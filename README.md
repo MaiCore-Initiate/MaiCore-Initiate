@@ -1,4 +1,4 @@
-# 由于官方启动器完善，该启动器将自今日起无限期停更
+# 由于官方启动器完善，启动器GUI开发将自今日起无限期停更
 > # 官方启动器后端见https://github.com/MaiM-with-u/mailauncher-backend?tab=readme-ov-file
 
 # MaiMbot一键启动V3.2版-适配0.6.2、0.6.3或可适配0.7.0（目前尚不明确）
