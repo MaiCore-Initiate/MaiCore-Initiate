@@ -3,9 +3,49 @@ import json
 import subprocess
 import re
 import ctypes
-from colorama import Fore, Style, init
 import time
-import toml  # 新增：导入TOML库
+import toml # 新增：导入TOML库
+import requests
+import zipfile
+import sys
+from colorama import Fore, Style, init
+from tqdm import tqdm  
+import shutil # 用于删除实例
+import winreg # 用于注册表操作
+
+if sys.platform == 'win32':
+    kernel32 = ctypes.windll.kernel32
+    kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+
+def print_rgb(text, rgb_hex, end="\n", bold=False):
+    """
+    使用 RGB 十六进制值打印彩色文本
+    
+    Args:
+        text (str): 要打印的文本
+        rgb_hex (str): RGB 十六进制值 (如 "#BADFFA")
+        end (str): 行尾字符
+        bold (bool): 是否加粗
+    """
+    # 确保输入是有效的十六进制颜色
+    if not rgb_hex.startswith("#") or len(rgb_hex) != 7:
+        print(text, end=end)
+        return
+    
+    try:
+        # 将十六进制转换为RGB
+        r = int(rgb_hex[1:3], 16)
+        g = int(rgb_hex[3:5], 16)
+        b = int(rgb_hex[5:7], 16)
+        
+        # 构建ANSI转义序列
+        bold_code = "1;" if bold else ""
+        escape_seq = f"\033[{bold_code}38;2;{r};{g};{b}m"
+        reset_seq = "\033[0m"
+        
+        print(f"{escape_seq}{text}{reset_seq}", end=end)
+    except ValueError:
+        print(text, end=end)
 
 # 初始化颜色支持
 init(autoreset=True)
@@ -57,28 +97,37 @@ def print_color(text, color=None, end="\n"):
         print(text, end=end)
 
 
+# 在 print_header 函数中使用自定义颜色
 def print_header():
     header = r"""
-  __  __           _   __  __   _               _              ____   _               _   
- |  \/  |   __ _  (_) |  \/  | | |__     ___   | |_           / ___| | |__     __ _  | |_ 
- | |\/| |  / _` | | | | |\/| | | '_ \   / _ \  | __|  _____  | |     | '_ \   / _` | | __|
- | |  | | | (_| | | | | |  | | | |_) | | (_| | | |_  |_____| | |___  | | | | | (_| | | |_ 
- |_|  |_|  \__,_| |_| |_|  |_| |_.__/   \___/   \__|          \____| |_| |_|  \__,_|  \__|
+88b         d88           88 888888ba                                ,ad88ba,  88                                
+888         888           "" 88    "8b            88                d8"'  `"8b 88                    88     
+888b       d888              88    ,8P            88               d8'         88                    88     
+88 8b     d8'88 ,adPYYba, 88 88aaaa8P'  ,adPYba,  88MMM            88          88,dPPYba,  ,adPPYba, 88MMM  
+88 `8b   d8' 88 ""    `Y8 88 88“”“”8b, a8"    "8a 88     aaaaaaaa  88          88P'    "8a ""    `Y8 88     
+88  `8b d8'  88 ,adPPPP88 88 88    `8b 8b      d8 88     “”“”“”“”  Y8,         88       88 ,adPPPP88 88     
+88   `888'   88 88,   ,88 88 88    a8P "8a,  ,a8" 88,               Y8a.  .a8P 88       88 88,   ,88 88,    
+88           88 `"8bdP"Y8 88 888888P"   `"YbdP"'   "Y888             `"Y88Y"'  88       88 `"8bdP"Y8  "Y888  
 """
-    print_color(header, "blue")
-    print_color("促进多元化艺术创作发展普及", "blue")
-    print_color("\n🌈麦麦启动器控制台", "blue")
+    print_rgb(header, "#BADFFA")  # 使用自定义颜色
+    print_rgb("促进多元化艺术创作发展普及", "#BADFFA")
+    print_rgb("\n🌈麦麦启动器控制台", "#BADFFA")
     print_color("——————————", "gray")
     print_color("选择选项", "gray")
-    print("================")
-    print_color(" [A] 🚀 运行麦麦", "blue")
-    print_color(" [B] 运行麦麦（同时启动NapCatQQ和Mongo DB）", "blue")
-    print_color(" [C] 配置管理（新建/修改/检查配置）", "blue")  # 合并C、D选项
-    print_color(" [D] LPMM知识库构建", "cyan")  # 原D选项删除，调整后续选项顺序
-    print_color(" [E] 知识库迁移（MongoDB → SQLite）", "cyan")
-    print_color(" [F] 实例部署辅助系统", "red")
-    print_color(" [Q] 👋退出程序", "purple")
-    print("================\n")
+    print("===================")
+    print("====>>启动类<<====")
+    print_rgb(" [A] 🚀 运行麦麦", "#4AF933")
+    print_rgb(" [B] 运行麦麦（同时启动NapCatQQ和Mongo DB）", "#4AF933")
+    print("====>>配置类<<====")
+    print_rgb(" [C] 配置管理（新建/修改/检查配置）", "#F2FF5D")
+    print("====>>功能类<<====")
+    print_rgb(" [D] LPMM知识库构建", "#00FFBB")
+    print_rgb(" [E] 知识库迁移（MongoDB → SQLite）", "#28DCF0")
+    print("====>>部署类<<====")
+    print_rgb(" [F] 实例部署辅助系统", "#FF6B6B")  # 使用另一个自定义颜色
+    print("====>>退出类<<====")
+    print_rgb(" [Q] 👋退出程序", "#7E1DE4")
+    print("===================\n")
 
 def is_legacy_version(version):
     """检测是否为旧版本（小于0.6.0或为classical）"""
@@ -168,7 +217,7 @@ def get_input(prompt, color=None, check_file=None, allow_empty=False, is_exe=Fal
             return ""
 
         if not path:
-            print_color("❌ 路径不能为空！", "red")
+            print_rgb("❌ 路径不能为空！", "#FF6B6B")
             continue
 
         # 路径标准化处理
@@ -182,7 +231,7 @@ def get_input(prompt, color=None, check_file=None, allow_empty=False, is_exe=Fal
 
         if valid:
             return path
-        print_color(f"❌ 路径验证失败：{msg}", "red")
+        print_rgb(f"❌ 路径验证失败：{msg}", "#FF6B6B")
 
 
 def validate_exe_path(path):
@@ -199,7 +248,7 @@ def validate_exe_path(path):
 
 
 def auto_detect_mai():
-    print_color("🟢 正在检索麦麦本体...", "yellow")
+    print_rgb("🟢 正在检索麦麦本体...", "#F2FF5D")
     default_path = os.path.abspath("MaiBot")
     if os.path.isfile(os.path.join(default_path, "bot.py")):
         return default_path
@@ -207,7 +256,7 @@ def auto_detect_mai():
 
 
 def auto_detect_adapter():
-    print_color("🟢 正在检索适配器...", "yellow")
+    print_rgb("🟢 正在检索适配器...", "#F2FF5D")
     default_path = os.path.abspath("MaiBot-Napcat-Adapter")
     if os.path.isfile(os.path.join(default_path, "main.py")):
         return default_path
@@ -224,21 +273,42 @@ def get_text_input(prompt, color=None, allow_empty=False):
             return ""
             
         if not text:
-            print_color("❌ 输入不能为空！", "red")
+            print_rgb("❌ 输入不能为空！", "#FF6B6B")
             continue
             
         return text
 
+def generate_unique_absolute_serial(configs):
+    """生成唯一的绝对序列号，只与其他绝对序列号比较，确保真正唯一"""
+    # 只收集已使用的绝对序列号
+    used_absolute_serials = set()
+    for cfg in configs.values():
+        abs_serial = cfg.get('absolute_serial_number')
+        if abs_serial is not None:
+            # 确保转换为整数进行比较
+            try:
+                used_absolute_serials.add(int(abs_serial))
+            except (ValueError, TypeError):
+                # 如果转换失败，跳过这个值
+                continue
+    
+    # 从1开始生成绝对序列号
+    candidate_serial = 1
+    while candidate_serial in used_absolute_serials:
+        candidate_serial += 1
+    
+    return candidate_serial
+
 def config_menu():
     while True:
         clear_screen()
-        print_color("[🔧 配置模式]", "green")
+        print_rgb("[🔧 配置模式]", "#F2FF5D")
         print("================")
         print_color(" [A] 自动检索麦麦", "green")
         print_color(" [B] 手动配置", "green")
-        print_color(" [C] 管理配置集(新建/删除)", "cyan")
-        print_color(" [D] 检查现有配置", "green")
-        print_color(" [Q] 返回上级", "blue")
+        print_rgb(" [C] 管理配置集(新建/删除)", "#6DA0FD")
+        print_rgb(" [D] 检查现有配置", "#6DA0FD")
+        print_rgb(" [Q] 返回上级", "#7E1DE4")
         print("================")
 
         choice = input("请选择操作: ").upper()
@@ -284,7 +354,7 @@ def config_menu():
         elif choice == "C":
             while True:
                 clear_screen()
-                print_color("[🔧 配置集管理]", "green")
+                print_rgb("[🔧 配置集管理]", "#6DA0FD")
                 print("================")
                 
                 # 重新加载最新配置
@@ -293,7 +363,7 @@ def config_menu():
                 
                 # 检查配置是否为空
                 if not configs:
-                    print_color("❌ 当前没有任何配置", "red")
+                    print_rgb("❌ 当前没有任何配置", "#FF6B6B")
                     time.sleep(2)
                     break
                 
@@ -307,7 +377,7 @@ def config_menu():
                     adapter_path = cfg.get('adapter_path', '未配置')
                     napcat_path = cfg.get('napcat_path', '未配置')
                     
-                    print_color(f"实例 {nickname} (序列号: {serial_number})", "cyan")
+                    print_rgb(f"实例 {nickname} (序列号: {serial_number})", "#005CFA")
                     print(f"版本号：{version}")
                     print(f"麦麦路径：{mai_path}")
                     print(f"适配器路径：{adapter_path}")
@@ -315,9 +385,9 @@ def config_menu():
                     print("——————————")
 
                 print("\n[操作选项]")
-                print_color(" [A] 新建配置集", "green")
-                print_color(" [B] 删除配置集", "red")
-                print_color(" [Q] 返回上级", "blue")
+                print_rgb(" [A] 新建配置集", "#6DFD8A")
+                print_rgb(" [B] 删除配置集", "#FF6B6B")
+                print_rgb(" [Q] 返回上级", "#7E1DE4")
                 sub_choice = input("请选择操作: ").upper()
 
                 if sub_choice == "Q":
@@ -332,15 +402,15 @@ def config_menu():
                         config["current_config"] = new_name
                         config["configurations"] = configs
                         save_config(config)
-                        print_color(f"✅ 已创建新配置集: {new_name}", "green")
+                        print_rgb(f"✅ 已创建新配置集: {new_name}", "#6DFD8A")
                         time.sleep(1)
         
                         # 进入配置流程
                         clear_screen()
-                        print_color(f"[🔧 配置 {new_name}]", "green")
-                        print_color("请选择配置方式:", "green")
-                        print_color(" [A] 自动检索麦麦", "green")
-                        print_color(" [B] 手动配置", "green")
+                        print_rgb(f"[🔧 配置 {new_name}]", "#6DFD8A")
+                        print_rgb("请选择配置方式:", "#6DA0FD")
+                        print_rgb(" [A] 自动检索麦麦", "#6DFD8A")
+                        print_rgb(" [B] 手动配置", "#F2FF5D")
                         cfg_choice = input("请选择操作: ").upper()
                         
                         current_cfg = configs[new_name]
@@ -357,7 +427,7 @@ def config_menu():
                             if not mai_path:
                                 mai_path = get_input("请输入麦麦本体路径：", "green", check_file="bot.py")
                             else:
-                                print_color(f"✅ 已自动检测到麦麦本体：{mai_path}", "green")
+                                print_rgb(f"✅ 已自动检测到麦麦本体：{mai_path}", "#6DFD8A")
 
                             # 根据版本决定是否配置适配器
                             if is_legacy:
@@ -369,7 +439,7 @@ def config_menu():
                                 if not adapter_path:
                                     adapter_path = get_input("请输入适配器路径：", "green", check_file="main.py")
                                 else:
-                                    print_color(f"✅ 已自动检测到适配器：{adapter_path}", "green")
+                                    print_rgb(f"✅ 已自动检测到适配器：{adapter_path}", "#6DFD8A")
 
                             # NapCat路径（新旧版本都可能需要）
                             napcat_path = get_input("请输入NapCatQQ路径（可为空）：", "green", allow_empty=True, is_exe=True)
@@ -399,7 +469,7 @@ def config_menu():
                             # 根据版本决定是否配置适配器
                             if is_legacy:
                                 adapter_path = "当前配置集的对象实例版本较低，无适配器"
-                                print_color("检测到旧版本，无需配置适配器", "yellow")
+                                print_rgb("检测到旧版本，无需配置适配器", "#F2FF5D")
                                 mai_path = get_input("请输入麦麦本体路径：", "green", check_file="bot.py")
                             else:
                                 mai_path = get_input("请输入麦麦本体路径：", "green", check_file="bot.py")
@@ -417,10 +487,10 @@ def config_menu():
 
                         config["configurations"] = configs
                         save_config(config)
-                        print_color("🎉 配置已保存！", "green")
+                        print_rgb("🎉 配置已保存！", "#6DFD8A")
                         time.sleep(1)
                     else:
-                        print_color("❌ 配置集名称已存在", "red")
+                        print_rgb("❌ 配置集名称已存在", "#FF6B6B")
                         time.sleep(1)
 
                 elif sub_choice == "B":
@@ -457,13 +527,13 @@ def config_menu():
                             t for t in targets if t not in [cfg.get('serial_number', '') for cfg in configs.values()]
                         ]
                         if not_found:
-                            print_color(f"未找到用户序列号: {', '.join(not_found)}", "red")
-                        print_color(f"已删除 {len(deleted)} 个配置集", "green")
+                            print_rgb(f"未找到用户序列号: {', '.join(not_found)}", "#FF6B6B")
+                        print_rgb(f"已删除 {len(deleted)} 个配置集", "#6DFD8A")
                     else:
-                        print_color("已取消删除操作", "yellow")
+                        print_rgb("已取消删除操作", "#F2FF5D")
                     time.sleep(1)
                 else:
-                    print_color("❌ 无效选项", "red")
+                    print_rgb("❌ 无效选项", "#FF6B6B")
                     time.sleep(1)
 
         elif choice == "D":
@@ -527,8 +597,227 @@ def run_script(work_dir, commands):
         )
         return True
     except Exception as e:
-        print_color(f"❌ 启动失败!：{str(e)}", "red")
+        print_rgb(f"❌ 启动失败!：{str(e)}", "#FF6B6B")
         return False
+
+def check_process(process_name):
+    try:
+        output = subprocess.check_output(f'tasklist /FI "IMAGENAME eq {process_name}"', shell=True)
+        return process_name.lower() in output.decode().lower()
+    except:
+        return False
+
+
+def check_mongodb():
+    try:
+        output = subprocess.check_output('sc query MongoDB', shell=True)
+        return "RUNNING" in output.decode()
+    except:
+        return False
+
+
+
+def run_mai():
+    config = load_config()
+    all_configs = config["configurations"]
+    
+    # 显示实例选择菜单
+    selected_cfg = select_config(all_configs)
+    if not selected_cfg:
+        return
+
+    # 检查配置有效性
+    errors = validate_config(selected_cfg)
+    if errors:
+        print_rgb("❌ 发现配置错误!：", "#FF6B6B")
+        for error in errors:
+            print_rgb(f"• {error}", "#FF6B6B")
+        input("按回车键返回主菜单...")
+        return
+
+    try:
+        version = selected_cfg.get("version_path", "")
+        
+        if is_legacy_version(version):
+            # 旧版本启动逻辑：直接运行run.bat
+            print_rgb("检测到旧版本，使用兼容启动模式", "#F2FF5D")
+            
+            run_bat_path = os.path.join(selected_cfg["mai_path"], "run.bat")
+            if os.path.exists(run_bat_path):
+                # 使用 subprocess.Popen 启动新的 cmd 窗口
+                success = True
+                try:
+                    subprocess.Popen(
+                        f'cmd /c start cmd /k "{run_bat_path}"',
+                        cwd=selected_cfg["mai_path"],
+                        shell=True
+                    )
+                    print_rgb("🟢 旧版本麦麦启动成功！CMD窗口将保持打开", "#6DFD8A")
+                except Exception as e:
+                    print_rgb(f"❌ 旧版本麦麦启动失败：{str(e)}", "#FF6B6B")
+                    success = False
+                
+                if not success:
+                    print_rgb("🔔 旧版本麦麦启动可能失败，请检查弹出的窗口", "#F2FF5D")
+            else:
+                print_rgb("❌ 未找到run.bat文件！", "#FF6B6B")
+        else:
+            # 新版本启动逻辑：启动麦麦本体和适配器
+            print_rgb("使用新版本启动模式", "#6DFD8A")
+            
+            # 启动麦麦本体
+            success1 = run_script(
+                work_dir=selected_cfg["mai_path"],
+                commands="python bot.py"
+            )
+
+            # 启动适配器（仅在适配器路径有效时）
+            adapter_path = selected_cfg.get("adapter_path", "")
+            if adapter_path and adapter_path != "当前配置集的对象实例版本较低，无适配器":
+                venv_activate = os.path.normpath(
+                    os.path.join(
+                        selected_cfg["mai_path"],
+                        "venv",
+                        "Scripts",
+                        "activate"
+                    )
+                )
+                success2 = run_script(
+                    work_dir=adapter_path,
+                    commands=[
+                        f'& "{venv_activate}"',
+                        'python main.py'
+                    ]
+                )
+
+                if success1 and success2:
+                    print_rgb("🟢 麦麦启动成功！两个PowerShell窗口将保持打开", "#6DFD8A")
+                else:
+                    print_rgb("🔔 部分组件启动失败，请检查弹出的窗口", "#F2FF5D")
+            else:
+                if success1:
+                    print_rgb("🟢 麦麦本体启动成功！", "#6DFD8A")
+                else:
+                    print_rgb("🔔 麦麦本体启动失败，请检查弹出的窗口", "#F2FF5D")
+
+    except Exception as e:
+        print_rgb(f"❌ 启动失败：{str(e)}", "#FF6B6B")
+    finally:
+        input("按回车键返回主菜单...")
+
+
+
+def run_full():
+    config = load_config()
+    all_configs = config["configurations"]
+    
+    # 显示实例选择菜单
+    selected_cfg = select_config(all_configs)
+    if not selected_cfg:
+        return
+
+    # 检查配置有效性
+    errors = validate_config(selected_cfg)
+    if errors:
+        print_rgb("❌ 发现配置错误!：",  "#FF6B6B")
+        for error in errors:
+            print_rgb(f"• {error}", "#FF6B6B")
+        input("按回车键返回主菜单...")
+        return
+
+    version = selected_cfg.get("version_path", "")
+    
+    # 检查NapCat（新旧版本都可能需要）
+    napcat_running = check_process("NapCatWinBootMain.exe")
+    if not napcat_running:
+        if selected_cfg["napcat_path"]:
+            try:
+                subprocess.Popen(f'"{selected_cfg["napcat_path"]}"')
+                print_rgb("🟢 NapCat启动成功！", "#6DFD8A")
+            except Exception as e:
+                print_rgb(f"❌ NapCat启动失败！{str(e)}", "#FF6B6B")
+        else:
+            print_rgb("🔔 NapCat路径未配置，跳过NapCat的启动", "#F2FF5D")
+
+    # 检查MongoDB（仅新版本需要）
+    if not is_legacy_version(version):
+        if check_mongodb():
+            print_rgb("🟢 MongoDB已启动！", "#6DFD8A")
+        else:
+            if version > "0.7.0":
+                print_rgb("🔔 MongoDB服务未启动，请手动启动！若您使用的是高于0.7.0版本的麦麦，请忽略该警告", "#F2FF5D")
+            else:
+                print_rgb("🔔 MongoDB服务未启动，请手动启动！", "#F2FF5D")
+
+    # 启动麦麦
+    try:
+        if is_legacy_version(version):
+            # 旧版本启动逻辑：直接运行run.bat
+            print_rgb("检测到旧版本，使用兼容启动模式", "#F2FF5D")
+            run_bat_path = os.path.join(selected_cfg["mai_path"], "run.bat")
+            if os.path.exists(run_bat_path):
+                # 使用 subprocess.Popen 启动新的 cmd 窗口
+                success = True
+                try:
+                    subprocess.Popen(
+                        f'cmd /c start cmd /k "{run_bat_path}"',
+                        cwd=selected_cfg["mai_path"],
+                        shell=True
+                    )
+                    print_rgb("🟢 旧版本麦麦启动成功！CMD窗口将保持打开", "#6DFD8A")
+                except Exception as e:
+                    print_rgb(f"❌ 旧版本麦麦启动失败：{str(e)}", "#FF6B6B")
+                    success = False
+                
+                if not success:
+                    print_rgb("🔔 旧版本麦麦启动可能失败，请检查弹出的窗口", "#F2FF5D")
+            else:
+                print_rgb("❌ 未找到run.bat文件！", "#FF6B6B")
+        else:
+            # 新版本启动逻辑：启动麦麦本体和适配器
+            print_rgb("使用新版本启动模式", "#6DFD8A")
+            
+            # 启动麦麦本体
+            success1 = run_script(
+                work_dir=selected_cfg["mai_path"],
+                commands="python bot.py"
+            )
+
+            # 启动适配器（仅在适配器路径有效时）
+            adapter_path = selected_cfg.get("adapter_path", "")
+            if adapter_path and adapter_path != "当前配置集的对象实例版本较低，无适配器":
+                venv_activate = os.path.normpath(
+                    os.path.join(
+                        selected_cfg["mai_path"],
+                        "venv",
+                        "Scripts",
+                        "activate"
+                    )
+                )
+                success2 = run_script(
+                    work_dir=adapter_path,
+                    commands=[
+                        f'& "{venv_activate}"',
+                        'python main.py'
+                    ]
+                )
+
+                if success1 and success2:
+                    print_rgb("🟢 麦麦启动成功！两个PowerShell窗口将保持打开", "#6DFD8A")
+                else:
+                    print_rgb("🔔 部分组件启动失败，请检查弹出的窗口", "#F2FF5D")
+            else:
+                if success1:
+                    print_rgb("🟢 麦麦本体启动成功！PowerShell窗口将保持打开", "#6DFD8A")
+                else:
+                    print_header("🔔 麦麦本体启动失败，请检查弹出的窗口", "#F2FF5D")
+
+    except Exception as e:
+        print_rgb(f"❌ 启动失败：{str(e)}", "#FF6B6B")
+    finally:
+        input("按回车键返回主菜单...")
+
+
 
 def check_config():
     """检查和重新配置任意配置集"""
@@ -537,7 +826,7 @@ def check_config():
     
     while True:
         clear_screen()
-        print_color("[🔧 检查现有配置]", "green")
+        print_rgb("[🔧 检查现有配置]", "#6DA0FD")
         
         # 使用 select_config 显示所有配置集并选择
         selected_cfg = select_config(configs)
@@ -550,15 +839,15 @@ def check_config():
             None
         )
         if not selected_config_name:
-            print_color("❌ 未找到匹配的配置集！", "red")
+            print_rgb("❌ 未找到匹配的配置集！", "#FF6B6B")
             input("按回车键返回主菜单...")
             return
         
         # 显示选中的配置集信息
         print(f"当前配置名称: {selected_config_name}")
-        print_color(f"用户序列号: {selected_cfg['serial_number'] or '未配置'}","cyan")
+        print_rgb(f"用户序列号: {selected_cfg['serial_number'] or '未配置'}","#005CFA")
         print(f"绝对序列号: {selected_cfg['absolute_serial_number'] or '未配置'}")
-        print_color(f"昵称: {selected_cfg['nickname_path'] or '未配置'}", "cyan")
+        print_rgb(f"昵称: {selected_cfg['nickname_path'] or '未配置'}", "#005CFA")
         print(f"麦麦本体路径: {selected_cfg['mai_path'] or '未配置'}")
         print(f"适配器路径: {selected_cfg['adapter_path'] or '未配置'}")
         print(f"NapCat路径: {selected_cfg['napcat_path'] or '未配置'}")
@@ -567,18 +856,18 @@ def check_config():
         if selected_cfg["napcat_path"]:
             valid, msg = validate_exe_path(selected_cfg["napcat_path"])
             if not valid:
-                print_color(f"❌ NapCatQQ路径错误!：{msg}", "red")
+                print_rgb(f"❌ NapCatQQ路径错误!：{msg}", "#FF6B6B")
 
         # 检查配置有效性
         errors = validate_config(selected_cfg)
         if errors:
-            print_color("❌ 发现配置错误!：", "red")
+            print_rgb("❌ 发现配置错误!：", "#FF6B6B")
             for error in errors:
-                print_color(f"• {error}", "red")
+                print_rgb(f"• {error}", "#FF6B6B")
 
         print("\n=================")
-        print_color(" [A] 重新配置此配置集", "green")
-        print_color(" [B] 返回配置菜单", "yellow")
+        print_rgb(" [A] 重新配置此配置集", "#6DFD8A")
+        print_rgb(" [B] 返回配置菜单", "#7E1DE4")
         choice = input("请选择操作: ").upper()
 
         if choice == "B":
@@ -589,42 +878,21 @@ def check_config():
             config = load_config()
             configs = config["configurations"]
         else:
-            print_color("❌ 无效选项", "red")
+            print_rgb("❌ 无效选项", "#FF6B6B")
             time.sleep(1)
 
     input("\n按回车键返回配置菜单...")
 
 
-def generate_unique_absolute_serial(configs):
-    """生成唯一的绝对序列号，只与其他绝对序列号比较，确保真正唯一"""
-    # 只收集已使用的绝对序列号
-    used_absolute_serials = set()
-    for cfg in configs.values():
-        abs_serial = cfg.get('absolute_serial_number')
-        if abs_serial is not None:
-            # 确保转换为整数进行比较
-            try:
-                used_absolute_serials.add(int(abs_serial))
-            except (ValueError, TypeError):
-                # 如果转换失败，跳过这个值
-                continue
-    
-    # 从1开始生成绝对序列号
-    candidate_serial = 1
-    while candidate_serial in used_absolute_serials:
-        candidate_serial += 1
-    
-    return candidate_serial
-
 
 def reconfigure_current_config(config, current_config_name, current_cfg):
     """重新配置当前配置集"""
     clear_screen()
-    print_color(f"[🔧 重新配置 {current_config_name}]", "green")
+    print_rgb(f"[🔧 重新配置 {current_config_name}]", "#6DFD8A")
     print("================")
-    print("以下信息将保持不变:")
+    print_rgb("以下信息将保持不变:", "#6DA0FD")
     print(f"当前配置名称: {current_config_name}")
-    print_color(f"用户序列号: {current_cfg['serial_number']}","cyan")
+    print_rgb(f"用户序列号: {current_cfg['serial_number']}","#005CFA")
     print(f"绝对序列号: {current_cfg['absolute_serial_number']}")
     print("================")
     
@@ -632,37 +900,37 @@ def reconfigure_current_config(config, current_config_name, current_cfg):
     original_cfg = current_cfg.copy()
     
     # 逐项询问是否配置
-    print_color("\n开始配置流程...", "green")
+    print_rgb("\n开始配置流程...", "#6DFD8A")
     
     # 配置版本号
-    print_color(f"\n当前版本号: {current_cfg['version_path'] or '未配置'}", "cyan")
+    print_rgb(f"\n当前版本号: {current_cfg['version_path'] or '未配置'}", "#6DA0FD")
     if input("是否重新配置版本号？(Y/N): ").upper() == 'Y':
         current_cfg['version_path'] = get_text_input("请输入新的版本号（如0.7.0或0.6.3-fix4）：", "green")
     
     # 配置昵称
-    print_color(f"\n当前昵称: {current_cfg['nickname_path'] or '未配置'}", "cyan")
+    print_rgb(f"\n当前昵称: {current_cfg['nickname_path'] or '未配置'}", "#6DA0FD")
     if input("是否重新配置昵称？(Y/N): ").upper() == 'Y':
         current_cfg['nickname_path'] = get_text_input("请输入新的配置昵称：", "green")
     
     # 配置麦麦本体路径
-    print_color(f"\n当前麦麦本体路径: {current_cfg['mai_path'] or '未配置'}", "cyan")
+    print_rgb(f"\n当前麦麦本体路径: {current_cfg['mai_path'] or '未配置'}", "#6DA0FD")
     if input("是否重新配置麦麦本体路径？(Y/N): ").upper() == 'Y':
         current_cfg['mai_path'] = get_input("请输入新的麦麦本体路径：", "green", check_file="bot.py")
     
     # 配置适配器路径
-    print_color(f"\n当前适配器路径: {current_cfg['adapter_path'] or '未配置'}", "cyan")
+    print_rgb(f"\n当前适配器路径: {current_cfg['adapter_path'] or '未配置'}", "#6DA0FD")
     if input("是否重新配置适配器路径？(Y/N): ").upper() == 'Y':
         current_cfg['adapter_path'] = get_input("请输入新的适配器路径：", "green", check_file="main.py")
     
     # 配置NapCat路径
-    print_color(f"\n当前NapCat路径: {current_cfg['napcat_path'] or '未配置'}", "cyan")
+    print_rgb(f"\n当前NapCat路径: {current_cfg['napcat_path'] or '未配置'}", "#6DA0FD")
     if input("是否重新配置NapCat路径？(Y/N): ").upper() == 'Y':
         current_cfg['napcat_path'] = get_input("请输入新的NapCatQQ路径（可为空）：", "green", allow_empty=True, is_exe=True)
     
     # 保存配置
     config["configurations"][current_config_name] = current_cfg
     save_config(config)
-    print_color("✅ 配置已更新！", "green")
+    print_rgb("✅ 配置已更新！", "#6DFD8A")
     input("按回车键继续...")
 
 def validate_config(config):
@@ -702,11 +970,11 @@ def run_mai():
     
     # 显示实例选择菜单（保持不变）
     clear_screen()
-    print_color("请选择您要启动的实例：", "green")
+    print_rgb("请选择您要启动的实例：", "#6DA0FD")
     for idx, (cfg_name, cfg) in enumerate(all_configs.items(), 1):
         print(f"实例{idx}")
-        print_color(f"序列号\"{cfg['serial_number']}\"（绝对序列号：{cfg['absolute_serial_number']}）","cyan")  # 显示两个序列号
-        print_color(f"昵称\"{cfg['nickname_path']}\"","cyan")
+        print_rgb(f"序列号\"{cfg['serial_number']}\"（绝对序列号：{cfg['absolute_serial_number']}）","#005CFA")  # 显示两个序列号
+        print_rgb(f"昵称\"{cfg['nickname_path']}\"","#005CFA")
         print(f"版本\"{cfg['version_path']}\"")
         print(f"本体路径\"{cfg['mai_path']}\"")
         print(f"适配器路径\"{cfg['adapter_path']}\"")
@@ -724,16 +992,16 @@ def run_mai():
     )
     
     if not selected_cfg:
-        print_color("❌ 未找到匹配的实例序列号！", "red")
+        print_rgb("❌ 未找到匹配的实例序列号！", "#FF6B6B")
         input("按回车键返回主菜单...")
         return
 
     # 原有配置验证逻辑（保持不变）
     errors = validate_config(selected_cfg)
     if errors:
-        print_color("❌ 发现配置错误!：", "red")
+        print_rgb("❌ 发现配置错误!：", "#FF6B6B")
         for error in errors:
-            print_color(f"• {error}", "red")
+            print_rgb(f"• {error}", "#FF6B6B")
         input("按回车键返回主菜单...")
         return
 
@@ -762,30 +1030,17 @@ def run_mai():
         )
 
         if success1 and success2:
-            print_color("🟢 麦麦启动成功！两个PowerShell窗口将保持打开", "green")
+            print_rgb("🟢 麦麦启动成功！两个PowerShell窗口将保持打开", "#6DFD8A")
         else:
-            print_color("🔔 部分组件启动失败，请检查弹出的窗口", "yellow")
+            print_rgb("🔔 部分组件启动失败，请检查弹出的窗口", "#F2FF5D")
 
     except Exception as e:
-        print_color(f"❌ 启动失败：{str(e)}", "red")
+        print_rgb(f"❌ 启动失败：{str(e)}", "#FF6B6B")
     finally:
         input("按回车键返回主菜单...")
 
 # 剩余函数保持原有实现（check_process, check_mongodb, run_full, main）
-def check_process(process_name):
-    try:
-        output = subprocess.check_output(f'tasklist /FI "IMAGENAME eq {process_name}"', shell=True)
-        return process_name.lower() in output.decode().lower()
-    except:
-        return False
 
-
-def check_mongodb():
-    try:
-        output = subprocess.check_output('sc query MongoDB', shell=True)
-        return "RUNNING" in output.decode()
-    except:
-        return False
 
 
 def run_full():
@@ -796,29 +1051,29 @@ def run_full():
         if config["napcat_path"]:
             try:
                 subprocess.Popen(f'"{config["napcat_path"]}"')
-                print_color("🟢 NapCat启动成功！", "green")
+                print_rgb("🟢 NapCat启动成功！", "#6DFD8A")
             except:
-                print_color("❌ NapCat启动失败！", "red")
+                print_rgb("❌ NapCat启动失败！", "#FF6B6B")
         else:
-            print_color("🔔 NapCat路径未配置！", "yellow")
+            print_rgb("🔔 NapCat路径未配置！", "#F2FF5D")
 
     # 检查MongoDB
     if check_mongodb():
-        print_color("🟢 MongoDB已启动！", "green")
+        print_rgb("🟢 MongoDB已启动！", "#6DFD8A")
     else:
-        print_color("🔔 MongoDB未启动！", "yellow")
+        print_rgb("🔔 MongoDB未启动！", "#F2FF5D")
 
     run_mai()
 
 def select_config(configs):
     """显示配置集并让用户选择目标实例，返回选中的配置"""
-    while True:  # 添加循环，允许用户返回
+    while True:
         clear_screen()
-        print_color("请选择您要使用的实例：", "green")
+        print_rgb("请选择您要使用的实例：", "#6DA0FD")
         for idx, (cfg_name, cfg) in enumerate(configs.items(), 1):
             print(f"实例{idx}")
-            print_color(f"序列号\"{cfg['serial_number']}\"（绝对序列号：{cfg['absolute_serial_number']}）","cyan") 
-            print_color(f"昵称\"{cfg['nickname_path']}\"", "cyan")
+            print_rgb(f"序列号\"{cfg['serial_number']}\"（绝对序列号：{cfg['absolute_serial_number']}）","#005CFA")  # 显示两个序列号
+            print_rgb(f"昵称\"{cfg['nickname_path']}\"", "#005CFA")
             print(f"版本\"{cfg['version_path']}\"")
             print(f"本体路径\"{cfg['mai_path']}\"")
             print(f"适配器路径\"{cfg['adapter_path']}\"")
@@ -826,7 +1081,7 @@ def select_config(configs):
             print("——————————")
 
         # 获取用户输入的序列号（支持用户自定义序列号或绝对序列号）
-        print_color("请输入您要使用的实例序列号（输入Q返回）：", "green")
+        print_rgb("请输入您要使用的实例序列号（输入Q返回）：", "#6DFD8A")
         selected_serial = input("> ").strip()
         
         # 检查用户是否要返回
@@ -841,24 +1096,22 @@ def select_config(configs):
         )
         
         if not selected_cfg:
-            print_color("❌ 未找到匹配的实例序列号！", "red")
+            print_rgb("❌ 未找到匹配的实例序列号！", "#FF6B6B")
             input("按回车键继续...")
-            continue  # 继续循环而不是返回
+            continue
         
         return selected_cfg
-    
-    return selected_cfg
 
 def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
     """运行LPMM相关脚本的通用函数"""
     if not mai_path:
-        print_color("❌ 麦麦知识库（本体）路径未配置！请重新配置！", "red")
+        print_rgb("❌ 麦麦知识库（本体）路径未配置！请重新配置！", "#FF6B6B")
         return False
 
     try:
         # 激活虚拟环境
-        print_color(f"正在进行{description}...", "cyan")
-        print_color("正在激活虚拟环境...", "cyan")
+        print_rgb(f"正在进行{description}...", "#00FFBB")
+        print_rgb("正在激活虚拟环境...", "#00FFBB")
         
         # 显示警告信息
         if warning_messages:
@@ -873,8 +1126,8 @@ def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
             return False
             
         # 运行脚本
-        print_color(f"操作已确认！正在启动{description}程序...", "green")
-        print_color("请在PowerShell窗口中确认执行程序！", "blue")
+        print_rgb(f"操作已确认！正在启动{description}程序...", "#00FFBB")
+        print_rgb("请在PowerShell窗口中确认执行程序！", "#00FFBB")
         
         try:
             # 构建PowerShell命令
@@ -887,17 +1140,17 @@ def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
             subprocess.run(start_command, shell=True, check=True)
             
             # 等待用户输入确认PowerShell操作已完成
-            print_color("\n请在PowerShell窗口中完成操作后，在此处按回车键继续...", "yellow")
+            print_rgb("\n请在PowerShell窗口中完成操作后，在此处按回车键继续...", "#00FFBB")
             input()
             
             return True
             
         except subprocess.CalledProcessError as e:
-            print_color(f"❌ 执行失败：{str(e)}", "red")
+            print_rgb(f"❌ 执行失败：{str(e)}", "#FF6B6B")
             return False
         
     except Exception as e:
-        print_color(f"❌ 执行失败：{str(e)}", "red")
+        print_rgb(f"❌ 执行失败：{str(e)}", "#FF6B6B")
         return False
 
 def run_lpmm_entity_extract(configs):
@@ -919,7 +1172,7 @@ def run_lpmm_entity_extract(configs):
         warnings
     )
     if success:
-        print_color("\nLPMM知识库实体提取已结束！", "green")
+        print_rgb("\nLPMM知识库实体提取已结束！", "#00FFBB")
     return success
 
 
@@ -945,21 +1198,21 @@ def run_lpmm_knowledge_import(configs):
         warnings
     )
     if success:
-        print_color("\nLPMM知识库知识图谱导入已结束！", "green")
+        print_rgb("\nLPMM知识库知识图谱导入已结束！", "#00FFBB")
     return success
 
 def run_lpmm_pipeline(configs):
     """运行LPMM一条龙服务"""
     if run_lpmm_text_split(configs):
-        print_color("\nLPMM知识库文本分割已结束！", "green")
+        print_rgb("\nLPMM知识库文本分割已结束！", "#00FFBB")
         print_color("是否继续进行实体提取操作？(Y/N)：", "yellow")
         if input().upper() == 'Y':
             if run_lpmm_entity_extract(configs):
-                print_color("\nLPMM知识库实体提取已结束！", "green")
+                print_rgb("\nLPMM知识库实体提取已结束！", "#00FFBB")
                 while True:
-                    print_color("\n [A] 实体提取可能失败，重新提取？", "red")
-                    print_color(" [B] 继续进行知识图谱导入操作", "green")
-                    print_color(" [C] 取消后续操作并返回主菜单", "yellow")
+                    print_rgb("\n [A] 实体提取可能失败，重新提取？", "#FF6B6B")
+                    print_rgb(" [B] 继续进行知识图谱导入操作", "#6DA0FD")
+                    print_rgb(" [Q] 取消后续操作并返回主菜单", "#7E1DE4")
                     choice = input("请选择操作: ").upper()
                     
                     if choice == 'A':
@@ -967,12 +1220,12 @@ def run_lpmm_pipeline(configs):
                             break
                     elif choice == 'B':
                         if run_lpmm_knowledge_import(configs):
-                            print_color("\nLPMM知识库知识图谱导入已结束！LPMM知识库构建操作已结束！", "green")
+                            print_rgb("\nLPMM知识库知识图谱导入已结束！LPMM知识库构建操作已结束！", "#00FFBB")
                         break
-                    elif choice == 'C':
+                    elif choice == 'Q':
                         break
     
-    print_color("\n已关闭命令行窗口，即将返回主菜单！", "green")
+    print_rgb("\n已关闭命令行窗口，即将返回主菜单！", "#F2FF5D")
     countdown_timer(5)
 
 
@@ -1012,219 +1265,18 @@ def validate_config(config):
     return errors
 
 
-def run_mai():
-    config = load_config()
-    all_configs = config["configurations"]
-    
-    # 显示实例选择菜单
-    selected_cfg = select_config(all_configs)
-    if not selected_cfg:
-        return
-
-    # 检查配置有效性
-    errors = validate_config(selected_cfg)
-    if errors:
-        print_color("❌ 发现配置错误!：", "red")
-        for error in errors:
-            print_color(f"• {error}", "red")
-        input("按回车键返回主菜单...")
-        return
-
-    try:
-        version = selected_cfg.get("version_path", "")
-        
-        if is_legacy_version(version):
-            # 旧版本启动逻辑：直接运行run.bat
-            print_color("检测到旧版本，使用兼容启动模式", "yellow")
-            
-            run_bat_path = os.path.join(selected_cfg["mai_path"], "run.bat")
-            if os.path.exists(run_bat_path):
-                # 使用 subprocess.Popen 启动新的 cmd 窗口
-                success = True
-                try:
-                    subprocess.Popen(
-                        f'cmd /c start cmd /k "{run_bat_path}"',
-                        cwd=selected_cfg["mai_path"],
-                        shell=True
-                    )
-                    print_color("🟢 旧版本麦麦启动成功！CMD窗口将保持打开", "green")
-                except Exception as e:
-                    print_color(f"❌ 旧版本麦麦启动失败：{str(e)}", "red")
-                    success = False
-                
-                if not success:
-                    print_color("🔔 旧版本麦麦启动可能失败，请检查弹出的窗口", "yellow")
-            else:
-                print_color("❌ 未找到run.bat文件！", "red")
-        else:
-            # 新版本启动逻辑：启动麦麦本体和适配器
-            print_color("使用新版本启动模式", "green")
-            
-            # 启动麦麦本体
-            success1 = run_script(
-                work_dir=selected_cfg["mai_path"],
-                commands="python bot.py"
-            )
-
-            # 启动适配器（仅在适配器路径有效时）
-            adapter_path = selected_cfg.get("adapter_path", "")
-            if adapter_path and adapter_path != "当前配置集的对象实例版本较低，无适配器":
-                venv_activate = os.path.normpath(
-                    os.path.join(
-                        selected_cfg["mai_path"],
-                        "venv",
-                        "Scripts",
-                        "activate"
-                    )
-                )
-                success2 = run_script(
-                    work_dir=adapter_path,
-                    commands=[
-                        f'& "{venv_activate}"',
-                        'python main.py'
-                    ]
-                )
-
-                if success1 and success2:
-                    print_color("🟢 麦麦启动成功！两个PowerShell窗口将保持打开", "green")
-                else:
-                    print_color("🔔 部分组件启动失败，请检查弹出的窗口", "yellow")
-            else:
-                if success1:
-                    print_color("🟢 麦麦本体启动成功！", "green")
-                else:
-                    print_color("🔔 麦麦本体启动失败，请检查弹出的窗口", "yellow")
-
-    except Exception as e:
-        print_color(f"❌ 启动失败：{str(e)}", "red")
-    finally:
-        input("按回车键返回主菜单...")
-
-
-
-def run_full():
-    config = load_config()
-    all_configs = config["configurations"]
-    
-    # 显示实例选择菜单
-    selected_cfg = select_config(all_configs)
-    if not selected_cfg:
-        return
-
-    # 检查配置有效性
-    errors = validate_config(selected_cfg)
-    if errors:
-        print_color("❌ 发现配置错误!：", "red")
-        for error in errors:
-            print_color(f"• {error}", "red")
-        input("按回车键返回主菜单...")
-        return
-
-    version = selected_cfg.get("version_path", "")
-    
-    # 检查NapCat（新旧版本都可能需要）
-    napcat_running = check_process("NapCatWinBootMain.exe")
-    if not napcat_running:
-        if selected_cfg["napcat_path"]:
-            try:
-                subprocess.Popen(f'"{selected_cfg["napcat_path"]}"')
-                print_color("🟢 NapCat启动成功！", "green")
-            except Exception as e:
-                print_color(f"❌ NapCat启动失败！{str(e)}", "red")
-        else:
-            print_color("🔔 NapCat路径未配置，跳过NapCat的启动", "yellow")
-
-    # 检查MongoDB（仅新版本需要）
-    if not is_legacy_version(version):
-        if check_mongodb():
-            print_color("🟢 MongoDB已启动！", "green")
-        else:
-            if version > "0.7.0":
-                print_color("🔔 MongoDB服务未启动，请手动启动！若您使用的是高于0.7.0版本的麦麦，请忽略该警告", "yellow")
-            else:
-                print_color("🔔 MongoDB服务未启动，请手动启动！", "yellow")
-
-    # 启动麦麦
-    try:
-        if is_legacy_version(version):
-            # 旧版本启动逻辑：直接运行run.bat
-            print_color("检测到旧版本，使用兼容启动模式", "yellow")
-            run_bat_path = os.path.join(selected_cfg["mai_path"], "run.bat")
-            if os.path.exists(run_bat_path):
-                # 使用 subprocess.Popen 启动新的 cmd 窗口
-                success = True
-                try:
-                    subprocess.Popen(
-                        f'cmd /c start cmd /k "{run_bat_path}"',
-                        cwd=selected_cfg["mai_path"],
-                        shell=True
-                    )
-                    print_color("🟢 旧版本麦麦启动成功！CMD窗口将保持打开", "green")
-                except Exception as e:
-                    print_color(f"❌ 旧版本麦麦启动失败：{str(e)}", "red")
-                    success = False
-                
-                if not success:
-                    print_color("🔔 旧版本麦麦启动可能失败，请检查弹出的窗口", "yellow")
-            else:
-                print_color("❌ 未找到run.bat文件！", "red")
-        else:
-            # 新版本启动逻辑：启动麦麦本体和适配器
-            print_color("使用新版本启动模式", "green")
-            
-            # 启动麦麦本体
-            success1 = run_script(
-                work_dir=selected_cfg["mai_path"],
-                commands="python bot.py"
-            )
-
-            # 启动适配器（仅在适配器路径有效时）
-            adapter_path = selected_cfg.get("adapter_path", "")
-            if adapter_path and adapter_path != "当前配置集的对象实例版本较低，无适配器":
-                venv_activate = os.path.normpath(
-                    os.path.join(
-                        selected_cfg["mai_path"],
-                        "venv",
-                        "Scripts",
-                        "activate"
-                    )
-                )
-                success2 = run_script(
-                    work_dir=adapter_path,
-                    commands=[
-                        f'& "{venv_activate}"',
-                        'python main.py'
-                    ]
-                )
-
-                if success1 and success2:
-                    print_color("🟢 麦麦启动成功！两个PowerShell窗口将保持打开", "green")
-                else:
-                    print_color("🔔 部分组件启动失败，请检查弹出的窗口", "yellow")
-            else:
-                if success1:
-                    print_color("🟢 麦麦本体启动成功！PowerShell窗口将保持打开", "green")
-                else:
-                    print_color("🔔 麦麦本体启动失败，请检查弹出的窗口", "yellow")
-
-    except Exception as e:
-        print_color(f"❌ 启动失败：{str(e)}", "red")
-    finally:
-        input("按回车键返回主菜单...")
-
-
 
 
 def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
     """运行LPMM相关脚本的通用函数"""
     if not mai_path:
-        print_color("❌ 麦麦知识库（本体）路径未配置！请重新配置！", "red")
+        print_rgb("❌ 麦麦知识库（本体）路径未配置！请重新配置！", "#FF6B6B")
         return False
 
     try:
         # 激活虚拟环境
-        print_color(f"正在进行{description}...", "cyan")
-        print_color("正在激活虚拟环境...", "cyan")
+        print_rgb(f"正在进行{description}...", "#00FFBB")
+        print_rgb("正在激活虚拟环境...", "#00FFBB")
         
         # 显示警告信息
         if warning_messages:
@@ -1239,8 +1291,8 @@ def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
             return False
             
         # 运行脚本
-        print_color(f"操作已确认！正在启动{description}程序...", "green")
-        print_color("请在PowerShell窗口中确认执行程序！", "blue")
+        print_rgb(f"操作已确认！正在启动{description}程序...", "#00FFBB")
+        print_rgb("请在PowerShell窗口中确认执行程序！", "#00FFBB")
         
         try:
             # 构建PowerShell命令
@@ -1253,17 +1305,17 @@ def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
             subprocess.run(start_command, shell=True, check=True)
             
             # 等待用户输入确认PowerShell操作已完成
-            print_color("\n请在PowerShell窗口中完成操作后，在此处按回车键继续...", "yellow")
+            print_rgb("\n请在PowerShell窗口中完成操作后，在此处按回车键继续...", "#00FFBB")
             input()
             
             return True
             
         except subprocess.CalledProcessError as e:
-            print_color(f"❌ 执行失败：{str(e)}", "red")
+            print_rgb(f"❌ 执行失败：{str(e)}", "#FF6B6B")
             return False
         
     except Exception as e:
-        print_color(f"❌ 执行失败：{str(e)}", "red")
+        print_rgb(f"❌ 执行失败：{str(e)}", "#FF6B6B")
         return False
 
 def run_lpmm_text_split(configs):
@@ -1276,19 +1328,19 @@ def run_lpmm_text_split(configs):
     # 验证路径
     valid, msg = validate_path(mai_path, check_file="bot.py")
     if not valid:
-        print_color(f"❌ 麦麦本体路径无效：{msg}", "red")
+        print_rgb(f"❌ 麦麦本体路径无效：{msg}", "#FF6B6B")
         input("按回车键返回菜单...")
         return False
     
-    print_color("该进程将处理\\MaiBot\\data/lpmm_raw_data目录下的所有.txt文件。", "cyan")
-    print_color("处理后的数据将全部合并为一个.JSON文件并储存在\\MaiBot\\data/imported_lpmm_data目录中。", "cyan")
+    print_rgb("该进程将处理\\MaiBot\\data/lpmm_raw_data目录下的所有.txt文件。", "#6DA0FD")
+    print_rgb("处理后的数据将全部合并为一个.JSON文件并储存在\\MaiBot\\data/imported_lpmm_data目录中。", "#6DA0FD")
     success = run_lpmm_script(
         mai_path,
         "raw_data_preprocessor.py",
         "LPMM知识库文本分割"
     )
     if success:
-        print_color("\nLPMM知识库文本分割已结束！", "green")
+        print_rgb("\nLPMM知识库文本分割已结束！", "#00FFBB")
     return success
 
 def run_lpmm_entity_extract(configs):
@@ -1301,7 +1353,7 @@ def run_lpmm_entity_extract(configs):
     # 验证路径
     valid, msg = validate_path(mai_path, check_file="bot.py")
     if not valid:
-        print_color(f"❌ 麦麦本体路径无效：{msg}", "red")
+        print_rgb(f"❌ 麦麦本体路径无效：{msg}", "#FF6B6B")
         input("按回车键返回菜单...")
         return False
     
@@ -1317,7 +1369,7 @@ def run_lpmm_entity_extract(configs):
         warnings
     )
     if success:
-        print_color("\nLPMM知识库实体提取已结束！", "green")
+        print_color("\nLPMM知识库实体提取已结束！", "#00FFBB")
     return success
 
 def run_lpmm_knowledge_import(configs):
@@ -1330,7 +1382,7 @@ def run_lpmm_knowledge_import(configs):
     # 验证路径
     valid, msg = validate_path(mai_path, check_file="bot.py")
     if not valid:
-        print_color(f"❌ 麦麦本体路径无效：{msg}", "red")
+        print_rgb(f"❌ 麦麦本体路径无效：{msg}", "#FF6B6B")
         input("按回车键返回菜单...")
         return False
     
@@ -1349,21 +1401,21 @@ def run_lpmm_knowledge_import(configs):
         warnings
     )
     if success:
-        print_color("\nLPMM知识库知识图谱导入已结束！", "green")
+        print_rgb("\nLPMM知识库知识图谱导入已结束！", "#00FFBB")
     return success
 
 def run_lpmm_pipeline(configs):
     """运行LPMM一条龙服务"""
     if run_lpmm_text_split(configs):
-        print_color("\nLPMM知识库文本分割已结束！", "green")
-        print_color("是否继续进行实体提取操作？(Y/N)：", "yellow")
+        print_rgb("\nLPMM知识库文本分割已结束！", "#00FFBB")
+        print_rgb("是否继续进行实体提取操作？(Y/N)：", "#6DA0FD")
         if input().upper() == 'Y':
             if run_lpmm_entity_extract(configs):
-                print_color("\nLPMM知识库实体提取已结束！", "green")
+                print_rgb("\nLPMM知识库实体提取已结束！", "#00FFBB")
                 while True:
-                    print_color("\n [A] 实体提取可能失败，重新提取？", "red")
-                    print_color(" [B] 继续进行知识图谱导入操作", "green")
-                    print_color(" [C] 取消后续操作并返回主菜单", "yellow")
+                    print_rgb("\n [A] 实体提取可能失败，重新提取？", "#FF6B6B")
+                    print_rgb(" [B] 继续进行知识图谱导入操作", "#6DA0FD")
+                    print_rgb(" [Q] 取消后续操作并返回主菜单", "#7E1DE4")
                     choice = input("请选择操作: ").upper()
                     
                     if choice == 'A':
@@ -1371,25 +1423,27 @@ def run_lpmm_pipeline(configs):
                             break
                     elif choice == 'B':
                         if run_lpmm_knowledge_import(configs):
-                            print_color("\nLPMM知识库知识图谱导入已结束！LPMM知识库构建操作已结束！", "green")
+                            print_rgb("\nLPMM知识库知识图谱导入已结束！LPMM知识库构建操作已结束！", "#00FFBB")
                         break
-                    elif choice == 'C':
+                    elif choice == 'Q':
                         break
     
-    print_color("\n已关闭命令行窗口，即将返回主菜单！", "green")
+    print_rgb("\n已关闭命令行窗口，即将返回主菜单！", "#6DFD8A")
     countdown_timer(3)
 
 def lpmm_menu():
     """LPMM知识库构建子菜单"""
     while True:
         clear_screen()
-        print_color("[🔧 LPMM知识库构建]", "cyan")
+        print_rgb("[🔧 LPMM知识库构建]", "#00FFBB")
         print("================")
-        print_color(" [A] LPMM知识库一条龙构建（适用于支持LPMM知识库的版本，推荐0.6.3）", "cyan")
-        print_color(" [B] LPMM知识库文本分割", "cyan")
-        print_color(" [C] LPMM知识库实体提取", "cyan")
-        print_color(" [D] LPMM知识库知识图谱导入", "cyan")
-        print_color(" [Q] 返回主菜单", "blue")
+        print_rgb("->>>该功能仅适用于支持LPMM知识库的版本，如“0.6.3-alpha”<<<-", "#FF6B6B")
+        print_rgb(" [A] LPMM知识库一条龙构建", "#00FFBB")
+        print_rgb(" [B] LPMM知识库文本分割", "#02A18F")
+        print_rgb(" [C] LPMM知识库实体提取", "#02A18F")
+        print_rgb(" [D] LPMM知识库知识图谱导入", "#02A18F")
+        print_rgb(" [Q] 返回主菜单", "#7E1DE4")
+        print_rgb("->>>仍使用旧版知识库的版本（如0.6.0-alpha）请运行根目录下的“麦麦开始学习.bat”脚本构建知识库<<<-", "#FF6B6B")
         print("================")
 
         choice = input("请选择操作: ").upper()
@@ -1407,15 +1461,15 @@ def lpmm_menu():
         elif choice == "D":
             run_lpmm_knowledge_import(configs)
         else:
-            print_color("❌ 无效选项", "red")
+            print_rgb("❌ 无效选项", "#FF6B6B")
             time.sleep(1)
 
 def migrate_mongodb_to_sqlite():
     """MongoDB to SQLite database migration menu"""
     clear_screen()
-    print_color("[🔧 知识库迁移 (MongoDB → SQLite)]", "cyan")
+    print_rgb("[🔧 知识库迁移 (MongoDB → SQLite)]", "#28DCF0")
     print("================")
-    print_color("该功能系用于将较低版本的麦麦（如0.6.3-fix4）的知识库迁移至较高版本的麦麦（如0.7.0）的知识库", "cyan")
+    print_rgb("该功能系用于将较低版本的麦麦（如0.6.3-fix4）的知识库迁移至较高版本的麦麦（如0.7.0）的知识库", "#28DCF0")
     
     # Load configurations
     config = load_config()
@@ -1430,20 +1484,20 @@ def migrate_mongodb_to_sqlite():
     mai_path = selected_cfg["mai_path"]
     valid, msg = validate_path(mai_path, check_file="bot.py")
     if not valid:
-        print_color(f"❌ 麦麦本体路径无效：{msg}", "red")
+        print_rgb(f"❌ 麦麦本体路径无效：{msg}", "#FF6B6B")
         input("按回车键返回主菜单...")
         return
     
     # Check if MongoDB service is running
     if not check_mongodb():
-        print_color("❌ MongoDB服务未启动！请确保MongoDB服务已开启后再试。", "red")
+        print_rgb("❌ MongoDB服务未启动！请确保MongoDB服务已开启后再试。", "#FF6B6B")
         input("按回车键返回主菜单...")
         return
     
     # Confirm migration
-    print_color("该操作将迁移原MongoDB数据库下名为MegBot的数据库至最新的SQLite数据库", "cyan")
-    print_color("迁移前请确保MongoDB服务已开启", "yellow")
-    print_color("是否继续？(Y/N)：", "yellow")
+    print_rgb("该操作将迁移原MongoDB数据库下名为MegBot的数据库至最新的SQLite数据库", "#28DCF0")
+    print_rgb("迁移前请确保MongoDB服务已开启", "#28DCF0")
+    print_rgb("是否继续？(Y/N)：", "#28DCF0")
     choice = input().upper()
     if choice != 'Y':
         print_color("操作已取消！", "yellow")
@@ -1455,40 +1509,1049 @@ def migrate_mongodb_to_sqlite():
     
     # Check if the batch file exists
     if not os.path.isfile(bat_file):
-        print_color(f"❌ 迁移脚本文件 {bat_file} 不存在！", "red")
+        print_rgb(f"❌ 迁移脚本文件 {bat_file} 不存在！", "#FF6B6B")
         input("按回车键返回主菜单...")
         return
     
     # Run the migration script
     try:
-        print_color("操作已确认！正在启动MongoDB到SQLite迁移程序...", "green")
-        print_color("请在命令行窗口中确认执行程序！", "blue")
+        print_rgb("操作已确认！正在启动MongoDB到SQLite迁移程序...", "#28DCF0")
+        print_rgb("请在命令行窗口中确认执行程序！", "#28DCF0")
         
         # Execute the batch file
         subprocess.run(f'"{bat_file}"', shell=True, check=True)
         
-        print_color("\nMongoDB到SQLite迁移已完成！", "green")
+        print_rgb("\nMongoDB到SQLite迁移已完成！", "#28DCF0")
     except subprocess.CalledProcessError as e:
-        print_color(f"❌ 迁移失败：{str(e)}", "red")
+        print_rgb(f"❌ 迁移失败：{str(e)}", "#FF6B6B")
     except Exception as e:
-        print_color(f"❌ 迁移失败：{str(e)}", "red")
+        print_rgb(f"❌ 迁移失败：{str(e)}", "#FF6B6B")
     
     input("按回车键返回主菜单...")
 
-def Deployment():
-    """部署菜单"""
+def install_mongodb():
+    """
+    安装 MongoDB
+    """
+    print_rgb("下载 MongoDB", "#0BA30D")
+    resp = requests.get(
+        "https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-latest.zip",
+        stream=True,
+    )
+    total = int(resp.headers.get("content-length", 0))  # 计算文件大小
+    with (
+        open("mongodb.zip", "wb") as file,
+        tqdm(  # 展示下载进度条，并解压文件
+            desc="mongodb.zip",
+            total=total,
+            unit="iB",
+            unit_scale=True,
+            unit_divisor=1024,
+        ) as bar,
+    ):
+        for data in resp.iter_content(chunk_size=1024):
+            size = file.write(data)
+            bar.update(size)
+    
+    with zipfile.ZipFile("mongodb.zip", 'r') as zip_ref:
+        zip_ref.extractall("mongodb")
+    
+    print_rgb("MongoDB 下载完成", "#0BA30D")
+    os.remove("mongodb.zip")
+    
+    choice = input("是否安装 MongoDB Compass？此软件可以以可视化的方式修改数据库，建议安装（Y/n）").upper()
+    if choice == "Y" or choice == "":
+        install_mongodb_compass()
+
+def run_cmd(command: str, open_new_window: bool = True):
+    """
+    运行 cmd 命令
+
+    Args:
+        command (str): 指定要运行的命令
+        open_new_window (bool): 指定是否新建一个 cmd 窗口运行
+    """
+    if open_new_window:
+        command = "start " + command
+    subprocess.Popen(command, shell=True)
+
+def install_mongodb_compass():
+    run_cmd(r"powershell Start-Process powershell -Verb runAs 'Set-ExecutionPolicy RemoteSigned'")
+    input("请在弹出的用户账户控制中点击“是”后按任意键继续安装")
+    run_cmd(r"powershell mongodb\bin\Install-Compass.ps1")
+
+def is_python_installed(min_version=(3, 10)):
+    try:
+        # 检查Python是否安装
+        result = subprocess.run(["python", "--version"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return False
+        
+        # 解析版本号
+        version_str = result.stdout.strip().split()[1]
+        version_tuple = tuple(map(int, version_str.split('.')))
+        
+        # 检查版本是否足够新
+        return version_tuple > min_version
+    except Exception:
+        return False
+
+def download_file(url, filename):
+    """
+    下载文件并显示进度条
+    """
+    resp = requests.get(url, stream=True)
+    total = int(resp.headers.get("content-length", 0))
+    
+    with open(filename, "wb") as file, tqdm(
+        desc=filename,
+        total=total,
+        unit="iB",
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as bar:
+        for data in resp.iter_content(chunk_size=1024):
+            size = file.write(data)
+            bar.update(size)
+
+def check_mongodb_service():
+    try:
+        output = subprocess.check_output('sc query MongoDB', shell=True, stderr=subprocess.DEVNULL)
+        return "RUNNING" in output.decode()
+    except:
+        return False
+
+def check_mongodb_compass():
+    """
+    检查系统是否安装了 MongoDB Compass
+    通过查询Windows注册表来检测
+    """
+    try:
+        # 打开卸载注册表项
+        reg_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+        reg_key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path)
+        
+        # 获取子键数量
+        key_count = winreg.QueryInfoKey(reg_key)[0]
+        
+        # 遍历所有已安装程序
+        for i in range(key_count):
+            try:
+                # 打开每个程序的注册表项
+                key_name = winreg.EnumKey(reg_key, i)
+                sub_key = winreg.OpenKey(reg_key, key_name)
+                
+                # 获取显示名称
+                display_name, _ = winreg.QueryValueEx(sub_key, "DisplayName")
+                
+                # 检查是否为 MongoDB Compass
+                if "MongoDB Compass" in display_name:
+                    return True
+                    
+            except FileNotFoundError:
+                # 某些键可能没有DisplayName值，跳过
+                continue
+            except Exception as e:
+                # 记录其他错误但继续检查
+                print_rgb(f"注册表检查错误: {str(e)}", "#FF6B6B")
+                continue
+                
+        return False
+        
+    except FileNotFoundError:
+        # 注册表路径不存在
+        return False
+    except PermissionError:
+        # 没有权限访问注册表
+        print_rgb("❌ 没有权限访问注册表！", "#FF6B6B")
+        return False
+    except Exception as e:
+        # 其他未知错误
+        print_rgb(f"❌ 检查MongoDB Compass时出错: {str(e)}", "#FF6B6B")
+        return False
+
+def get_changelog(version):
+    """根据版本返回更新日志"""
+    changelogs = {
+        "classical": """
+🌟 核心功能增强
+关系系统升级
+新增关系系统构建与启用功能
+优化关系管理系统
+改进prompt构建器结构
+新增手动修改记忆库的脚本功能
+增加alter支持功能
+启动器优化
+新增MaiLauncher.bat 1.0版本
+优化Python和Git环境检测逻辑
+添加虚拟环境检查功能
+改进工具箱菜单选项
+新增分支重置功能
+添加MongoDB支持
+优化脚本逻辑
+修复虚拟环境选项闪退和conda激活问题
+修复环境检测菜单闪退问题
+修复.env.prod文件复制路径错误
+日志系统改进
+新增GUI日志查看器
+重构日志工厂处理机制
+优化日志级别配置
+支持环境变量配置日志级别
+改进控制台日志输出
+优化logger输出格式
+💻 系统架构优化
+配置系统升级
+更新配置文件到0.0.10版本
+优化配置文件可视化编辑
+新增配置文件版本检测功能
+改进配置文件保存机制
+修复重复保存可能清空list内容的bug
+修复人格设置和其他项配置保存问题
+WebUI改进
+优化WebUI界面和功能
+支持安装后管理功能
+修复部分文字表述错误
+部署支持扩展
+优化Docker构建流程
+改进MongoDB服务启动逻辑
+完善Windows脚本支持
+优化Linux一键安装脚本
+新增Debian 12专用运行脚本
+🐛 问题修复
+功能稳定性
+修复bot无法识别at对象和reply对象的问题
+修复每次从数据库读取额外加0.5的问题
+修复新版本由于版本判断不能启动的问题
+修复配置文件更新和学习知识库的确认逻辑
+优化token统计功能
+修复EULA和隐私政策处理时的编码兼容问题
+修复文件读写编码问题，统一使用UTF-8
+修复颜文字分割问题
+修复willing模块cfg变量引用问题
+📚 文档更新
+更新CLAUDE.md为高信息密度项目文档
+添加mermaid系统架构图和模块依赖图
+添加核心文件索引和类功能表格
+添加消息处理流程图
+优化文档结构
+更新EULA和隐私政策文档
+🔧 其他改进
+更新全球在线数量展示功能
+优化statistics输出展示
+新增手动修改内存脚本（支持添加、删除和查询节点和边）
+主要改进方向
+完善关系系统功能
+优化启动器和部署流程
+改进日志系统
+提升配置系统稳定性
+加强文档完整性
+""",
+        "0.6.0-alpha": """
+MaiBot 0.6.0 重磅升级！ 核心重构为独立智能体MaiCore，
+新增思维流对话系统，支持拟真思考过程。
+记忆与关系系统2.0让交互更自然，动态日程引擎实现智能调整。
+优化部署流程，修复30+稳定性问题，隐私政策同步更新！
+""",
+        "0.6.2-alpha": """
+摘要
+优化了心流的观察系统，优化提示词和表现，现在心流表现更好！
+新增工具调用能力，可以更好地获取信息
+本次更新主要围绕工具系统、心流系统、消息处理和代码优化展开，新增多个工具类，优化了心流系统的逻辑，改进了消息处理流程，并修复了多个问题。
+🌟 核心功能增强
+工具系统
+新增了知识获取工具系统，支持通过心流调用获取多种知识
+新增了工具系统使用指南，详细说明工具结构、自动注册机制和添加步骤
+新增了多个实用工具类，包括心情调整工具ChangeMoodTool、关系查询工具RelationshipTool、数值比较工具CompareNumbersTool、日程获取工具GetCurrentTaskTool、上下文压缩工具CompressContextTool和知识获取工具GetKnowledgeTool
+更新了ToolUser类，支持自动获取已注册工具定义并调用execute方法
+需要配置支持工具调用的模型才能使用完整功能
+心流系统
+新增了上下文压缩缓存功能，可以有更持久的记忆
+新增了心流系统的README.md文件，详细介绍了系统架构、主要功能和工作流程。
+优化了心流系统的逻辑，包括子心流自动清理和合理配置更新间隔。
+改进了心流观察系统，优化了提示词设计和系统表现，使心流运行更加稳定高效。
+更新了Heartflow类的方法和属性，支持异步生成提示词并提升生成质量。
+消息处理
+改进了消息处理流程，包括回复检查、消息生成和发送逻辑。
+新增了ReplyGenerator类，用于根据观察信息和对话信息生成回复。
+优化了消息队列管理系统，支持按时间顺序处理消息。
+现在可以启用更好的表情包发送系统
+""",
+        "0.6.3-alpha": """
+摘要
+MaiBot 0.6.3 版本发布！核心重构回复逻辑，统一为心流系统管理，智能切换交互模式。
+引入全新的 LPMM 知识库系统，大幅提升信息获取能力。
+新增昵称系统，改善群聊中的身份识别。
+提供独立的桌宠适配器连接程序。
+优化日志输出，修复若干问题。
+🌟 核心功能增强
+统一回复逻辑 (Unified Reply Logic)
+核心重构: 移除了经典 (Reasoning) 与心流 (Heart Flow) 模式的区分，将回复逻辑完全整合到 SubHeartflow 中进行统一管理，由主心流统一调控。保留 Heart FC 模式的特色功能。
+智能交互模式: SubHeartflow 现在可以根据情境智能选择不同的交互模式：
+普通聊天 (Normal Chat): 类似于之前的 Reasoning 模式，进行常规回复（激活逻辑暂未改变）。
+心流聊天 (Heart Flow Chat): 基于改进的 PFC 模式，能更好地理解上下文，减少重复和认错人的情况，并支持工具调用以获取额外信息。
+离线模式 (Offline/Absent): 在特定情况下，麦麦可能会选择暂时不查看或回复群聊消息。
+状态管理: 交互模式的切换由 SubHeartflow 内部逻辑和 SubHeartflowManager 根据整体状态 (MaiState) 和配置进行管理。
+流程优化: 拆分了子心流的思考模块，使整体对话流程更加清晰。
+状态判断改进: 将 CHAT 状态判断交给 LLM 处理，使对话更自然。
+回复机制: 实现更为灵活的概率回复机制，使机器人能够自然地融入群聊环境。
+重复性检查: 加入心流回复重复性检查机制，防止麦麦陷入固定回复模式。
+全新知识库系统 (New Knowledge Base System - LPMM)
+引入 LPMM: 新增了 LPMM (Large Psychology Model Maker) 知识库系统，具有强大的信息检索能力，能显著提升麦麦获取和利用知识的效率。
+功能集成: 集成了 LPMM 知识库查询功能，进一步扩展信息检索能力。
+推荐使用: 强烈建议使用新的 LPMM 系统以获得最佳体验。旧的知识库系统仍然可用作为备选。
+昵称系统 (Nickname System)
+自动取名: 麦麦现在会尝试给群友取昵称，减少对易变的群昵称的依赖，从而降低认错人的概率。
+持续完善: 该系统目前仍处于早期阶段，会持续进行优化。
+记忆与上下文增强 (Memory and Context Enhancement)
+聊天记录压缩: 大幅优化聊天记录压缩系统，使机器人能够处理5倍于之前的上下文记忆量。
+长消息截断: 新增了长消息自动截断与模糊化功能，随着时间推移降低超长消息的权重，避免被特定冗余信息干扰。
+记忆提取: 优化记忆提取功能，提高对历史对话的理解和引用能力。
+记忆整合: 为记忆系统加入了合并与整合机制，优化长期记忆的结构与效率。
+中期记忆调用: 完善中期记忆调用机制，使机器人能够更自然地回忆和引用较早前的对话。
+Prompt 优化: 进一步优化了关系系统和记忆系统相关的提示词（prompt）。
+私聊 PFC 功能增强 (Private Chat PFC Enhancement)
+功能修复与优化: 修复了私聊 PFC 载入聊天记录缺失的 bug，优化了 prompt 构建，增加了审核机制，调整了重试次数，并将机器人发言存入数据库。
+实验性质: 请注意，PFC 仍然是一个实验性功能，可能在未来版本中被修改或移除，目前不接受相关 Bug 反馈。
+情感与互动增强 (Emotion and Interaction Enhancement)
+全新表情包系统: 新的表情包系统上线，表情含义更丰富，发送更快速。
+表情包使用优化: 优化了表情包的选择逻辑，减少重复使用特定表情包的情况，使表达更生动。
+提示词优化: 优化提示词（prompt）构建，增强对话质量和情感表达。
+积极性配置: 优化"让麦麦更愿意说话"的相关配置，使机器人更积极参与对话。
+颜文字保护: 保护颜文字处理机制，确保表情正确显示。
+工具与集成 (Tools and Integration)
+动态更新: 使用工具调用来更新关系和心情，取代原先的固定更新机制。
+智能调用: 工具调用时会考虑上下文，使调用更加智能。
+知识库依赖: 添加 LPMM 知识库依赖，扩展知识检索工具。
+💻 系统架构优化
+日志优化 (Logging Optimization)
+输出更清晰: 优化了日志信息的格式和内容，使其更易于阅读和理解。
+模型与消息整合 (Model and Message Integration)
+模型合并: 合并工具调用模型和心流模型，提高整体一致性。
+消息规范: 全面改用 maim_message，移除对 rest 的支持。
+(临时) 简易 GUI (Temporary Simple GUI)
+运行状态查看: 提供了一个非常基础的图形用户界面，用于查看麦麦的运行状态。
+临时方案: 这是一个临时性的解决方案，功能简陋，将在 0.6.4 版本中被全新的 Web UI 所取代。此 GUI 不会包含在主程序包中，而是通过一键包提供，并且不接受 Bug 反馈。
+🐛 问题修复
+记忆检索优化: 提高了记忆检索的准确性和效率。
+修复了一些其他小问题。
+🔧 其他改进
+桌宠适配器 (Bug Catcher Adapter)
+独立适配器: 提供了一个"桌宠"独立适配器，用于连接麦麦和桌宠。
+获取方式: 可在 MaiBot 的 GitHub 组织中找到该适配器，不包含在主程序内。
+""",
+        "0.6.3-fix3-alpha": """
+What's Changed
+Fix: 修复私聊构建失败 by @tcmofashi in #906
+新增lpmm的Linux快捷脚本 by @infinitycat233 in #907
+feat: 新增lpmm的Linux快捷脚本 by @infinitycat233 in #901
+PFC 修复 by @Dax233 in #912
+feat: 更新数据路径配置，增强数据处理功能并优化错误提示 by @DrSmoothl in #916
+表情包修复 by @Dax233 in #918
+fix: 将左半角括号改为全角括号，保持注释左右括号匹配 by @KeepingRunning in #933
+Full Changelog: 0.6.3-alpha...0.6.3-fix3-alpha
+""",
+        "0.6.3-fix4-alpha": """
+0.6.3 的最后一个修复版
+fix1-fix4修复日志
+聊天状态
+大幅精简聊天状态切换，提高麦麦说话能力
+移除OFFLINE和ABSENT状态
+移除聊天数量限制
+聊天默认normal_chat
+默认关闭focus_chat
+知识库LPMM
+增加嵌入模型一致性校验功能
+强化数据导入处理，增加非法文段检测功能
+修正知识获取逻辑，调整相关性输出顺序
+添加数据导入的用户确认删除功能
+专注模式
+默认提取记忆，优化记忆表现
+添加心流查重
+为复读增加硬限制
+支持获取子心流循环信息和状态的API接口
+优化工具调用的信息获取与缓存
+表情包系统
+优化表情包识别和处理
+提升表情匹配逻辑
+日志系统
+优化日志样式配置
+添加丰富的追踪信息以增强调试能力
+API
+添加GraphQL路由支持
+新增强制停止MAI Bot的API接口
+""",
+        "0.7.0-alpha": """
+更新细节：
+重构专注聊天(HFC - focus_chat)
+模块化设计，可以自定义不同的部件
+观察器（获取信息）
+信息处理器（处理信息）
+重构：聊天思考（子心流）处理器
+重构：聊天处理器
+重构：聊天元信息处理器
+重构：工具处理器
+新增：工作记忆处理器
+新增：自我认知处理器
+新增：动作处理器
+决策器（选择动作）
+执行器（执行动作）
+回复动作
+不回复动作
+退出HFC动作
+插件：禁言动作
+表达器：装饰语言风格
+可通过插件添加和自定义HFC部件（目前只支持action定义）
+为专注模式添加关系线索
+在专注模式下，麦麦可以决定自行发送语音消息（需要搭配tts适配器）
+优化reply，减少复读
+可自定义连续回复次数
+可自定义处理器超时时间
+优化普通聊天(normal_chat)
+添加可学习的表达方式
+增加了talk_frequency参数来有效控制回复频率
+优化了进入和离开normal_chat的方式
+添加时间信息
+新增表达方式学习
+麦麦配置单独表达方式
+自主学习群聊中的表达方式，更贴近群友
+可自定义的学习频率和开关
+根据人设生成额外的表达方式
+聊天管理
+移除不在线状态
+优化自动模式下normal与focus聊天的切换机制
+大幅精简聊天状态切换规则，减少复杂度
+移除聊天限额数量
+插件系统
+示例插件：禁言插件
+示例插件：豆包绘图插件
+人格
+简化了人格身份的配置
+优化了在focus模式下人格的表现和稳定性
+数据库重构
+移除了默认使用MongoDB，采用轻量sqlite
+无需额外安装数据库
+提供迁移脚本
+优化
+移除日程系统，减少幻觉（将会在未来版本回归）
+移除主心流思考和LLM进入聊天判定
+支持qwen3模型，支持自定义是否思考和思考长度
+优化提及和at的判定
+添加配置项
+添加临时配置文件读取器
+"""
+    }
+    return changelogs.get(version, "❌ 未找到该版本的更新日志")
+
+def deployment_assistant():
+    """部署辅助系统主函数"""
+    clear_screen()
+    print_rgb("[🔧 部署辅助系统]", "#FF6B6B")
+    print("================\n")
+    print_rgb("当前可部署的实例版本有:", "#FFF3C2")
+    versions = [
+        "classical",
+        "0.6.0-alpha",
+        "0.6.2-alpha",
+        "0.6.3-alpha",
+        "0.6.3-fix3-alpha",
+        "0.6.3-fix4-alpha",
+        "0.7.0-alpha"
+    ]
+    print_rgb("以稳定性为指标推荐部署的版本有“classical”、“0.6.2-alpha”、“0.6.3-fix4-alpha”、“0.7.0-alpha”,“0.7.0-alpha”为目前的最新版本，请您根据实际情况选择", "#FFF3C2")
+    
+    for version in versions:
+        print_rgb(f" {version}", "#F2FF5D")
+    
+    while True:
+        selected_version = get_text_input("\n请输入版本号以选择您要部署的实例（输入Q返回）:", "cyan")
+        if selected_version.upper() == "Q":
+            return
+        
+        if selected_version in versions:
+            break
+        print_rgb("❌ 无效的版本号，请重新输入", "#FF6B6B")
+    
+    # 显示更新日志
+    show_changelog = input("是否显示当前实例的更新日志？(Y/N) ").upper()
+    if show_changelog == "Y":
+        changelog = get_changelog(selected_version)
+        print_rgb("\n更新日志:", "#FFF3C2")
+        print(changelog)
+        input("\n按回车键继续...")
+    
+    # 检查Python环境
+    print_rgb("正在检测Python...", "#FFF3C2")
+    if not is_python_installed():
+        print_rgb("❌ 未检测到Python，或当前Python版本过低，无法继续部署！", "#FF6B6B")
+        download_python = input("是否下载Python安装包？（Y/N）").upper()
+        
+        if download_python == "Y":
+            print_rgb("正在下载Python安装包...", "#BADFFA")
+            python_url = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe"
+            download_file(python_url, "python-3.12.8-amd64.exe")
+            
+            print_rgb("Python安装包下载完成！", "#6DFD8A")
+            print_rgb("请双击安装包以启动安装程序，", "#FFF3C2")
+            print_rgb("一定要勾选下方的Add python.exe to PATH选项！", "#FF6B6B")
+            print_rgb("然后选择第一个标题为Install Now的安装选项安装", "#FFF3C2")
+            print_rgb("安装完成后请手动添加Python的bin文件夹到系统环境变量中或重启计算机以自动添加", "#FFF3C2")
+            
+            input("\n安装完成后按回车键继续...")
+            
+            # 再次检查Python
+            print_rgb("再次检测Python环境...", "#BADFFA")
+            if not is_python_installed():
+                print_rgb("❌ Python安装未完成或环境变量未配置，部署中断！", "#FF6B6B")
+                return
+        else:
+            confirm_cancel = input("该操作将中断部署流程，是否确认？（Y/N）").upper()
+            if confirm_cancel == "Y":
+                return
+    
+    # 检查MongoDB（classical或小于0.7.0-alpha的版本需要）
+    if selected_version == "classical" or selected_version < "0.7.0-alpha":
+        print_rgb("正在检测Mongo DB...", "#BADFFA")
+        mongodb_installed = check_mongodb_service()
+        
+        if mongodb_installed:
+            print_rgb("已检测到Mongo DB服务，跳过Mongo DB安装", "#BADFFA")
+        else:
+            print_rgb("未检测到Mongo DB服务", "#FF6B6B")
+            install_mongodb = input("是否安装Mongo DB？(Y/N) ").upper()
+            if install_mongodb == "Y":
+                install_mongodb()
+            else:
+                print_rgb("❌ MongoDB是必需组件，部署中断！", "#FF6B6B")
+                return
+        
+        # 检查MongoDB Compass
+        mongodb_compass_installed = check_mongodb_compass()
+        if mongodb_compass_installed:
+            print_rgb("已检测到MongoDB Compass，跳过安装", "#BADFFA")
+        else:
+            print_rgb("未检测到MongoDB Compass", "#F2FF5D")
+    else:
+        print_rgb("因为您将部署的实例无需用到Mongo DB，跳过Mongo DB检测", "#BADFFA")
+    
+    # 安装NapCat
+    install_napcat = input("是否下载并安装NapCat？(Y/N) ").upper()
+    if install_napcat == "Y":
+        print_rgb("请在浏览器中下载NapCatQQ:", "#FFF3C2")
+        print_rgb("1. 打开 https://github.com/NapNeko/NapCatQQ/releases", "#A8B1FF")
+        print_rgb('2. 下拉找到蓝色的"NapCat.Framework.Windows.OneKey.zip"', "#A8B1FF")
+        print_rgb("3. 点击下载", "#FFF3C2")
+        print_rgb("4. 下载完成后解压压缩包", "#FFF3C2")
+        print_rgb("5. 运行其中的NapCatInstaller.exe文件以安装NapCat", "#FFF3C2")
+        print_rgb("6. 安装完成后进入新生成的NapCat.XXXXX.Framework文件夹（如NapCat.34740.Framework）", "#FFF3C2")
+        print_rgb('7. 找到"NapCatWinBootMain.exe"文件并运行', "#FFF3C2")
+        print_rgb("8. 登录您的QQ账号", "#A8B1FF")
+        
+        open_webui = input("\n是否打开NapCat的WebUI？(Y/N) ").upper()
+        if open_webui == "Y":
+            print_rgb("在浏览器中打开 https://127.0.0.1:6099", "#46AEF8")
+            print_rgb("在网络配置中新建Websocket客户端:", "#46AEF8")
+            
+            if selected_version == "classical":
+                print_rgb('URL处请填写: ws://127.0.0.1:8080/onebot/v11/ws', "#A8B1FF")
+            else:
+                print_rgb('URL处请填写: ws://localhost:8095/', "#A8B1FF")
+            
+            print_rgb("记得启用配置！", "#F2FF5D")
+    
+    # 检查Git环境
+    print_rgb("正在检测Git环境...", "#BADFFA")
+    try:
+        subprocess.run(["git", "--version"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print_rgb("已检测到Git环境！", "#A8B1FF")
+    except:
+        print_rgb("❌ 检测到您的计算机中未安装Git，无法使用实例部署功能！", "#FF6B6B")
+        print_rgb("请前往以下链接手动下载包体：", "#FFF3C2")
+        print_rgb("https://github.com/MaiM-with-u/MaiBot", "#A8B1FF")
+        print_rgb("https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter", "#A8B1FF")
+        print_rgb("或者前往以下链接前往Git官网下载并安装Git", "#FFF3C2")
+        print_rgb("https://git-scm.com/downloads", "#A8B1FF")
+        return
+    
+    # 创建临时配置
+    print_rgb("即将就该实例创建临时配置集！", "#BADFFA")
+    temp_config = {}
+    
+    # 获取用户序列号（确保不重复）
+    config = load_config()
+    existing_serials = {cfg["serial_number"] for cfg in config["configurations"].values()}
+    
+    while True:
+        serial_number = get_text_input("请输入该实例的用户序列号（不能为空）:", "cyan")
+        if not serial_number:
+            print_rgb("❌ 用户序列号不能为空！", "#FF6B6B")
+            continue
+        if serial_number in existing_serials:
+            print_rgb("❌ 该用户序列号已存在，请使用其他序列号！", "#FF6B6B")
+            continue
+        break
+    
+    # 获取安装目录
+    while True:
+        install_dir = get_input("请输入该实例的安装目录路径（不能为空）:", "cyan")
+        if not install_dir:
+            print_rgb("❌ 安装目录不能为空！", "#FF6B6B")
+            continue
+        if os.path.exists(os.path.join(install_dir, "MaiM-with-u")):
+            print_rgb("❌ 当前文件夹中已有重名项目文件夹，请更换目录！", "#FF6B6B")
+            continue
+        break
+    
+    # 获取昵称
+    nickname = get_text_input("请输入该实例的昵称（不能为空）:", "cyan")
+    while not nickname:
+        print_rgb("❌ 昵称不能为空！", "#FF6B6B")
+        nickname = get_text_input("请输入该实例的昵称（不能为空）:", "cyan")
+    
+    # 保存临时配置
+    temp_config = {
+        "serial_number": serial_number,
+        "install_dir": install_dir,
+        "nickname": nickname,
+        "version": selected_version
+    }
+    
+    with open("Install_config.toml", "w", encoding="utf-8") as f:
+        toml.dump(temp_config, f)
+    
+    # 确认部署
+    confirm = input("\n准备就绪！是否开始部署？(Y/N) ").upper()
+    if confirm != "Y":
+        confirm_cancel = input("确认取消部署？该操作将删除已配置完成的部署模板！（Y/N）").upper()
+        if confirm_cancel == "Y":
+            if os.path.exists("Install_config.toml"):
+                os.remove("Install_config.toml")
+            return
+    
+    # 开始部署
+    print_rgb("正在创建项目文件夹...", "#BADFFA")
+    os.makedirs(os.path.join(install_dir, "MaiM-with-u"), exist_ok=True)
+    print_rgb("项目文件夹创建成功！", "#FFF3C2")
+    
+    if selected_version == "classical":
+        deploy_classical(install_dir)
+    else:
+        deploy_non_classical(install_dir, selected_version)
+    
+    # 创建配置集
+    print_rgb("正在就该实例创建配置模版...", "#BADFFA")
+    config_name = get_text_input("请输入配置集名称:", "cyan")
+    
+    # 创建配置
+    new_config = {
+        "serial_number": serial_number,
+        "absolute_serial_number": generate_unique_absolute_serial(config["configurations"]),
+        "version_path": selected_version,
+        "nickname_path": nickname,
+        "mai_path": os.path.join(install_dir, "MaiM-with-u", "MaiBot"),
+        "adapter_path": os.path.join(install_dir, "MaiM-with-u", "MaiBot-Napcat-Adapter") if selected_version != "classical" else "当前配置集的对象实例版本较低，无适配器",
+        "napcat_path": get_input("请输入NapCat路径（可为空）:", "cyan", allow_empty=True, is_exe=True)
+    }
+    
+    # 保存配置
+    config["configurations"][config_name] = new_config
+    save_config(config)
+    
+    # 清理临时文件
+    if os.path.exists("Install_config.toml"):
+        os.remove("Install_config.toml")
+    
+    print_rgb("配置集保存完成，您可以通过主菜单中的 [A] 选项对该实例进行二次启动！", "#FFF3C2")
+    input("\n按回车键返回菜单...")
+
+def deploy_classical(install_dir):
+    """部署classical版本"""
+    project_dir = os.path.join(install_dir, "MaiM-with-u")
+    
+    # Clone classical版本
+    print_rgb("正在clone“classical”版本的麦麦至项目目录...", "#FFF3C2")
+    run_script(project_dir, "git clone -b classical --single-branch https://github.com/MaiM-with-u/MaiBot.git")
+    input("Clone完成后按回车键继续...")
+    
+    # 进入MaiBot目录
+    mai_dir = os.path.join(project_dir, "MaiBot")
+    
+    # 创建虚拟环境
+    print_rgb("正在创建名为“maimbot”虚拟环境...", "#FFF3C2")
+    run_script(mai_dir, "python -m venv maimbot")
+    input("虚拟环境创建完成后按回车键继续...")
+    
+    # 激活虚拟环境
+    print_rgb("正在激活虚拟环境...", "#FFF3C2")
+    run_script(mai_dir, "maimbot\\Scripts\\activate")
+    input("虚拟环境激活完成后按回车键继续...")
+    
+    # 更新pip
+    print_rgb("正在更新pip...", "#FFF3C2")
+    run_script(mai_dir, "python.exe -m pip install --upgrade pip")
+    input("pip更新完成后按回车键继续...")
+    
+    # 安装依赖
+    print_rgb("正在安装依赖...", "#FFF3C2")
+    run_script(mai_dir, "pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ -r requirements.txt --use-pep517")
+    input("依赖安装完成后按回车键继续...")
+    
+    # 首次启动
+    print_rgb("准备首次启动麦麦以初始化bot...", "#BADFFA")
+    print_rgb("首次启动后请输入同意并回车以同意隐私条款（若需要）", "#FFF3C2")
+    print_rgb("首次启动请保持终端窗口打开20秒以上，以确保完成初始化", "#FFF3C2")
+    print_rgb("保持终端窗口打开20秒后可以关闭窗口", "#FFF3C2")
+    print_rgb("初始化完成后请打开根目录的.env.prod文件并填写你的API Key", "#A8B1FF")
+    print_rgb("然后打开位于子目录config的bot_config.toml文件照注释对您的麦麦进行自定义", "#A8B1FF")
+    
+    run_script(mai_dir, "nb run")
+    input("完成后请回车以继续...")
+    
+    # 启动麦麦
+    print_rgb("麦麦启动成功！", "#6DFD8A")
+    run_script(mai_dir, "run.bat")
+
+def deploy_non_classical(install_dir, version):
+    """部署非classical版本"""
+    project_dir = os.path.join(install_dir, "MaiM-with-u")
+    
+    # Clone 指定版本
+    print_rgb(f"正在clone“{version}”版本的麦麦至项目目录...", "#FFF3C2")
+    run_script(project_dir, f"git clone --branch {version} https://github.com/MaiM-with-u/MaiBot.git")
+    input("Clone完成后按回车键继续...")
+    
+    # Clone 适配器
+    print_rgb("正在clone适配器至项目目录...", "#FFF3C2")
+    run_script(project_dir, "git clone https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter.git")
+    input("Clone完成后按回车键继续...")
+    
+    # 创建虚拟环境
+    mai_dir = os.path.join(project_dir, "MaiBot")
+    print_rgb("正在创建名为“venv”虚拟环境...", "#FFF3C2")
+    run_script(project_dir, f"python -m venv {os.path.join(mai_dir, 'venv')}")
+    input("虚拟环境创建完成后按回车键继续...")
+    
+    # 激活虚拟环境
+    print_rgb("正在激活虚拟环境...", "#FFF3C2")
+    run_script(project_dir, f"{os.path.join(mai_dir, 'venv', 'Scripts', 'activate')}")
+    input("虚拟环境激活完成后按回车键继续...")
+    
+    # 更新pip
+    print_rgb("正在更新pip...", "#FFF3C2")
+    run_script(project_dir, "python.exe -m pip install --upgrade pip")
+    input("pip更新完成后按回车键继续...")
+    
+    # 安装麦麦依赖
+    print_rgb("正在安装麦麦的依赖...", "#FFF3C2")
+    run_script(mai_dir, "pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade")
+    input("依赖安装完成后按回车键继续...")
+    
+    # 安装适配器依赖
+    adapter_dir = os.path.join(project_dir, "MaiBot-Napcat-Adapter")
+    print_rgb("正在安装适配器的依赖...", "#FFF3C2")
+    run_script(adapter_dir, "pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade")
+    input("依赖安装完成后按回车键继续...")
+    
+    # 处理适配器配置文件
+    print_rgb("正在复制并重命名适配器的配置文件...", "#BADFFA")
+    template_path = os.path.join(adapter_dir, "template", "template_config.toml")
+    config_path = os.path.join(adapter_dir, "config.toml")
+    
+    if os.path.exists(template_path):
+        with open(template_path, "r", encoding="utf-8") as src, open(config_path, "w", encoding="utf-8") as dst:
+            dst.write(src.read())
+        print_rgb("适配器配置文件已处理完成！", "#6DFD8A")
+    else:
+        print_rgb("❌ 未找到适配器模板文件！", "#FF6B6B")
+    
+    print_rgb("请您打开适配器根目录下的config.toml文件并配置白名单", "#A8B1FF")
+    input("完成后请回车以继续...")
+    
+    # 创建麦麦配置文件夹
+    print_rgb("正在创建麦麦的配置文件存放文件夹...", "#BADFFA")
+    config_dir = os.path.join(mai_dir, "config")
+    os.makedirs(config_dir, exist_ok=True)
+    print_rgb("配置文件存放文件夹创建成功！", "#FFF3C2")
+    
+    # 处理麦麦配置文件
+    print_rgb("正在复制并重命名麦麦的配置文件...", "#BADFFA")
+    mai_templates = [
+        ("bot_config_template.toml", "bot_config.toml"),
+        ("lpmm_config_template.toml", "lpmm_config.toml")
+    ]
+    
+    for src_name, dst_name in mai_templates:
+        src_path = os.path.join(mai_dir, "template", src_name)
+        dst_path = os.path.join(config_dir, dst_name)
+        
+        if os.path.exists(src_path):
+            with open(src_path, "r", encoding="utf-8") as src, open(dst_path, "w", encoding="utf-8") as dst:
+                dst.write(src.read())
+            print_rgb(f"{dst_name} 文件已处理完成！", "#6DFD8A")
+        else:
+            print_rgb(f"❌ 未找到 {src_name} 文件！若您部署的版本未支持LPMM（0.6.0-alpha、0.6.2-alpha）且仅lpmm_config_template.toml文件未找到，请忽略该警告", "#FF6B6B")
+    
+    # 处理.env文件
+    env_src = os.path.join(mai_dir, "template", "template.env")
+    env_dst = os.path.join(mai_dir, ".env")
+    
+    if os.path.exists(env_src):
+        with open(env_src, "r", encoding="utf-8") as src, open(env_dst, "w", encoding="utf-8") as dst:
+            dst.write(src.read())
+        print_rgb(".env 文件已处理完成！", "#6DFD8A")
+    else:
+        print_rgb("❌ 未找到 .env 模板文件！", "#FF6B6B")
+    
+    print_rgb("所有配置文件已处理完成！", "#FFF3C2")
+    print_rgb("请打开根目录的.env文件配置你的API Key", "#A8B1FF")
+    print_rgb("然后打开位于子目录config的lpmm_config.toml文件（若有）填写您的API Key", "#A8B1FF")
+    print_rgb("然后打开位于子目录config的bot_config.toml文件照注释对您的麦麦进行自定义", "#A8B1FF")
+    input("按回车键继续...")
+
+def delete_instance():
+    """删除实例"""
+    config = load_config()
+    configs = config["configurations"]
+    
+    if not configs:
+        print_rgb("❌ 当前没有配置任何实例！", "#FF6B6B")
+        input("按回车键返回...")
+        return
+    
+    clear_screen()
+    print_color("[🔧 删除实例]", "red")
+    print("================\n")
+    
+    # 列出所有配置集
+    for cfg_name, cfg in configs.items():
+        print(f"配置集: {cfg_name}")
+        print_rgb(f"序列号: {cfg['serial_number']}", "#005CFA")
+        print_rgb(f"昵称: {cfg['nickname_path']}", "#005CFA")
+        print(f"版本: {cfg['version_path']}")
+        print(f"麦麦路径: {cfg['mai_path']}")
+        print(f"适配器路径: {cfg['adapter_path']}")
+        print("——————————")
+    
+    print("\n==================")
+    print_color(" [A] 释放实例", "red")
+    print_color(" [Q] 返回上级菜单", "blue")
+    print("==================")
+    
+    choice = input("请选择操作: ").upper()
+    if choice != "A":
+        return
+    
+    # 选择要释放的实例
+    serial_number = get_text_input("请输入要释放的实例的用户序列号:", "red")
+    target_cfg = next((cfg for cfg in configs.values() if cfg["serial_number"] == serial_number), None)
+    
+    if not target_cfg:
+        print_rgb("❌ 未找到匹配的实例！", "#FF6B6B")
+        input("按回车键返回...")
+        return
+    
+    # 确认删除
+    print_color("\n==================", "red")
+    print_color("-+-+-危险操作-+-+-", "red")
+    print_color("==================", "red")
+    print_color("该操作将彻底删除您选中的实例以达到释放实例的目的", "red")
+    print_color("该操作将不可撤销", "red")
+    print_rgb("我们强烈建议您备份.env、bot_config.toml、lpmm_config.toml等重要文件", "#A8B1FF")
+    
+    if target_cfg["version_path"] == "0.7.0-alpha":
+        print_rgb("如果您使用的是0.7.0-alpha版本的实例，我们非常强烈建议您备份MaiBot.db文件", "#A8B1FF")
+        print_color("它是该实例的数据库文件，位于根目录中的data文件夹中", "yellow")
+    
+    print_color("若您的实例使用的是Mongo DB数据库，我们不会清空它，那需要您手动清理", "yellow")
+    print_color("但我们并不推荐您这样做，因为它无法便捷的备份", "yellow")
+    print_color("我们推荐您采用更改数据库名的方式变相备份它", "yellow")
+    print_color("您可以备份完成后再推进实例释放流程", "yellow")
+    
+    confirm = input("\n确认继续推进实例释放流程？(Y/N) ").upper()
+    if confirm != "Y":
+        return
+    
+    # 最终确认
+    print_color("\n==================", "red")
+    print_color("-+-+-危险操作-+-+-", "red")
+    print_color("==================", "red")
+    print_color("这是最后一次要求您确认释放实例操作", "red")
+    print_color("一旦您确认，我们将立即释放实例", "red")
+    print_color("该操作您无法撤销！", "red")
+    print(f"若您仍旧希望释放该实例，请再次输入您选定的实例的用户序列号 [{serial_number}]")
+    print_color("若您未输入实例的用户序列号直接回车，我们将视为放弃实例释放操作", "red")
+    print("==================")
+    
+    reenter_serial = input("> ").strip()
+    if reenter_serial != serial_number:
+        print_rgb("❌ 序列号不匹配，操作已取消！", "#FF6B6B")
+        return
+    
+    # 删除实例
+import shutil  # 需要导入shutil模块进行目录删除
+
+# ... 其他代码保持不变 ...
+
+def delete_instance():
+    """删除实例"""
+    config = load_config()
+    configs = config["configurations"]
+    
+    if not configs:
+        print_rgb("❌ 当前没有配置任何实例！", "#FF6B6B")
+        input("按回车键返回...")
+        return
+    
+    clear_screen()
+    print_color("[🔧 删除实例]", "red")
+    print("================\n")
+    
+    # 列出所有配置集
+    for cfg_name, cfg in configs.items():
+        print(f"配置集: {cfg_name}")
+        print_rgb(f"序列号: {cfg['serial_number']}", "#005CFA")
+        print_rgb(f"昵称: {cfg['nickname_path']}", "#005CFA")
+        print(f"版本: {cfg['version_path']}")
+        print(f"麦麦路径: {cfg['mai_path']}")
+        print(f"适配器路径: {cfg['adapter_path']}")
+        print("——————————")
+    
+    print("\n==================")
+    print_color(" [A] 释放实例", "red")
+    print_rgb(" [Q] 返回上级菜单", "#7E1DE4")
+    print("==================")
+    
+    choice = input("请选择操作: ").upper()
+    if choice != "A":
+        return
+    
+    # 选择要释放的实例
+    serial_number = get_text_input("请输入要释放的实例的用户序列号:", "red")
+    target_cfg = next((cfg for cfg in configs.values() if cfg["serial_number"] == serial_number), None)
+    
+    if not target_cfg:
+        print_rgb("❌ 未找到匹配的实例！", "#FF6B6B")
+        input("按回车键返回...")
+        return
+    
+    # 确认删除
+    print_color("\n==================", "red")
+    print_color("-+-+-危险操作-+-+-", "red")
+    print_color("==================", "red")
+    print_color("该操作将彻底删除您选中的实例以达到释放实例的目的", "red")
+    print_color("该操作将不可撤销", "red")
+    print_rgb("我们强烈建议您备份.env、bot_config.toml、lpmm_config.toml等重要文件", "#A8B1FF")
+    
+    if target_cfg["version_path"] == "0.7.0-alpha":
+        print_rgb("如果您使用的是0.7.0-alpha版本的实例，我们非常强烈建议您备份MaiBot.db文件", "#A8B1FF")
+        print_color("它是该实例的数据库文件，位于根目录中的data文件夹中", "yellow")
+    
+    print_color("若您的实例使用的是Mongo DB数据库，我们不会清空它，那需要您手动清理", "yellow")
+    print_color("但我们并不推荐您这样做，因为它无法便捷的备份", "yellow")
+    print_color("我们推荐您采用更改数据库名的方式变相备份它", "yellow")
+    print_color("您可以备份完成后再推进实例释放流程", "yellow")
+    
+    confirm = input("\n确认继续推进实例释放流程？(Y/N) ").upper()
+    if confirm != "Y":
+        return
+    
+    # 最终确认
+    print_color("\n==================", "red")
+    print_color("-+-+-危险操作-+-+-", "red")
+    print_color("==================", "red")
+    print_color("这是最后一次要求您确认释放实例操作", "red")
+    print_color("一旦您确认，我们将立即释放实例", "red")
+    print_color("该操作您无法撤销！", "red")
+    print(f"若您仍旧希望释放该实例，请再次输入您选定的实例的用户序列号 [{serial_number}]")
+    print_color("若您未输入实例的用户序列号直接回车，我们将视为放弃实例释放操作", "red")
+    print("==================")
+    
+    reenter_serial = input("> ").strip()
+    if reenter_serial != serial_number:
+        print_rgb("❌ 序列号不匹配，操作已取消！", "#FF6B6B")
+        return
+    
+    # 删除实例 - 实际执行删除操作
+    version = target_cfg["version_path"]
+    deleted = False
+    
+    try:
+        if is_legacy_version(version):
+            print_rgb("正在释放当前实例的麦麦本体...", "#BADFFA")
+            mai_path = target_cfg["mai_path"]
+            if os.path.exists(mai_path):
+                # 实际删除目录
+                shutil.rmtree(mai_path)
+                print_rgb(f"✅ 已删除麦麦本体目录: {mai_path}", "#FFF3C2")
+                deleted = True
+            else:
+                print_rgb("⚠️ 麦麦本体路径不存在，跳过删除", "#A8B1FF")
+        else:
+            print_rgb("正在释放当前实例的麦麦本体...", "#BADFFA")
+            mai_path = target_cfg["mai_path"]
+            if os.path.exists(mai_path):
+                # 实际删除目录
+                shutil.rmtree(mai_path)
+                print_rgb(f"✅ 已删除麦麦本体目录: {mai_path}", "#FFF3C2")
+                deleted = True
+            else:
+                print_rgb("⚠️ 麦麦本体路径不存在，跳过删除", "#A8B1FF")
+            
+            print_rgb("正在释放当前实例的适配器...", "#BADFFA")
+            adapter_path = target_cfg["adapter_path"]
+            # 检查适配器路径是否有效（非占位符）
+            if adapter_path and adapter_path != "当前配置集的对象实例版本较低，无适配器" and os.path.exists(adapter_path):
+                # 实际删除目录
+                shutil.rmtree(adapter_path)
+                print_rgb(f"✅ 已删除适配器目录: {adapter_path}", "#FFF3C2")
+                deleted = True
+            else:
+                print_rgb("⚠️ 适配器路径不存在或无效，跳过删除", "#A8B1FF")
+        
+        # 删除配置集
+        config_name = next((name for name, cfg in configs.items() if cfg == target_cfg), None)
+        if config_name:
+            del configs[config_name]
+            config["configurations"] = configs
+            save_config(config)
+            print_rgb("✅ 指向配置集已删除！", "#FFF3C2")
+            deleted = True
+        
+        if deleted:
+            print_rgb("✅ 实例释放操作已完成！", "#A8B1FF")
+            print_rgb("说声再见吧~~", "#96FD6D")
+        else:
+            print_rgb("⚠️ 未执行任何删除操作", "#A8B1FF")
+    except Exception as e:
+        print_rgb(f"❌ 删除过程中发生错误: {str(e)}", "#FF6B6B")
+        print_rgb("⚠️ 部分文件可能未被完全删除", "#F2FF5D")
+    
+    input("\n按回车键返回...")
+    
+    # 删除配置集
+    config_name = next((name for name, cfg in configs.items() if cfg == target_cfg), None)
+    if config_name:
+        del configs[config_name]
+        config["configurations"] = configs
+        save_config(config)
+        print_rgb("指向配置集已删除！", "#FFF3C2")
+    
+    print_rgb("实例释放操作已完成！", "#A8B1FF")
+    print_rgb("说声再见吧~~", "#96FD6D")
+    input("\n按回车键返回...")
+
+def deployment_menu():
+    """部署子菜单"""
     while True:
         clear_screen()
-        print_color("[🔧 部署（当前仅支持安装Git环境的部署）]", "cyan")
+        print_rgb("[🔧 部署辅助系统]", "#FF6B6B")
         print("================")
-        print_color("======功能开发中，敬请期待！======", "red")
-        print_color(" [A] 运行MaiBot", "cyan")
-        print_color(" [B] 运行完整环境", "cyan")
-        print_color(" [C] 配置菜单", "cyan")
-        print_color(" [D] LPMM知识库构建", "cyan")
-        print_color(" [E] MongoDB到SQLite迁移", "cyan")
-        print_color(" [F] 检查当前配置", "cyan")
-        print_color(" [Q] 返回主菜单", "blue")
+        print_rgb("======（当前仅支持安装Git环境的部署）======", "#FFF3C2")
+        print_rgb("\n [A] 辅助部署", "#A8B1FF")
+        print_rgb(" [B] 删除实例", "#FF6B6B")
+        print_rgb(" [C] 跳转到配置菜单","#F2FF5D")
+        print_rgb(" [D] 跳转到LPMM构建","#00FFBB")
+        print_rgb(" [E] 跳转到数据库迁移","#28DCF0")
+        print_rgb(" [Q] 返回主菜单","#7E1DE4")
         print("================")
 
         choice = input("请选择操作: ").upper()
@@ -1496,22 +2559,21 @@ def Deployment():
         if choice == "Q":
             break
         elif choice == "A":
-            run_mai()
+            deployment_assistant()
         elif choice == "B":
-            run_full()
+            delete_instance()
         elif choice == "C":
             config_menu()
         elif choice == "D":
             lpmm_menu()
         elif choice == "E":
             migrate_mongodb_to_sqlite()
-        elif choice == "F":
-            check_config()
         else:
-            print_color("❌ 无效选项", "red")
+            print_rgb("❌ 无效选项", "#FF6B6B")
             time.sleep(1)
 
 
+# ====================== 主函数 ======================
 def main():
     # 设置控制台编码
     if os.name == 'nt':
@@ -1533,14 +2595,12 @@ def main():
         elif choice == "D":
             lpmm_menu()
         elif choice == "E":
-            migrate_mongodb_to_sqlite()  # Call the new function
+            migrate_mongodb_to_sqlite()
         elif choice == "F":
-            Deployment()
+            deployment_menu()
         else:
-            print_color("❌ 无效选项", "red")
+            print_rgb("❌ 无效选项", "#FF6B6B")
             time.sleep(1)
-
-
 
 if __name__ == "__main__":
     # 设置控制台编码
