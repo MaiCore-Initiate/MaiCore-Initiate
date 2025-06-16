@@ -1529,6 +1529,69 @@ def migrate_mongodb_to_sqlite():
     
     input("按回车键返回主菜单...")
 
+def get_powershell_path():
+    """获取PowerShell可执行路径"""
+    try:
+        # 尝试通过注册表获取
+        reg_key = winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\PowerShell\3\PowerShellEngine"
+        )
+        base_path = winreg.QueryValueEx(reg_key, "ApplicationBase")[0]
+        powershell_path = os.path.join(base_path, "powershell.exe")
+        winreg.CloseKey(reg_key)
+        if os.path.exists(powershell_path):
+            return powershell_path
+    except:
+        pass
+    
+    # 回退到默认路径
+    default_paths = [
+        os.path.expandvars(r"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"),
+        os.path.expandvars(r"%SystemRoot%\SysNative\WindowsPowerShell\v1.0\powershell.exe"),
+        os.path.expandvars(r"%ProgramFiles%\PowerShell\7\pwsh.exe")
+    ]
+    
+    for path in default_paths:
+        if os.path.exists(path):
+            return path
+    
+    raise Exception("❌ 无法找到PowerShell可执行文件")
+
+def run_commands_in_single_console(work_dir, commands, description):
+    """
+    在单个控制台窗口中按顺序执行多条命令
+    """
+    try:
+        # 构建完整的PowerShell命令
+        full_command = f'cd "{work_dir}"; '
+        if isinstance(commands, list):
+            full_command += '; '.join(commands)
+        else:
+            full_command += commands
+        
+        print_rgb(f"🟢 开始执行: {description}", "#6DFD8A")
+        print_rgb(f"执行路径: {work_dir}", "#BADFFA")
+        
+        # 创建PowerShell进程
+        powershell_path = get_powershell_path()
+        process = subprocess.Popen(
+            [
+                powershell_path,
+                '-NoExit',
+                '-Command',
+                full_command
+            ],
+            creationflags=subprocess.CREATE_NEW_CONSOLE
+        )
+        
+        print_rgb("✅ 命令已在新的控制台窗口中启动", "#6DFD8A")
+        print_rgb("请在新窗口中完成操作后返回此处继续", "#F2FF5D")
+        return process
+    except Exception as e:
+        print_rgb(f"❌ 执行失败: {str(e)}", "#FF6B6B")
+        return None
+
 def install_mongodb():
     """
     安装 MongoDB
@@ -1938,7 +2001,13 @@ API
 优化提及和at的判定
 添加配置项
 添加临时配置文件读取器
-"""
+""",
+        "dev": """
+开发版本，可能包含未完成的功能或实验性特性，请谨慎使用。
+        """,
+        "main": """
+主分支版本，包含最新的稳定功能和修复。
+        """
     }
     return changelogs.get(version, "❌ 未找到该版本的更新日志")
 
@@ -1955,9 +2024,11 @@ def deployment_assistant():
         "0.6.3-alpha",
         "0.6.3-fix3-alpha",
         "0.6.3-fix4-alpha",
-        "0.7.0-alpha"
+        "0.7.0-alpha",
+        "dev",
+        "main",
     ]
-    print_rgb("以稳定性为指标推荐部署的版本有“classical”、“0.6.2-alpha”、“0.6.3-fix4-alpha”、“0.7.0-alpha”,“0.7.0-alpha”为目前的最新版本，请您根据实际情况选择", "#FFF3C2")
+    print_rgb("以稳定性为指标推荐部署的版本有“classical”、“0.6.2-alpha”、“0.6.3-fix4-alpha”、“0.7.0-alpha”,“0.7.0-alpha”为目前的最新版本，“dev”为调试版，“main”为主要版本，请您根据实际情况选择", "#FFF3C2")
     
     for version in versions:
         print_rgb(f" {version}", "#F2FF5D")
@@ -2166,92 +2237,101 @@ def deployment_assistant():
 def deploy_classical(install_dir):
     """部署classical版本"""
     project_dir = os.path.join(install_dir, "MaiM-with-u")
-    
-    # Clone classical版本
-    print_rgb("正在clone“classical”版本的麦麦至项目目录...", "#FFF3C2")
-    run_script(project_dir, "git clone -b classical --single-branch https://github.com/MaiM-with-u/MaiBot.git")
-    input("Clone完成后按回车键继续...")
-    
-    # 进入MaiBot目录
+    os.makedirs(project_dir, exist_ok=True)
     mai_dir = os.path.join(project_dir, "MaiBot")
     
-    # 创建虚拟环境
-    print_rgb("正在创建名为“maimbot”虚拟环境...", "#FFF3C2")
-    run_script(mai_dir, "python -m venv maimbot")
-    input("虚拟环境创建完成后按回车键继续...")
+    # 组合所有命令在一个窗口中执行
+    commands = [
+        'Write-Host "=== 开始部署classical版本 ===" -ForegroundColor Cyan',
+        f'git clone -b classical --single-branch --depth 1 https://github.com/MaiM-with-u/MaiBot.git "{mai_dir}"',
+        f'cd "{mai_dir}"',
+        'python -m venv maimbot',
+        '.\\maimbot\\Scripts\\activate.ps1',
+        'python -m pip install --upgrade pip',
+        'pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ -r requirements.txt --use-pep517',
+        'Write-Host "✅ 依赖安装完成" -ForegroundColor Green',
+        'Write-Host "请返回启动器继续后续操作" -ForegroundColor Yellow'
+    ]
     
-    # 激活虚拟环境
-    print_rgb("正在激活虚拟环境...", "#FFF3C2")
-    run_script(mai_dir, "maimbot\\Scripts\\activate")
-    input("虚拟环境激活完成后按回车键继续...")
+    process = run_commands_in_single_console(
+        project_dir, 
+        commands,
+        "克隆仓库、创建虚拟环境和安装依赖"
+    )
     
-    # 更新pip
-    print_rgb("正在更新pip...", "#FFF3C2")
-    run_script(mai_dir, "python.exe -m pip install --upgrade pip")
-    input("pip更新完成后按回车键继续...")
+    if not process:
+        return
     
-    # 安装依赖
-    print_rgb("正在安装依赖...", "#FFF3C2")
-    run_script(mai_dir, "pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ -r requirements.txt --use-pep517")
-    input("依赖安装完成后按回车键继续...")
+    input("请在新窗口中完成操作后按回车键继续...")
     
     # 首次启动
     print_rgb("准备首次启动麦麦以初始化bot...", "#BADFFA")
     print_rgb("首次启动后请输入同意并回车以同意隐私条款（若需要）", "#FFF3C2")
     print_rgb("首次启动请保持终端窗口打开20秒以上，以确保完成初始化", "#FFF3C2")
-    print_rgb("保持终端窗口打开20秒后可以关闭窗口", "#FFF3C2")
-    print_rgb("初始化完成后请打开根目录的.env.prod文件并填写你的API Key", "#A8B1FF")
-    print_rgb("然后打开位于子目录config的bot_config.toml文件照注释对您的麦麦进行自定义", "#A8B1FF")
     
-    run_script(mai_dir, "nb run")
-    input("完成后请回车以继续...")
+    commands = [
+        f'cd "{mai_dir}"',
+        '.\\maimbot\\Scripts\\activate.ps1',
+        'nb run',
+        'Write-Host "请返回启动器继续后续操作" -ForegroundColor Yellow'
+    ]
     
-    # 启动麦麦
-    print_rgb("麦麦启动成功！", "#6DFD8A")
-    run_script(mai_dir, "run.bat")
+    process = run_commands_in_single_console(
+        mai_dir, 
+        commands,
+        "首次启动麦麦进行初始化"
+    )
+    
+    input("完成后请按回车键继续...")
+    
+    # 配置启动脚本
+    run_bat_path = os.path.join(mai_dir, "run.bat")
+    if not os.path.exists(run_bat_path):
+        with open(run_bat_path, 'w') as f:
+            f.write("@echo off\n")
+            f.write("call maimbot\\Scripts\\activate\n")
+            f.write("python bot.py\n")
+            f.write("pause\n")
+    
+    print_rgb("麦麦部署完成！", "#6DFD8A")
 
 def deploy_non_classical(install_dir, version):
     """部署非classical版本"""
     project_dir = os.path.join(install_dir, "MaiM-with-u")
-    
-    # Clone 指定版本
-    print_rgb(f"正在clone“{version}”版本的麦麦至项目目录...", "#FFF3C2")
-    run_script(project_dir, f"git clone --branch {version} https://github.com/MaiM-with-u/MaiBot.git")
-    input("Clone完成后按回车键继续...")
-    
-    # Clone 适配器
-    print_rgb("正在clone适配器至项目目录...", "#FFF3C2")
-    run_script(project_dir, "git clone https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter.git")
-    input("Clone完成后按回车键继续...")
-    
-    # 创建虚拟环境
+    os.makedirs(project_dir, exist_ok=True)
     mai_dir = os.path.join(project_dir, "MaiBot")
-    print_rgb("正在创建名为“venv”虚拟环境...", "#FFF3C2")
-    run_script(project_dir, f"python -m venv {os.path.join(mai_dir, 'venv')}")
-    input("虚拟环境创建完成后按回车键继续...")
-    
-    # 激活虚拟环境
-    print_rgb("正在激活虚拟环境...", "#FFF3C2")
-    run_script(project_dir, f"{os.path.join(mai_dir, 'venv', 'Scripts', 'activate')}")
-    input("虚拟环境激活完成后按回车键继续...")
-    
-    # 更新pip
-    print_rgb("正在更新pip...", "#FFF3C2")
-    run_script(project_dir, "python.exe -m pip install --upgrade pip")
-    input("pip更新完成后按回车键继续...")
-    
-    # 安装麦麦依赖
-    print_rgb("正在安装麦麦的依赖...", "#FFF3C2")
-    run_script(mai_dir, "pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade")
-    input("依赖安装完成后按回车键继续...")
-    
-    # 安装适配器依赖
     adapter_dir = os.path.join(project_dir, "MaiBot-Napcat-Adapter")
-    print_rgb("正在安装适配器的依赖...", "#FFF3C2")
-    run_script(adapter_dir, "pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade")
-    input("依赖安装完成后按回车键继续...")
     
-    # 处理适配器配置文件
+    # 组合所有命令在一个窗口中执行
+    commands = [
+        f'Write-Host "=== 开始部署{version}版本 ===" -ForegroundColor Cyan',
+        f'git clone --branch {version} --single-branch --depth 1 https://github.com/MaiM-with-u/MaiBot.git "{mai_dir}"',
+        f'git clone https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter.git "{adapter_dir}"',
+        f'cd "{mai_dir}"',
+        'python -m venv venv',
+        '.\\venv\\Scripts\\activate.ps1',
+        'python -m pip install --upgrade pip',
+        'pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade',
+        f'cd "{adapter_dir}"',
+        '.\\..\\MaiBot\\venv\\Scripts\\activate.ps1',
+        'pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade',
+        'Write-Host "✅ 依赖安装完成" -ForegroundColor Green',
+        'Write-Host "请返回启动器继续后续操作" -ForegroundColor Yellow'
+    ]
+    
+    process = run_commands_in_single_console(
+        project_dir, 
+        commands,
+        "克隆仓库、创建虚拟环境和安装依赖"
+    )
+    
+    if not process:
+        return
+    
+    input("请在新窗口中完成操作后按回车键继续...")
+    
+    # 配置文件处理
+ # 处理适配器配置文件
     print_rgb("正在复制并重命名适配器的配置文件...", "#BADFFA")
     template_path = os.path.join(adapter_dir, "template", "template_config.toml")
     config_path = os.path.join(adapter_dir, "config.toml")
@@ -2306,6 +2386,9 @@ def deploy_non_classical(install_dir, version):
     print_rgb("然后打开位于子目录config的lpmm_config.toml文件（若有）填写您的API Key", "#A8B1FF")
     print_rgb("然后打开位于子目录config的bot_config.toml文件照注释对您的麦麦进行自定义", "#A8B1FF")
     input("按回车键继续...")
+    
+    print_rgb("所有配置文件已处理完成！", "#FFF3C2")
+    print_rgb("麦麦部署完成！", "#6DFD8A")
 
 def delete_instance():
     """删除实例"""
@@ -2377,7 +2460,7 @@ def delete_instance():
     print_color("这是最后一次要求您确认释放实例操作", "red")
     print_color("一旦您确认，我们将立即释放实例", "red")
     print_color("该操作您无法撤销！", "red")
-    print(f"若您仍旧希望释放该实例，请再次输入您选定的实例的用户序列号 [{serial_number}]")
+    print_rgb(f"若您仍旧希望释放该实例，请再次输入您选定的实例的用户序列号 [{serial_number}]","#A8B1FF")
     print_color("若您未输入实例的用户序列号直接回车，我们将视为放弃实例释放操作", "red")
     print("==================")
     
