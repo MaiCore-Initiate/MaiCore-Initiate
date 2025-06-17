@@ -125,6 +125,8 @@ def print_header():
     print_rgb(" [E] 知识库迁移（MongoDB → SQLite）", "#28DCF0")
     print("====>>部署类<<====")
     print_rgb(" [F] 实例部署辅助系统", "#FF6B6B")  # 使用另一个自定义颜色
+    print("====>>关于类<<====")
+    print_rgb(" [G] 关于本程序", "#6DA0FD")
     print("====>>退出类<<====")
     print_rgb(" [Q] 👋退出程序", "#7E1DE4")
     print("===================\n")
@@ -2622,6 +2624,126 @@ def delete_instance():
     print_rgb("说声再见吧~~", "#96FD6D")
     input("\n按回车键返回...")
 
+def update_instance():
+    """更新实例"""
+    config = load_config()
+    configs = config["configurations"]
+    
+    # 过滤出可更新的配置集（仅限classical/dev/main）
+    updatable_configs = {}
+    for cfg_name, cfg in configs.items():
+        version = cfg.get("version_path", "")
+        if version.lower() in ["classical", "dev", "main"]:
+            updatable_configs[cfg_name] = cfg
+    
+    if not updatable_configs:
+        print_rgb("❌ 当前没有可更新的实例配置！", "#FF6B6B")
+        print_rgb("仅支持版本号为classical/dev/main的实例", "#F2FF5D")
+        input("按回车键返回...")
+        return
+    
+    clear_screen()
+    print_rgb("[🔧 实例更新]", "#FF6B6B")
+    print("================\n")
+    print_rgb("可更新的实例列表：", "#FFF3C2")
+    
+    # 列出可更新的实例
+    for cfg_name, cfg in updatable_configs.items():
+        print(f"配置集: {cfg_name}")
+        print_rgb(f"序列号: {cfg['serial_number']}", "#005CFA")
+        print_rgb(f"昵称: {cfg['nickname_path']}", "#005CFA")
+        print(f"版本: {cfg['version_path']}")
+        print(f"麦麦路径: {cfg['mai_path']}")
+        print("——————————")
+    
+    # 获取用户选择的序列号
+    serial_number = get_text_input("\n请输入要更新的实例的用户序列号:", "cyan")
+    selected_cfg = next(
+        (cfg for cfg in updatable_configs.values() if cfg["serial_number"] == serial_number),
+        None
+    )
+    
+    if not selected_cfg:
+        print_rgb("❌ 未找到匹配的实例！", "#FF6B6B")
+        input("按回车键返回...")
+        return
+    
+    # 显示警告信息
+    version = selected_cfg["version_path"]
+    nickname = selected_cfg["nickname_path"]
+    print_rgb(f"\n当前操作将对实例[{version}][{nickname}]执行git pull指令", "#FF6B6B")
+    print_rgb("在此之前建议您备份以下重要文件：", "#FFF3C2")
+    print_rgb("- .env", "#F2FF5D")
+    print_rgb("- bot_config.toml", "#F2FF5D")
+    print_rgb("- lpmm_config.toml", "#F2FF5D")
+    if version == "0.7.0-alpha":
+        print_rgb("- MaiBot.db (位于data文件夹)", "#F2FF5D")
+    print_rgb("\n相较于'实例更新'功能，我们更推荐您部署一例新的实例", "#FFF3C2")
+    
+    confirm = input("您确定要继续吗？（Y/N）").upper()
+    if confirm != "Y":
+        print_rgb("更新操作已取消！", "#F2FF5D")
+        return
+    
+    # 获取拉取深度
+    while True:
+        try:
+            depth = int(input("您准备拉取当前分支的多少次提交记录？（1~2147483647）: "))
+            if 1 <= depth <= 2147483647:
+                break
+            print_rgb("❌ 输入必须在1~2147483647之间！", "#FF6B6B")
+        except ValueError:
+            print_rgb("❌ 请输入有效的整数！", "#FF6B6B")
+    
+    # 最终确认
+    print_rgb(f"\n将拉取 {depth} 次提交记录", "#FFF3C2")
+    final_confirm = input("您确定要继续吗？（Y/N）").upper()
+    if final_confirm != "Y":
+        print_rgb("更新操作已取消！", "#F2FF5D")
+        return
+    
+    # 执行更新
+    mai_path = selected_cfg["mai_path"]
+    branch = version.lower()
+    
+    # 验证路径是否存在
+    if not os.path.exists(mai_path):
+        print_rgb(f"❌ 路径不存在: {mai_path}", "#FF6B6B")
+        input("按回车键返回...")
+        return
+    
+    # 检查是否git仓库
+    git_dir = os.path.join(mai_path, ".git")
+    if not os.path.exists(git_dir):
+        print_rgb("❌ 目标路径不是Git仓库！", "#FF6B6B")
+        input("按回车键返回...")
+        return
+    
+    # 构建PowerShell命令
+    commands = [
+        f'cd "{mai_path}"',
+        f'git fetch --depth={depth} origin {branch}',
+        f'git merge FETCH_HEAD --no-commit --no-ff',
+        '$conflictFiles = git diff --name-only --diff-filter=M --relative HEAD FETCH_HEAD',
+        'if ($conflictFiles) { git checkout --ours $conflictFiles }',
+        f'git commit -m "Merge remote-tracking branch \'origin/{branch}\' into current branch with local changes preserved"'
+    ]
+    
+    # 执行命令
+    process = run_commands_in_single_console(
+        mai_path, 
+        commands,
+        f"更新 {nickname} 实例"
+    )
+    
+    if process:
+        print_rgb("✅ 更新命令已启动！", "#6DFD8A")
+        print_rgb("请在PowerShell窗口中查看更新进度", "#F2FF5D")
+    else:
+        print_rgb("❌ 更新命令启动失败！", "#FF6B6B")
+    
+    input("\n按回车键返回...")
+
 def deployment_menu():
     """部署子菜单"""
     while True:
@@ -2630,10 +2752,11 @@ def deployment_menu():
         print("================")
         print_rgb("======（当前仅支持安装Git环境的部署）======", "#FFF3C2")
         print_rgb("\n [A] 辅助部署", "#A8B1FF")
-        print_rgb(" [B] 删除实例", "#FF6B6B")
-        print_rgb(" [C] 跳转到配置菜单","#F2FF5D")
-        print_rgb(" [D] 跳转到LPMM构建","#00FFBB")
-        print_rgb(" [E] 跳转到数据库迁移","#28DCF0")
+        print_rgb(" [B] 更新实例", "#6DFD8A")  # 新增选项
+        print_rgb(" [C] 删除实例", "#FF6B6B")
+        print_rgb(" [D] 跳转到配置菜单","#F2FF5D")
+        print_rgb(" [E] 跳转到LPMM构建","#00FFBB")
+        print_rgb(" [F] 跳转到数据库迁移","#28DCF0")
         print_rgb(" [Q] 返回主菜单","#7E1DE4")
         print("================")
 
@@ -2644,17 +2767,245 @@ def deployment_menu():
         elif choice == "A":
             deployment_assistant()
         elif choice == "B":
-            delete_instance()
+            update_instance()
         elif choice == "C":
-            config_menu()
+            delete_instance()
         elif choice == "D":
-            lpmm_menu()
+            config_menu()
         elif choice == "E":
+            lpmm_menu()
+        elif choice == "F":
             migrate_mongodb_to_sqlite()
         else:
             print_rgb("❌ 无效选项", "#FF6B6B")
             time.sleep(1)
 
+def about_menu():
+    """关于本程序菜单"""
+    while True:
+        clear_screen()
+        print_rgb("===关于本程序===", "#BADFFA")
+        print_rgb("当前启动器版本 V3.4.1", "#BADFFA")
+        print("=================")
+        print_rgb(" [A] 程序概述", "#4AF933")
+        print_rgb(" [B] 使用说明", "#F2FF5D")
+        print_rgb(" [C] 更新日志", "#FF6B6B")
+        print_rgb(" [D] 开源许可", "#00FFBB")
+        print_rgb(" [E] 其他信息", "#46AEF8")   
+        print_rgb(" [Q] 返回主菜单", "#7E1DE4")
+        print("=================")
+        
+        choice = input("请选择操作: ").upper()
+        
+        if choice == "Q":
+            break
+            
+        clear_screen()
+        print_rgb("===关于本程序===", "#BADFFA")
+        
+        if choice == "A":
+            print_rgb("程序概述：", "#4AF933")
+            print("麦麦启动器是简化MaiBot框架管理的工具，提供：")
+            print("1. 多实例管理：支持创建/切换不同版本实例")
+            print("2. 智能启动：自动适配新旧版本启动方式")
+            print("3. 配置管理：可视化编辑路径和参数")
+            print("4. 知识库构建：LPMM全流程支持")
+            print("5. 部署辅助：一键部署实例+环境检测")
+            print("6. 数据迁移：MongoDB→SQLite转换工具")
+            print("通过彩色交互界面简化操作流程，支持Windows系统环境。")
+            
+        elif choice == "B":
+            print_rgb("🌈 麦麦启动器使用说明", "#F2FF5D")
+            print("\n核心功能：")
+            print(" 1.启动类：")
+            print("   A：运行麦麦本体")
+            print("   B：运行麦麦+NapCatQQ+MongoDB")
+            print(" 2.配置类：")
+            print("   C：管理多实例配置（创建/修改/检查）")
+            print(" 3.功能类：")
+            print("   D：LPMM知识库构建（文本分割/实体提取）")
+            print("   E：知识库迁移（MongoDB→SQLite）")
+            print(" 4.部署类：")
+            print("   F：实例管理（部署/更新/删除实例）")
+            print("   支持版本：classical/0.6.0~0.7.0/dev/main")
+            print(" 5.关于类：")
+            print("   G：查看程序信息/更新日志")
+            print(" 6.退出类：")
+            print("   退出程序")
+            print("--------------------")
+            print_rgb("🚀 快速上手：","#F2FF5D")
+            print("\n 1.首次使用：")
+            print("   通过F部署新实例")
+            print("   通过C配置路径")
+            print(" 2.日常使用：")
+            print("   选择A或B启动麦麦")
+            print("   使用D构建知识库")
+            print(" 3.维护操作：")
+            print("   F→C：更新实例（需Git环境）")
+            print("   F→B：删除不再需要的实例")
+            print("   E：数据库迁移（旧版→新版）")
+            print("--------------------")
+            print_rgb("⚠️ 重要提示：","#FF0000")
+            print_rgb("\n 1.路径要求：","#FF6B6B")
+            print_rgb("   所有路径不能包含中文", "#C4A4FF")
+            print_rgb("   建议使用英文路径", "#C4A4FF")
+            print_rgb(" 2.更新建议：", "#FF6B6B")
+            print_rgb("   更新前最好备份:", "#C4A4FF")
+            print_rgb("    - .env文件", "#C4A4FF")
+            print_rgb("    - bot_config.toml", "#C4A4FF")
+            print_rgb("    - MaiBot.db（0.7.0-alpha版本）", "#C4A4FF")
+            print_rgb("   推荐部署新实例而非更新", "#C4A4FF")
+            print_rgb(" 3.Git要求：", "#FF6B6B")
+            print_rgb("   实例更新及实例部署功能需要安装Git", "#C4A4FF")
+            print_rgb("   下载：https://git-scm.com/downloads", "#46AEF8")
+            print("--------------------")
+            print_rgb("ℹ️ 更多信息：","#F2FF5D")
+            print_rgb("\n GitHub仓库：", "#C4A4FF")
+            print_rgb(" https://github.com/xiaoCZX/MaiMbot-initiate","#46AEF8")
+            
+        elif choice == "C":
+            print_rgb("更新日志：V3.4.2", "#FF6B6B")
+            print("\n新增功能")
+            print("- 实例更新功能：支持一键更新实例")
+            print("- 添加“关于本程序”菜单,你可以了解到本程序的更多信息")
+            print("--------------------")
+            print_rgb("V3.4.1", "#46AEF8")
+            print("新增功能：")
+            print("- 部署辅助系统：支持一键部署多版本实例")
+            print("- 实例删除功能：彻底释放资源")
+            print("- 彩色输出界面：RGB控制台显示")
+            print("\n功能优化：")
+            print("- 菜单分类重组（启动/配置/功能/部署/退出）")
+            print("- 多配置集支持+序列号标识")
+            print("- 旧版本兼容run.bat启动")
+            print("- 路径中文检测+文件验证")
+            print("\n问题修复：")
+            print("- 配置加载异常处理")
+            print("- 旧版本run.bat缺失提示")
+            print("- 适配器路径验证逻辑")
+            print("--------------------")
+            print_rgb("V3.4", "#46AEF8")
+            print("\n核心功能：")
+            print("- 配置文件迁移JSON→TOML格式")
+            print("- 多实例管理支持")
+            print("- 多版本启动机制（新旧版本区分）")
+            print("- 知识库迁移工具（MongoDB→SQLite）")
+            print("- 部署辅助系统框架")
+            print("\n优化改进：")
+            print("- 配置集管理系统")
+            print("- LPMM知识库构建流程")
+            print("- 路径验证逻辑")
+            print("- 错误处理机制")
+            print("--------------------")
+            print_rgb("V3.3", "#46AEF8")
+            print("\n架构重构：")
+            print("- PowerShell→Python迁移")
+            print("- INI→JSON配置格式")
+            print("- 模块化函数设计")
+            print("\n功能增强：")
+            print("- 自动路径检索")
+            print("- 多层路径验证")
+            print("- 彩色终端输出")
+            print("- 进程检测优化")
+            print("--------------------")
+            print_rgb("V3.2", "#46AEF8")
+            print("\nLPMM知识库：")
+            print("- 新增专属构建菜单")
+            print("- 一条龙构建流程")
+            print("- 文本分割/实体提取/知识图谱导入")
+            print("- 操作确认机制")
+            print("\n界面优化：")
+            print("- 多层子菜单系统")
+            print("- 改进颜色方案")
+            print("- 详细进度反馈")
+            print("--------------------")
+            print_rgb("V3.1", "#46AEF8")
+            print("\n核心改进：")
+            print("- 批处理→PowerShell迁移")
+            print("- 独立config.ini配置")
+            print("- 智能路径验证")
+            print("- 容错机制增强")
+            print("\n用户体验：")
+            print("- 支持拖拽输入路径")
+            print("- UTF-8编码强制设置")
+            print("-清晰步骤提示")
+            print("- 虚拟环境路径处理")
+            print("--------------------")
+            print_rgb("V3.0", "#46AEF8")
+            print("\n功能扩展：")
+            print("- 新增“运行麦麦+NapCatQQ+MongoDB”选项")
+            print("- 退出程序功能")
+            print("- NapCatQQ路径灵活处理")
+            print("\n交互优化：")
+            print("- 字母选项菜单")
+            print("- 横线/等号分隔界面")
+            print("- 拖拽路径输入支持")
+            print("--------------------")
+            print_rgb("\nV2.1", "#46AEF8")
+            print("- 修复含空格/特殊字符路径问题")
+            print("- 新增拖拽文件输入功能")
+            print("--------------------")
+            print_rgb("V2.0", "#46AEF8")
+            print("\n核心改进：")
+            print("- 独立config.ini配置管理")
+            print("- 智能路径验证")
+            print("- 容错机制增强")
+            print("- UTF-8编码支持")
+            print("\n用户体验：")
+            print("- 保留命令窗口查看状态")
+            print("- 清晰步骤提示")
+            print("- 虚拟环境路径兼容")
+            print("--------------------")
+            print_rgb("\nV1.1", "#46AEF8")
+            print("- 修复路径检索问题")
+            print("- 优化一键启动逻辑")
+            print("- 简化配置流程")
+            print("--------------------")
+            print_rgb("V1.0", "#46AEF8")
+            print("\n初始版本：")
+            print("- 基础启动功能")
+            print("- 路径配置支持")
+            print("- 批处理脚本实现")
+            print("- 解决中文路径问题")
+            print("--------------------")
+            
+        elif choice == "D":  # 开源许可选项
+            print_rgb("开源许可：Apache License 2.0", "#00FFBB")
+            print("="*50)
+            print("Copyright 2025 xiaoCZX\n")
+            print("Licensed under the Apache License, Version 2.0 (the \"License\");")
+            print("you may not use this file except in compliance with the License.")
+            print("You may obtain a copy of the License at\n")
+            print("    http://www.apache.org/licenses/LICENSE-2.0\n")
+            print("Unless required by applicable law or agreed to in writing, software")
+            print("distributed under the License is distributed on an \"AS IS\" BASIS,")
+            print("WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.")
+            print("See the License for the specific language governing permissions and")
+            print("limitations under the License.\n")
+            print("="*50)
+            print_rgb("关键条款摘要：", "#00FFBB")
+            print("1. 允许商业使用、修改、分发")
+            print("2. 必须保留版权声明和许可声明")
+            print("3. 明确声明无担保责任")
+            print("4. 使用本软件造成的损害不承担责任")
+            print("5. 贡献者需授权专利使用权")
+            print("\n完整许可证文本请访问：")
+            print_rgb("https://github.com/xiaoCZX/MaiMbot-initiate?tab=License-1-ov-file", "#46AEF8")
+            
+        elif choice == "E":  # 其他信息选项
+            print_rgb("其他信息：", "#46AEF8")
+            print("更多详情请访问GitHub仓库：")
+            print_rgb("https://github.com/xiaoCZX/MaiMbot-initiate", "#46AEF8")
+            print("\n开源许可：Apache License 2.0")
+            print("作者：xiaoCZX")
+            print("最后更新：2025年6月17日")
+
+        else:
+            print_rgb("❌ 无效选项", "#FF6B6B")
+            time.sleep(1)
+            continue
+            
+        input("\n按回车键返回...")
 
 # ====================== 主函数 ======================
 def main():
@@ -2681,6 +3032,8 @@ def main():
             migrate_mongodb_to_sqlite()
         elif choice == "F":
             deployment_menu()
+        elif choice == "G":
+            about_menu()
         else:
             print_rgb("❌ 无效选项", "#FF6B6B")
             time.sleep(1)
