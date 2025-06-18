@@ -13,28 +13,6 @@ from tqdm import tqdm
 import shutil # 用于删除实例
 import winreg # 用于注册表操作
 
-def create_mbl_alias():
-    """创建命令行别名"""
-    if len(sys.argv) > 1 and sys.argv[1] == "--register-alias":
-        try:
-            # 获取当前可执行文件路径
-            exe_path = os.path.abspath(sys.argv[0])
-            
-            # 创建批处理文件
-            bat_content = f'@echo off\n"{exe_path}" %*\n'
-            bat_path = os.path.join(os.environ['SYSTEMROOT'], 'System32', 'mbl.bat')
-            
-            with open(bat_path, 'w') as f:
-                f.write(bat_content)
-                
-            print(f"✅ 已创建命令行别名: mbl -> {exe_path}")
-        except Exception as e:
-            print(f"❌ 创建别名失败: {str(e)}")
-        sys.exit(0)
-
-# 在 main() 前调用
-create_mbl_alias()
-
 if sys.platform == 'win32':
     kernel32 = ctypes.windll.kernel32
     kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
