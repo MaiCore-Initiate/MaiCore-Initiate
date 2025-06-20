@@ -570,7 +570,7 @@ def check_mongodb():
     except Exception:
         return False
 
-# 新函数 - 在当前终端运行命令（用于部署过程）
+# 修改 run_in_current_terminal 函数
 def run_in_current_terminal(commands, cwd=None):
     """在当前终端运行命令（用于部署过程）"""
     try:
@@ -579,8 +579,8 @@ def run_in_current_terminal(commands, cwd=None):
         else:
             cmd_str = commands
         
-        # 准备完整命令
-        full_cmd = cmd_str
+        # 准备完整命令 - 明确使用 bash
+        full_cmd = f'bash -c {shlex.quote(cmd_str)}'
         
         # 在当前终端运行命令
         result = subprocess.run(
@@ -1752,7 +1752,7 @@ def deploy_classical(install_dir):
         f'git clone -b classical --single-branch --depth 1 https://github.com/MaiM-with-u/MaiBot.git "{mai_dir}"',
         f'cd "{mai_dir}"',
         'python -m venv maimbot',
-        'source maimbot/bin/activate',
+        '. maimbot/bin/activate',
         'python -m pip install --upgrade pip',
         'pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ -r requirements.txt --use-pep517',
         'echo "✅ 依赖安装完成"'
@@ -1774,7 +1774,7 @@ def deploy_classical(install_dir):
     
     commands = [
         f'cd "{mai_dir}"',
-        'source maimbot/bin/activate',
+        '. maimbot/bin/activate',
         'nb run',
         'echo "请返回启动器继续后续操作"'
     ]
@@ -1814,7 +1814,7 @@ def deploy_non_classical(install_dir, version):
         f'git clone https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter.git "{adapter_dir}"',
         f'cd "{mai_dir}"',
         'python -m venv venv',
-        'source venv/bin/activate',
+        '. venv/bin/activate',
         'python -m pip install --upgrade pip',
         'pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade',
         f'cd "{adapter_dir}"',
