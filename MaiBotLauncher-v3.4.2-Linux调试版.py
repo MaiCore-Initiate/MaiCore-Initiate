@@ -10,6 +10,25 @@ import sys
 from colorama import Fore, Style, init
 from tqdm import tqdm  
 import shutil
+import shlex
+
+
+def get_available_terminal():
+    """检测系统可用的终端模拟器"""
+    terminals = [
+        'x-terminal-emulator',  # 通用终端
+        'gnome-terminal',       # GNOME
+        'konsole',              # KDE
+        'xfce4-terminal',       # XFCE
+        'mate-terminal',        # MATE
+        'tilix',                # Tilix
+        'xterm'                 # 回退选项
+    ]
+    
+    for term in terminals:
+        if shutil.which(term):
+            return term
+    return None
 
 # Linux不需要Windows控制台模式设置
 init(autoreset=True)
@@ -464,50 +483,90 @@ def config_menu():
         input("\n按回车键返回配置菜单...")
 
 def run_script(work_dir, commands):
-    """Linux脚本执行函数"""
     try:
-        # 确保工作目录存在
         if not os.path.exists(work_dir):
             print_rgb(f"❌ 工作目录不存在: {work_dir}", "#FF6B6B")
             return False
         
-        # 构建命令
+        terminal = get_available_terminal()
+        if not terminal:
+            print_rgb("❌ 未找到可用的终端模拟器！", "#FF6B6B")
+            return False
+        
+        # 构建命令字符串
         if isinstance(commands, list):
             cmd_str = '; '.join(commands)
         else:
             cmd_str = commands
         
-        # 启动新的终端窗口 (Linux使用x-terminal-emulator)
-        terminal_cmd = f'x-terminal-emulator -e "cd {work_dir}; {cmd_str}; echo \\n按回车键退出...; read"'
+        # 根据不同的终端构建命令
+        if terminal == 'gnome-terminal':
+            command = [
+                'gnome-terminal', '--', 
+                'bash', '-c', 
+                f'cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo "按回车键退出..."; read'
+            ]
+        elif terminal == 'konsole':
+            command = [
+                'konsole', '-e', 
+                'bash', '-c', 
+                f'cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo "按回车键退出..."; read'
+            ]
+        else:  # 通用处理
+            command = [
+                terminal, '-e', 
+                'bash', '-c', 
+                f'cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo "按回车键退出..."; read'
+            ]
         
-        subprocess.Popen(
-            terminal_cmd,
-            shell=True,
-            executable="/bin/bash"
-        )
+        subprocess.Popen(command)
         return True
     except Exception as e:
         print_rgb(f"❌ 启动失败: {str(e)}", "#FF6B6B")
         return False
 
+
 def check_process(process_name):
     """Linux进程检测"""
     try:
-        result = subprocess.run(['pgrep', '-f', process_name], 
-                               stdout=subprocess.PIPE, 
-                               stderr=subprocess.PIPE)
-        return result.returncode == 0
-    except:
+        # 使用pgrep检查进程
+        result = subprocess.run(
+            ['pgrep', '-f', process_name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        return result.returncode == 0 and result.stdout.strip() != ""
+    except Exception:
         return False
 
 def check_mongodb():
     """Linux MongoDB服务检测"""
     try:
-        result = subprocess.run(['systemctl', 'is-active', 'mongodb'], 
-                               stdout=subprocess.PIPE, 
-                               stderr=subprocess.PIPE)
-        return result.stdout.decode().strip() == 'active'
-    except:
+        # 尝试多种检测方法
+        methods = [
+            ['systemctl', 'is-active', 'mongodb'],
+            ['systemctl', 'is-active', 'mongod'],
+            ['service', 'mongodb', 'status'],
+            ['service', 'mongod', 'status']
+        ]
+        
+        for cmd in methods:
+            try:
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                if 'active' in result.stdout.lower():
+                    return True
+            except FileNotFoundError:
+                continue
+                
+        # 回退到进程检测
+        return check_process('mongod') or check_process('mongodb')
+    except Exception:
         return False
 
 def run_mai():
@@ -1082,20 +1141,38 @@ def run_commands_in_single_console(work_dir, commands, description):
             print_rgb(f"❌ 工作目录不存在: {work_dir}", "#FF6B6B")
             return None
         
+        terminal = get_available_terminal()
+        if not terminal:
+            print_rgb("❌ 未找到可用的终端模拟器！", "#FF6B6B")
+            return None
+        
+        # 构建命令字符串
         if isinstance(commands, list):
             cmd_str = '; '.join(commands)
         else:
             cmd_str = commands
         
-        terminal_cmd = f'x-terminal-emulator -e "cd {work_dir}; {cmd_str}; echo \\n操作完成，按回车键退出...; read"'
+        # 根据不同的终端构建命令
+        if terminal == 'gnome-terminal':
+            command = [
+                'gnome-terminal', '-t', shlex.quote(description), '--', 
+                'bash', '-c', 
+                f'cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo "操作完成，按回车键退出..."; read'
+            ]
+        elif terminal == 'konsole':
+            command = [
+                'konsole', '--caption', shlex.quote(description), '-e', 
+                'bash', '-c', 
+                f'cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo "操作完成，按回车键退出..."; read'
+            ]
+        else:  # 通用处理
+            command = [
+                terminal, '-title', shlex.quote(description), '-e', 
+                'bash', '-c', 
+                f'cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo "操作完成，按回车键退出..."; read'
+            ]
         
-        process = subprocess.Popen(
-            terminal_cmd,
-            shell=True
-        )
-        
-        print_rgb("✅ 命令已在新的终端窗口中启动", "#6DFD8A")
-        print_rgb("请在新窗口中完成操作后返回此处继续", "#F2FF5D")
+        process = subprocess.Popen(command)
         return process
     except Exception as e:
         print_rgb(f"❌ 执行失败: {str(e)}", "#FF6B6B")
