@@ -483,6 +483,7 @@ def config_menu():
         input("\n按回车键返回配置菜单...")
 
 def run_script(work_dir, commands):
+    """唤起新终端运行麦麦程序"""
     try:
         if not os.path.exists(work_dir):
             print_rgb(f"❌ 工作目录不存在: {work_dir}", "#FF6B6B")
@@ -490,8 +491,8 @@ def run_script(work_dir, commands):
         
         terminal = get_available_terminal()
         if not terminal:
-            print_rgb("❌ 未找到可用的终端模拟器！", "#FF6B6B")
-            return False
+            print_rgb("❌ 未找到可用的终端模拟器！尝试使用系统默认终端...", "#FF6B6B")
+            terminal = 'x-terminal-emulator'
         
         # 构建命令字符串
         if isinstance(commands, list):
@@ -500,23 +501,23 @@ def run_script(work_dir, commands):
             cmd_str = commands
         
         # 根据不同的终端构建命令
-        if terminal == 'gnome-terminal':
+        if terminal == 'konsole':
+            command = [
+                'konsole', '--hold', '-e', 
+                'bash', '-c', 
+                f'cd {shlex.quote(work_dir)}; {cmd_str}'
+            ]
+        elif terminal == 'gnome-terminal':
             command = [
                 'gnome-terminal', '--', 
                 'bash', '-c', 
-                f'cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo "按回车键退出..."; read'
-            ]
-        elif terminal == 'konsole':
-            command = [
-                'konsole', '-e', 
-                'bash', '-c', 
-                f'cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo "按回车键退出..."; read'
+                f'cd {shlex.quote(work_dir)}; {cmd_str}'
             ]
         else:  # 通用处理
             command = [
                 terminal, '-e', 
                 'bash', '-c', 
-                f'cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo "按回车键退出..."; read'
+                f'cd {shlex.quote(work_dir)}; {cmd_str}'
             ]
         
         subprocess.Popen(command)
@@ -567,6 +568,32 @@ def check_mongodb():
         # 回退到进程检测
         return check_process('mongod') or check_process('mongodb')
     except Exception:
+        return False
+
+# 新函数 - 在当前终端运行命令（用于部署过程）
+def run_in_current_terminal(commands, cwd=None):
+    """在当前终端运行命令（用于部署过程）"""
+    try:
+        if isinstance(commands, list):
+            cmd_str = ' && '.join(commands)
+        else:
+            cmd_str = commands
+        
+        # 准备完整命令
+        full_cmd = cmd_str
+        
+        # 在当前终端运行命令
+        result = subprocess.run(
+            full_cmd,
+            shell=True,
+            cwd=cwd,
+            text=True,
+            check=False
+        )
+        
+        return result.returncode == 0
+    except Exception as e:
+        print_rgb(f"❌ 执行失败: {str(e)}", "#FF6B6B")
         return False
 
 def run_mai():
@@ -1714,31 +1741,33 @@ def deployment_assistant():
     print_rgb("配置集保存完成，您可以通过主菜单中的 [A] 选项对该实例进行二次启动！", "#FFF3C2")
     input("\n按回车键返回菜单...")
 
+# 修改部署函数 - 使用当前终端运行部署命令
 def deploy_classical(install_dir):
     project_dir = os.path.join(install_dir, "MaiM-with-u")
     os.makedirs(project_dir, exist_ok=True)
     mai_dir = os.path.join(project_dir, "MaiBot")
     
     commands = [
-        'echo "=== 开始部署classical版本 ==="',
+        f'echo "=== 开始部署classical版本 ==="',
         f'git clone -b classical --single-branch --depth 1 https://github.com/MaiM-with-u/MaiBot.git "{mai_dir}"',
         f'cd "{mai_dir}"',
         'python -m venv maimbot',
         'source maimbot/bin/activate',
         'python -m pip install --upgrade pip',
         'pip install -i https://pypi.tuna.tsinghua.edu.cn/simple/ -r requirements.txt --use-pep517',
-        'echo "✅ 依赖安装完成"',
-        'echo "请返回启动器继续后续操作"'
+        'echo "✅ 依赖安装完成"'
     ]
     
-    process = run_commands_in_single_console(
-        project_dir, 
-        commands,
-        "克隆仓库、创建虚拟环境和安装依赖"
-    )
+    # 在当前终端运行部署命令
+    success = run_in_current_terminal(commands, project_dir)
     
-    input("请在新窗口中完成操作后按回车键继续...")
+    if not success:
+        print_rgb("❌ 部署过程中出现错误！", "#FF6B6B")
+        return
     
+    print_rgb("✅ 部署命令执行完成！", "#6DFD8A")
+    
+    # 准备首次启动麦麦（唤起新终端）
     print_rgb("准备首次启动麦麦以初始化bot...", "#BADFFA")
     print_rgb("首次启动后请输入同意并回车以同意隐私条款（若需要）", "#FFF3C2")
     print_rgb("首次启动请保持终端窗口打开20秒以上，以确保完成初始化", "#FFF3C2")
@@ -1750,13 +1779,18 @@ def deploy_classical(install_dir):
         'echo "请返回启动器继续后续操作"'
     ]
     
-    process = run_commands_in_single_console(
+    # 唤起新终端运行麦麦
+    success = run_script(
         mai_dir, 
-        commands,
-        "首次启动麦麦进行初始化"
+        '; '.join(commands)
     )
     
-    input("完成后请按回车键继续...")
+    if success:
+        print_rgb("✅ 麦麦已在新的终端窗口中启动！", "#6DFD8A")
+        print_rgb("请在新窗口中完成操作后返回此处继续...", "#F2FF5D")
+        input("完成后请按回车键继续...")
+    else:
+        print_rgb("❌ 启动麦麦失败！", "#FF6B6B")
     
     run_sh_path = os.path.join(mai_dir, "run.sh")
     if not os.path.exists(run_sh_path):
@@ -1786,36 +1820,33 @@ def deploy_non_classical(install_dir, version):
         f'cd "{adapter_dir}"',
         'source ../MaiBot/venv/bin/activate',
         'pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade',
-        'echo "✅ 依赖安装完成"',
-        'echo "请返回启动器继续后续操作"'
+        'echo "✅ 依赖安装完成"'
     ]
     
-    process = run_commands_in_single_console(
-        project_dir, 
-        commands,
-        "克隆仓库、创建虚拟环境和安装依赖"
-    )
+    # 在当前终端运行部署命令
+    success = run_in_current_terminal(commands, project_dir)
     
-    input("请在新窗口中完成操作后按回车键继续...")
+    if not success:
+        print_rgb("❌ 部署过程中出现错误！", "#FF6B6B")
+        return
     
+    print_rgb("✅ 部署命令执行完成！", "#6DFD8A")
+    
+    # 以下是配置文件的处理（在当前终端完成）
     print_rgb("正在复制并重命名适配器的配置文件...", "#BADFFA")
     template_path = os.path.join(adapter_dir, "template", "template_config.toml")
     config_path = os.path.join(adapter_dir, "config.toml")
     
     if os.path.exists(template_path):
-        with open(template_path, "r", encoding="utf-8") as src, open(config_path, "w", encoding="utf-8") as dst:
-            dst.write(src.read())
-        print_rgb("适配器配置文件已处理完成！", "#6DFD8A")
+        shutil.copy(template_path, config_path)
+        print_rgb("✅ 适配器配置文件已处理完成！", "#6DFD8A")
     else:
-        print_rgb("❌ 未找到适配器模板文件！", "#FF6B6B")
-    
-    print_rgb("请您打开适配器根目录下的config.toml文件并配置白名单", "#A8B1FF")
-    input("完成后请回车以继续...")
+        print_rgb("⚠️ 未找到适配器模板文件！", "#F2FF5D")
     
     print_rgb("正在创建麦麦的配置文件存放文件夹...", "#BADFFA")
     config_dir = os.path.join(mai_dir, "config")
     os.makedirs(config_dir, exist_ok=True)
-    print_rgb("配置文件存放文件夹创建成功！", "#FFF3C2")
+    print_rgb("✅ 配置文件存放文件夹创建成功！", "#6DFD8A")
     
     print_rgb("正在复制并重命名麦麦的配置文件...", "#BADFFA")
     mai_templates = [
@@ -1828,29 +1859,21 @@ def deploy_non_classical(install_dir, version):
         dst_path = os.path.join(config_dir, dst_name)
         
         if os.path.exists(src_path):
-            with open(src_path, "r", encoding="utf-8") as src, open(dst_path, "w", encoding="utf-8") as dst:
-                dst.write(src.read())
-            print_rgb(f"{dst_name} 文件已处理完成！", "#6DFD8A")
+            shutil.copy(src_path, dst_path)
+            print_rgb(f"✅ {dst_name} 文件已处理完成！", "#6DFD8A")
         else:
-            print_rgb(f"❌ 未找到 {src_name} 文件！若您部署的版本未支持LPMM（0.6.0-alpha、0.6.2-alpha）且仅lpmm_config_template.toml文件未找到，请忽略该警告", "#FF6B6B")
+            print_rgb(f"⚠️ 未找到 {src_name} 文件！", "#F2FF5D")
     
     env_src = os.path.join(mai_dir, "template", "template.env")
     env_dst = os.path.join(mai_dir, ".env")
     
     if os.path.exists(env_src):
-        with open(env_src, "r", encoding="utf-8") as src, open(env_dst, "w", encoding="utf-8") as dst:
-            dst.write(src.read())
-        print_rgb(".env 文件已处理完成！", "#6DFD8A")
+        shutil.copy(env_src, env_dst)
+        print_rgb("✅ .env 文件已处理完成！", "#6DFD8A")
     else:
-        print_rgb("❌ 未找到 .env 模板文件！", "#FF6B6B")
+        print_rgb("⚠️ 未找到 .env 模板文件！", "#F2FF5D")
     
-    print_rgb("所有配置文件已处理完成！", "#FFF3C2")
-    print_rgb("请打开根目录的.env文件配置你的API Key", "#A8B1FF")
-    print_rgb("然后打开位于子目录config的lpmm_config.toml文件（若有）填写您的API Key", "#A8B1FF")
-    print_rgb("然后打开位于子目录config的bot_config.toml文件照注释对您的麦麦进行自定义", "#A8B1FF")
-    input("按回车键继续...")
-    
-    print_rgb("所有配置文件已处理完成！", "#FFF3C2")
+    print_rgb("所有配置文件已处理完成！", "#6DFD8A")
     print_rgb("麦麦部署完成！", "#6DFD8A")
 
 def delete_instance():
