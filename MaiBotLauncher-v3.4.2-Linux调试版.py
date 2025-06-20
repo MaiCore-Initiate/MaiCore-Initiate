@@ -483,16 +483,11 @@ def config_menu():
         input("\n按回车键返回配置菜单...")
 
 def run_script(work_dir, commands):
-    """唤起新终端运行麦麦程序"""
+    """运行麦麦程序 - 使用更可靠的方法唤起终端"""
     try:
         if not os.path.exists(work_dir):
             print_rgb(f"❌ 工作目录不存在: {work_dir}", "#FF6B6B")
             return False
-        
-        terminal = get_available_terminal()
-        if not terminal:
-            print_rgb("❌ 未找到可用的终端模拟器！尝试使用系统默认终端...", "#FF6B6B")
-            terminal = 'x-terminal-emulator'
         
         # 构建命令字符串
         if isinstance(commands, list):
@@ -500,27 +495,43 @@ def run_script(work_dir, commands):
         else:
             cmd_str = commands
         
-        # 根据不同的终端构建命令
-        if terminal == 'konsole':
-            command = [
-                'konsole', '--hold', '-e', 
-                'bash', '-c', 
-                f'cd {shlex.quote(work_dir)}; {cmd_str}'
-            ]
-        elif terminal == 'gnome-terminal':
-            command = [
-                'gnome-terminal', '--', 
-                'bash', '-c', 
-                f'cd {shlex.quote(work_dir)}; {cmd_str}'
-            ]
-        else:  # 通用处理
-            command = [
-                terminal, '-e', 
-                'bash', '-c', 
-                f'cd {shlex.quote(work_dir)}; {cmd_str}'
-            ]
+        # 创建临时脚本文件
+        script_path = os.path.join(work_dir, "run_mai.sh")
+        with open(script_path, 'w') as f:
+            f.write("#!/bin/bash\n")
+            f.write(f"cd {shlex.quote(work_dir)}\n")
+            f.write(f"{cmd_str}\n")
+            f.write('echo -e "\\n操作完成，按回车键退出..."; read\n')
+        os.chmod(script_path, 0o755)
         
-        subprocess.Popen(command)
+        # 尝试多种方式唤起终端
+        terminals = [
+            ['x-terminal-emulator', '-e', f'bash {shlex.quote(script_path)}'],
+            ['konsole', '-e', f'bash {shlex.quote(script_path)}'],
+            ['xfce4-terminal', '-x', 'bash', '-c', f'cd {shlex.quote(work_dir)}; {cmd_str}; echo -e "\\n按回车键退出..."; read'],
+            ['mate-terminal', '-x', 'bash', '-c', f'cd {shlex.quote(work_dir)}; {cmd_str}; echo -e "\\n按回车键退出..."; read'],
+            ['xterm', '-e', f'bash {shlex.quote(script_path)}'],
+            ['gnome-terminal', '--', 'bash', '-c', f'cd {shlex.quote(work_dir)}; {cmd_str}; echo -e "\\n按回车键退出..."; read']
+        ]
+        
+        # 尝试每种终端直到成功
+        for terminal_cmd in terminals:
+            try:
+                subprocess.Popen(terminal_cmd)
+                print_rgb(f"✅ 使用 {terminal_cmd[0]} 启动终端", "#6DFD8A")
+                return True
+            except (FileNotFoundError, OSError):
+                continue
+        
+        # 所有终端都失败的回退方案
+        print_rgb("⚠️ 无法唤起终端，将在后台运行程序", "#F2FF5D")
+        subprocess.Popen(
+            f'cd {shlex.quote(work_dir)}; {cmd_str}',
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        print_rgb("✅ 程序已在后台运行", "#6DFD8A")
         return True
     except Exception as e:
         print_rgb(f"❌ 启动失败: {str(e)}", "#FF6B6B")
