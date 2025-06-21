@@ -1258,42 +1258,50 @@ def run_lpmm_knowledge_import(configs):
     return success
 
 def run_lpmm_pipeline():
+    """
+    LPMM知识库一条龙构建流程
+    """
     config = load_config()
     configs = config["configurations"]
     
-    # 只选择一次配置
+    # 选择目标实例
     selected_cfg = select_config(configs)
     if not selected_cfg:
         return
     
-    # 显示当前目标实例信息
-    nickname = selected_cfg.get('nickname_path', '未命名')
-    serial_number = selected_cfg.get('serial_number', 'N/A')
-    version = selected_cfg.get('version_path', 'N/A')
+    # 验证路径
+    mai_path = selected_cfg["mai_path"]
+    valid, msg = validate_path(mai_path, check_file="bot.py")
+    if not valid:
+        print_rgb(f"❌ 麦麦本体路径无效：{msg}", "#FF6B6B")
+        input("按回车键返回菜单...")
+        return
     
-    print_rgb(f"当前目标实例: {nickname} (序列号: {serial_number}, 版本: {version})", "#00FFBB")
+    # 准备步骤参数
+    steps = [
+        "raw_data_preprocessor.py",
+        "info_extraction.py",
+        "import_openie.py"
+    ]
+    descriptions = [
+        "LPMM知识库文本分割",
+        "LPMM知识库实体提取",
+        "LPMM知识库知识图谱导入"
+    ]
     
-    if run_lpmm_text_split(selected_cfg=selected_cfg):
-        print_rgb("\nLPMM知识库文本分割已结束！", "#00FFBB")
-        print_rgb("是否继续进行实体提取操作？(Y/N)：", "#6DA0FD")
-        if input().upper() == 'Y':
-            if run_lpmm_entity_extract(selected_cfg=selected_cfg):
-                print_rgb("\nLPMM知识库实体提取已结束！", "#00FFBB")
-                while True:
-                    print_rgb("\n [A] 实体提取可能失败，重新提取？", "#FF6B6B")
-                    print_rgb(" [B] 继续进行知识图谱导入操作", "#6DA0FD")
-                    print_rgb(" [Q] 取消后续操作并返回主菜单", "#7E1E4")
-                    choice = input("请选择操作: ").upper()
-                    
-                    if choice == 'A':
-                        if not run_lpmm_entity_extract(selected_cfg=selected_cfg):
-                            break
-                    elif choice == 'B':
-                        if run_lpmm_knowledge_import(selected_cfg=selected_cfg):
-                            print_rgb("\nLPMM知识库知识图谱导入已结束！LPMM知识库构建操作已结束！", "#00FFBB")
-                        break
-                    elif choice == 'Q':
-                        break
+    # 警告信息
+    warnings = [
+        "实体提取操作将会花费较多API余额和时间（举例：600万字需约3小时）",
+        "知识导入时会消耗大量系统资源（举例：10700K CPU占用80%）",
+        "推荐使用硅基流动的Pro/BAAI/bge-m3模型"
+    ]
+    
+    # 显示警告
+    print_rgb("\n".join(warnings), "#FF6B6B")
+    
+    # 执行统一构建流程
+    if run_lpmm_unified_script(mai_path, steps, descriptions, warnings):
+        print_rgb("\nLPMM知识库构建操作已结束！", "#00FFBB")
     
     print_rgb("\n已关闭命令行窗口，即将返回主菜单！", "#6DFD8A")
     countdown_timer(5)
