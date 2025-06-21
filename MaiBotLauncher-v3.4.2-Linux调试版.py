@@ -1295,6 +1295,82 @@ def lpmm_menu():
             print_rgb("❌ 无效选项", "#FF6B6B")
             time.sleep(2)
 
+def run_old_knowledge_build(configs=None):
+    if not configs:
+        config = load_config()
+        configs = config["configurations"]
+    selected_cfg = select_config(configs)
+    if not selected_cfg:
+        return False
+    
+    mai_path = selected_cfg["mai_path"]
+    version = selected_cfg.get("version_path", "")
+    
+    # 验证是否为旧版本
+    if not is_legacy_version(version):
+        print_rgb("❌ 该功能仅适用于旧版本（0.6.0-alpha或classical）", "#FF6B6B")
+        input("按回车键返回...")
+        return False
+    
+    valid, msg = validate_path(mai_path, check_file="bot.py")
+    if not valid:
+        print_rgb(f"❌ 麦麦本体路径无效：{msg}", "#FF6B6B")
+        input("按回车键返回菜单...")
+        return False
+    
+    # 创建知识库原始数据文件夹
+    print_rgb("准备知识库原始数据文件夹...", "#02A18F")
+    raw_data_dir = os.path.join(mai_path, "data", "knowledge")
+    if not os.path.exists(raw_data_dir):
+        os.makedirs(raw_data_dir)
+        print_rgb(f"✅ 已创建原始数据文件夹: {raw_data_dir}", "#6DFD8A")
+    else:
+        print_rgb(f"✅ 原始数据文件夹已存在: {raw_data_dir}", "#6DFD8A")
+    
+    # 提示用户放置数据文件
+    print_rgb("\n📝 请将原始知识库文本文件(.txt格式)放入以下目录:", "#00FFBB")
+    print_rgb(f"  {raw_data_dir}", "#46AEF8")
+    input("放置完成后按回车键继续...")
+    
+    # 检查是否有文件
+    if not any(fname.endswith('.txt') for fname in os.listdir(raw_data_dir)):
+        print_rgb("⚠️ 未找到任何.txt文件！请确保已放置数据文件", "#F2FF5D")
+        choice = input("是否继续？(Y/N): ").upper()
+        if choice != 'Y':
+            return False
+    
+    # 检查MongoDB服务
+    if not check_mongodb():
+        print_rgb("❌ MongoDB服务未启动！请确保MongoDB服务已开启后再试。", "#FF6B6B")
+        input("按回车键返回主菜单...")
+        return False
+    
+    # 运行旧版知识库构建脚本
+    print_rgb("操作已确认！正在启动旧版知识库构建程序...", "#00FFBB")
+    print_rgb("请在终端窗口中确认执行程序！", "#00FFBB")
+    
+    try:
+        # 构建命令 - 在麦麦本体文件夹中运行
+        commands = [
+            f'cd "{mai_path}"',
+            'source ./venv/bin/activate',
+            'python3 ./src/plugins/zhishi/knowledge_library.py'
+        ]
+        
+        # 启动新终端
+        terminal_cmd = f'x-terminal-emulator -e "bash -c \\"{"; ".join(commands)}; echo; echo \\"操作完成，按回车键退出...\\"; read\\""'
+        subprocess.run(terminal_cmd, shell=True)
+        
+        print_rgb("\n请在终端窗口中完成操作后，在此处按回车键继续...", "#00FFBB")
+        input()
+        
+        print_rgb("\n旧版知识库构建已结束！", "#00FFBB")
+        return True
+        
+    except Exception as e:
+        print_rgb(f"❌ 执行失败：{str(e)}", "#FF6B6B")
+        return False
+
 def migrate_mongodb_to_sqlite():
     clear_screen()
     print_rgb("[🔧 知识库迁移 (MongoDB → SQLite)]", "#28DCF0")
