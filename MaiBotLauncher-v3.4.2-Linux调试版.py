@@ -1660,25 +1660,39 @@ def deployment_assistant():
     else:
         print_rgb("因为您将部署的实例无需用到Mongo DB，跳过Mongo DB检测", "#BADFFA")
     
-    install_napcat = input("是否下载并安装NapCat？(Y/N) ").upper()
+    install_napcat = input("是否下载并安装NapCat与QQ？(Y/N) ").upper()
     if install_napcat == "Y":
-        print_rgb("请在浏览器中下载NapCatQQ:", "#FFF3C2")
-        print_rgb("1. 打开 https://github.com/NapNeko/NapCatQQ/releases", "#A8B1FF")
-        print_rgb('2. 下载适用于Linux的版本', "#A8B1FF")
-        print_rgb("3. 下载完成后解压压缩包", "#FFF3C2")
-        print_rgb("4. 运行其中的安装脚本", "#FFF3C2")
+        # 在用户主目录(~)中打开新终端执行安装命令
+        home_dir = os.path.expanduser("~")
+        commands = [
+            'curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh',
+            'sudo bash napcat.sh --tui'
+        ]
         
-        open_webui = input("\n是否打开NapCat的WebUI？(Y/N) ").upper()
-        if open_webui == "Y":
-            print_rgb("在浏览器中打开 http://127.0.0.1:6099", "#46AEF8")
-            print_rgb("在网络配置中新建Websocket客户端:", "#46AEF8")
-            
-            if selected_version == "classical":
-                print_rgb('URL处请填写: ws://127.0.0.1:8080/onebot/v11/ws', "#A8B1FF")
-            else:
-                print_rgb('URL处请填写: ws://localhost:8095/', "#A8B1FF")
-            
-            print_rgb("记得启用配置！", "#F2FF5D")
+        # 使用run_script函数在新终端中执行命令
+        success = run_script(
+            work_dir=home_dir,
+            commands=' && '.join(commands)
+        )
+        
+        if success:
+            print_rgb("✅ NapCat安装程序已在新终端中启动！", "#6DFD8A")
+            print_rgb("请在新终端中完成安装操作后返回此处继续...", "#F2FF5D")
+            input("完成后请按回车键继续...")
+        else:
+            print_rgb("❌ 启动NapCat安装失败！", "#FF6B6B")
+
+        # 保留原有的WebUI配置提示
+        print_rgb("安装完成后需要配置NapCat的WebUI:", "#FFF3C2")
+        print_rgb("1. 打开浏览器访问 http://127.0.0.1:6099/weui", "#46AEF8")
+        print_rgb("2. 在网络配置中新建Websocket客户端:", "#46AEF8")
+        
+        if selected_version == "classical":
+            print_rgb('   URL填写: ws://127.0.0.1:8080/onebot/v11/ws', "#A8B1FF")
+        else:
+            print_rgb('   URL填写: ws://localhost:8095/', "#A8B1FF")
+        
+        print_rgb("3. 启用配置", "#F2FF5D")
     
     print_rgb("正在检测Git环境...", "#BADFFA")
     try:
