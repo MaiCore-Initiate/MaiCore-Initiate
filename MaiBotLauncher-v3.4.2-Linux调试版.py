@@ -317,7 +317,7 @@ def config_menu():
         print_color(" [B] 手动配置", "green")
         print_rgb(" [C] 管理配置集(新建/删除)", "#6DA0FD")
         print_rgb(" [D] 检查现有配置", "#6DA0FD")
-        print_rgb(" [Q] 返回上级", "#7E1E4")
+        print_rgb(" [Q] 返回上级", "#7E1DE4")
         print("================")
 
         choice = input("请选择操作: ").upper()
@@ -391,7 +391,7 @@ def config_menu():
                 print("\n[操作选项]")
                 print_rgb(" [A] 新建配置集", "#6DFD8A")
                 print_rgb(" [B] 删除配置集", "#FF6B6B")
-                print_rgb(" [Q] 返回上级", "#7E1E4")
+                print_rgb(" [Q] 返回上级", "#7E1DE4")
                 sub_choice = input("请选择操作: ").upper()
 
                 if sub_choice == "Q":
@@ -898,10 +898,10 @@ def check_config():
 
         print("\n=================")
         print_rgb(" [A] 重新配置此配置集", "#6DFD8A")
-        print_rgb(" [B] 返回配置菜单", "#7E1E4")
+        print_rgb(" [Q] 返回配置菜单", "#7E1DE4")
         choice = input("请选择操作: ").upper()
 
-        if choice == "B":
+        if choice == "Q":
             break
         elif choice == "A":
             reconfigure_current_config(config, selected_config_name, selected_cfg)
@@ -1047,9 +1047,9 @@ def run_lpmm_unified_script(mai_path, steps, descriptions, warnings=None):
         if i < len(steps) - 1:
             next_step = descriptions[i+1].split()[-1]  # 获取下一步名称
             commands.append('echo "请选择下一步操作:"')
-            commands.append(f'echo "A: 继续{next_step}"')
-            commands.append('echo "B: 重新执行当前步骤"')
-            commands.append('echo "Q: 取消后续操作"')
+            commands.append(f'echo "[A]: 继续{next_step}"')
+            commands.append('echo "[B]: 重新执行当前步骤"')
+            commands.append('echo "[Q]: 取消后续操作"')
             commands.append('read -p "您的选择 (A/B/Q): " choice')
             commands.append('case $choice in')
             commands.append('  B|b) continue;;')
@@ -1330,8 +1330,8 @@ def lpmm_menu():
         print_rgb(" [B] LPMM知识库文本分割", "#02A18F")
         print_rgb(" [C] LPMM知识库实体提取", "#02A18F")
         print_rgb(" [D] LPMM知识库知识图谱导入", "#02A18F")
-        print_rgb(" [Q] 返回主菜单", "#7E1E4")
-        print_rgb("->>>仍使用旧版知识库的版本（如0.6.0-alpha）请运行根目录下的“麦麦开始学习.bat”脚本构建知识库<<<-", "#FF6B6B")
+        print_rgb(" [Q] 返回主菜单", "#7E1DE4")
+        print_rgb(" [E] ", "#FF6B6B")
         print("================")
 
         choice = input("请选择操作: ").upper()
@@ -1348,6 +1348,8 @@ def lpmm_menu():
             run_lpmm_entity_extract(configs)
         elif choice == "D":
             run_lpmm_knowledge_import(configs)
+        elif choice == "E":
+            run_old_knowledge_build(configs=None)
         else:
             print_rgb("❌ 无效选项", "#FF6B6B")
             time.sleep(2)
@@ -2243,7 +2245,7 @@ def delete_instance():
     
     print("\n==================")
     print_color(" [A] 释放实例", "red")
-    print_rgb(" [Q] 返回上级菜单", "#7E1E4")
+    print_rgb(" [Q] 返回上级菜单", "#7E1DE4")
     print("==================")
     
     choice = input("请选择操作: ").upper()
@@ -2464,7 +2466,7 @@ def deployment_menu():
         print_rgb(" [D] 跳转到配置菜单","#F2FF5D")
         print_rgb(" [E] 跳转到LPMM构建","#00FFBB")
         print_rgb(" [F] 跳转到数据库迁移","#28DCF0")
-        print_rgb(" [Q] 返回主菜单","#7E1E4")
+        print_rgb(" [Q] 返回主菜单","#7E1DE4")
         print("================")
 
         choice = input("请选择操作: ").upper()
@@ -2498,7 +2500,7 @@ def about_menu():
         print_rgb(" [C] 更新日志", "#FF6B6B")
         print_rgb(" [D] 开源许可", "#00FFBB")
         print_rgb(" [E] 其他信息", "#46AEF8")   
-        print_rgb(" [Q] 返回主菜单", "#7E1E4")
+        print_rgb(" [Q] 返回主菜单", "#7E1DE4")
         print("=================")
         
         choice = input("请选择操作: ").upper()
