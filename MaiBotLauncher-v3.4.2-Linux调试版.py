@@ -160,7 +160,7 @@ def print_header():
     print("====>>配置类<<====")
     print_rgb(" [C] 配置管理（新建/修改/检查配置）", "#F2FF5D")
     print("====>>功能类<<====")
-    print_rgb(" [D] LPMM知识库构建", "#00FFBB")
+    print_rgb(" [D] 知识库构建", "#00FFBB")
     print_rgb(" [E] 知识库迁移（MongoDB → SQLite）", "#28DCF0")
     print("====>>部署类<<====")
     print_rgb(" [F] 实例部署辅助系统", "#FF6B6B")
@@ -1257,51 +1257,63 @@ def run_lpmm_knowledge_import(configs):
         print_rgb("\nLPMM知识库知识图谱导入已结束！", "#00FFBB")
     return success
 
-def run_lpmm_pipeline():
+def run_lpmm_pipeline(configs=None):
     """
-    LPMM知识库一条龙构建流程
+    LPMM知识库一条龙构建流程（完整交互式版本）
     """
-    config = load_config()
-    configs = config["configurations"]
+    if not configs:
+        config = load_config()
+        configs = config["configurations"]
     
-    # 选择目标实例
+    # 只选择一次配置
     selected_cfg = select_config(configs)
     if not selected_cfg:
         return
     
-    # 验证路径
+    # 显示当前目标实例信息
+    nickname = selected_cfg.get('nickname_path', '未命名')
+    serial_number = selected_cfg.get('serial_number', 'N/A')
+    version = selected_cfg.get('version_path', 'N/A')
     mai_path = selected_cfg["mai_path"]
+    
+    print_rgb(f"当前目标实例: {nickname} (序列号: {serial_number}, 版本: {version})", "#00FFBB")
+    
+    # 验证路径
     valid, msg = validate_path(mai_path, check_file="bot.py")
     if not valid:
         print_rgb(f"❌ 麦麦本体路径无效：{msg}", "#FF6B6B")
         input("按回车键返回菜单...")
         return
     
-    # 准备步骤参数
-    steps = [
-        "raw_data_preprocessor.py",
-        "info_extraction.py",
-        "import_openie.py"
-    ]
-    descriptions = [
-        "LPMM知识库文本分割",
-        "LPMM知识库实体提取",
-        "LPMM知识库知识图谱导入"
-    ]
-    
-    # 警告信息
-    warnings = [
-        "实体提取操作将会花费较多API余额和时间（举例：600万字需约3小时）",
-        "知识导入时会消耗大量系统资源（举例：10700K CPU占用80%）",
-        "推荐使用硅基流动的Pro/BAAI/bge-m3模型"
-    ]
-    
-    # 显示警告
-    print_rgb("\n".join(warnings), "#FF6B6B")
-    
-    # 执行统一构建流程
-    if run_lpmm_unified_script(mai_path, steps, descriptions, warnings):
-        print_rgb("\nLPMM知识库构建操作已结束！", "#00FFBB")
+    # 步骤1: 文本分割
+    if run_lpmm_text_split(selected_cfg=selected_cfg):
+        print_rgb("\nLPMM知识库文本分割已结束！", "#00FFBB")
+        
+        # 询问是否继续实体提取
+        print_rgb("是否继续进行实体提取操作？(Y/N)：", "#6DA0FD")
+        if input().upper() == 'Y':
+            # 步骤2: 实体提取
+            if run_lpmm_entity_extract(selected_cfg=selected_cfg):
+                print_rgb("\nLPMM知识库实体提取已结束！", "#00FFBB")
+                
+                # 实体提取后选项
+                while True:
+                    print_rgb("\n [A] 实体提取可能失败，重新提取？", "#FF6B6B")
+                    print_rgb(" [B] 继续进行知识图谱导入操作", "#6DA0FD")
+                    print_rgb(" [Q] 取消后续操作并返回主菜单", "#7E1E4")
+                    choice = input("请选择操作: ").upper()
+                    
+                    if choice == 'A':
+                        # 重新执行实体提取
+                        if not run_lpmm_entity_extract(selected_cfg=selected_cfg):
+                            break
+                    elif choice == 'B':
+                        # 步骤3: 知识图谱导入
+                        if run_lpmm_knowledge_import(selected_cfg=selected_cfg):
+                            print_rgb("\nLPMM知识库知识图谱导入已结束！LPMM知识库构建操作已结束！", "#00FFBB")
+                        break
+                    elif choice == 'Q':
+                        break
     
     print_rgb("\n已关闭命令行窗口，即将返回主菜单！", "#6DFD8A")
     countdown_timer(5)
@@ -1309,7 +1321,7 @@ def run_lpmm_pipeline():
 def lpmm_menu():
     while True:
         clear_screen()
-        print_rgb("[🔧 LPMM知识库构建]", "#00FFBB")
+        print_rgb("[🔧 知识库构建]", "#00FFBB")
         print("================")
         
         # 显示当前配置信息
@@ -1325,13 +1337,13 @@ def lpmm_menu():
         else:
             print_rgb("⚠️ 未设置默认实例", "#F2FF5D")
         
-        print_rgb("->>>该功能仅适用于支持LPMM知识库的版本，如“0.6.3-alpha”<<<-", "#FF6B6B")
+        print_rgb("->>>LPMM功能仅适用于支持LPMM知识库的版本，如“0.6.3-alpha”<<<-", "#FF6B6B")
         print_rgb(" [A] LPMM知识库一条龙构建", "#00FFBB")
         print_rgb(" [B] LPMM知识库文本分割", "#02A18F")
         print_rgb(" [C] LPMM知识库实体提取", "#02A18F")
         print_rgb(" [D] LPMM知识库知识图谱导入", "#02A18F")
         print_rgb(" [Q] 返回主菜单", "#7E1DE4")
-        print_rgb(" [E] ", "#FF6B6B")
+        print_rgb(" [E] 旧版知识库构建", "#FF6B6B")
         print("================")
 
         choice = input("请选择操作: ").upper()
