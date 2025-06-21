@@ -714,6 +714,51 @@ def run_in_current_terminal(commands, cwd=None):
         print_rgb(f"❌ 执行失败: {str(e)}", "#FF6B6B")
         return False
 
+def install_mongodb_service():
+    """安装MongoDB服务"""
+    print_rgb("🛠️ 正在安装MongoDB服务...", "#0BA30D")
+    
+    commands = [
+        'sudo apt update',
+        'sudo apt install -y wget gnupg',
+        'wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -',
+        'echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list',
+        'sudo apt update',
+        'sudo apt install -y mongodb-org',
+        'sudo systemctl start mongod',
+        'sudo systemctl enable mongod',
+        'sudo systemctl status mongod --no-pager'
+    ]
+    
+    success = run_in_current_terminal(commands)
+    
+    if success:
+        print_rgb("✅ MongoDB服务安装完成！", "#6DFD8A")
+        return True
+    else:
+        print_rgb("❌ MongoDB服务安装失败！", "#FF6B6B")
+        return False
+
+def install_mongodb_compass():
+    """安装MongoDB Compass图形界面"""
+    print_rgb("📊 正在安装MongoDB Compass...", "#0BA30D")
+    
+    commands = [
+        'sudo apt update',
+        'sudo apt install -y wget gdebi-core',
+        'wget -qO- https://downloads.mongodb.com/compass/mongodb-compass_latest_amd64.deb -O mongodb-compass.deb',
+        'sudo gdebi --non-interactive mongodb-compass.deb'
+    ]
+    
+    success = run_in_current_terminal(commands)
+    
+    if success:
+        print_rgb("✅ MongoDB Compass安装完成！", "#6DFD8A")
+        return True
+    else:
+        print_rgb("❌ MongoDB Compass安装失败！", "#FF6B6B")
+        return False
+
 def run_mai():
     config = load_config()
     all_configs = config["configurations"]
@@ -2002,28 +2047,35 @@ def deployment_assistant():
             if confirm_cancel == "Y":
                 return
     
+    # MongoDB安装逻辑重构
     if selected_version == "classical" or selected_version < "0.7.0-alpha":
         print_rgb("正在检测Mongo DB...", "#BADFFA")
         mongodb_installed = check_mongodb()
         
         if mongodb_installed:
-            print_rgb("已检测到Mongo DB服务，跳过Mongo DB安装", "#BADFFA")
+            print_rgb("✅ 已检测到MongoDB服务，跳过安装", "#6DFD8A")
         else:
-            print_rgb("未检测到Mongo DB服务", "#FF6B6B")
-            install_mongodb = input("是否安装Mongo DB？(Y/N) ").upper()
+            print_rgb("❌ 未检测到MongoDB服务", "#FF6B6B")
+            print_rgb("MongoDB是旧版本麦麦必需的数据存储服务", "#F2FF5D")
+            install_mongodb = input("是否安装MongoDB服务？(Y/N) ").upper()
             if install_mongodb == "Y":
-                install_mongodb()
+                if not install_mongodb_service():
+                    print_rgb("❌ MongoDB安装失败，部署中断！", "#FF6B6B")
+                    return
             else:
                 print_rgb("❌ MongoDB是必需组件，部署中断！", "#FF6B6B")
                 return
         
         mongodb_compass_installed = check_mongodb_compass()
         if mongodb_compass_installed:
-            print_rgb("已检测到MongoDB Compass，跳过安装", "#BADFFA")
+            print_rgb("✅ 已检测到MongoDB Compass，跳过安装", "#6DFD8A")
         else:
-            print_rgb("未检测到MongoDB Compass", "#F2FF5D")
+            print_rgb("⚠️ 未检测到MongoDB Compass", "#F2FF5D")
+            install_compass = input("是否安装MongoDB Compass图形界面？(Y/N) ").upper()
+            if install_compass == "Y":
+                install_mongodb_compass()
     else:
-        print_rgb("因为您将部署的实例无需用到Mongo DB，跳过Mongo DB检测", "#BADFFA")
+        print_rgb("✅ 因为您将部署的实例无需用到MongoDB，跳过MongoDB检测", "#6DFD8A")
     
     install_napcat = input("是否下载并安装NapCat与QQ？(Y/N) ").upper()
     if install_napcat == "Y":
