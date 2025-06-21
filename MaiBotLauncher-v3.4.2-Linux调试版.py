@@ -12,26 +12,38 @@ from tqdm import tqdm
 import shutil
 import shlex
 
-# 添加依赖检查函数
 def check_and_install_dependencies():
-    """检查并安装必要的依赖"""
+    """检查并安装必要的依赖（Ubuntu优化版）"""
     print_rgb("🔍 正在检查系统依赖...", "#BADFFA")
+    
+    # Ubuntu专用依赖检查列表
     dependencies = [
-        "xvfb",  # 虚拟X服务器
-        "wget",  # 文件下载工具
-        "curl",   # 网络工具
-        "unzip"   # 解压工具
+        {"name": "Xvfb", "check": "Xvfb", "pkg": "xvfb"},  # 虚拟X服务器
+        {"name": "wget", "check": "wget", "pkg": "wget"},   # 文件下载工具
+        {"name": "curl", "check": "curl", "pkg": "curl"},    # 网络工具
+        {"name": "unzip", "check": "unzip", "pkg": "unzip"}  # 解压工具
     ]
     
     missing_deps = []
     
     for dep in dependencies:
         try:
-            subprocess.run(["which", dep], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print_rgb(f"✅ {dep} 已安装", "#6DFD8A")
-        except:
-            print_rgb(f"❌ {dep} 未安装", "#FF6B6B")
-            missing_deps.append(dep)
+            # 使用type命令检查是否存在（兼容alias）
+            result = subprocess.run(
+                ["type", dep["check"]], 
+                check=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            # 检查输出中是否包含"not found"
+            if "not found" in result.stdout.lower() or "not found" in result.stderr.lower():
+                raise subprocess.CalledProcessError(1, "type")
+                
+            print_rgb(f"✅ {dep['name']} 已安装", "#6DFD8A")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            print_rgb(f"❌ {dep['name']} 未安装", "#FF6B6B")
+            missing_deps.append(dep["pkg"])
     
     if missing_deps:
         print_rgb(f"⚠️ 缺少必要依赖: {', '.join(missing_deps)}", "#F2FF5D")
@@ -39,16 +51,21 @@ def check_and_install_dependencies():
         if choice == 'Y':
             try:
                 print_rgb("正在安装依赖...", "#BADFFA")
+                
+                # 更新包列表
                 subprocess.run(["sudo", "apt", "update"], check=True)
+                
+                # 安装缺失的依赖
                 install_cmd = ["sudo", "apt", "install", "-y"] + missing_deps
                 subprocess.run(install_cmd, check=True)
+                
                 print_rgb("✅ 依赖安装完成！", "#6DFD8A")
                 time.sleep(1)
             except Exception as e:
                 print_rgb(f"❌ 安装依赖失败: {str(e)}", "#FF6B6B")
                 print_rgb("请手动安装以下依赖:", "#FF6B6B")
-                for dep in missing_deps:
-                    print_rgb(f"sudo apt install {dep}", "#F2FF5D")
+                for pkg in missing_deps:
+                    print_rgb(f"sudo apt install {pkg}", "#F2FF5D")
                 input("按回车键继续...")
         else:
             print_rgb("⚠️ 某些功能可能无法正常工作", "#F2FF5D")
