@@ -1014,6 +1014,55 @@ def select_config(configs):
         
         return selected_cfg
 
+def run_lpmm_unified_script(mai_path, steps, descriptions, warnings=None):
+    """
+    在单个终端窗口中顺序执行LPMM知识库构建步骤
+    参数:
+        mai_path: 麦麦本体路径
+        steps: 步骤脚本列表
+        descriptions: 步骤描述列表
+        warnings: 警告信息列表
+    """
+    venv_activate = os.path.join(mai_path, "venv", "bin", "activate")
+    
+    # 构建命令序列
+    commands = [
+        f"source {venv_activate}",
+        "set -e"  # 开启错误检测
+    ]
+    
+    # 添加警告信息
+    if warnings:
+        commands.append('echo "⚠️ 警告信息: "')
+        for warning in warnings:
+            commands.append(f'echo "  - {warning}"')
+        commands.append('echo "=============================="')
+    
+    # 添加每个步骤
+    for i, (step, desc) in enumerate(zip(steps, descriptions)):
+        commands.append(f'echo "=== 开始{desc} ==="')
+        commands.append(f"python ./scripts/{step} || true")  # 防止脚本退出
+        
+        # 添加用户选项（最后一步除外）
+        if i < len(steps) - 1:
+            next_step = descriptions[i+1].split()[-1]  # 获取下一步名称
+            commands.append('echo "请选择下一步操作:"')
+            commands.append(f'echo "A: 继续{next_step}"')
+            commands.append('echo "B: 重新执行当前步骤"')
+            commands.append('echo "Q: 取消后续操作"')
+            commands.append('read -p "您的选择 (A/B/Q): " choice')
+            commands.append('case $choice in')
+            commands.append('  B|b) continue;;')
+            commands.append('  Q|q) exit 0;;')
+            commands.append('  *) ;;')
+            commands.append('esac')
+    
+    commands.append('echo "=== 所有步骤已完成！ ==="')
+    commands.append('echo "按回车键退出..."')
+    commands.append('read')
+    
+    return run_script(mai_path, "; ".join(commands))
+
 def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
     if not mai_path:
         print_rgb("❌ 麦麦知识库（本体）路径未配置！请重新配置！", "#FF6B6B")
