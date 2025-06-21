@@ -1124,10 +1124,14 @@ def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
         print_rgb(f"❌ 执行失败：{str(e)}", "#FF6B6B")
         return False
 
-def run_lpmm_text_split(configs):
-    selected_cfg = select_config(configs)
+def run_lpmm_text_split(configs=None, selected_cfg=None):
     if not selected_cfg:
-        return False
+        if not configs:
+            config = load_config()
+            configs = config["configurations"]
+        selected_cfg = select_config(configs)
+        if not selected_cfg:
+            return False
     
     mai_path = selected_cfg["mai_path"]
     valid, msg = validate_path(mai_path, check_file="bot.py")
@@ -1204,12 +1208,27 @@ def run_lpmm_knowledge_import(configs):
         print_rgb("\nLPMM知识库知识图谱导入已结束！", "#00FFBB")
     return success
 
-def run_lpmm_pipeline(configs):
-    if run_lpmm_text_split(configs):
+def run_lpmm_pipeline():
+    config = load_config()
+    configs = config["configurations"]
+    
+    # 只选择一次配置
+    selected_cfg = select_config(configs)
+    if not selected_cfg:
+        return
+    
+    # 显示当前目标实例信息
+    nickname = selected_cfg.get('nickname_path', '未命名')
+    serial_number = selected_cfg.get('serial_number', 'N/A')
+    version = selected_cfg.get('version_path', 'N/A')
+    
+    print_rgb(f"当前目标实例: {nickname} (序列号: {serial_number}, 版本: {version})", "#00FFBB")
+    
+    if run_lpmm_text_split(selected_cfg=selected_cfg):
         print_rgb("\nLPMM知识库文本分割已结束！", "#00FFBB")
         print_rgb("是否继续进行实体提取操作？(Y/N)：", "#6DA0FD")
         if input().upper() == 'Y':
-            if run_lpmm_entity_extract(configs):
+            if run_lpmm_entity_extract(selected_cfg=selected_cfg):
                 print_rgb("\nLPMM知识库实体提取已结束！", "#00FFBB")
                 while True:
                     print_rgb("\n [A] 实体提取可能失败，重新提取？", "#FF6B6B")
@@ -1218,23 +1237,37 @@ def run_lpmm_pipeline(configs):
                     choice = input("请选择操作: ").upper()
                     
                     if choice == 'A':
-                        if not run_lpmm_entity_extract(configs):
+                        if not run_lpmm_entity_extract(selected_cfg=selected_cfg):
                             break
                     elif choice == 'B':
-                        if run_lpmm_knowledge_import(configs):
+                        if run_lpmm_knowledge_import(selected_cfg=selected_cfg):
                             print_rgb("\nLPMM知识库知识图谱导入已结束！LPMM知识库构建操作已结束！", "#00FFBB")
                         break
                     elif choice == 'Q':
                         break
     
     print_rgb("\n已关闭命令行窗口，即将返回主菜单！", "#6DFD8A")
-    countdown_timer(3)
+    countdown_timer(5)
 
 def lpmm_menu():
     while True:
         clear_screen()
         print_rgb("[🔧 LPMM知识库构建]", "#00FFBB")
         print("================")
+        
+        # 显示当前配置信息
+        config = load_config()
+        current_cfg_name = config.get("current_config", "default")
+        current_cfg = config["configurations"].get(current_cfg_name, {})
+        
+        if current_cfg:
+            nickname = current_cfg.get('nickname_path', '未命名')
+            serial_number = current_cfg.get('serial_number', 'N/A')
+            version = current_cfg.get('version_path', 'N/A')
+            print_rgb(f"当前默认实例: {nickname} (序列号: {serial_number}, 版本: {version})", "#00FFBB")
+        else:
+            print_rgb("⚠️ 未设置默认实例", "#F2FF5D")
+        
         print_rgb("->>>该功能仅适用于支持LPMM知识库的版本，如“0.6.3-alpha”<<<-", "#FF6B6B")
         print_rgb(" [A] LPMM知识库一条龙构建", "#00FFBB")
         print_rgb(" [B] LPMM知识库文本分割", "#02A18F")
@@ -1251,7 +1284,7 @@ def lpmm_menu():
         if choice == "Q":
             break
         elif choice == "A":
-            run_lpmm_pipeline(configs)
+            run_lpmm_pipeline()
         elif choice == "B":
             run_lpmm_text_split(configs)
         elif choice == "C":
@@ -1260,7 +1293,7 @@ def lpmm_menu():
             run_lpmm_knowledge_import(configs)
         else:
             print_rgb("❌ 无效选项", "#FF6B6B")
-            time.sleep(1)
+            time.sleep(2)
 
 def migrate_mongodb_to_sqlite():
     clear_screen()
