@@ -1360,8 +1360,8 @@ def lpmm_menu():
         print_rgb(" [B] LPMM知识库文本分割", "#02A18F")
         print_rgb(" [C] LPMM知识库实体提取", "#02A18F")
         print_rgb(" [D] LPMM知识库知识图谱导入", "#02A18F")
-        print_rgb(" [Q] 返回主菜单", "#7E1DE4")
         print_rgb(" [E] 旧版知识库构建", "#FF6B6B")
+        print_rgb(" [Q] 返回主菜单", "#7E1DE4")
         print("================")
 
         choice = input("请选择操作: ").upper()
