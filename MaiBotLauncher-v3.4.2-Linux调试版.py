@@ -18,30 +18,31 @@ def check_and_install_dependencies():
     
     # Ubuntu专用依赖检查列表
     dependencies = [
-        {"name": "Xvfb", "check": "Xvfb", "pkg": "xvfb"},  # 虚拟X服务器
-        {"name": "wget", "check": "wget", "pkg": "wget"},   # 文件下载工具
-        {"name": "curl", "check": "curl", "pkg": "curl"},    # 网络工具
-        {"name": "unzip", "check": "unzip", "pkg": "unzip"}  # 解压工具
+        {"name": "Xvfb", "command": "Xvfb", "pkg": "xvfb"},  # 虚拟X服务器
+        {"name": "wget", "command": "wget", "pkg": "wget"},   # 文件下载工具
+        {"name": "curl", "command": "curl", "pkg": "curl"},    # 网络工具
+        {"name": "unzip", "command": "unzip", "pkg": "unzip"}  # 解压工具
     ]
     
     missing_deps = []
     
     for dep in dependencies:
         try:
-            # 使用type命令检查是否存在（兼容alias）
+            # 使用 POSIX 兼容的方式检查命令是否存在
             result = subprocess.run(
-                ["type", dep["check"]], 
-                check=True, 
-                stdout=subprocess.PIPE, 
+                ["sh", "-c", f"command -v {dep['command']}"],
+                stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
             )
-            # 检查输出中是否包含"not found"
-            if "not found" in result.stdout.lower() or "not found" in result.stderr.lower():
-                raise subprocess.CalledProcessError(1, "type")
+            
+            # 如果命令存在，返回0且有输出
+            if result.returncode == 0 and result.stdout.strip():
+                print_rgb(f"✅ {dep['name']} 已安装", "#6DFD8A")
+            else:
+                raise FileNotFoundError(f"{dep['name']} not found")
                 
-            print_rgb(f"✅ {dep['name']} 已安装", "#6DFD8A")
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except Exception:
             print_rgb(f"❌ {dep['name']} 未安装", "#FF6B6B")
             missing_deps.append(dep["pkg"])
     
