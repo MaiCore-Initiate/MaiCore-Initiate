@@ -621,33 +621,72 @@ def check_process(process_name):
         return False
 
 def check_mongodb():
-    """Linux MongoDB服务检测"""
+    """Linux MongoDB服务检测 - 优化版本"""
+    # 方法1: 检查mongod进程是否运行
     try:
-        # 尝试多种检测方法
-        methods = [
-            ['systemctl', 'is-active', 'mongodb'],
-            ['systemctl', 'is-active', 'mongod'],
-            ['service', 'mongodb', 'status'],
-            ['service', 'mongod', 'status']
-        ]
-        
-        for cmd in methods:
-            try:
-                result = subprocess.run(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
-                )
-                if 'active' in result.stdout.lower():
-                    return True
-            except FileNotFoundError:
-                continue
-                
-        # 回退到进程检测
-        return check_process('mongod') or check_process('mongodb')
+        # 使用pgrep精确匹配mongod进程
+        result = subprocess.run(
+            ['pgrep', '-x', 'mongod'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return True
     except Exception:
-        return False
+        pass
+    
+    # 方法2: 检查系统服务状态
+    service_names = ['mongod', 'mongodb']
+    for service in service_names:
+        try:
+            result = subprocess.run(
+                ['systemctl', 'is-active', service],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            if result.returncode == 0 and 'active' in result.stdout.lower():
+                return True
+        except Exception:
+            continue
+    
+    # 方法3: 检查默认端口是否被占用
+    try:
+        # 检查默认的MongoDB端口27017
+        result = subprocess.run(
+            ['lsof', '-i', ':27017'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.returncode == 0 and 'mongod' in result.stdout:
+            return True
+    except Exception:
+        pass
+    
+    # 方法4: 检查mongo命令是否可用
+    try:
+        result = subprocess.run(
+            ['which', 'mongo'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            # 检查是否能连接本地实例
+            conn_result = subprocess.run(
+                ['mongo', '--eval', 'db.version()'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            if conn_result.returncode == 0 and 'MongoDB' in conn_result.stdout:
+                return True
+    except Exception:
+        pass
+    
+    return False
 
 # 修改 run_in_current_terminal 函数
 def run_in_current_terminal(commands, cwd=None):
