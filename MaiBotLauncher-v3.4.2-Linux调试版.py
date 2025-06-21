@@ -483,7 +483,7 @@ def config_menu():
         input("\n按回车键返回配置菜单...")
 
 def run_script(work_dir, commands):
-    """运行麦麦程序 - 使用更可靠的方法唤起终端"""
+    """运行麦麦程序 - 增强兼容性版本"""
     try:
         if not os.path.exists(work_dir):
             print_rgb(f"❌ 工作目录不存在: {work_dir}", "#FF6B6B")
@@ -495,44 +495,52 @@ def run_script(work_dir, commands):
         else:
             cmd_str = commands
         
-        # 创建临时脚本文件
-        script_path = os.path.join(work_dir, "run_mai.sh")
-        with open(script_path, 'w') as f:
-            f.write("#!/bin/bash\n")
-            f.write(f"cd {shlex.quote(work_dir)}\n")
-            f.write(f"{cmd_str}\n")
-            f.write('echo -e "\\n操作完成，按回车键退出..."; read\n')
-        os.chmod(script_path, 0o755)
+        # 方法1: 尝试使用 x-terminal-emulator (系统默认)
+        try:
+            subprocess.Popen([
+                'x-terminal-emulator', '-e', 
+                f'bash -c "cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo 按回车键退出...; read"'
+            ])
+            return True
+        except Exception:
+            pass
         
-        # 尝试多种方式唤起终端
-        terminals = [
-            ['x-terminal-emulator', '-e', f'bash {shlex.quote(script_path)}'],
-            ['konsole', '-e', f'bash {shlex.quote(script_path)}'],
-            ['xfce4-terminal', '-x', 'bash', '-c', f'cd {shlex.quote(work_dir)}; {cmd_str}; echo -e "\\n按回车键退出..."; read'],
-            ['mate-terminal', '-x', 'bash', '-c', f'cd {shlex.quote(work_dir)}; {cmd_str}; echo -e "\\n按回车键退出..."; read'],
-            ['xterm', '-e', f'bash {shlex.quote(script_path)}'],
-            ['gnome-terminal', '--', 'bash', '-c', f'cd {shlex.quote(work_dir)}; {cmd_str}; echo -e "\\n按回车键退出..."; read']
-        ]
+        # 方法2: 尝试使用 xterm (几乎总是可用)
+        try:
+            subprocess.Popen([
+                'xterm', '-e', 
+                f'bash -c "cd {shlex.quote(work_dir)}; {cmd_str}; echo; echo 按回车键退出...; read"'
+            ])
+            return True
+        except Exception:
+            pass
         
-        # 尝试每种终端直到成功
-        for terminal_cmd in terminals:
-            try:
-                subprocess.Popen(terminal_cmd)
-                print_rgb(f"✅ 使用 {terminal_cmd[0]} 启动终端", "#6DFD8A")
-                return True
-            except (FileNotFoundError, OSError):
-                continue
+        # 方法3: 尝试在当前终端中运行 (最后手段)
+        print_rgb("⚠️ 无法唤起新终端，将在当前终端运行程序", "#F2FF5D")
+        print_rgb("="*50, "#F2FF5D")
+        print_rgb("麦麦输出开始:", "#4AF933")
         
-        # 所有终端都失败的回退方案
-        print_rgb("⚠️ 无法唤起终端，将在后台运行程序", "#F2FF5D")
-        subprocess.Popen(
+        process = subprocess.Popen(
             f'cd {shlex.quote(work_dir)}; {cmd_str}',
             shell=True,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.STDOUT,
+            text=True
         )
-        print_rgb("✅ 程序已在后台运行", "#6DFD8A")
+        
+        # 实时显示输出
+        for line in iter(process.stdout.readline, ''):
+            print(line, end='')
+        
+        process.wait()
+        
+        print_rgb("="*50, "#F2FF5D")
+        print_rgb("✅ 程序执行完成", "#6DFD8A")
+        print_rgb("按回车键返回主菜单...", "#F2FF5D")
+        input()
+        
         return True
+        
     except Exception as e:
         print_rgb(f"❌ 启动失败: {str(e)}", "#FF6B6B")
         return False
@@ -646,24 +654,28 @@ def run_mai():
                 print_rgb("❌ 未找到run.sh文件！", "#FF6B6B")
         else:
             print_rgb("使用新版本启动模式", "#6DFD8A")
+        
+            # 定义虚拟环境激活路径（麦麦本体的虚拟环境）
+            venv_activate = os.path.join(selected_cfg["mai_path"], "venv", "bin", "activate")
             
-            # 启动麦麦本体
+            # 启动麦麦本体 - 使用虚拟环境和python3
             success1 = run_script(
                 work_dir=selected_cfg["mai_path"],
-                commands="python bot.py"
+                commands=[
+                    f'source {venv_activate}',
+                    'python3 bot.py'
+                ]
             )
 
             # 启动适配器
             adapter_path = selected_cfg.get("adapter_path", "")
             if adapter_path and adapter_path != "当前配置集的对象实例版本较低，无适配器":
-                # Linux使用bin/activate
-                venv_activate = os.path.join(selected_cfg["mai_path"], "venv", "bin", "activate")
-                
+                # 启动适配器 - 使用虚拟环境和python3
                 success2 = run_script(
                     work_dir=adapter_path,
                     commands=[
                         f'source {venv_activate}',
-                        'python main.py'
+                        'python3 main.py'
                     ]
                 )
 
@@ -744,19 +756,26 @@ def run_full():
         else:
             print_rgb("使用新版本启动模式", "#6DFD8A")
             
+            # 定义虚拟环境激活路径（麦麦本体的虚拟环境）
+            venv_activate = os.path.join(selected_cfg["mai_path"], "venv", "bin", "activate")
+            
+            # 启动麦麦本体 - 使用虚拟环境和python3
             success1 = run_script(
                 work_dir=selected_cfg["mai_path"],
-                commands="python bot.py"
+                commands=[
+                    f'source {venv_activate}',
+                    'python3 bot.py'
+                ]
             )
 
             adapter_path = selected_cfg.get("adapter_path", "")
             if adapter_path and adapter_path != "当前配置集的对象实例版本较低，无适配器":
-                venv_activate = os.path.join(selected_cfg["mai_path"], "venv", "bin", "activate")
+                # 启动适配器 - 使用虚拟环境和python3
                 success2 = run_script(
                     work_dir=adapter_path,
                     commands=[
                         f'source {venv_activate}',
-                        'python main.py'
+                        'python3 main.py'
                     ]
                 )
 
@@ -768,7 +787,7 @@ def run_full():
                 if success1:
                     print_rgb("🟢 麦麦本体启动成功！终端窗口将保持打开", "#6DFD8A")
                 else:
-                    print_header("🔔 麦麦本体启动失败，请检查弹出的窗口", "#F2FF5D")
+                    print_rgb("🔔 麦麦本体启动失败，请检查弹出的窗口", "#F2FF5D")
 
     except Exception as e:
         print_rgb(f"❌ 启动失败：{str(e)}", "#FF6B6B")
