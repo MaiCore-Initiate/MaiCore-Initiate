@@ -154,7 +154,6 @@ def print_header():
     print_rgb("\n🌈麦麦启动器控制台", "#BADFFA")
     print_color("——————————", "gray")
     print_color("选择选项", "gray")
-    print("===================")
     print("====>>启动类<<====")
     print_rgb(" [A] 🚀 运行麦麦", "#4AF933")
     print_rgb(" [B] 运行麦麦（同时启动NapCatQQ和Mongo DB）", "#4AF933")
@@ -168,8 +167,7 @@ def print_header():
     print("====>>关于类<<====")
     print_rgb(" [G] 关于本程序", "#6DA0FD")
     print("====>>退出类<<====")
-    print_rgb(" [Q] 👋退出程序", "#7E1DE4")
-    print("===================\n")
+    print_rgb(" [Q] 👋退出程序\n", "#7E1DE4")
 
 def is_legacy_version(version):
     if not version:
@@ -1023,6 +1021,74 @@ def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
 
     try:
         print_rgb(f"正在进行{description}...", "#00FFBB")
+        
+        # 检查并安装必要的系统依赖
+        print_rgb("🛠️ 正在准备LPMM构建环境...", "#00FFBB")
+        print_rgb("1. 检查并安装GCC/G++编译器...", "#02A18F")
+        
+        # 检查是否已安装gcc
+        if not shutil.which("gcc") or not shutil.which("g++"):
+            print_rgb("未检测到GCC/G++编译器，需要安装build-essential", "#F2FF5D")
+            confirm = input("需要安装系统依赖，是否继续？(Y/N): ").upper()
+            if confirm != 'Y':
+                print_rgb("❌ 环境准备已取消", "#FF6B6B")
+                return False
+            
+            commands = [
+                'sudo apt update',
+                'sudo apt install -y build-essential'
+            ]
+            
+            # 在当前终端运行安装命令
+            success = run_in_current_terminal(commands, mai_path)
+            if not success:
+                print_rgb("❌ GCC/G++编译器安装失败！", "#FF6B6B")
+                return False
+        else:
+            print_rgb("✅ 已检测到GCC/G++编译器", "#6DFD8A")
+        
+        # 安装quick-algo库
+        print_rgb("2. 安装LPMM必备库quick-algo...", "#02A18F")
+        venv_activate = os.path.join(mai_path, "venv", "bin", "activate")
+        commands = [
+            f'source {venv_activate}',
+            'pip install quick-algo'
+        ]
+        
+        # 在新终端中安装
+        success = run_script(
+            work_dir=mai_path,
+            commands=' && '.join(commands)
+        )
+        
+        if not success:
+            print_rgb("❌ quick-algo库安装失败！", "#FF6B6B")
+            return False
+        
+        # 创建lpmm_raw_data文件夹
+        print_rgb("3. 准备知识库原始数据文件夹...", "#02A18F")
+        raw_data_dir = os.path.join(mai_path, "data", "lpmm_raw_data")
+        if not os.path.exists(raw_data_dir):
+            os.makedirs(raw_data_dir)
+            print_rgb(f"✅ 已创建原始数据文件夹: {raw_data_dir}", "#6DFD8A")
+        else:
+            print_rgb(f"✅ 原始数据文件夹已存在: {raw_data_dir}", "#6DFD8A")
+        
+        # 提示用户放置数据文件
+        print_rgb("\n📝 请将原始知识库文本文件(.txt格式)放入以下目录:", "#00FFBB")
+        print_rgb(f"  {raw_data_dir}", "#46AEF8")
+        print_rgb("格式及分段要求详阅:", "#00FFBB")
+        print_rgb("https://docs.mai-mai.org/manual/usage/lpmm.html#%E9%BA%A6%E9%BA%A6%E5%AD%A6%E4%B9%A0%E7%9F%A5%E8%AF%86", "#46AEF8")
+        input("放置完成后按回车键继续...")
+        
+        # 检查是否有文件
+        if not any(fname.endswith('.txt') for fname in os.listdir(raw_data_dir)):
+            print_rgb("⚠️ 未找到任何.txt文件！请确保已放置数据文件", "#F2FF5D")
+            choice = input("是否继续？(Y/N): ").upper()
+            if choice != 'Y':
+                return False
+        
+        # 继续原流程
         print_rgb("正在激活虚拟环境...", "#00FFBB")
         
         if warning_messages:
@@ -1039,8 +1105,6 @@ def run_lpmm_script(mai_path, script_name, description, warning_messages=None):
         print_rgb("请在终端窗口中确认执行程序！", "#00FFBB")
         
         try:
-            # Linux使用bin/activate
-            venv_activate = os.path.join(mai_path, "venv", "bin", "activate")
             command = f'cd "{mai_path}"; source {venv_activate}; python ./scripts/{script_name}'
             
             # 启动新终端
