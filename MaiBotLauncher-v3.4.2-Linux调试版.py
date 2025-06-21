@@ -12,7 +12,51 @@ from tqdm import tqdm
 import shutil
 import shlex
 
+# 添加依赖检查函数
+def check_and_install_dependencies():
+    """检查并安装必要的依赖"""
+    print_rgb("🔍 正在检查系统依赖...", "#BADFFA")
+    dependencies = [
+        "xvfb",  # 虚拟X服务器
+        "wget",  # 文件下载工具
+        "curl",   # 网络工具
+        "unzip"   # 解压工具
+    ]
+    
+    missing_deps = []
+    
+    for dep in dependencies:
+        try:
+            subprocess.run(["which", dep], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print_rgb(f"✅ {dep} 已安装", "#6DFD8A")
+        except:
+            print_rgb(f"❌ {dep} 未安装", "#FF6B6B")
+            missing_deps.append(dep)
+    
+    if missing_deps:
+        print_rgb(f"⚠️ 缺少必要依赖: {', '.join(missing_deps)}", "#F2FF5D")
+        choice = input("是否自动安装这些依赖？(Y/N): ").upper()
+        if choice == 'Y':
+            try:
+                print_rgb("正在安装依赖...", "#BADFFA")
+                subprocess.run(["sudo", "apt", "update"], check=True)
+                install_cmd = ["sudo", "apt", "install", "-y"] + missing_deps
+                subprocess.run(install_cmd, check=True)
+                print_rgb("✅ 依赖安装完成！", "#6DFD8A")
+                time.sleep(1)
+            except Exception as e:
+                print_rgb(f"❌ 安装依赖失败: {str(e)}", "#FF6B6B")
+                print_rgb("请手动安装以下依赖:", "#FF6B6B")
+                for dep in missing_deps:
+                    print_rgb(f"sudo apt install {dep}", "#F2FF5D")
+                input("按回车键继续...")
+        else:
+            print_rgb("⚠️ 某些功能可能无法正常工作", "#F2FF5D")
+            time.sleep(1)
+    
+    clear_screen()
 
+# 修改后的get_available_terminal函数
 def get_available_terminal():
     """检测系统可用的终端模拟器"""
     terminals = [
@@ -717,10 +761,30 @@ def run_full():
     if not napcat_running:
         if selected_cfg["napcat_path"]:
             try:
-                # Linux不需要.exe后缀
-                napcat_path = selected_cfg["napcat_path"].replace('.exe', '')
-                subprocess.Popen(f'"{napcat_path}"', shell=True)
-                print_rgb("🟢 NapCat启动成功！", "#6DFD8A")
+                # 改进的NapCat启动逻辑
+                napcat_path = selected_cfg["napcat_path"]
+                
+                # 检查是否是有效的NapCat目录
+                if not os.path.isdir(napcat_path):
+                    print_rgb(f"❌ NapCat路径不是一个目录: {napcat_path}", "#FF6B6B")
+                else:
+                    # 查找可执行文件
+                    qq_executable = os.path.join(napcat_path, "bin", "qq")
+                    if not os.path.isfile(qq_executable):
+                        qq_executable = os.path.join(napcat_path, "qq")
+                    
+                    if not os.path.isfile(qq_executable):
+                        print_rgb(f"❌ 未找到NapCat可执行文件: {qq_executable}", "#FF6B6B")
+                    else:
+                        # 在新终端中启动NapCat
+                        success = run_script(
+                            work_dir=napcat_path,
+                            commands=f'xvfb-run -a {qq_executable} --no-sandbox'
+                        )
+                        if success:
+                            print_rgb("🟢 NapCat启动成功！终端窗口将保持打开", "#6DFD8A")
+                        else:
+                            print_rgb("🔔 NapCat启动失败，请检查弹出的窗口", "#F2FF5D")
             except Exception as e:
                 print_rgb(f"❌ NapCat启动失败！{str(e)}", "#FF6B6B")
         else:
@@ -1662,7 +1726,9 @@ def deployment_assistant():
     
     install_napcat = input("是否下载并安装NapCat与QQ？(Y/N) ").upper()
     if install_napcat == "Y":
-        # 在用户主目录(~)中打开新终端执行安装命令
+        print_rgb("正在准备安装NapCat与QQ...", "#BADFFA")
+        
+        # 在用户主目录中打开新终端执行安装命令
         home_dir = os.path.expanduser("~")
         commands = [
             'curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh',
@@ -1682,9 +1748,8 @@ def deployment_assistant():
         else:
             print_rgb("❌ 启动NapCat安装失败！", "#FF6B6B")
 
-        # 保留原有的WebUI配置提示
         print_rgb("安装完成后需要配置NapCat的WebUI:", "#FFF3C2")
-        print_rgb("1. 打开浏览器访问 http://127.0.0.1:6099/weui", "#46AEF8")
+        print_rgb("1. 打开浏览器访问 http://127.0.0.1:6099", "#46AEF8")
         print_rgb("2. 在网络配置中新建Websocket客户端:", "#46AEF8")
         
         if selected_version == "classical":
@@ -1860,10 +1925,14 @@ def deploy_non_classical(install_dir, version):
         'python -m venv venv',
         '. venv/bin/activate',
         'python -m pip install --upgrade pip',
-        'pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade',
+        # 使用uv安装麦麦本体依赖
+        'pip install uv -i https://mirrors.aliyun.com/pypi/simple',
+        'uv pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade',
         f'cd "{adapter_dir}"',
         'source ../MaiBot/venv/bin/activate',
-        'pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade',
+        # 使用uv安装适配器依赖
+        'pip install uv -i https://mirrors.aliyun.com/pypi/simple',
+        'uv pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt --upgrade',
         'echo "✅ 依赖安装完成"'
     ]
     
@@ -2415,6 +2484,9 @@ def about_menu():
         input("\n按回车键返回...")
 
 def main():
+    # 启动时检查依赖
+    check_and_install_dependencies()
+    
     while True:
         clear_screen()
         print_header()
