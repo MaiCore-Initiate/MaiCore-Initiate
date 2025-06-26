@@ -715,14 +715,16 @@ def run_in_current_terminal(commands, cwd=None):
         return False
 
 def install_mongodb_service():
-    """安装MongoDB服务"""
+    """安装MongoDB服务 - 适配新版Ubuntu"""
     print_rgb("🛠️ 正在安装MongoDB服务...", "#0BA30D")
     
     commands = [
         'sudo apt update',
         'sudo apt install -y wget gnupg',
-        'wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | sudo apt-key add -',
-        'echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list',
+        # 使用新的GPG密钥安装方式
+        'wget -qO- https://www.mongodb.org/static/pgp/server-7.0.asc | gpg --dearmor | sudo tee /usr/share/keyrings/mongodb-server-7.0.gpg > /dev/null',
+        # 添加带签名的源
+        'echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list',
         'sudo apt update',
         'sudo apt install -y mongodb-org',
         'sudo systemctl start mongod',
