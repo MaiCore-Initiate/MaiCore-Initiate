@@ -12,6 +12,8 @@ from colorama import Fore, Style, init
 from tqdm import tqdm  
 import shutil # 用于删除实例
 import winreg # 用于注册表操作
+import tempfile  # 添加tempfile模块
+from urllib.request import urlopen  # 添加urlopen
 
 if sys.platform == 'win32':
     kernel32 = ctypes.windll.kernel32
@@ -96,6 +98,17 @@ def print_color(text, color=None, end="\n"):
     else:
         print(text, end=end)
 
+def is_admin():
+    """检查是否以管理员权限运行"""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def run_as_admin():
+    """以管理员权限重新运行程序"""
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+    sys.exit(0)
 
 # 在 print_header 函数中使用自定义颜色
 def print_header():
@@ -2175,6 +2188,126 @@ emoji系统: 移除emoji默认发送模式，优化表情包审查功能
     }
     return changelogs.get(version, "❌ 未找到该版本的更新日志")
 
+def download_git_installer():
+    """下载Git安装程序"""
+    # 获取最新的Git for Windows下载URL
+    git_url = "https://github.com/git-for-windows/git/releases/download/v2.45.1.windows.1/Git-2.45.1-64-bit.exe"
+    
+    # 创建临时目录
+    temp_dir = tempfile.gettempdir()
+    installer_path = os.path.join(temp_dir, "Git-Installer.exe")
+    
+    print(Fore.CYAN + "正在下载Git安装程序...")
+    
+    try:
+        # 尝试使用requests下载（带进度条）
+        response = requests.get(git_url, stream=True)
+        total_size = int(response.headers.get('content-length', 0))
+        block_size = 1024
+        progress_bar_length = 50
+        
+        with open(installer_path, 'wb') as f:
+            downloaded = 0
+            for data in response.iter_content(block_size):
+                f.write(data)
+                downloaded += len(data)
+                if total_size > 0:
+                    percent = downloaded / total_size
+                    filled_length = int(progress_bar_length * percent)
+                    bar = '#' * filled_length + '-' * (progress_bar_length - filled_length)
+                    sys.stdout.write(f'\r{Fore.YELLOW}下载进度: |{bar}| {percent:.1%}')
+                    sys.stdout.flush()
+        sys.stdout.write('\n')
+        return installer_path
+    except Exception as e:
+        print(Fore.RED + f"使用requests下载失败: {e}, 尝试使用urllib...")
+        try:
+            # 使用urllib作为备选方案
+            with urlopen(git_url) as response, open(installer_path, 'wb') as f:
+                total_size = response.length
+                block_size = 1024 * 8
+                downloaded = 0
+                while True:
+                    buffer = response.read(block_size)
+                    if not buffer:
+                        break
+                    f.write(buffer)
+                    downloaded += len(buffer)
+                    if total_size > 0:
+                        percent = downloaded / total_size
+                        filled_length = int(50 * percent)
+                        bar = '#' * filled_length + '-' * (50 - filled_length)
+                        sys.stdout.write(f'\r{Fore.YELLOW}下载进度: |{bar}| {percent:.1%}')
+                        sys.stdout.flush()
+            sys.stdout.write('\n')
+            return installer_path
+        except Exception as e2:
+            print(Fore.RED + f"下载失败: {e2}")
+            return None
+        
+def install_git_silently(installer_path):
+    """静默安装Git"""
+    try:
+        # 以静默方式安装Git
+        command = [
+            installer_path,
+            '/VERYSILENT',  # 非常安静模式
+            '/NORESTART',   # 不重启
+            '/NOCANCEL',    # 不显示取消按钮
+            '/SP-',         # 禁用安装程序启动页面
+            '/CLOSEAPPLICATIONS',  # 关闭可能冲突的应用程序
+            '/RESTARTAPPLICATIONS',  # 安装完成后重启应用程序
+            '/COMPONENTS=""'  # 安装所有组件
+        ]
+        
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        
+        if process.returncode == 0:
+            print(Fore.GREEN + "✅ Git安装成功")
+            # 将Git添加到系统环境变量
+            os.environ['PATH'] = os.environ['PATH'] + ';C:\\Program Files\\Git\\bin'
+            return True
+        else:
+            print(Fore.RED + f"❌ Git安装失败，错误代码: {process.returncode}")
+            if stderr:
+                print(Fore.RED + stderr.decode('utf-8', errors='ignore'))
+            return False
+    except Exception as e:
+        print(Fore.RED + f"❌ 安装过程中出错: {e}")
+        return False
+
+def install_git():
+    """下载并安装Git"""
+    # 检查是否以管理员权限运行
+    if not is_admin():
+        print(Fore.YELLOW + "请求管理员权限以安装Git...")
+        run_as_admin()
+        return True  # 当前进程退出，等待管理员权限进程执行
+    
+    # 下载安装程序
+    installer_path = download_git_installer()
+    if not installer_path:
+        return False
+    
+    # 安装Git
+    if install_git_silently(installer_path):
+        # 验证安装
+        try:
+            # 直接检查Git安装路径
+            git_path = r"C:\Program Files\Git\bin\git.exe"
+            if os.path.exists(git_path):
+                version_output = subprocess.check_output([git_path, "--version"], stderr=subprocess.STDOUT, text=True)
+                print(Fore.GREEN + f"✅ Git验证成功: {version_output.strip()}")
+                return True
+            else:
+                print(Fore.YELLOW + "⚠️ Git安装完成，但未在默认路径找到，请手动检查")
+                return True
+        except Exception as e:
+            print(Fore.YELLOW + f"⚠️ Git验证失败: {e}")
+            return True
+    return False
+
 def deployment_assistant():
     """部署辅助系统主函数"""
     clear_screen()
@@ -2295,17 +2428,24 @@ def deployment_assistant():
             print_rgb("记得启用配置！", "#F2FF5D")
     
     # 检查Git环境
-    print_rgb("正在检测Git环境...", "#BADFFA")
+    print(Fore.CYAN + "正在检测Git环境...")
     try:
+        # 尝试直接调用git命令
         subprocess.run(["git", "--version"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print_rgb("已检测到Git环境！", "#A8B1FF")
+        print(Fore.GREEN + "✅ 已检测到Git环境！")
     except:
-        print_rgb("❌ 检测到您的计算机中未安装Git，无法使用实例部署功能！", "#FF6B6B")
-        print_rgb("请前往以下链接手动下载包体：", "#FFF3C2")
-        print_rgb("https://github.com/MaiM-with-u/MaiBot", "#A8B1FF")
-        print_rgb("https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter", "#A8B1FF")
-        print_rgb("或者前往以下链接前往Git官网下载并安装Git", "#FFF3C2")
-        print_rgb("https://git-scm.com/downloads", "#A8B1FF")
+        print(Fore.RED + "❌ 检测到您的计算机中未安装Git，无法使用实例部署功能！")
+        choice = input(Fore.YELLOW + "是否立即安装Git？(Y/N): ").upper()
+        if choice == 'Y':
+            if install_git():
+                print(Fore.GREEN + "✅ Git安装成功，请关闭所有窗口，然后重新启动启动器")
+                print(Fore.YELLOW + "注意：安装完成后需要重启终端才能识别git命令")
+                time.sleep(5)
+                sys.exit(0)
+            else:
+                print(Fore.RED + "❌ Git安装失败，请手动安装Git")
+        else:
+            print(Fore.YELLOW + "请手动安装Git后重试。")
         return
     
     # 创建临时配置
