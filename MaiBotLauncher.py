@@ -12,6 +12,8 @@ from colorama import Fore, Style, init
 from tqdm import tqdm  
 import shutil # 用于删除实例
 import winreg # 用于注册表操作
+import tempfile  # 添加tempfile模块
+from urllib.request import urlopen  # 添加urlopen
 
 if sys.platform == 'win32':
     kernel32 = ctypes.windll.kernel32
@@ -96,6 +98,17 @@ def print_color(text, color=None, end="\n"):
     else:
         print(text, end=end)
 
+def is_admin():
+    """检查是否以管理员权限运行"""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def run_as_admin():
+    """以管理员权限重新运行程序"""
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
+    sys.exit(0)
 
 # 在 print_header 函数中使用自定义颜色
 def print_header():
@@ -114,14 +127,13 @@ def print_header():
     print_rgb("\n🌈麦麦启动器控制台", "#BADFFA")
     print_color("——————————", "gray")
     print_color("选择选项", "gray")
-    print("===================")
     print("====>>启动类<<====")
     print_rgb(" [A] 🚀 运行麦麦", "#4AF933")
     print_rgb(" [B] 运行麦麦（同时启动NapCatQQ和Mongo DB）", "#4AF933")
     print("====>>配置类<<====")
     print_rgb(" [C] 配置管理（新建/修改/检查配置）", "#F2FF5D")
     print("====>>功能类<<====")
-    print_rgb(" [D] LPMM知识库构建", "#00FFBB")
+    print_rgb(" [D] 知识库构建", "#00FFBB")
     print_rgb(" [E] 知识库迁移（MongoDB → SQLite）", "#28DCF0")
     print("====>>部署类<<====")
     print_rgb(" [F] 实例部署辅助系统", "#FF6B6B")  # 使用另一个自定义颜色
@@ -129,7 +141,6 @@ def print_header():
     print_rgb(" [G] 关于本程序", "#6DA0FD")
     print("====>>退出类<<====")
     print_rgb(" [Q] 👋退出程序", "#7E1DE4")
-    print("===================\n")
 
 def is_legacy_version(version):
     """检测是否为旧版本（小于0.6.0或为classical）"""
@@ -1433,19 +1444,125 @@ def run_lpmm_pipeline(configs):
     print_rgb("\n已关闭命令行窗口，即将返回主菜单！", "#6DFD8A")
     countdown_timer(3)
 
+def run_legacy_knowledge_build(configs):
+    """运行旧版知识库构建（仅适用于0.6.0-alpha及更早版本）"""
+    # 筛选出旧版实例
+    legacy_configs = {}
+    for cfg_name, cfg in configs.items():
+        if is_legacy_version(cfg.get("version_path", "")):
+            legacy_configs[cfg_name] = cfg
+    
+    if not legacy_configs:
+        print_rgb("❌ 未找到符合条件的旧版实例（版本号≤0.6.2或classical）", "#FF6B6B")
+        input("按回车键返回...")
+        return
+    
+    # 显示所有旧版实例
+    clear_screen()
+    print_rgb("[🔧 旧版知识库构建]", "#FF6B6B")
+    print("================\n")
+    print_rgb("请选择目标实例（仅显示旧版实例）：", "#F2FF5D")
+    
+    for idx, (cfg_name, cfg) in enumerate(legacy_configs.items(), 1):
+        print(f"实例{idx}")
+        print_rgb(f"序列号: {cfg['serial_number']}", "#005CFA")
+        print_rgb(f"昵称: {cfg['nickname_path']}", "#005CFA")
+        print(f"版本: {cfg['version_path']}")
+        print(f"麦麦路径: {cfg['mai_path']}")
+        print("——————————")
+    
+    # 获取用户选择的序列号
+    serial_number = get_text_input("\n请输入目标实例的用户序列号（输入Q返回）:", "cyan")
+    if serial_number.upper() == "Q":
+        return
+    
+    selected_cfg = next(
+        (cfg for cfg in legacy_configs.values() if cfg["serial_number"] == serial_number),
+        None
+    )
+    
+    if not selected_cfg:
+        print_rgb("❌ 未找到匹配的实例！", "#FF6B6B")
+        input("按回车键返回...")
+        return
+    
+    mai_path = selected_cfg["mai_path"]
+    raw_info_dir = os.path.join(mai_path, "data", "raw_info")
+    
+    # 显示警告和操作说明
+    clear_screen()
+    print_rgb("=== 旧版知识库构建 ===", "#FF6B6B")
+    print("=======================")
+    print_rgb("警告提示：", "#FF6B6B")
+    print("1. 这是一个demo系统，不完善不稳定，仅用于体验")
+    print("2. 不要塞入过长过大的文本，这会导致信息提取迟缓")
+    print("=======================")
+    print_rgb(f"请将要学习的文本文件放入以下目录：", "#F2FF5D")
+    print_rgb(f"{raw_info_dir}", "#46AEF8")
+    print("=======================")
+    print_rgb("确保文件为UTF-8编码的txt文件", "#F2FF5D")
+    print("=======================")
+    
+    confirm = input("确认文件已放置完毕？(Y/N): ").upper()
+    if confirm != 'Y':
+        print_rgb("操作已取消", "#F2FF5D")
+        return
+    
+    # 选择Python环境
+    print_rgb("\n请选择Python环境：", "#F2FF5D")
+    print_rgb(" [1] venv (推荐)", "#F2FF5D")
+    print_rgb(" [2] conda", "#F2FF5D")
+    env_choice = input("请输入数字选择(1或2): ").strip()
+    
+    script_path = os.path.join(mai_path, "src", "plugins", "zhishi", "knowledge_library.py")
+    
+    if env_choice == '1':
+        # 使用venv环境
+        venv_path = os.path.join(mai_path, "venv", "Scripts", "python.exe")
+        if not os.path.exists(venv_path):
+            venv_path = os.path.join(mai_path, "maimbot", "Scripts", "python.exe")
+        
+        if not os.path.exists(venv_path):
+            print_rgb("❌ 未找到venv环境，请使用conda或手动配置", "#FF6B6B")
+            input("按回车键返回...")
+            return
+        
+        command = f'start cmd /k "{venv_path}" "{script_path}"'
+    elif env_choice == '2':
+        # 使用conda环境
+        env_name = input("请输入要激活的conda环境名称: ").strip()
+        if not env_name:
+            print_rgb("❌ 环境名称不能为空", "#FF6B6B")
+            return
+        
+        command = f'start cmd /k conda activate {env_name} && python "{script_path}"'
+    else:
+        print_rgb("❌ 无效选择", "#FF6B6B")
+        return
+    
+    # 执行命令
+    try:
+        subprocess.Popen(command, shell=True)
+        print_rgb("✅ 已启动知识库构建脚本，请在新窗口中操作", "#6DFD8A")
+    except Exception as e:
+        print_rgb(f"❌ 启动失败: {str(e)}", "#FF6B6B")
+    
+    input("按回车键返回...")
+
 def lpmm_menu():
-    """LPMM知识库构建子菜单"""
+    """知识库构建子菜单"""
     while True:
         clear_screen()
-        print_rgb("[🔧 LPMM知识库构建]", "#00FFBB")
+        print_rgb("[🔧 知识库构建]", "#00FFBB")
         print("================")
-        print_rgb("->>>该功能仅适用于支持LPMM知识库的版本，如“0.6.3-alpha”<<<-", "#FF6B6B")
+        print_rgb("->>>LPMM功能仅适用于支持LPMM知识库的版本，如“0.6.3-alpha”<<<-", "#FF6B6B")
         print_rgb(" [A] LPMM知识库一条龙构建", "#00FFBB")
         print_rgb(" [B] LPMM知识库文本分割", "#02A18F")
         print_rgb(" [C] LPMM知识库实体提取", "#02A18F")
         print_rgb(" [D] LPMM知识库知识图谱导入", "#02A18F")
+        print_rgb(" [E] 旧版知识库构建（仅0.6.0-alpha及更早版本）", "#924444")  # 新增选项
         print_rgb(" [Q] 返回主菜单", "#7E1DE4")
-        print_rgb("->>>仍使用旧版知识库的版本（如0.6.0-alpha）请运行根目录下的“麦麦开始学习.bat”脚本构建知识库<<<-", "#FF6B6B")
+        print_rgb("->>>仍使用旧版知识库的版本（如0.6.0-alpha）请选择选项 [E] <<<-", "#FF6B6B")
         print("================")
 
         choice = input("请选择操作: ").upper()
@@ -1462,6 +1579,8 @@ def lpmm_menu():
             run_lpmm_entity_extract(configs)
         elif choice == "D":
             run_lpmm_knowledge_import(configs)
+        elif choice == "E":  # 新增选项
+            run_legacy_knowledge_build(configs)
         else:
             print_rgb("❌ 无效选项", "#FF6B6B")
             time.sleep(1)
@@ -2004,6 +2123,62 @@ API
 添加配置项
 添加临时配置文件读取器
 """,
+        "0.8.0-alpha": """
+主要升级点：
+1.插件系统正式加入，现已上线插件商店，同时支持normal和focus
+2.大幅降低了token消耗，更省钱
+3.加入人物印象系统，麦麦可以对群友有不同的印象
+4.可以精细化控制不同时段和不同群聊的发言频率
+其他升级
+日志系统重构使用structlog
+大量稳定性修复和性能优化。
+MMC启动速度加快
+🔌 插件系统正式推出
+全面重构的插件生态系统，支持强大 的扩展能力
+插件API重构: 全面重构插件系统，统一加载机制，区分内部插件和外部插件
+插件仓库：现可以分享和下载插件
+依赖管理: 新增插件依赖管理系统，支持自动注册和依赖检查
+命令支持: 插件现已支持命令(command)功能，提供更丰富的交互方式
+示例插件升级: 更新禁言插件、豆包绘图插件、TTS插件等示例插件
+配置文件管理: 插件支持自动生成和管理配置文件，支持版本自动更新
+文档完善: 补全插件API文档，提供详细的开发指南
+👥 人物印象系统
+麦麦现在能认得群友，记住每个人的特点
+人物侧写功能: 加入了人物侧写！麦麦现在能认得群友，新增用户侧写功能，将印象拆分为多方面特点
+⚡ Focus模式大幅优化 - 降低Token消耗与提升速度
+Planner架构更新: 更新planner架构，大大加快速度和表现效果！
+处理器重构:
+移除冗余处理器
+精简处理器上下文，减少不必要的处理
+后置工具处理器，大大减少token消耗
+统计系统: 提供focus统计功能，可查看详细的no_reply统计信息
+⏰ 聊天频率精细控制
+支持时段化的精细频率管理，让麦麦在合适的时间说合适的话
+时段化控制: 添加时段talk_frequency控制，支持不同时间段不同群聊的精细频率管理
+严格频率控制: 实现更加严格和可靠的频率控制机制
+Normal模式优化: 大幅优化normal模式的频率控制逻辑，提升回复的智能性
+🎭 表达方式系统大幅优化
+智能学习群友聊天风格，让麦麦的表达更加多样化
+智能学习机制: 优化表达方式学习算法，支持衰减机制，太久没学的会被自动抛弃
+表达方式选择: 新增表达方式选择器，让表达使用更合理
+跨群互通配置: 表达方式现在可以选择在不同群互通或独立
+可视化工具: 提供表达方式可视化脚本和检查脚本
+💾 记忆系统改进
+更快的记忆处理和更好的短期记忆管理
+海马体优化: 大大优化海马体同步速度，提升记忆处理效率
+工作记忆升级: 精简升级工作记忆模块，提供更好的短期记忆管理
+聊天记录构建: 优化聊天记录构建方式，提升记忆提取效率
+📊 日志系统重构
+使用structlog提供更好的结构化日志
+structlog替换: 使用structlog替代loguru，提供更好的结构化日志
+日志查看器: 新增日志查看脚本，支持更好的日志浏览
+可配置日志: 提供可配置的日志级别和格式，支持不同环境的需求
+🎯 其他改进
+emoji系统: 移除emoji默认发送模式，优化表情包审查功能
+控制台发送: 添加不完善的控制台发送功能
+行为准则: 添加贡献者契约行为准则
+图像清理: 自动清理images文件夹，优化存储空间使用。
+        """,
         "dev": """
 开发版本，可能包含未完成的功能或实验性特性，请谨慎使用。
         """,
@@ -2012,6 +2187,126 @@ API
         """
     }
     return changelogs.get(version, "❌ 未找到该版本的更新日志")
+
+def download_git_installer():
+    """下载Git安装程序"""
+    # 获取最新的Git for Windows下载URL
+    git_url = "https://github.com/git-for-windows/git/releases/download/v2.45.1.windows.1/Git-2.45.1-64-bit.exe"
+    
+    # 创建临时目录
+    temp_dir = tempfile.gettempdir()
+    installer_path = os.path.join(temp_dir, "Git-Installer.exe")
+    
+    print(Fore.CYAN + "正在下载Git安装程序...")
+    
+    try:
+        # 尝试使用requests下载（带进度条）
+        response = requests.get(git_url, stream=True)
+        total_size = int(response.headers.get('content-length', 0))
+        block_size = 1024
+        progress_bar_length = 50
+        
+        with open(installer_path, 'wb') as f:
+            downloaded = 0
+            for data in response.iter_content(block_size):
+                f.write(data)
+                downloaded += len(data)
+                if total_size > 0:
+                    percent = downloaded / total_size
+                    filled_length = int(progress_bar_length * percent)
+                    bar = '#' * filled_length + '-' * (progress_bar_length - filled_length)
+                    sys.stdout.write(f'\r{Fore.YELLOW}下载进度: |{bar}| {percent:.1%}')
+                    sys.stdout.flush()
+        sys.stdout.write('\n')
+        return installer_path
+    except Exception as e:
+        print(Fore.RED + f"使用requests下载失败: {e}, 尝试使用urllib...")
+        try:
+            # 使用urllib作为备选方案
+            with urlopen(git_url) as response, open(installer_path, 'wb') as f:
+                total_size = response.length
+                block_size = 1024 * 8
+                downloaded = 0
+                while True:
+                    buffer = response.read(block_size)
+                    if not buffer:
+                        break
+                    f.write(buffer)
+                    downloaded += len(buffer)
+                    if total_size > 0:
+                        percent = downloaded / total_size
+                        filled_length = int(50 * percent)
+                        bar = '#' * filled_length + '-' * (50 - filled_length)
+                        sys.stdout.write(f'\r{Fore.YELLOW}下载进度: |{bar}| {percent:.1%}')
+                        sys.stdout.flush()
+            sys.stdout.write('\n')
+            return installer_path
+        except Exception as e2:
+            print(Fore.RED + f"下载失败: {e2}")
+            return None
+        
+def install_git_silently(installer_path):
+    """静默安装Git"""
+    try:
+        # 以静默方式安装Git
+        command = [
+            installer_path,
+            '/VERYSILENT',  # 非常安静模式
+            '/NORESTART',   # 不重启
+            '/NOCANCEL',    # 不显示取消按钮
+            '/SP-',         # 禁用安装程序启动页面
+            '/CLOSEAPPLICATIONS',  # 关闭可能冲突的应用程序
+            '/RESTARTAPPLICATIONS',  # 安装完成后重启应用程序
+            '/COMPONENTS=""'  # 安装所有组件
+        ]
+        
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        
+        if process.returncode == 0:
+            print(Fore.GREEN + "✅ Git安装成功")
+            # 将Git添加到系统环境变量
+            os.environ['PATH'] = os.environ['PATH'] + ';C:\\Program Files\\Git\\bin'
+            return True
+        else:
+            print(Fore.RED + f"❌ Git安装失败，错误代码: {process.returncode}")
+            if stderr:
+                print(Fore.RED + stderr.decode('utf-8', errors='ignore'))
+            return False
+    except Exception as e:
+        print(Fore.RED + f"❌ 安装过程中出错: {e}")
+        return False
+
+def install_git():
+    """下载并安装Git"""
+    # 检查是否以管理员权限运行
+    if not is_admin():
+        print(Fore.YELLOW + "请求管理员权限以安装Git...")
+        run_as_admin()
+        return True  # 当前进程退出，等待管理员权限进程执行
+    
+    # 下载安装程序
+    installer_path = download_git_installer()
+    if not installer_path:
+        return False
+    
+    # 安装Git
+    if install_git_silently(installer_path):
+        # 验证安装
+        try:
+            # 直接检查Git安装路径
+            git_path = r"C:\Program Files\Git\bin\git.exe"
+            if os.path.exists(git_path):
+                version_output = subprocess.check_output([git_path, "--version"], stderr=subprocess.STDOUT, text=True)
+                print(Fore.GREEN + f"✅ Git验证成功: {version_output.strip()}")
+                return True
+            else:
+                print(Fore.YELLOW + "⚠️ Git安装完成，但未在默认路径找到，请手动检查")
+                return True
+        except Exception as e:
+            print(Fore.YELLOW + f"⚠️ Git验证失败: {e}")
+            return True
+    return False
 
 def deployment_assistant():
     """部署辅助系统主函数"""
@@ -2027,6 +2322,7 @@ def deployment_assistant():
         "0.6.3-fix3-alpha",
         "0.6.3-fix4-alpha",
         "0.7.0-alpha",
+        "0.8.0-alpha",
         "dev",
         "main",
     ]
@@ -2132,17 +2428,24 @@ def deployment_assistant():
             print_rgb("记得启用配置！", "#F2FF5D")
     
     # 检查Git环境
-    print_rgb("正在检测Git环境...", "#BADFFA")
+    print(Fore.CYAN + "正在检测Git环境...")
     try:
+        # 尝试直接调用git命令
         subprocess.run(["git", "--version"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print_rgb("已检测到Git环境！", "#A8B1FF")
+        print(Fore.GREEN + "✅ 已检测到Git环境！")
     except:
-        print_rgb("❌ 检测到您的计算机中未安装Git，无法使用实例部署功能！", "#FF6B6B")
-        print_rgb("请前往以下链接手动下载包体：", "#FFF3C2")
-        print_rgb("https://github.com/MaiM-with-u/MaiBot", "#A8B1FF")
-        print_rgb("https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter", "#A8B1FF")
-        print_rgb("或者前往以下链接前往Git官网下载并安装Git", "#FFF3C2")
-        print_rgb("https://git-scm.com/downloads", "#A8B1FF")
+        print(Fore.RED + "❌ 检测到您的计算机中未安装Git，无法使用实例部署功能！")
+        choice = input(Fore.YELLOW + "是否立即安装Git？(Y/N): ").upper()
+        if choice == 'Y':
+            if install_git():
+                print(Fore.GREEN + "✅ Git安装成功，请关闭所有窗口，然后重新启动启动器")
+                print(Fore.YELLOW + "注意：安装完成后需要重启终端才能识别git命令")
+                time.sleep(5)
+                sys.exit(0)
+            else:
+                print(Fore.RED + "❌ Git安装失败，请手动安装Git")
+        else:
+            print(Fore.YELLOW + "请手动安装Git后重试。")
         return
     
     # 创建临时配置
@@ -2755,7 +3058,7 @@ def deployment_menu():
         print_rgb(" [B] 更新实例", "#6DFD8A")  # 新增选项
         print_rgb(" [C] 删除实例", "#FF6B6B")
         print_rgb(" [D] 跳转到配置菜单","#F2FF5D")
-        print_rgb(" [E] 跳转到LPMM构建","#00FFBB")
+        print_rgb(" [E] 跳转到知识库构建","#00FFBB")
         print_rgb(" [F] 跳转到数据库迁移","#28DCF0")
         print_rgb(" [Q] 返回主菜单","#7E1DE4")
         print("================")
