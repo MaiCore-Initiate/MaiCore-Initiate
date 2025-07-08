@@ -13,6 +13,7 @@ from tqdm import tqdm
 import shutil # 用于删除实例
 import winreg # 用于注册表操作
 import tempfile  # 添加tempfile模块
+import logging
 from urllib.request import urlopen  # 添加urlopen
 
 if sys.platform == 'win32':
@@ -2326,7 +2327,7 @@ def deployment_assistant():
         "dev",
         "main",
     ]
-    print_rgb("以稳定性为指标推荐部署的版本有“classical”、“0.6.2-alpha”、“0.6.3-fix4-alpha”、“0.7.0-alpha”,“0.7.0-alpha”为目前的最新版本，“dev”为调试版，“main”为主要版本，请您根据实际情况选择", "#FFF3C2")
+    print_rgb("以稳定性为指标推荐部署的版本有“classical”、“0.6.2-alpha”、“0.6.3-fix4-alpha”、“0.8.0-alpha”,“0.8.0-alpha”为目前的最新版本，“dev”为调试版，“main”为主要版本，请您根据实际情况选择", "#FFF3C2")
     
     for version in versions:
         print_rgb(f" {version}", "#F2FF5D")
@@ -2405,15 +2406,116 @@ def deployment_assistant():
     # 安装NapCat
     install_napcat = input("是否下载并安装NapCat？(Y/N) ").upper()
     if install_napcat == "Y":
-        print_rgb("请在浏览器中下载NapCatQQ:", "#FFF3C2")
-        print_rgb("1. 打开 https://github.com/NapNeko/NapCatQQ/releases", "#A8B1FF")
-        print_rgb('2. 下拉找到蓝色的"NapCat.Framework.Windows.OneKey.zip"', "#A8B1FF")
-        print_rgb("3. 点击下载", "#FFF3C2")
-        print_rgb("4. 下载完成后解压压缩包", "#FFF3C2")
-        print_rgb("5. 运行其中的NapCatInstaller.exe文件以安装NapCat", "#FFF3C2")
-        print_rgb("6. 安装完成后进入新生成的NapCat.XXXXX.Framework文件夹（如NapCat.34740.Framework）", "#FFF3C2")
-        print_rgb('7. 找到"NapCatWinBootMain.exe"文件并运行', "#FFF3C2")
-        print_rgb("8. 登录您的QQ账号", "#A8B1FF")
+        print_rgb("正在从GitHub获取NapCatQQ的最新版本信息...", "#FFF3C2")
+        try:
+            # 获取最新版本
+            api_url = "https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest"
+            response = requests.get(api_url, timeout=30)
+            response.raise_for_status()
+            release_info = response.json()
+            
+            latest_version = release_info["tag_name"]
+            print_rgb(f"找到最新版本: {latest_version}", "#A8B1FF")
+            
+            # 查找OneKey.zip资源
+            onekey_asset = None
+            for asset in release_info["assets"]:
+                if "NapCat.Framework.Windows.OneKey.zip" in asset["name"]:
+                    onekey_asset = asset
+                    break
+            
+            if onekey_asset:
+                download_url = onekey_asset["browser_download_url"]
+                file_size = onekey_asset["size"]
+                file_size_mb = file_size / (1024 * 1024)
+                
+                print_rgb(f"找到安装包: {onekey_asset['name']} ({file_size_mb:.2f} MB)", "#A8B1FF")
+                download = input(f"是否下载安装包？(Y/N) ").upper()
+                
+                if download == "Y":
+                    # 使用程序所在目录
+                    current_dir = os.path.dirname(os.path.abspath(__file__))
+                    napcat_dir = os.path.join(current_dir, "NapCat")
+                    
+                    # 创建NapCat目录(如果不存在)
+                    os.makedirs(napcat_dir, exist_ok=True)
+                    
+                    zip_path = os.path.join(napcat_dir, "NapCat.Framework.Windows.OneKey.zip")
+                    
+                    print_rgb(f"开始下载NapCat安装包到: {napcat_dir}", "#FFF3C2")
+                    
+                    # 使用requests下载文件并显示进度条
+                    with requests.get(download_url, stream=True) as response:
+                        response.raise_for_status()
+                        total_size = int(response.headers.get('content-length', 0))
+                        block_size = 8192
+                        
+                        with open(zip_path, 'wb') as f, tqdm(
+                            desc="下载进度", 
+                            total=total_size, 
+                            unit='B', 
+                            unit_scale=True, 
+                            unit_divisor=1024
+                        ) as bar:
+                            for chunk in response.iter_content(chunk_size=block_size):
+                                if chunk:
+                                    f.write(chunk)
+                                    bar.update(len(chunk))
+                    
+                    print_rgb(f"下载完成! 开始解压...", "#A8B1FF")
+                    
+                    # 解压文件到NapCat目录
+                    extract_dir = os.path.join(napcat_dir, "extracted")
+                    os.makedirs(extract_dir, exist_ok=True)
+                    
+                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                        zip_ref.extractall(extract_dir)
+                    
+                    print_rgb("解压完成!", "#A8B1FF")
+                    
+                    # 寻找安装程序并运行
+                    installer_path = None
+                    for root, dirs, files in os.walk(extract_dir):
+                        for file in files:
+                            if file == "NapCatInstaller.exe":
+                                installer_path = os.path.join(root, file)
+                                break
+                        if installer_path:
+                            break
+                    
+                    if installer_path:
+                        print_rgb(f"找到安装程序: {installer_path}", "#A8B1FF")
+                        print_rgb("正在运行NapCat安装程序...", "#FFF3C2")
+                        try:
+                            # 运行安装程序
+                            subprocess.run([installer_path], check=True)
+                            print_rgb("NapCat安装程序已启动，请按照安装向导完成安装", "#6DFD8A")
+                            print_rgb("提示: 安装完成后，请记录NapCatWinBootMain.exe的位置，稍后需要配置此路径", "#FFF3C2")
+                            print_rgb(f"NapCat已下载到: {napcat_dir}", "#A8B1FF")
+                            print_rgb(f"安装文件位置: {installer_path}", "#A8B1FF")
+                        except subprocess.CalledProcessError as e:
+                            print_rgb(f"运行安装程序失败: {e}", "#FF5252")
+                    else:
+                        print_rgb("未找到安装程序NapCatInstaller.exe", "#FF5252")
+                        print_rgb(f"请手动打开下载目录: {napcat_dir}", "#FFF3C2")
+                        print_rgb("并解压NapCat.Framework.Windows.OneKey.zip后运行NapCatInstaller.exe", "#FFF3C2")
+                else:
+                    print_rgb("已跳过下载", "#BADFFA")
+            else:
+                print_rgb("未找到NapCat.Framework.Windows.OneKey.zip安装包", "#FF5252")
+                print_rgb("请手动访问：https://github.com/NapNeko/NapCatQQ/releases", "#FFF3C2")
+        except requests.exceptions.RequestException as e:
+            print_rgb(f"获取版本信息失败: {e}", "#FF5252")
+            print_rgb("请检查网络连接或手动访问: https://github.com/NapNeko/NapCatQQ/releases", "#FFF3C2")
+        except Exception as e:
+            print_rgb(f"处理过程中出错: {e}", "#FF5252")
+            print_rgb("请手动访问：https://github.com/NapNeko/NapCatQQ/releases", "#FFF3C2")
+        
+        print_rgb("\n安装完成后，请确认以下步骤:", "#FFF3C2")
+        print_rgb(f"1. 所有文件已保存在程序目录下的NapCat文件夹中: {os.path.join(os.path.dirname(os.path.abspath(__file__)), 'NapCat')}", "#A8B1FF")
+        print_rgb("2. 进入新生成的NapCat.XXXXX.Framework文件夹（如NapCat.34740.Framework）", "#FFF3C2")
+        print_rgb('3. 找到"NapCatWinBootMain.exe"文件并运行', "#FFF3C2")
+        print_rgb("4. 登录您的QQ账号", "#A8B1FF")
         
         open_webui = input("\n是否打开NapCat的WebUI？(Y/N) ").upper()
         if open_webui == "Y":
