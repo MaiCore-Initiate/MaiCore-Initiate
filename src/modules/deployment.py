@@ -1059,6 +1059,11 @@ pause
             # 第四步：设置Python环境
             venv_path = self._setup_python_environment(maibot_path, adapter_path)
 
+            # 第四点二步：如果安装了WebUI且有虚拟环境，重新安装WebUI后端依赖
+            if webui_path and venv_path:
+                ui.console.print("\n[🔄 在虚拟环境中重新安装WebUI后端依赖]", style=ui.colors["primary"])
+                webui_installer.install_webui_backend_dependencies(webui_path, venv_path)
+
             # 第四点五步：配置文件设置
             if not self._setup_config_files(deploy_config, maibot_path, adapter_path, napcat_path, mongodb_path, webui_path):
                 ui.print_warning("配置文件设置失败，但部署将继续...")
@@ -2172,7 +2177,7 @@ pause
             logger.error("MongoDB检查失败", error=str(e))
             return False, ""
     
-    def _check_and_install_webui(self, deploy_config: Dict, maibot_path: str) -> Tuple[bool, str]:
+    def _check_and_install_webui(self, deploy_config: Dict, maibot_path: str, venv_path: str = "") -> Tuple[bool, str]:
         """检查并安装WebUI（如果需要）"""
         try:
             ui.console.print("\n[🌐 WebUI安装检查]", style=ui.colors["primary"])
@@ -2182,8 +2187,8 @@ pause
             
             logger.info("开始WebUI安装检查", install_dir=install_dir, maibot_path=maibot_path)
             
-            # 调用WebUI安装器进行直接安装
-            success, webui_path = webui_installer.install_webui_directly(install_dir)
+            # 调用WebUI安装器进行直接安装，传入虚拟环境路径
+            success, webui_path = webui_installer.install_webui_directly(install_dir, venv_path)
             
             if success:
                 ui.print_success("✅ WebUI安装检查完成")

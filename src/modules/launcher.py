@@ -541,34 +541,37 @@ class MaiLauncher:
 
             # 首先确保MongoDB运行（如果配置了）
             self._ensure_mongodb_running(config)
-            
+
             # 启动WebUI
             if webui_path and os.path.exists(webui_path):
                 # 启动 http_server/main.py
                 http_server_path = os.path.join(webui_path, "http_server", "main.py")
                 if os.path.exists(http_server_path):
-                    python_cmd = self._get_python_command(config, os.path.dirname(http_server_path))
-                http_server_process = self.start_in_new_cmd(
-                    f"{python_cmd} main.py",
-                    os.path.dirname(http_server_path),
-                    f"WebUI-HTTPServer - {version}"
-                )
-                if http_server_process:
-                    ui.print_success("WebUI HTTP Server 启动成功！")
-                    logger.info("WebUI HTTP Server 启动成功", path=http_server_path)
+                    python_cmd_http = self._get_python_command(config, os.path.dirname(http_server_path))
+                    http_server_process = self.start_in_new_cmd(
+                        f"{python_cmd_http} main.py",
+                        os.path.dirname(http_server_path),
+                        f"WebUI-HTTPServer - {version}"
+                    )
+                    if http_server_process:
+                        ui.print_success("WebUI HTTP Server 启动成功！")
+                        logger.info("WebUI HTTP Server 启动成功", path=http_server_path)
+                    else:
+                        ui.print_error("WebUI HTTP Server 启动失败")
+                        return False
                 else:
-                    ui.print_error("WebUI HTTP Server 启动失败")
+                    ui.print_error("未找到 http_server/main.py，WebUI 启动失败")
                     return False
             else:
-                ui.print_error("未找到 http_server/main.py，WebUI 启动失败")
+                ui.print_error("WebUI路径无效或不存在")
                 return False
 
             # 只启动 adapter/maimai_http_adapter.py
             adapter_path = os.path.join(webui_path, "adapter", "maimai_http_adapter.py")
             if os.path.exists(adapter_path):
-                python_cmd = self._get_python_command(config, os.path.dirname(adapter_path))
+                python_cmd_adapter = self._get_python_command(config, os.path.dirname(adapter_path))
                 adapter_process = self.start_in_new_cmd(
-                    f"{python_cmd} maimai_http_adapter.py",
+                    f"{python_cmd_adapter} maimai_http_adapter.py",
                     os.path.dirname(adapter_path),
                     f"WebUI-Adapter - {version}"
                 )

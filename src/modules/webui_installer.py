@@ -366,44 +366,243 @@ class WebUIInstaller:
             logger.error("WebUI下载失败", error=str(e))
             return None
     
-    def install_webui_dependencies(self, webui_dir: str) -> bool:
-        """安装WebUI依赖"""
+    def install_webui_dependencies(self, webui_dir: str, venv_path: str = "") -> bool:
+        """安装WebUI依赖（包括前端和后端）"""
         try:
             ui.print_info("正在安装WebUI依赖...")
+            success_count = 0
+            total_count = 0
             
-            # 检查package.json是否存在
+            # 1. 安装前端依赖 (http_server)
             package_json_path = os.path.join(webui_dir, "http_server", "package.json")
-            if not os.path.exists(package_json_path):
-                ui.print_warning("未找到package.json文件，跳过依赖安装")
-                return True
-
-            original_cwd = os.getcwd()
-            try:
-                os.chdir(os.path.join(webui_dir, "http_server"))
-                ui.print_info("正在执行npm install...")
-                result = subprocess.run(
-                    ["npm", "install"],
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                    shell=True
-                )
-                if result.returncode == 0:
-                    ui.print_success("WebUI依赖安装完成")
-                    logger.info("WebUI依赖安装成功")
-                    return True
+            if os.path.exists(package_json_path):
+                total_count += 1
+                ui.print_info("正在安装前端依赖 (npm)...")
+                original_cwd = os.getcwd()
+                try:
+                    os.chdir(os.path.join(webui_dir, "http_server"))
+                    result = subprocess.run(
+                        ["npm", "install"],
+                        capture_output=True,
+                        text=True,
+                        timeout=300,
+                        shell=True
+                    )
+                    if result.returncode == 0:
+                        ui.print_success("✅ 前端依赖安装完成")
+                        logger.info("前端依赖安装成功")
+                        success_count += 1
+                    else:
+                        ui.print_error(f"❌ 前端依赖安装失败：{result.stderr}")
+                        logger.error("前端依赖安装失败", error=result.stderr)
+                finally:
+                    os.chdir(original_cwd)
+            else:
+                ui.print_warning("未找到 http_server/package.json，跳过前端依赖安装")
+            
+            # 2. 安装后端依赖 (backend/server)
+            backend_paths = [
+                os.path.join(webui_dir, "backend", "requirements.txt"),
+                os.path.join(webui_dir, "server", "requirements.txt"),
+                os.path.join(webui_dir, "api", "requirements.txt")
+            ]
+            
+            for backend_req_path in backend_paths:
+                if os.path.exists(backend_req_path):
+                    total_count += 1
+                    backend_dir = os.path.dirname(backend_req_path)
+                    backend_name = os.path.basename(backend_dir)
+                    ui.print_info(f"正在安装后端依赖 ({backend_name})...")
+                    
+                    # 确定使用的pip命令
+                    if venv_path:
+                        if platform.system() == "Windows":
+                            pip_cmd = os.path.join(venv_path, "Scripts", "pip.exe")
+                        else:
+                            pip_cmd = os.path.join(venv_path, "bin", "pip")
+                        
+                        if not os.path.exists(pip_cmd):
+                            ui.print_warning(f"虚拟环境pip不存在，使用系统pip: {pip_cmd}")
+                            pip_cmd = "pip"
+                    else:
+                        pip_cmd = "pip"
+                    
+                    try:
+                        result = subprocess.run(
+                            [pip_cmd, "install", "-r", backend_req_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=300,
+                            shell=True
+                        )
+                        if result.returncode == 0:
+                            ui.print_success(f"✅ 后端依赖安装完成 ({backend_name})")
+                            logger.info(f"后端依赖安装成功", path=backend_req_path)
+                            success_count += 1
+                        else:
+                            ui.print_error(f"❌ 后端依赖安装失败 ({backend_name})：{result.stderr}")
+                            logger.error(f"后端依赖安装失败", path=backend_req_path, error=result.stderr)
+                    except Exception as e:
+                        ui.print_error(f"❌ 后端依赖安装异常 ({backend_name})：{str(e)}")
+                        logger.error(f"后端依赖安装异常", path=backend_req_path, error=str(e))
+                    break  # 只安装找到的第一个后端依赖文件
+            
+            # 3. 检查根目录的 requirements.txt
+            root_requirements_path = os.path.join(webui_dir, "requirements.txt")
+            if os.path.exists(root_requirements_path):
+                total_count += 1
+                ui.print_info("正在安装根目录依赖 (pip)...")
+                
+                # 确定使用的pip命令
+                if venv_path:
+                    if platform.system() == "Windows":
+                        pip_cmd = os.path.join(venv_path, "Scripts", "pip.exe")
+                    else:
+                        pip_cmd = os.path.join(venv_path, "bin", "pip")
+                    
+                    if not os.path.exists(pip_cmd):
+                        ui.print_warning(f"虚拟环境pip不存在，使用系统pip: {pip_cmd}")
+                        pip_cmd = "pip"
                 else:
-                    ui.print_error(f"WebUI依赖安装失败：{result.stderr}")
-                    logger.error("WebUI依赖安装失败", error=result.stderr)
-                    return False
-            finally:
-                os.chdir(original_cwd)
+                    pip_cmd = "pip"
+                
+                try:
+                    result = subprocess.run(
+                        [pip_cmd, "install", "-r", root_requirements_path],
+                        capture_output=True,
+                        text=True,
+                        timeout=300,
+                        shell=True
+                    )
+                    if result.returncode == 0:
+                        ui.print_success("✅ 根目录依赖安装完成")
+                        logger.info("根目录依赖安装成功")
+                        success_count += 1
+                    else:
+                        ui.print_error(f"❌ 根目录依赖安装失败：{result.stderr}")
+                        logger.error("根目录依赖安装失败", error=result.stderr)
+                except Exception as e:
+                    ui.print_error(f"❌ 根目录依赖安装异常：{str(e)}")
+                    logger.error("根目录依赖安装异常", error=str(e))
+            
+            # 总结安装结果
+            if total_count == 0:
+                ui.print_warning("未找到任何依赖文件，跳过依赖安装")
+                return True
+            elif success_count == total_count:
+                ui.print_success(f"🎉 所有依赖安装完成 ({success_count}/{total_count})")
+                logger.info("所有WebUI依赖安装成功", success=success_count, total=total_count)
+                return True
+            elif success_count > 0:
+                ui.print_warning(f"⚠️ 部分依赖安装成功 ({success_count}/{total_count})")
+                logger.warning("部分WebUI依赖安装成功", success=success_count, total=total_count)
+                return True
+            else:
+                ui.print_error("❌ 所有依赖安装失败")
+                logger.error("所有WebUI依赖安装失败")
+                return False
                 
         except Exception as e:
             ui.print_error(f"WebUI依赖安装失败：{str(e)}")
             logger.error("WebUI依赖安装失败", error=str(e))
             return False
     
+    def install_webui_backend_dependencies(self, webui_dir: str, venv_path: str) -> bool:
+        """在虚拟环境中专门安装WebUI后端依赖"""
+        try:
+            ui.print_info("正在在虚拟环境中安装WebUI后端依赖...")
+            success_count = 0
+            total_count = 0
+            
+            # 确定使用的pip命令
+            if platform.system() == "Windows":
+                pip_cmd = os.path.join(venv_path, "Scripts", "pip.exe")
+            else:
+                pip_cmd = os.path.join(venv_path, "bin", "pip")
+            
+            if not os.path.exists(pip_cmd):
+                ui.print_error(f"虚拟环境pip不存在: {pip_cmd}")
+                return False
+            
+            # 1. 安装后端依赖 (backend/server)
+            backend_paths = [
+                os.path.join(webui_dir, "requirements.txt"),
+            ]
+            
+            for backend_req_path in backend_paths:
+                if os.path.exists(backend_req_path):
+                    total_count += 1
+                    backend_dir = os.path.dirname(backend_req_path)
+                    backend_name = os.path.basename(backend_dir)
+                    ui.print_info(f"正在在虚拟环境中安装后端依赖 ({backend_name})...")
+                    
+                    try:
+                        result = subprocess.run(
+                            [pip_cmd, "install", "-r", backend_req_path],
+                            capture_output=True,
+                            text=True,
+                            timeout=300,
+                            shell=True
+                        )
+                        if result.returncode == 0:
+                            ui.print_success(f"✅ 后端依赖安装完成 ({backend_name})")
+                            logger.info(f"后端依赖安装成功", path=backend_req_path, venv=venv_path)
+                            success_count += 1
+                        else:
+                            ui.print_error(f"❌ 后端依赖安装失败 ({backend_name})：{result.stderr}")
+                            logger.error(f"后端依赖安装失败", path=backend_req_path, error=result.stderr)
+                    except Exception as e:
+                        ui.print_error(f"❌ 后端依赖安装异常 ({backend_name})：{str(e)}")
+                        logger.error(f"后端依赖安装异常", path=backend_req_path, error=str(e))
+                    break  # 只安装找到的第一个后端依赖文件
+            
+            # 2. 检查根目录的 requirements.txt
+            root_requirements_path = os.path.join(webui_dir, "requirements.txt")
+            if os.path.exists(root_requirements_path):
+                total_count += 1
+                ui.print_info("正在在虚拟环境中安装根目录依赖...")
+                
+                try:
+                    result = subprocess.run(
+                        [pip_cmd, "install", "-r", root_requirements_path],
+                        capture_output=True,
+                        text=True,
+                        timeout=300,
+                        shell=True
+                    )
+                    if result.returncode == 0:
+                        ui.print_success("✅ 根目录依赖安装完成")
+                        logger.info("根目录依赖安装成功", venv=venv_path)
+                        success_count += 1
+                    else:
+                        ui.print_error(f"❌ 根目录依赖安装失败：{result.stderr}")
+                        logger.error("根目录依赖安装失败", error=result.stderr)
+                except Exception as e:
+                    ui.print_error(f"❌ 根目录依赖安装异常：{str(e)}")
+                    logger.error("根目录依赖安装异常", error=str(e))
+            
+            # 总结安装结果
+            if total_count == 0:
+                ui.print_info("未找到WebUI后端依赖文件，跳过虚拟环境依赖安装")
+                return True
+            elif success_count == total_count:
+                ui.print_success(f"🎉 所有WebUI后端依赖安装完成 ({success_count}/{total_count})")
+                logger.info("所有WebUI后端依赖安装成功", success=success_count, total=total_count)
+                return True
+            elif success_count > 0:
+                ui.print_warning(f"⚠️ 部分WebUI后端依赖安装成功 ({success_count}/{total_count})")
+                logger.warning("部分WebUI后端依赖安装成功", success=success_count, total=total_count)
+                return True
+            else:
+                ui.print_error("❌ 所有WebUI后端依赖安装失败")
+                logger.error("所有WebUI后端依赖安装失败")
+                return False
+                
+        except Exception as e:
+            ui.print_error(f"WebUI后端依赖安装失败：{str(e)}")
+            logger.error("WebUI后端依赖安装失败", error=str(e))
+            return False
+
     def check_and_install_webui(self, install_dir: str) -> Tuple[bool, str]:
         """检查并安装WebUI"""
         try:
@@ -460,7 +659,7 @@ class WebUIInstaller:
             logger.error("WebUI安装失败", error=str(e))
             return False, ""
     
-    def install_webui_directly(self, install_dir: str) -> Tuple[bool, str]:
+    def install_webui_directly(self, install_dir: str, venv_path: str = "") -> Tuple[bool, str]:
         """直接安装WebUI，不询问用户"""
         try:
             ui.console.print("\n[🌐 WebUI安装]", style=ui.colors["primary"])
@@ -498,7 +697,7 @@ class WebUIInstaller:
                 return False, ""
             
             # 安装WebUI依赖
-            if not self.install_webui_dependencies(webui_dir):
+            if not self.install_webui_dependencies(webui_dir, venv_path):
                 ui.print_warning("WebUI依赖安装失败，但WebUI文件已下载")
                 ui.print_info("可以稍后手动在WebUI目录中执行 npm install")
             
