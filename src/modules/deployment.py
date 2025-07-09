@@ -762,18 +762,11 @@ class DeploymentManager:
                     if ui.confirm("是否自动运行NapCat安装程序？"):
                         installer_success = self.run_napcat_installer(installer_exe)
                         if installer_success:
-                            # 安装完成后，尝试查找已安装的NapCat
-                            ui.print_info("安装完成，正在查找NapCat可执行文件...")
-                            time.sleep(2)  # 等待安装完成
-                            
-                            # 在整个安装目录中查找已安装的NapCat
-                            installed_napcat = self.find_installed_napcat(install_dir)
-                            if installed_napcat:
-                                ui.print_success(f"已找到NapCat可执行文件: {installed_napcat}")
-                                return installed_napcat
-                            else:
-                                ui.print_warning("未能自动找到NapCat可执行文件，请手动配置")
-                                return napcat_dir
+                            ui.print_success("NapCat安装程序已成功启动")
+                            return napcat_exe or napcat_dir
+                        else:
+                            ui.print_error("NapCat安装程序启动失败")
+                            return None
                     else:
                         ui.print_info("您可以稍后手动运行安装程序")
                         ui.print_info(f"安装程序位置: {installer_exe}")
@@ -1122,9 +1115,9 @@ pause
         ui.console.print(f"版本类型：{'旧版本 (classical/0.5.x)' if is_legacy else '新版本 (0.6.0+)'}")
         
         if is_legacy:
-            ui.print_info("旧版本建议配置：仅MaiBot主体 + MongoDB（可选）")
+            ui.print_info("旧版本建议配置：MaiBot主体 + MongoDB")
         else:
-            ui.print_info("新版本建议配置：MaiBot + 适配器 + NapCat")
+            ui.print_info("新版本建议配置：MaiBot + 适配器 + NapCat + mongodb(0.7-)")
         
         ui.console.print()
         
@@ -1135,7 +1128,11 @@ pause
             install_napcat = ui.confirm("是否需要安装NapCat？（QQ连接组件）")
         else:
             install_adapter = ui.confirm("是否需要安装适配器？（新版本推荐安装）")
-            install_napcat = True  # 新版本默认需要NapCat
+            if install_adapter == False:
+                ui.print_info("已跳过适配器安装")
+                install_napcat = False
+            else:
+                install_napcat = True  # 新版本默认需要NapCat
         
         # 询问是否需要安装NapCat
         
