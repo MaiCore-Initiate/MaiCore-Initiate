@@ -502,8 +502,8 @@ class DeploymentManager:
             return False
 
 
-    def show_version_menu(self) -> Optional[Tuple[Dict, bool]]:
-        """显示版本选择菜单，返回选中的版本信息和是否需要下载NapCat"""
+    def show_version_menu(self) -> Optional[Dict]:
+        """显示版本选择菜单，返回选中的版本信息"""
         ui.clear_screen()
         ui.console.print("[🚀 选择部署版本]", style=ui.colors["primary"])
         ui.console.print("="*50)
@@ -572,11 +572,8 @@ class DeploymentManager:
                 if 1 <= choice_num <= len(display_versions):
                     selected_version = display_versions[choice_num - 1]
                     
-                    # 询问是否需要下载NapCat
                     ui.console.print(f"\n已选择版本: {selected_version['display_name']}")
-                    download_napcat = ui.confirm("是否同时下载最新版本的NapCat？")
-                    
-                    return selected_version, download_napcat
+                    return selected_version
                 else:
                     ui.print_error("无效选项，请重新选择")
             except ValueError:
@@ -1030,8 +1027,10 @@ pause
             if not maibot_path:
                 return False
             
-            # 第二步：检测版本并安装适配器
-            adapter_path = self._install_adapter_if_needed(deploy_config, maibot_path)
+            # 第二步：检测版本并安装适配器（如果选择了NapCat）
+            adapter_path = ""
+            if deploy_config.get("install_napcat"):
+                adapter_path = self._install_adapter_if_needed(deploy_config, maibot_path)
 
             # 第二点五步：检查并安装MongoDB（如果需要）
             mongodb_path = ""
@@ -1044,14 +1043,15 @@ pause
 
             # 第三步：安装NapCat（如果选择了）
             napcat_path = ""
-            if deploy_config.get("napcat_version"):
+            if deploy_config.get("install_napcat") and deploy_config.get("napcat_version"):
                 napcat_path = self._install_napcat(deploy_config, maibot_path)
             
-            # 第三点五步：检查并安装WebUI（如果需要）
+            # 第三点五步：检查并安装WebUI（如果选择了）
             webui_path = ""
-            success, webui_path = self._check_and_install_webui(deploy_config, maibot_path)
-            if not success:
-                ui.print_warning("WebUI安装检查失败，但部署将继续...")
+            if deploy_config.get("install_webui"):
+                success, webui_path = self._check_and_install_webui(deploy_config, maibot_path)
+                if not success:
+                    ui.print_warning("WebUI安装检查失败，但部署将继续...")
             
             # 将WebUI路径保存到部署配置中
             deploy_config["webui_path"] = webui_path
@@ -1097,18 +1097,29 @@ pause
     def _get_deployment_config(self) -> Optional[Dict]:
         """获取部署配置信息"""
         # 选择版本
-        version_info = self.show_version_menu()
-        if not version_info:
+        selected_version = self.show_version_menu()
+        if not selected_version:
             return None
         
-        selected_version, download_napcat = version_info
+        # 重新询问用户是否需要安装各个组件
+        ui.clear_screen()
+        ui.console.print("[🔧 组件安装选择]", style=ui.colors["primary"])
+        ui.console.print("="*50)
+        ui.console.print("请选择需要安装的组件：\n")
+        
+        # 询问是否需要安装NapCat + 适配器
+        install_napcat = ui.confirm("是否需要安装NapCat + 适配器？")
         
         # 选择NapCat版本（如果需要）
         napcat_version = None
-        if download_napcat:
+        if install_napcat:
             napcat_version = self.select_napcat_version()
-            if napcat_version is None and download_napcat:
+            if napcat_version is None:
                 ui.print_info("已跳过NapCat下载")
+                install_napcat = False
+        
+        # 询问是否需要安装WebUI
+        install_webui = ui.confirm("是否需要安装WebUI？")
         
         # 获取基本信息
         existing_configs = config_manager.get_all_configurations()
@@ -1147,7 +1158,9 @@ pause
             "napcat_version": napcat_version,
             "serial_number": serial_number,
             "install_dir": install_dir,
-            "nickname": nickname
+            "nickname": nickname,
+            "install_napcat": install_napcat,
+            "install_webui": install_webui
         }
     
     def _confirm_deployment(self, deploy_config: Dict) -> bool:
@@ -1161,8 +1174,16 @@ pause
         ui.console.print(f"序列号：{deploy_config['serial_number']}")
         ui.console.print(f"昵称：{deploy_config['nickname']}")
         ui.console.print(f"安装目录：{deploy_config['install_dir']}")
+        
+        # 显示组件安装选择
+        ui.console.print("\n[🔧 组件安装选择]", style=ui.colors["info"])
+        napcat_status = "✅ 安装" if deploy_config.get("install_napcat") else "❌ 跳过"
+        webui_status = "✅ 安装" if deploy_config.get("install_webui") else "❌ 跳过"
+        
+        ui.console.print(f"NapCat + 适配器：{napcat_status}")
         if deploy_config.get("napcat_version"):
-            ui.console.print(f"NapCat版本：{deploy_config['napcat_version']['display_name']}")
+            ui.console.print(f"  └─ NapCat版本：{deploy_config['napcat_version']['display_name']}")
+        ui.console.print(f"WebUI：{webui_status}")
         
         return ui.confirm("确认开始部署吗？")
     
@@ -1413,11 +1434,10 @@ pause
         ui.print_info(f"正在下载v{adapter_version}版本的适配器...")
         
         with tempfile.TemporaryDirectory() as temp_dir:
-            adapter_repo = "MaiM-with-u/MaiBot-Napcat-Adapter"
             if adapter_version == "main" or adapter_version == "dev":
-                adapter_url = f"https://github.com/{adapter_repo}/releases/download/{adapter_version}/MaiBot-Napcat-Adapter-{adapter_version}.zip"
+                adapter_url = f"https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter/releases/download/{adapter_version}/MaiBot-Napcat-Adapter-{adapter_version}.zip"
             else:
-                adapter_url = f"https://github.com/{adapter_repo}/archive/refs/tags/v{adapter_version}.zip"
+                adapter_url = f"https://codeload.github.com/MaiM-with-u/MaiBot-Napcat-Adapter/archive/zip/tags/{adapter_version}"
             adapter_zip = os.path.join(temp_dir, f"adapter_v{adapter_version}.zip")
             
             if not self.download_file(adapter_url, adapter_zip):
@@ -1481,8 +1501,8 @@ pause
                 return napcat_path
             
             if attempt < max_attempts:
-                ui.print_warning(f"❌ 第 {attempt} 次检测未找到NapCat，准备进行下一次检测...")
-                time.sleep(2)  # 短暂等待
+                ui.print_warning(f"❌ 第 {attempt} 次检测未找到NapCat，等待5秒后进行下一次检测...")
+                time.sleep(5)  # 等待5秒后再进行下一次检测
             else:
                 ui.print_error(f"❌ 已完成 {max_attempts} 次检测，均未找到NapCat安装")
         
@@ -2081,8 +2101,8 @@ pause
             
             logger.info("开始WebUI安装检查", install_dir=install_dir, maibot_path=maibot_path)
             
-            # 调用WebUI安装器进行检查和安装
-            success, webui_path = webui_installer.check_and_install_webui(install_dir)
+            # 调用WebUI安装器进行直接安装
+            success, webui_path = webui_installer.install_webui_directly(install_dir)
             
             if success:
                 ui.print_success("✅ WebUI安装检查完成")

@@ -372,26 +372,22 @@ class WebUIInstaller:
             ui.print_info("正在安装WebUI依赖...")
             
             # 检查package.json是否存在
-            package_json_path = os.path.join(webui_dir, "package.json")
+            package_json_path = os.path.join(webui_dir, "http_server", "package.json")
             if not os.path.exists(package_json_path):
                 ui.print_warning("未找到package.json文件，跳过依赖安装")
                 return True
-            
-            # 切换到WebUI目录并安装依赖
+
             original_cwd = os.getcwd()
             try:
-                os.chdir(webui_dir)
-                
-                # 使用npm install安装依赖
+                os.chdir(os.path.join(webui_dir, "http_server"))
                 ui.print_info("正在执行npm install...")
                 result = subprocess.run(
                     ["npm", "install"],
                     capture_output=True,
                     text=True,
-                    timeout=300,  # 5分钟超时
-                    shell=True  # 在Windows上使用shell
+                    timeout=300,
+                    shell=True
                 )
-                
                 if result.returncode == 0:
                     ui.print_success("WebUI依赖安装完成")
                     logger.info("WebUI依赖安装成功")
@@ -400,7 +396,6 @@ class WebUIInstaller:
                     ui.print_error(f"WebUI依赖安装失败：{result.stderr}")
                     logger.error("WebUI依赖安装失败", error=result.stderr)
                     return False
-                    
             finally:
                 os.chdir(original_cwd)
                 
@@ -444,6 +439,57 @@ class WebUIInstaller:
             if not branch_info:
                 ui.print_info("已跳过WebUI安装")
                 return True, ""
+            
+            # 下载WebUI
+            webui_dir = self.download_webui(branch_info, install_dir)
+            if not webui_dir:
+                ui.print_error("WebUI下载失败")
+                return False, ""
+            
+            # 安装WebUI依赖
+            if not self.install_webui_dependencies(webui_dir):
+                ui.print_warning("WebUI依赖安装失败，但WebUI文件已下载")
+                ui.print_info("可以稍后手动在WebUI目录中执行 npm install")
+            
+            ui.print_success("✅ WebUI安装完成")
+            logger.info("WebUI安装完成", path=webui_dir)
+            return True, webui_dir
+            
+        except Exception as e:
+            ui.print_error(f"WebUI安装失败：{str(e)}")
+            logger.error("WebUI安装失败", error=str(e))
+            return False, ""
+    
+    def install_webui_directly(self, install_dir: str) -> Tuple[bool, str]:
+        """直接安装WebUI，不询问用户"""
+        try:
+            ui.console.print("\n[🌐 WebUI安装]", style=ui.colors["primary"])
+            
+            # 检查Node.js环境
+            ui.print_info("检查Node.js环境...")
+            node_installed, node_version = self.check_nodejs_installed()
+            npm_installed, npm_version = self.check_npm_installed()
+            
+            if not node_installed or not npm_installed:
+                ui.print_warning("未检测到Node.js或npm")
+                ui.print_info("WebUI需要Node.js环境支持")
+                
+                if ui.confirm("是否自动安装Node.js？"):
+                    if not self.install_nodejs():
+                        ui.print_error("Node.js安装失败，跳过WebUI安装")
+                        return False, ""
+                else:
+                    ui.print_info("已跳过WebUI安装")
+                    return False, ""
+            else:
+                ui.print_success(f"Node.js环境检测通过: {node_version}")
+                ui.print_success(f"npm环境检测通过: {npm_version}")
+            
+            # 选择WebUI分支
+            branch_info = self.show_webui_branch_menu()
+            if not branch_info:
+                ui.print_info("已跳过WebUI安装")
+                return False, ""
             
             # 下载WebUI
             webui_dir = self.download_webui(branch_info, install_dir)
