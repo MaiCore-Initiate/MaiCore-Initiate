@@ -179,7 +179,7 @@ class UI:
     
     def get_choice(self, prompt: str, choices: list) -> str:
         """获取用户选择"""
-        return Prompt.ask(prompt, choices=choices).upper()
+        return ui.get_input(prompt).upper()
     
     def confirm(self, prompt: str) -> bool:
         """获取用户确认"""

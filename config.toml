@@ -1,4 +1,4 @@
-current_config = "instance_114514"
+current_config = "instance_114515"
 
 [configurations.default]
 serial_number = "1"
@@ -8,15 +8,3 @@ nickname_path = "默认配置"
 mai_path = ""
 adapter_path = ""
 napcat_path = ""
-mongodb_path = ""
-
-[configurations.instance_114514]
-serial_number = "114514"
-absolute_serial_number = 2
-version_path = "0.8.1-alpha"
-nickname_path = "113"
-mai_path = "E:\\delveoper\\maimai-luncher\\TEST3\\MaiBot"
-adapter_path = "E:\\delveoper\\maimai-luncher\\TEST3\\MaiBot\\adapter"
-napcat_path = "E:\\delveoper\\maimai-luncher\\TEST3\\NapCat\\NapCat.34740.Shell\\NapCatWinBootMain.exe"
-venv_path = "E:\\delveoper\\maimai-luncher\\TEST3\\MaiBot\\venv"
-mongodb_path = ""

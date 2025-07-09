@@ -229,6 +229,9 @@ class MaiMaiLauncher:
                 knowledge_builder.knowledge_import(config)
             elif choice == "E":
                 knowledge_builder.legacy_knowledge_build(config)
+            else:
+                ui.print_error("无效选项")
+                ui.countdown(1)
             
             ui.pause()
     
@@ -273,6 +276,9 @@ class MaiMaiLauncher:
                 from src.modules.deployment import deployment_manager
                 deployment_manager.delete_instance()
                 ui.pause()
+            else:
+                ui.print_error("无效选项")
+                ui.countdown(1)
     
     def handle_about_menu(self):
         """处理关于菜单"""

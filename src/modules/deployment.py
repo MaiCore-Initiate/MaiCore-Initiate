@@ -27,6 +27,7 @@ from ..core.config import config_manager
 from ..ui.interface import ui
 from ..utils.common import validate_path
 from .mongodb_installer import mongodb_installer
+from .webui_installer import webui_installer
 
 logger = structlog.get_logger(__name__)
 
@@ -1046,15 +1047,24 @@ pause
             if deploy_config.get("napcat_version"):
                 napcat_path = self._install_napcat(deploy_config, maibot_path)
             
+            # 第三点五步：检查并安装WebUI（如果需要）
+            webui_path = ""
+            success, webui_path = self._check_and_install_webui(deploy_config, maibot_path)
+            if not success:
+                ui.print_warning("WebUI安装检查失败，但部署将继续...")
+            
+            # 将WebUI路径保存到部署配置中
+            deploy_config["webui_path"] = webui_path
+            
             # 第四步：设置Python环境
             venv_path = self._setup_python_environment(maibot_path, adapter_path)
 
             # 第四点五步：配置文件设置
-            if not self._setup_config_files(deploy_config, maibot_path, adapter_path, napcat_path, mongodb_path):
+            if not self._setup_config_files(deploy_config, maibot_path, adapter_path, napcat_path, mongodb_path, webui_path):
                 ui.print_warning("配置文件设置失败，但部署将继续...")
 
             # 第五步：创建配置和启动脚本
-            if not self._finalize_deployment(deploy_config, maibot_path, adapter_path, napcat_path, venv_path):
+            if not self._finalize_deployment(deploy_config, maibot_path, adapter_path, napcat_path, venv_path, webui_path):
                 return False
 
             ui.print_success(f"🎉 实例 '{deploy_config['nickname']}' 部署完成！")
@@ -1433,39 +1443,54 @@ pause
         
         napcat_exe = self.download_napcat(napcat_version, install_dir)
         if napcat_exe:
-            # 等待用户完成安装并自动检测路径
+            # 等待用户完成安装并进行3次检测
             napcat_path = self._wait_for_napcat_installation(install_dir)
             if napcat_path:
                 ui.print_success("✅ NapCat安装并检测完成")
+                logger.info("NapCat安装成功", path=napcat_path)
                 return napcat_path
             else:
-                ui.print_warning("⚠️ NapCat路径检测失败，请稍后手动配置")
-                return napcat_exe
+                ui.print_error("❌ NapCat路径检测失败")
+                ui.print_warning("⚠️ 您可以稍后手动配置NapCat路径")
+                logger.warning("NapCat路径检测失败，用户需手动配置")
+                return ""
         else:
-            ui.print_warning("⚠️ NapCat下载失败，请稍后手动配置")
+            ui.print_error("❌ NapCat下载失败")
+            ui.print_warning("⚠️ 请稍后手动下载和配置NapCat")
+            logger.error("NapCat下载失败")
             return ""
     
-    def _wait_for_napcat_installation(self, install_dir: str, max_wait_time: int = 300) -> Optional[str]:
+    def _wait_for_napcat_installation(self, install_dir: str) -> Optional[str]:
         """等待NapCat安装完成并检测路径"""
         ui.print_info("等待NapCat安装完成...")
         ui.print_warning("请在弹出的安装窗口中完成NapCat安装")
-        ui.print_info("安装完成后，系统将自动检测NapCat路径")
+        ui.print_info("安装完成后，按回车键开始检测NapCat路径")
         
-        start_time = time.time()
-        check_interval = 20  # 每20秒检测一次
+        # 等待用户确认安装完成
+        ui.pause("NapCat安装完成后按回车继续...")
         
-        while time.time() - start_time < max_wait_time:
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            ui.print_info(f"正在进行第 {attempt}/{max_attempts} 次NapCat路径检测...")
+            
             # 检测是否有新的NapCat安装
             napcat_path = self.find_installed_napcat(install_dir)
             if napcat_path:
-                ui.print_success(f"检测到NapCat安装：{napcat_path}")
+                ui.print_success(f"✅ 检测到NapCat安装：{napcat_path}")
+                logger.info("NapCat路径检测成功", path=napcat_path, attempt=attempt)
                 return napcat_path
             
-            # 等待一段时间后再次检测
-            ui.print_info(f"继续等待安装... ({int(time.time() - start_time)}s)")
-            time.sleep(check_interval)
+            if attempt < max_attempts:
+                ui.print_warning(f"❌ 第 {attempt} 次检测未找到NapCat，准备进行下一次检测...")
+                time.sleep(2)  # 短暂等待
+            else:
+                ui.print_error(f"❌ 已完成 {max_attempts} 次检测，均未找到NapCat安装")
         
-        ui.print_warning("等待超时，请稍后手动配置NapCat路径")
+        ui.print_error("NapCat路径检测失败，请检查以下可能的原因：")
+        ui.console.print("  • NapCat安装程序未正常完成安装")
+        ui.console.print("  • 安装目录与预期不符")
+        ui.console.print("  • 需要手动配置NapCat路径")
+        logger.error("NapCat路径检测失败", install_dir=install_dir, max_attempts=max_attempts)
         return None
 
     def _setup_python_environment(self, maibot_path: str, adapter_path: str) -> str:
@@ -1501,7 +1526,7 @@ pause
             ui.print_warning("⚠️ 虚拟环境创建失败，将使用系统Python")
             return ""
     
-    def _setup_config_files(self, deploy_config: Dict, maibot_path: str, adapter_path: str, napcat_path: str, mongodb_path: str) -> bool:
+    def _setup_config_files(self, deploy_config: Dict, maibot_path: str, adapter_path: str, napcat_path: str, mongodb_path: str, webui_path: str) -> bool:
         """第四点五步：配置文件设置"""
         ui.console.print("\n[⚙️ 第四点五步：配置文件设置]", style=ui.colors["primary"])
         
@@ -1608,6 +1633,13 @@ pause
                 ui.console.print(f"  • MongoDB路径: {mongodb_path}")
                 ui.console.print("  • 如需修改数据库配置，请编辑相关配置文件")
             
+            # 5. WebUI配置提示
+            if webui_path:
+                ui.print_info("WebUI配置完成:")
+                ui.console.print(f"  • WebUI路径: {webui_path}")
+                ui.console.print("  • 可以通过浏览器访问WebUI界面")
+                ui.console.print("  • 如需启动WebUI，请在WebUI目录中执行 npm start")
+            
             ui.print_success("✅ 配置文件设置完成")
             logger.info("配置文件设置完成", maibot_path=maibot_path)
             return True
@@ -1617,7 +1649,7 @@ pause
             logger.error("配置文件设置失败", error=str(e))
             return False
 
-    def _finalize_deployment(self, deploy_config: Dict, maibot_path: str, adapter_path: str, napcat_path: str, venv_path: str) -> bool:
+    def _finalize_deployment(self, deploy_config: Dict, maibot_path: str, adapter_path: str, napcat_path: str, venv_path: str, webui_path: str) -> bool:
         """第五步：完成部署配置"""
         ui.console.print("\n[⚙️ 第五步：完成部署配置]", style=ui.colors["primary"])
         
@@ -1633,7 +1665,8 @@ pause
             "adapter_path": adapter_path,
             "napcat_path": napcat_path,
             "venv_path": venv_path,
-            "mongodb_path": deploy_config.get("mongodb_path", "")
+            "mongodb_path": deploy_config.get("mongodb_path", ""),
+            "webui_path": webui_path
         }
         
         # 保存配置
@@ -1658,6 +1691,7 @@ pause
         ui.console.print("2. 修改 config.toml 中的机器人配置")
         ui.console.print("3. 如需要知识库功能，配置相关设置")
         ui.console.print("4. 如安装了NapCat，请配置QQ登录信息")
+        ui.console.print("5. 如安装了WebUI，可以通过浏览器访问管理界面")
         ui.console.print("\n您现在可以通过主菜单的启动选项来运行该实例")
     
     def update_instance(self) -> bool:
@@ -2036,7 +2070,34 @@ pause
             ui.print_error(f"MongoDB检查失败：{str(e)}")
             logger.error("MongoDB检查失败", error=str(e))
             return False, ""
-
+    
+    def _check_and_install_webui(self, deploy_config: Dict, maibot_path: str) -> Tuple[bool, str]:
+        """检查并安装WebUI（如果需要）"""
+        try:
+            ui.console.print("\n[🌐 WebUI安装检查]", style=ui.colors["primary"])
+            
+            # 获取安装目录
+            install_dir = deploy_config.get("install_dir", "")
+            
+            logger.info("开始WebUI安装检查", install_dir=install_dir, maibot_path=maibot_path)
+            
+            # 调用WebUI安装器进行检查和安装
+            success, webui_path = webui_installer.check_and_install_webui(install_dir)
+            
+            if success:
+                ui.print_success("✅ WebUI安装检查完成")
+                if webui_path:
+                    ui.print_info(f"WebUI安装路径: {webui_path}")
+            else:
+                ui.print_warning("⚠️ WebUI安装检查出现问题")
+            
+            return success, webui_path
+            
+        except Exception as e:
+            ui.print_error(f"WebUI安装检查失败：{str(e)}")
+            logger.error("WebUI安装检查失败", error=str(e))
+            return False, ""
+    
 
 # 全局部署管理器实例
 deployment_manager = DeploymentManager()
