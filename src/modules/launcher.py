@@ -538,43 +538,51 @@ class MaiLauncher:
             ui.print_info("🚀 启动模式：麦麦 + WebUI")
             version = config.get("version_path", "")
             webui_path = config.get("webui_path", "")
-            
+
             # 首先确保MongoDB运行（如果配置了）
             self._ensure_mongodb_running(config)
             
             # 启动WebUI
             if webui_path and os.path.exists(webui_path):
-                # 检查是否有package.json（Node.js项目）
-                package_json = os.path.join(webui_path, "package.json")
-                if os.path.exists(package_json):
-                    webui_process = self.start_in_new_cmd(
-                        "npm start",
-                        webui_path,
-                        f"WebUI - {version}"
-                    )
+                # 启动 http_server/main.py
+                http_server_path = os.path.join(webui_path, "http_server", "main.py")
+                if os.path.exists(http_server_path):
+                    python_cmd = self._get_python_command(config, os.path.dirname(http_server_path))
+                http_server_process = self.start_in_new_cmd(
+                    f"{python_cmd} main.py",
+                    os.path.dirname(http_server_path),
+                    f"WebUI-HTTPServer - {version}"
+                )
+                if http_server_process:
+                    ui.print_success("WebUI HTTP Server 启动成功！")
+                    logger.info("WebUI HTTP Server 启动成功", path=http_server_path)
                 else:
-                    # 尝试Python方式启动
-                    python_cmd = self._get_python_command(config, webui_path)
-                    webui_process = self.start_in_new_cmd(
-                        f"{python_cmd} app.py",
-                        webui_path,
-                        f"WebUI - {version}"
-                    )
-                
-                if webui_process:
-                    ui.print_success("WebUI启动成功！")
-                    logger.info("WebUI启动成功", path=webui_path)
-                    time.sleep(2)  # 等待WebUI启动
-                else:
-                    ui.print_error("WebUI启动失败")
+                    ui.print_error("WebUI HTTP Server 启动失败")
                     return False
             else:
-                ui.print_error("WebUI路径无效或不存在")
+                ui.print_error("未找到 http_server/main.py，WebUI 启动失败")
                 return False
-            
-            # 启动麦麦本体
+
+            # 只启动 adapter/maimai_http_adapter.py
+            adapter_path = os.path.join(webui_path, "adapter", "maimai_http_adapter.py")
+            if os.path.exists(adapter_path):
+                python_cmd = self._get_python_command(config, os.path.dirname(adapter_path))
+                adapter_process = self.start_in_new_cmd(
+                    f"{python_cmd} maimai_http_adapter.py",
+                    os.path.dirname(adapter_path),
+                    f"WebUI-Adapter - {version}"
+                )
+                if adapter_process:
+                    ui.print_success("WebUI Adapter 启动成功！")
+                    logger.info("WebUI Adapter 启动成功", path=adapter_path)
+                else:
+                    ui.print_error("WebUI Adapter 启动失败")
+                    return False
+            else:
+                ui.print_error("未找到 adapter/maimai_http_adapter.py，WebUI 启动失败")
+                return False
+
             return self.launch_mai_only(config)
-            
         except Exception as e:
             ui.print_error(f"启动失败：{str(e)}")
             logger.error("启动麦麦+WebUI失败", error=str(e), config=config)
