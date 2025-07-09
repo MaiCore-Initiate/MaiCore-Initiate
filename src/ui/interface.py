@@ -59,7 +59,6 @@ class UI:
         
         self.console.print("====>>启动类<<====")
         self.console.print(" [A] 🚀 运行麦麦", style=self.colors["success"])
-        self.console.print(" [B] 运行麦麦（同时启动NapCatQQ和Mongo DB）", style=self.colors["success"])
         
         self.console.print("====>>配置类<<====")
         self.console.print(" [C] 配置管理（新建/修改/检查配置）", style=self.colors["warning"])

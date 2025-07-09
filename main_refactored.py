@@ -64,40 +64,6 @@ class MaiMaiLauncher:
             logger.error("启动麦麦异常", error=str(e))
             ui.pause()
     
-    def handle_launch_full(self):
-        """处理全栈启动"""
-        try:
-            ui.clear_screen()
-            # 选择配置
-            config = config_mgr.select_configuration()
-            if not config:
-                return
-            
-            # 验证配置
-            errors = launcher.validate_configuration(config)
-            if errors:
-                ui.print_error("发现配置错误：")
-                for error in errors:
-                    ui.console.print(f"  • {error}", style=ui.colors["error"])
-                ui.pause()
-                return
-            
-            # 直接启动全栈（保持兼容性）
-            success = launcher.launch_full_stack(config)
-            if success:
-                ui.print_success("全栈启动成功！")
-                logger.info("用户全栈启动成功")
-            else:
-                ui.print_error("全栈启动失败")
-                logger.error("用户全栈启动失败")
-            
-            ui.pause()
-            
-        except Exception as e:
-            ui.print_error(f"启动过程出错：{str(e)}")
-            logger.error("全栈启动异常", error=str(e))
-            ui.pause()
-    
     def handle_config_menu(self):
         """处理配置菜单"""
         while True:
@@ -369,8 +335,6 @@ class MaiMaiLauncher:
                     logger.info("用户退出程序")
                 elif choice == "A":
                     self.handle_launch_mai()
-                elif choice == "B":
-                    self.handle_launch_full()
                 elif choice == "C":
                     self.handle_config_menu()
                 elif choice == "D":

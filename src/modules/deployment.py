@@ -1611,6 +1611,7 @@ pause
         try:
             # 创建config目录
             config_dir = os.path.join(maibot_path, "config")
+            adapter_config_dir = os.path.join(maibot_path, "adapter", "config") if adapter_path and adapter_path != "无需适配器" else None
             os.makedirs(config_dir, exist_ok=True)
             ui.print_info(f"创建config目录: {config_dir}")
             
@@ -1686,7 +1687,7 @@ pause
                         if target_filename.startswith('template.'):
                             target_filename = target_filename[9:]  # 移除 'template.'
                         
-                        target_file = os.path.join(config_dir, target_filename)
+                        target_file = os.path.join(adapter_config_dir, target_filename)
                         
                         try:
                             shutil.copy2(source_file, target_file)

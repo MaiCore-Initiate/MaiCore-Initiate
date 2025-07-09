@@ -33,8 +33,8 @@ class MaiLauncher:
             进程对象或None
         """
         try:
-            # 构建在新CMD窗口中运行的命令
-            cmd_command = f'start "{title}" cmd /k "cd /d "{cwd}" && {command}"'
+            # 构建在新CMD窗口中运行的命令，设置UTF-8编码
+            cmd_command = f'start "{title}" cmd /k "chcp 65001 && cd /d "{cwd}" && {command}"'
             
             logger.info("在新CMD窗口启动进程", title=title, command=command, cwd=cwd)
             
@@ -65,6 +65,72 @@ class MaiLauncher:
             ui.print_error(f"{title} 启动失败：{str(e)}")
             logger.error("进程启动失败", title=title, error=str(e))
             return None
+    
+    def _get_python_command(self, config: Dict[str, Any], work_dir: str) -> str:
+        """
+        获取Python命令，优先使用虚拟环境
+        
+        Args:
+            config: 配置字典
+            work_dir: 工作目录
+            
+        Returns:
+            Python命令
+        """
+        try:
+            # 检查是否有虚拟环境
+            venv_paths = [
+                os.path.join(work_dir, "venv", "Scripts", "python.exe"),
+                os.path.join(work_dir, ".venv", "Scripts", "python.exe"),
+                os.path.join(work_dir, "env", "Scripts", "python.exe")
+            ]
+            
+            for venv_path in venv_paths:
+                if os.path.exists(venv_path):
+                    ui.print_info(f"检测到虚拟环境：{venv_path}")
+                    logger.info("使用虚拟环境Python", venv_path=venv_path)
+                    return f'"{venv_path}"'
+            
+            # 没有虚拟环境，使用系统Python
+            ui.print_info("未检测到虚拟环境，使用系统Python")
+            logger.info("使用系统Python")
+            return "python"
+            
+        except Exception as e:
+            ui.print_warning(f"检测Python环境失败：{str(e)}")
+            logger.warning("检测Python环境失败", error=str(e))
+            return "python"
+    
+    def _ensure_mongodb_running(self, config: Dict[str, Any]) -> bool:
+        """
+        确保MongoDB运行（如果配置了）
+        
+        Args:
+            config: 配置字典
+            
+        Returns:
+            是否成功启动或已运行
+        """
+        try:
+            install_options = config.get("install_options", {})
+            
+            # 如果配置了MongoDB，确保其运行
+            if install_options.get("install_mongodb", False):
+                ui.print_info("检查MongoDB状态...")
+                if self._start_mongodb(config):
+                    ui.print_success("MongoDB准备就绪")
+                    return True
+                else:
+                    ui.print_warning("MongoDB启动失败，但将继续启动其他组件")
+                    return False
+            else:
+                ui.print_info("MongoDB未配置，跳过检查")
+                return True
+                
+        except Exception as e:
+            ui.print_warning(f"MongoDB检查失败：{str(e)}")
+            logger.warning("MongoDB检查失败", error=str(e))
+            return False
     
     def start_executable_in_new_cmd(self, exe_path: str, args: List[str] = None, title: str = "") -> Optional[subprocess.Popen]:
         """
@@ -145,6 +211,62 @@ class MaiLauncher:
                     errors.append("NapCatQQ路径：不是可执行文件")
         
         return errors
+    
+    def _get_python_command(self, config: Dict[str, Any], cwd: str) -> str:
+        """
+        获取Python命令，优先使用虚拟环境
+        
+        Args:
+            config: 配置字典
+            cwd: 工作目录
+            
+        Returns:
+            Python命令字符串
+        """
+        venv_path = config.get("venv_path", "")
+        
+        # 如果有虚拟环境，使用虚拟环境的Python
+        if venv_path and os.path.exists(venv_path):
+            if os.name == 'nt':  # Windows
+                python_exe = os.path.join(venv_path, "Scripts", "python.exe")
+            else:  # Linux/Mac
+                python_exe = os.path.join(venv_path, "bin", "python")
+            
+            if os.path.exists(python_exe):
+                ui.print_info(f"使用虚拟环境Python: {python_exe}")
+                return f'"{python_exe}"'
+        
+        # 如果没有虚拟环境或虚拟环境不存在，使用系统Python
+        ui.print_info("使用系统Python")
+        return "python"
+    
+    def _ensure_mongodb_running(self, config: Dict[str, Any]) -> bool:
+        """
+        确保MongoDB正在运行（如果配置了MongoDB）
+        
+        Args:
+            config: 配置字典
+            
+        Returns:
+            是否成功启动或已经在运行
+        """
+        install_options = config.get("install_options", {})
+        
+        # 如果没有安装MongoDB，跳过
+        if not install_options.get("install_mongodb", False):
+            return True
+        
+        ui.print_info("检查MongoDB状态...")
+        
+        # 检查MongoDB是否已在运行
+        mongodb_running = check_process("mongod.exe")
+        if mongodb_running:
+            ui.print_info("MongoDB已经在运行")
+            return True
+        
+        # 尝试启动MongoDB
+        ui.print_info("启动MongoDB...")
+        return self._start_mongodb(config)
     
     def show_launch_menu(self, config: Dict[str, Any]) -> bool:
         """
@@ -242,6 +364,9 @@ class MaiLauncher:
             version = config.get("version_path", "")
             mai_path = config.get("mai_path", "")
             
+            # 首先确保MongoDB运行（如果配置了）
+            self._ensure_mongodb_running(config)
+            
             if is_legacy_version(version):
                 # 旧版本启动逻辑：直接运行run.bat
                 logger.info("检测到旧版本，使用兼容启动模式", version=version)
@@ -264,12 +389,15 @@ class MaiLauncher:
                     logger.error("run.bat文件不存在", path=run_bat_path)
                     return False
             else:
-                # 新版本启动逻辑：仅启动麦麦本体
+                # 新版本启动逻辑：使用虚拟环境启动麦麦本体
                 logger.info("检测到新版本，启动麦麦本体", version=version)
+                
+                # 获取Python命令（优先使用虚拟环境）
+                python_cmd = self._get_python_command(config, mai_path)
                 
                 # 启动麦麦本体
                 mai_process = self.start_in_new_cmd(
-                    "python bot.py",
+                    f"{python_cmd} bot.py",
                     mai_path,
                     f"麦麦本体 - {version}"
                 )
@@ -301,15 +429,21 @@ class MaiLauncher:
             mai_path = config.get("mai_path", "")
             adapter_path = config.get("adapter_path", "")
             
+            # 首先确保MongoDB运行（如果配置了）
+            self._ensure_mongodb_running(config)
+            
             if is_legacy_version(version):
                 ui.print_warning("旧版本无需适配器，将仅启动麦麦本体")
                 return self.launch_mai_only(config)
+            
+            # 获取Python命令（优先使用虚拟环境）
+            python_cmd = self._get_python_command(config, mai_path)
             
             # 启动适配器
             if (adapter_path and 
                 adapter_path not in ["当前配置集的对象实例版本较低，无适配器", "跳过适配器安装"]):
                 adapter_process = self.start_in_new_cmd(
-                    "python main.py",
+                    f"{python_cmd} main.py",
                     adapter_path,
                     f"麦麦适配器 - {version}"
                 )
@@ -326,7 +460,7 @@ class MaiLauncher:
             
             # 启动麦麦本体
             mai_process = self.start_in_new_cmd(
-                "python bot.py",
+                f"{python_cmd} bot.py",
                 mai_path,
                 f"麦麦本体 - {version}"
             )
@@ -355,6 +489,9 @@ class MaiLauncher:
         try:
             ui.print_info("🚀 启动模式：麦麦 + 适配器 + NapCat")
             version = config.get("version_path", "")
+            
+            # 首先确保MongoDB运行（如果配置了）
+            self._ensure_mongodb_running(config)
             
             # 先启动NapCat
             napcat_running = check_process("NapCatWinBootMain.exe")
@@ -402,6 +539,9 @@ class MaiLauncher:
             version = config.get("version_path", "")
             webui_path = config.get("webui_path", "")
             
+            # 首先确保MongoDB运行（如果配置了）
+            self._ensure_mongodb_running(config)
+            
             # 启动WebUI
             if webui_path and os.path.exists(webui_path):
                 # 检查是否有package.json（Node.js项目）
@@ -414,8 +554,9 @@ class MaiLauncher:
                     )
                 else:
                     # 尝试Python方式启动
+                    python_cmd = self._get_python_command(config, webui_path)
                     webui_process = self.start_in_new_cmd(
-                        "python app.py",
+                        f"{python_cmd} app.py",
                         webui_path,
                         f"WebUI - {version}"
                     )
@@ -607,8 +748,9 @@ class MaiLauncher:
                         )
                     else:
                         # 尝试Python方式启动
+                        python_cmd = self._get_python_command(config, webui_path)
                         webui_process = self.start_in_new_cmd(
-                            "python app.py",
+                            f"{python_cmd} app.py",
                             webui_path,
                             f"WebUI - {version}"
                         )
@@ -630,8 +772,9 @@ class MaiLauncher:
                 adapter_path = config.get("adapter_path", "")
                 if (adapter_path and 
                     adapter_path not in ["当前配置集的对象实例版本较低，无适配器", "跳过适配器安装"]):
+                    python_cmd = self._get_python_command(config, adapter_path)
                     adapter_process = self.start_in_new_cmd(
-                        "python main.py",
+                        f"{python_cmd} main.py",
                         adapter_path,
                         f"麦麦适配器 - {version}"
                     )
@@ -670,8 +813,9 @@ class MaiLauncher:
                     return False
             else:
                 # 新版本启动逻辑
+                python_cmd = self._get_python_command(config, mai_path)
                 mai_process = self.start_in_new_cmd(
-                    "python bot.py",
+                    f"{python_cmd} bot.py",
                     mai_path,
                     f"麦麦本体 - {version}"
                 )
