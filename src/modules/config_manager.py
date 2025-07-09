@@ -46,34 +46,20 @@ class ConfigManager:
             # 获取版本号
             version = ui.get_input("请输入版本号（如0.7.0或classical）：")
             
-            # 根据版本决定适配器配置
-            from ..utils.common import is_legacy_version
-            if is_legacy_version(version):
-                adapter_path = "当前配置集的对象实例版本较低，无适配器"
-                ui.print_info("检测到旧版本，无需配置适配器")
-            else:
-                # 自动检测适配器
-                adapter_path = auto_detector.detect_adapter_path(mai_path)
-                if not adapter_path:
-                    ui.print_warning("未能自动检测到适配器，需要手动配置")
-                    adapter_path = ui.get_input("请输入适配器路径：")
-                    valid, msg = validate_path(adapter_path, check_file="main.py")
-                    if not valid:
-                        ui.print_error(f"适配器路径验证失败：{msg}")
-                        return False
-                else:
-                    ui.print_success(f"自动检测到适配器：{adapter_path}")
+            # 获取安装选项
+            install_options = self._get_install_options()
             
-            # 可选的NapCat路径
-            napcat_path = auto_detector.detect_napcat_path()
-            if napcat_path:
-                ui.print_success(f"自动检测到NapCat：{napcat_path}")
-            else:
-                ui.print_info("未检测到NapCat，可手动配置")
-                napcat_path = ui.get_input("请输入NapCat路径（可为空）：")
+            # 根据版本和选项配置适配器
+            adapter_path = self._configure_adapter(version, install_options, mai_path)
             
-            # 可选的MongoDB路径
-            mongodb_path = ui.get_input("请输入MongoDB路径（可为空，小于0.7版本时建议配置）：")
+            # 配置NapCat
+            napcat_path = self._configure_napcat(install_options)
+            
+            # 配置MongoDB
+            mongodb_path = self._configure_mongodb(version, install_options)
+            
+            # 配置WebUI
+            webui_path = self._configure_webui(install_options)
             
             # 获取其他配置
             nickname = ui.get_input("请输入配置昵称：")
@@ -87,8 +73,10 @@ class ConfigManager:
                 "nickname_path": nickname,
                 "mai_path": mai_path,
                 "adapter_path": adapter_path,
-                "napcat_path": napcat_path or "",
-                "mongodb_path": mongodb_path or ""
+                "napcat_path": napcat_path,
+                "mongodb_path": mongodb_path,
+                "webui_path": webui_path,
+                "install_options": install_options
             }
             
             # 保存配置
@@ -130,23 +118,20 @@ class ConfigManager:
                 ui.print_error(f"麦麦路径验证失败：{msg}")
                 return False
             
-            # 根据版本决定适配器配置
-            from ..utils.common import is_legacy_version
-            if is_legacy_version(version):
-                adapter_path = "当前配置集的对象实例版本较低，无适配器"
-                ui.print_info("检测到旧版本，无需配置适配器")
-            else:
-                adapter_path = ui.get_input("请输入适配器路径：")
-                valid, msg = validate_path(adapter_path, check_file="main.py")
-                if not valid:
-                    ui.print_error(f"适配器路径验证失败：{msg}")
-                    return False
+            # 获取安装选项
+            install_options = self._get_install_options()
             
-            # 可选的NapCat路径
-            napcat_path = ui.get_input("请输入NapCat路径（可为空）：")
+            # 根据版本和选项配置适配器
+            adapter_path = self._configure_adapter(version, install_options, mai_path)
             
-            # 可选的MongoDB路径
-            mongodb_path = ui.get_input("请输入MongoDB路径（可为空，小于0.7版本时建议配置）：")
+            # 配置NapCat
+            napcat_path = self._configure_napcat(install_options)
+            
+            # 配置MongoDB
+            mongodb_path = self._configure_mongodb(version, install_options)
+            
+            # 配置WebUI
+            webui_path = self._configure_webui(install_options)
             
             # 其他配置
             nickname = ui.get_input("请输入配置昵称：")
@@ -160,8 +145,10 @@ class ConfigManager:
                 "nickname_path": nickname,
                 "mai_path": mai_path,
                 "adapter_path": adapter_path,
-                "napcat_path": napcat_path or "",
-                "mongodb_path": mongodb_path or ""
+                "napcat_path": napcat_path,
+                "mongodb_path": mongodb_path,
+                "webui_path": webui_path,
+                "install_options": install_options
             }
             
             # 保存配置
@@ -261,20 +248,38 @@ class ConfigManager:
                             ui.print_error(f"路径验证失败：{msg}")
                             continue
                     
-                    if ui.confirm("是否重新配置适配器路径？"):
-                        adapter_path = ui.get_input("请输入新的适配器路径：")
-                        valid, msg = validate_path(adapter_path, check_file="main.py")
-                        if valid:
-                            config['adapter_path'] = adapter_path
-                        else:
-                            ui.print_error(f"路径验证失败：{msg}")
-                            continue
-                    
-                    if ui.confirm("是否重新配置NapCat路径？"):
-                        config['napcat_path'] = ui.get_input("请输入新的NapCat路径（可为空）：")
-                    
-                    if ui.confirm("是否重新配置MongoDB路径？"):
-                        config['mongodb_path'] = ui.get_input("请输入新的MongoDB路径（可为空）：")
+                    # 重新配置安装选项
+                    if ui.confirm("是否重新配置安装选项？"):
+                        install_options = self._get_install_options()
+                        config['install_options'] = install_options
+                        
+                        # 根据新的安装选项重新配置组件
+                        version = config.get('version_path', '')
+                        mai_path = config.get('mai_path', '')
+                        
+                        config['adapter_path'] = self._configure_adapter(version, install_options, mai_path)
+                        config['napcat_path'] = self._configure_napcat(install_options)
+                        config['mongodb_path'] = self._configure_mongodb(version, install_options)
+                        config['webui_path'] = self._configure_webui(install_options)
+                    else:
+                        # 单独配置各组件
+                        if ui.confirm("是否重新配置适配器路径？"):
+                            adapter_path = ui.get_input("请输入新的适配器路径：")
+                            valid, msg = validate_path(adapter_path, check_file="main.py")
+                            if valid:
+                                config['adapter_path'] = adapter_path
+                            else:
+                                ui.print_error(f"路径验证失败：{msg}")
+                                continue
+                        
+                        if ui.confirm("是否重新配置NapCat路径？"):
+                            config['napcat_path'] = ui.get_input("请输入新的NapCat路径（可为空）：")
+                        
+                        if ui.confirm("是否重新配置MongoDB路径？"):
+                            config['mongodb_path'] = ui.get_input("请输入新的MongoDB路径（可为空）：")
+                        
+                        if ui.confirm("是否重新配置WebUI路径？"):
+                            config['webui_path'] = ui.get_input("请输入新的WebUI路径（可为空）：")
                     
                     # 保存配置
                     self.config.save()
@@ -342,7 +347,14 @@ class ConfigManager:
                         "mai_path": "",
                         "adapter_path": "",
                         "napcat_path": "",
-                        "mongodb_path": ""
+                        "mongodb_path": "",
+                        "webui_path": "",
+                        "install_options": {
+                            "install_adapter": False,
+                            "install_napcat": False,
+                            "install_mongodb": False,
+                            "install_webui": False
+                        }
                     }
                     self.config.add_configuration("default", default_config)
                     self.config.set("current_config", "default")
@@ -356,7 +368,143 @@ class ConfigManager:
             ui.print_error(f"删除配置失败：{str(e)}")
             logger.error("删除配置失败", error=str(e))
             return False
-
-
+    
+    def _get_install_options(self) -> Dict[str, bool]:
+        """
+        获取安装选项
+        
+        Returns:
+            安装选项字典
+        """
+        ui.console.print("\n[🔧 组件安装选择]", style=ui.colors["primary"])
+        ui.console.print("请选择需要安装的组件：")
+        
+        # 询问是否安装适配器
+        install_adapter = ui.confirm("是否安装适配器？(新版本通常需要)")
+        
+        # 询问是否安装NapCat
+        install_napcat = ui.confirm("是否安装NapCat？(QQ连接组件)")
+        
+        # 询问是否安装MongoDB
+        install_mongodb = ui.confirm("是否安装MongoDB？(数据库，旧版本建议安装)")
+        
+        # 询问是否安装WebUI
+        install_webui = ui.confirm("是否安装WebUI？(Web管理界面)")
+        
+        return {
+            "install_adapter": install_adapter,
+            "install_napcat": install_napcat,
+            "install_mongodb": install_mongodb,
+            "install_webui": install_webui
+        }
+    
+    def _configure_adapter(self, version: str, install_options: Dict[str, bool], mai_path: str) -> str:
+        """
+        配置适配器
+        
+        Args:
+            version: 版本号
+            install_options: 安装选项
+            mai_path: 麦麦路径
+            
+        Returns:
+            适配器路径
+        """
+        if not install_options.get("install_adapter", False):
+            ui.print_info("跳过适配器安装")
+            return "跳过适配器安装"
+        
+        # 检查是否为旧版本
+        from ..utils.common import is_legacy_version
+        if is_legacy_version(version):
+            ui.print_info("检测到旧版本，无需配置适配器")
+            return "当前配置集的对象实例版本较低，无适配器"
+        
+        # 尝试自动检测适配器
+        adapter_path = auto_detector.detect_adapter_path(mai_path)
+        if adapter_path:
+            ui.print_success(f"自动检测到适配器：{adapter_path}")
+            return adapter_path
+        
+        # 手动配置适配器
+        ui.print_warning("未能自动检测到适配器，需要手动配置")
+        adapter_path = ui.get_input("请输入适配器路径：")
+        valid, msg = validate_path(adapter_path, check_file="main.py")
+        if not valid:
+            ui.print_error(f"适配器路径验证失败：{msg}")
+            return "适配器路径验证失败"
+        
+        return adapter_path
+    
+    def _configure_napcat(self, install_options: Dict[str, bool]) -> str:
+        """
+        配置NapCat
+        
+        Args:
+            install_options: 安装选项
+            
+        Returns:
+            NapCat路径
+        """
+        if not install_options.get("install_napcat", False):
+            ui.print_info("跳过NapCat安装")
+            return ""
+        
+        # 尝试自动检测NapCat
+        napcat_path = auto_detector.detect_napcat_path()
+        if napcat_path:
+            ui.print_success(f"自动检测到NapCat：{napcat_path}")
+            return napcat_path
+        
+        # 手动配置NapCat
+        ui.print_info("未检测到NapCat，需要手动配置")
+        napcat_path = ui.get_input("请输入NapCat路径（可为空）：")
+        
+        return napcat_path or ""
+    
+    def _configure_mongodb(self, version: str, install_options: Dict[str, bool]) -> str:
+        """
+        配置MongoDB
+        
+        Args:
+            version: 版本号
+            install_options: 安装选项
+            
+        Returns:
+            MongoDB路径
+        """
+        if not install_options.get("install_mongodb", False):
+            ui.print_info("跳过MongoDB安装")
+            return ""
+        
+        # 检查版本建议
+        from ..utils.common import is_legacy_version
+        if is_legacy_version(version):
+            ui.print_info("检测到旧版本，建议配置MongoDB")
+        else:
+            ui.print_info("新版本MongoDB为可选组件")
+        
+        mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
+        
+        return mongodb_path or ""
+    
+    def _configure_webui(self, install_options: Dict[str, bool]) -> str:
+        """
+        配置WebUI
+        
+        Args:
+            install_options: 安装选项
+            
+        Returns:
+            WebUI路径
+        """
+        if not install_options.get("install_webui", False):
+            ui.print_info("跳过WebUI安装")
+            return ""
+        
+        webui_path = ui.get_input("请输入WebUI路径（可为空）：")
+        
+        return webui_path or ""
+        
 # 全局配置管理器实例
 config_mgr = ConfigManager()

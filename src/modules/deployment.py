@@ -1107,8 +1107,32 @@ pause
         ui.console.print("="*50)
         ui.console.print("请选择需要安装的组件：\n")
         
-        # 询问是否需要安装NapCat + 适配器
-        install_napcat = ui.confirm("是否需要安装NapCat + 适配器？")
+        # 根据版本智能推荐组件
+        version_name = selected_version.get("name", "").lower()
+        from ..utils.common import is_legacy_version
+        is_legacy = is_legacy_version(version_name)
+        
+        # 显示版本信息和建议
+        ui.console.print(f"选择的版本：{selected_version['display_name']}")
+        ui.console.print(f"版本类型：{'旧版本 (classical/0.5.x)' if is_legacy else '新版本 (0.6.0+)'}")
+        
+        if is_legacy:
+            ui.print_info("旧版本建议配置：仅MaiBot主体 + MongoDB（可选）")
+        else:
+            ui.print_info("新版本建议配置：MaiBot + 适配器 + NapCat")
+        
+        ui.console.print()
+        
+        # 询问适配器安装（新版本默认推荐）
+        if is_legacy:
+            install_adapter = False
+            ui.print_info("旧版本无需适配器，已自动跳过")
+            install_napcat = ui.confirm("是否需要安装NapCat？（QQ连接组件）")
+        else:
+            install_adapter = ui.confirm("是否需要安装适配器？（新版本推荐安装）")
+            install_napcat = True  # 新版本默认需要NapCat
+        
+        # 询问是否需要安装NapCat
         
         # 选择NapCat版本（如果需要）
         napcat_version = None
@@ -1118,8 +1142,14 @@ pause
                 ui.print_info("已跳过NapCat下载")
                 install_napcat = False
         
+        # 询问是否需要安装MongoDB
+        if is_legacy:
+            install_mongodb = ui.confirm("是否需要安装MongoDB？（数据库，旧版本建议安装）")
+        else:
+            install_mongodb = False
+
         # 询问是否需要安装WebUI
-        install_webui = ui.confirm("是否需要安装WebUI？")
+        install_webui = ui.confirm("是否需要安装WebUI？（Web管理界面）")
         
         # 获取基本信息
         existing_configs = config_manager.get_all_configurations()
@@ -1159,7 +1189,9 @@ pause
             "serial_number": serial_number,
             "install_dir": install_dir,
             "nickname": nickname,
+            "install_adapter": install_adapter,
             "install_napcat": install_napcat,
+            "install_mongodb": install_mongodb,
             "install_webui": install_webui
         }
     
@@ -1177,13 +1209,39 @@ pause
         
         # 显示组件安装选择
         ui.console.print("\n[🔧 组件安装选择]", style=ui.colors["info"])
-        napcat_status = "✅ 安装" if deploy_config.get("install_napcat") else "❌ 跳过"
-        webui_status = "✅ 安装" if deploy_config.get("install_webui") else "❌ 跳过"
         
-        ui.console.print(f"NapCat + 适配器：{napcat_status}")
+        # MaiBot主体（必装）
+        ui.console.print(f"MaiBot主体：✅ 安装")
+        
+        # 适配器
+        adapter_status = "✅ 安装" if deploy_config.get("install_adapter") else "❌ 跳过"
+        ui.console.print(f"适配器：{adapter_status}")
+        
+        # NapCat
+        napcat_status = "✅ 安装" if deploy_config.get("install_napcat") else "❌ 跳过"
+        ui.console.print(f"NapCat：{napcat_status}")
         if deploy_config.get("napcat_version"):
             ui.console.print(f"  └─ NapCat版本：{deploy_config['napcat_version']['display_name']}")
+        
+        # MongoDB
+        mongodb_status = "✅ 安装" if deploy_config.get("install_mongodb") else "❌ 跳过"
+        ui.console.print(f"MongoDB：{mongodb_status}")
+        
+        # WebUI
+        webui_status = "✅ 安装" if deploy_config.get("install_webui") else "❌ 跳过"
         ui.console.print(f"WebUI：{webui_status}")
+        
+        # 显示预计安装时间
+        ui.console.print("\n[⏱️ 预计安装时间]", style=ui.colors["info"])
+        install_components = sum([
+            1,  # MaiBot主体
+            deploy_config.get("install_adapter", False),
+            deploy_config.get("install_napcat", False),
+            deploy_config.get("install_mongodb", False),
+            deploy_config.get("install_webui", False)
+        ])
+        estimated_time = install_components * 2  # 每个组件约2分钟
+        ui.console.print(f"预计耗时：{estimated_time}-{estimated_time + 5} 分钟")
         
         return ui.confirm("确认开始部署吗？")
     
@@ -1297,8 +1355,8 @@ pause
         
         ui.print_info("适配器选择规则：")
         ui.console.print("  • 0.5.x及以下：无需适配器")
-        ui.console.print("  • 0.6.x版本：使用0.2.3版本适配器")
-        ui.console.print("  • 0.7.x-0.8.x版本：使用0.4.2版本适配器")
+        ui.console.print("  • 0.6.x 版本：使用0.2.3版本适配器")
+        ui.console.print("  • 0.7.x-0.8.x 版本：使用0.4.2版本适配器")
         ui.console.print("  • main分支：使用main分支适配器")
         ui.console.print("  • dev分支：使用dev分支适配器")
         
@@ -1437,7 +1495,7 @@ pause
             if adapter_version == "main" or adapter_version == "dev":
                 adapter_url = f"https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter/releases/download/{adapter_version}/MaiBot-Napcat-Adapter-{adapter_version}.zip"
             else:
-                adapter_url = f"https://codeload.github.com/MaiM-with-u/MaiBot-Napcat-Adapter/archive/zip/tags/{adapter_version}"
+                adapter_url = f"https://codeload.github.com/MaiM-with-u/MaiBot-Napcat-Adapter/zip/refs/tags/{adapter_version}"
             adapter_zip = os.path.join(temp_dir, f"adapter_v{adapter_version}.zip")
             
             if not self.download_file(adapter_url, adapter_zip):
@@ -1676,6 +1734,14 @@ pause
         # 创建配置
         ui.print_info("正在创建实例配置...")
         
+        # 根据部署选项创建安装选项配置
+        install_options = {
+            "install_adapter": bool(adapter_path and adapter_path not in ["无需适配器", "跳过适配器安装"]),
+            "install_napcat": deploy_config.get("install_napcat", False),
+            "install_mongodb": bool(deploy_config.get("mongodb_path", "")),
+            "install_webui": deploy_config.get("install_webui", False)
+        }
+        
         new_config = {
             "serial_number": deploy_config["serial_number"],
             "absolute_serial_number": config_manager.generate_unique_serial(),
@@ -1686,7 +1752,8 @@ pause
             "napcat_path": napcat_path,
             "venv_path": venv_path,
             "mongodb_path": deploy_config.get("mongodb_path", ""),
-            "webui_path": webui_path
+            "webui_path": webui_path,
+            "install_options": install_options
         }
         
         # 保存配置
@@ -1699,6 +1766,19 @@ pause
         config_manager.save()
         ui.print_success("实例配置创建完成")
         
+        # 显示配置摘要
+        ui.console.print("\n[📋 部署摘要]", style=ui.colors["info"])
+        ui.console.print(f"实例名称：{deploy_config['nickname']}")
+        ui.console.print(f"序列号：{deploy_config['serial_number']}")
+        ui.console.print(f"版本：{deploy_config['selected_version']['name']}")
+        ui.console.print(f"安装路径：{maibot_path}")
+        
+        ui.console.print("\n[🔧 已安装组件]", style=ui.colors["success"])
+        ui.console.print(f"  • MaiBot主体：✅")
+        ui.console.print(f"  • 适配器：{'✅' if install_options['install_adapter'] else '❌'}")
+        ui.console.print(f"  • NapCat：{'✅' if install_options['install_napcat'] else '❌'}")
+        ui.console.print(f"  • MongoDB：{'✅' if install_options['install_mongodb'] else '❌'}")
+        ui.console.print(f"  • WebUI：{'✅' if install_options['install_webui'] else '❌'}")
         
         ui.print_success("✅ 部署配置完成")
         logger.info("配置创建成功", config=new_config)

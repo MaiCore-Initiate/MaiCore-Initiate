@@ -134,28 +134,72 @@ class UI:
         table.add_column("值", style="white")
         table.add_column("状态", style="green")
         
-        # 检查各项配置
+        # 基本配置
         items = [
             ("用户序列号", config.get('serial_number', '未配置')),
             ("绝对序列号", str(config.get('absolute_serial_number', '未配置'))),
             ("昵称", config.get('nickname_path', '未配置')),
             ("版本", config.get('version_path', '未配置')),
             ("麦麦本体路径", config.get('mai_path', '未配置')),
-            ("适配器路径", config.get('adapter_path', '未配置')),
-            ("NapCat路径", config.get('napcat_path', '未配置') or '未配置'),
-            ("MongoDB路径", config.get('mongodb_path', '未配置') or '未配置')
         ]
+        
+        # 获取安装选项
+        install_options = config.get('install_options', {})
+        
+        # 添加组件配置
+        if install_options.get('install_adapter', False):
+            items.append(("适配器路径", config.get('adapter_path', '未配置')))
+        else:
+            items.append(("适配器路径", "已跳过安装"))
+        
+        if install_options.get('install_napcat', False):
+            items.append(("NapCat路径", config.get('napcat_path', '未配置') or '未配置'))
+        else:
+            items.append(("NapCat路径", "已跳过安装"))
+        
+        if install_options.get('install_mongodb', False):
+            items.append(("MongoDB路径", config.get('mongodb_path', '未配置') or '未配置'))
+        else:
+            items.append(("MongoDB路径", "已跳过安装"))
+        
+        if install_options.get('install_webui', False):
+            items.append(("WebUI路径", config.get('webui_path', '未配置') or '未配置'))
+        else:
+            items.append(("WebUI路径", "已跳过安装"))
         
         for name, value in items:
             # 检查路径状态
-            if "路径" in name and value != "未配置":
+            if "路径" in name and value not in ["未配置", "已跳过安装"]:
                 status = "✅ 存在" if os.path.exists(value) else "❌ 不存在"
+            elif value == "已跳过安装":
+                status = "⏭️ 跳过"
             else:
                 status = "✅ 已设置" if value != "未配置" else "⚠️ 未设置"
             
             table.add_row(name, value, status)
         
-        self.console.print(table)
+        # 显示安装选项
+        if install_options:
+            self.console.print(table)
+            self.console.print("\n[🔧 安装选项]", style=self.colors["info"])
+            option_table = Table(show_header=True, header_style="bold magenta")
+            option_table.add_column("组件", style="cyan")
+            option_table.add_column("安装状态", style="white")
+            
+            component_names = {
+                'install_adapter': '适配器',
+                'install_napcat': 'NapCat',
+                'install_mongodb': 'MongoDB',
+                'install_webui': 'WebUI'
+            }
+            
+            for key, name in component_names.items():
+                status = "✅ 已选择" if install_options.get(key, False) else "❌ 已跳过"
+                option_table.add_row(name, status)
+            
+            self.console.print(option_table)
+        else:
+            self.console.print(table)
     
     def print_success(self, message: str):
         """打印成功消息"""

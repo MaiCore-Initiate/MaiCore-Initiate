@@ -48,14 +48,14 @@ class MaiMaiLauncher:
                 ui.pause()
                 return
             
-            # 启动麦麦
-            success = launcher.launch_mai_only(config)
+            # 显示启动选择菜单
+            success = launcher.show_launch_menu(config)
             if success:
-                ui.print_success("麦麦启动成功！")
-                logger.info("用户启动麦麦成功")
+                ui.print_success("启动操作完成！")
+                logger.info("用户启动操作成功")
             else:
-                ui.print_error("麦麦启动失败")
-                logger.error("用户启动麦麦失败")
+                ui.print_info("用户取消启动操作")
+                logger.info("用户取消启动操作")
             
             ui.pause()
             
@@ -82,7 +82,7 @@ class MaiMaiLauncher:
                 ui.pause()
                 return
             
-            # 启动全栈
+            # 直接启动全栈（保持兼容性）
             success = launcher.launch_full_stack(config)
             if success:
                 ui.print_success("全栈启动成功！")

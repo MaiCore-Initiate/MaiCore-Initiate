@@ -116,32 +116,116 @@ class MaiLauncher:
         if not valid:
             errors.append(f"麦麦本体路径：{msg}")
         
-        # 检查适配器（仅新版本需要）
+        # 获取安装选项
+        install_options = config.get("install_options", {})
         version = config.get("version_path", "")
-        if not is_legacy_version(version):
-            # 新版本需要检查适配器
+        
+        # 检查适配器（仅新版本且选择安装时需要）
+        if not is_legacy_version(version) and install_options.get("install_adapter", False):
             adapter_path = config.get("adapter_path", "")
-            if adapter_path and adapter_path != "当前配置集的对象实例版本较低，无适配器":
+            if adapter_path and adapter_path not in ["当前配置集的对象实例版本较低，无适配器", "跳过适配器安装"]:
                 valid, msg = validate_path(adapter_path, check_file="main.py")
                 if not valid:
                     errors.append(f"适配器路径：{msg}")
-            else:
-                errors.append("适配器路径：路径未配置或无效")
-        else:
+            elif not adapter_path:
+                errors.append("适配器路径：路径未配置")
+        elif is_legacy_version(version):
             # 旧版本需要检查run.bat文件
             valid, msg = validate_path(mai_path, check_file="run.bat")
             if not valid:
                 errors.append(f"麦麦本体路径缺少run.bat文件：{msg}")
         
-        # 检查NapCat路径（可选）
-        napcat_path = config.get("napcat_path", "")
-        if napcat_path:
-            if not os.path.exists(napcat_path):
-                errors.append("NapCatQQ路径：文件不存在")
-            elif not napcat_path.lower().endswith('.exe'):
-                errors.append("NapCatQQ路径：不是可执行文件")
+        # 检查NapCat路径（如果选择安装）
+        if install_options.get("install_napcat", False):
+            napcat_path = config.get("napcat_path", "")
+            if napcat_path:
+                if not os.path.exists(napcat_path):
+                    errors.append("NapCatQQ路径：文件不存在")
+                elif not napcat_path.lower().endswith('.exe'):
+                    errors.append("NapCatQQ路径：不是可执行文件")
         
         return errors
+    
+    def show_launch_menu(self, config: Dict[str, Any]) -> bool:
+        """
+        显示启动选择菜单
+        
+        Args:
+            config: 配置字典
+            
+        Returns:
+            是否成功选择启动
+        """
+        ui.clear_screen()
+        ui.console.print("[🚀 启动选择菜单]", style=ui.colors["primary"])
+        ui.console.print("="*50)
+        
+        # 获取配置信息
+        version = config.get("version_path", "")
+        install_options = config.get("install_options", {})
+        
+        # 显示配置信息
+        ui.console.print(f"实例版本：{version}")
+        ui.console.print(f"实例昵称：{config.get('nickname_path', '未知')}")
+        ui.console.print()
+        
+        # 显示可用组件
+        ui.console.print("[可用组件]", style=ui.colors["info"])
+        ui.console.print(f"  • 麦麦本体：✅ 可用")
+        ui.console.print(f"  • 适配器：{'✅ 可用' if install_options.get('install_adapter', False) else '❌ 未安装'}")
+        ui.console.print(f"  • NapCat：{'✅ 可用' if install_options.get('install_napcat', False) else '❌ 未安装'}")
+        ui.console.print(f"  • MongoDB：{'✅ 可用' if install_options.get('install_mongodb', False) else '❌ 未安装'}")
+        ui.console.print(f"  • WebUI：{'✅ 可用' if install_options.get('install_webui', False) else '❌ 未安装'}")
+        ui.console.print()
+        
+        # 显示启动选项
+        ui.console.print("[启动选项]", style=ui.colors["success"])
+        ui.console.print(" [1] 仅启动麦麦本体")
+        
+        if install_options.get('install_adapter', False):
+            ui.console.print(" [2] 启动麦麦 + 适配器")
+        
+        if install_options.get('install_napcat', False):
+            ui.console.print(" [3] 启动麦麦 + 适配器 + NapCat")
+        
+        if install_options.get('install_webui', False):
+            ui.console.print(" [4] 启动麦麦 + WebUI")
+        
+        if install_options.get('install_mongodb', False):
+            ui.console.print(" [5] 启动麦麦 + MongoDB")
+        
+        # 全栈启动（如果多个组件可用）
+        available_components = sum([
+            install_options.get('install_adapter', False),
+            install_options.get('install_napcat', False),
+            install_options.get('install_mongodb', False),
+            install_options.get('install_webui', False)
+        ])
+        
+        if available_components >= 2:
+            ui.console.print(" [6] 全栈启动（所有已安装组件）")
+        
+        ui.console.print(" [Q] 返回上级菜单", style="#7E1DE4")
+        
+        while True:
+            choice = ui.get_input("请选择启动方式：").strip().upper()
+            
+            if choice == 'Q':
+                return False
+            elif choice == '1':
+                return self.launch_mai_only(config)
+            elif choice == '2' and install_options.get('install_adapter', False):
+                return self.launch_mai_with_adapter(config)
+            elif choice == '3' and install_options.get('install_napcat', False):
+                return self.launch_mai_with_napcat(config)
+            elif choice == '4' and install_options.get('install_webui', False):
+                return self.launch_mai_with_webui(config)
+            elif choice == '5' and install_options.get('install_mongodb', False):
+                return self.launch_mai_with_mongodb(config)
+            elif choice == '6' and available_components >= 2:
+                return self.launch_full_stack(config)
+            else:
+                ui.print_error("无效选项或该组件未安装，请重新选择")
     
     def launch_mai_only(self, config: Dict[str, Any]) -> bool:
         """
@@ -154,6 +238,7 @@ class MaiLauncher:
             启动是否成功
         """
         try:
+            ui.print_info("🚀 启动模式：仅麦麦本体")
             version = config.get("version_path", "")
             mai_path = config.get("mai_path", "")
             
@@ -179,23 +264,8 @@ class MaiLauncher:
                     logger.error("run.bat文件不存在", path=run_bat_path)
                     return False
             else:
-                # 新版本启动逻辑
-                logger.info("检测到新版本，使用标准启动模式", version=version)
-                
-                # 启动适配器
-                adapter_path = config.get("adapter_path", "")
-                if adapter_path and adapter_path != "当前配置集的对象实例版本较低，无适配器":
-                    adapter_process = self.start_in_new_cmd(
-                        "python main.py",
-                        adapter_path,
-                        f"麦麦适配器 - {version}"
-                    )
-                    if adapter_process:
-                        ui.print_success("适配器启动成功！")
-                        logger.info("适配器启动成功", path=adapter_path)
-                        time.sleep(2)  # 等待适配器启动
-                    else:
-                        ui.print_warning("适配器启动失败")
+                # 新版本启动逻辑：仅启动麦麦本体
+                logger.info("检测到新版本，启动麦麦本体", version=version)
                 
                 # 启动麦麦本体
                 mai_process = self.start_in_new_cmd(
@@ -215,9 +285,9 @@ class MaiLauncher:
             logger.error("启动麦麦失败", error=str(e), config=config)
             return False
     
-    def launch_full_stack(self, config: Dict[str, Any]) -> bool:
+    def launch_mai_with_adapter(self, config: Dict[str, Any]) -> bool:
         """
-        启动完整技术栈（麦麦+适配器+NapCat+MongoDB）
+        启动麦麦 + 适配器
         
         Args:
             config: 配置字典
@@ -226,10 +296,67 @@ class MaiLauncher:
             启动是否成功
         """
         try:
+            ui.print_info("🚀 启动模式：麦麦本体 + 适配器")
             version = config.get("version_path", "")
-            ui.print_info("开始启动完整技术栈...")
+            mai_path = config.get("mai_path", "")
+            adapter_path = config.get("adapter_path", "")
             
-            # 检查并启动NapCat
+            if is_legacy_version(version):
+                ui.print_warning("旧版本无需适配器，将仅启动麦麦本体")
+                return self.launch_mai_only(config)
+            
+            # 启动适配器
+            if (adapter_path and 
+                adapter_path not in ["当前配置集的对象实例版本较低，无适配器", "跳过适配器安装"]):
+                adapter_process = self.start_in_new_cmd(
+                    "python main.py",
+                    adapter_path,
+                    f"麦麦适配器 - {version}"
+                )
+                if adapter_process:
+                    ui.print_success("适配器启动成功！")
+                    logger.info("适配器启动成功", path=adapter_path)
+                    time.sleep(2)  # 等待适配器启动
+                else:
+                    ui.print_error("适配器启动失败")
+                    return False
+            else:
+                ui.print_error("适配器路径无效")
+                return False
+            
+            # 启动麦麦本体
+            mai_process = self.start_in_new_cmd(
+                "python bot.py",
+                mai_path,
+                f"麦麦本体 - {version}"
+            )
+            if mai_process:
+                ui.print_success("麦麦启动成功！")
+                logger.info("麦麦本体启动成功", path=mai_path)
+                return True
+            else:
+                return False
+                
+        except Exception as e:
+            ui.print_error(f"启动失败：{str(e)}")
+            logger.error("启动麦麦+适配器失败", error=str(e), config=config)
+            return False
+    
+    def launch_mai_with_napcat(self, config: Dict[str, Any]) -> bool:
+        """
+        启动麦麦 + 适配器 + NapCat
+        
+        Args:
+            config: 配置字典
+            
+        Returns:
+            启动是否成功
+        """
+        try:
+            ui.print_info("🚀 启动模式：麦麦 + 适配器 + NapCat")
+            version = config.get("version_path", "")
+            
+            # 先启动NapCat
             napcat_running = check_process("NapCatWinBootMain.exe")
             if not napcat_running:
                 napcat_path = config.get("napcat_path", "")
@@ -243,51 +370,147 @@ class MaiLauncher:
                         logger.info("NapCat启动成功", path=napcat_path)
                         time.sleep(3)  # 等待NapCat启动
                     else:
-                        ui.print_warning("NapCat启动失败")
+                        ui.print_error("NapCat启动失败")
+                        return False
                 else:
-                    ui.print_warning("未配置NapCat路径或文件不存在，跳过启动")
-                    logger.warning("未配置NapCat路径或文件不存在")
+                    ui.print_error("NapCat路径无效或文件不存在")
+                    return False
             else:
                 ui.print_info("NapCat已经在运行")
                 logger.info("NapCat已经在运行")
             
-            # 检查并启动MongoDB（如果需要）
+            # 启动麦麦和适配器
+            return self.launch_mai_with_adapter(config)
+            
+        except Exception as e:
+            ui.print_error(f"启动失败：{str(e)}")
+            logger.error("启动麦麦+NapCat失败", error=str(e), config=config)
+            return False
+    
+    def launch_mai_with_webui(self, config: Dict[str, Any]) -> bool:
+        """
+        启动麦麦 + WebUI
+        
+        Args:
+            config: 配置字典
+            
+        Returns:
+            启动是否成功
+        """
+        try:
+            ui.print_info("🚀 启动模式：麦麦 + WebUI")
+            version = config.get("version_path", "")
+            webui_path = config.get("webui_path", "")
+            
+            # 启动WebUI
+            if webui_path and os.path.exists(webui_path):
+                # 检查是否有package.json（Node.js项目）
+                package_json = os.path.join(webui_path, "package.json")
+                if os.path.exists(package_json):
+                    webui_process = self.start_in_new_cmd(
+                        "npm start",
+                        webui_path,
+                        f"WebUI - {version}"
+                    )
+                else:
+                    # 尝试Python方式启动
+                    webui_process = self.start_in_new_cmd(
+                        "python app.py",
+                        webui_path,
+                        f"WebUI - {version}"
+                    )
+                
+                if webui_process:
+                    ui.print_success("WebUI启动成功！")
+                    logger.info("WebUI启动成功", path=webui_path)
+                    time.sleep(2)  # 等待WebUI启动
+                else:
+                    ui.print_error("WebUI启动失败")
+                    return False
+            else:
+                ui.print_error("WebUI路径无效或不存在")
+                return False
+            
+            # 启动麦麦本体
+            return self.launch_mai_only(config)
+            
+        except Exception as e:
+            ui.print_error(f"启动失败：{str(e)}")
+            logger.error("启动麦麦+WebUI失败", error=str(e), config=config)
+            return False
+    
+    def launch_mai_with_mongodb(self, config: Dict[str, Any]) -> bool:
+        """
+        启动麦麦 + MongoDB
+        
+        Args:
+            config: 配置字典
+            
+        Returns:
+            启动是否成功
+        """
+        try:
+            ui.print_info("🚀 启动模式：麦麦 + MongoDB")
+            version = config.get("version_path", "")
+            
+            # 启动MongoDB
+            if not self._start_mongodb(config):
+                ui.print_error("MongoDB启动失败")
+                return False
+            
+            # 启动麦麦本体
+            return self.launch_mai_only(config)
+            
+        except Exception as e:
+            ui.print_error(f"启动失败：{str(e)}")
+            logger.error("启动麦麦+MongoDB失败", error=str(e), config=config)
+            return False
+    
+    def _start_mongodb(self, config: Dict[str, Any]) -> bool:
+        """
+        启动MongoDB的内部方法
+        
+        Args:
+            config: 配置字典
+            
+        Returns:
+            启动是否成功
+        """
+        try:
+            version = config.get("version_path", "")
             mongodb_running = check_process("mongod.exe")
+            
             if not mongodb_running:
                 mongodb_path = config.get("mongodb_path", "")
                 if mongodb_path and os.path.exists(mongodb_path):
-                    # 尝试从配置的MongoDB路径启动
-                    try:
-                        # 查找mongod.exe
-                        mongod_exe = None
-                        for root, dirs, files in os.walk(mongodb_path):
-                            if "mongod.exe" in files:
-                                mongod_exe = os.path.join(root, "mongod.exe")
-                                break
+                    # 查找mongod.exe
+                    mongod_exe = None
+                    for root, dirs, files in os.walk(mongodb_path):
+                        if "mongod.exe" in files:
+                            mongod_exe = os.path.join(root, "mongod.exe")
+                            break
+                    
+                    if mongod_exe:
+                        # 创建数据目录
+                        data_dir = os.path.join(mongodb_path, "data")
+                        os.makedirs(data_dir, exist_ok=True)
                         
-                        if mongod_exe:
-                            # 创建数据目录
-                            data_dir = os.path.join(mongodb_path, "data")
-                            os.makedirs(data_dir, exist_ok=True)
-                            
-                            # 启动MongoDB
-                            mongodb_process = self.start_in_new_cmd(
-                                f'"{mongod_exe}" --dbpath "{data_dir}"',
-                                mongodb_path,
-                                f"MongoDB - {version}"
-                            )
-                            if mongodb_process:
-                                ui.print_success("MongoDB启动成功！")
-                                logger.info("MongoDB启动成功", path=mongod_exe)
-                                time.sleep(2)  # 等待MongoDB启动
-                            else:
-                                ui.print_warning("MongoDB启动失败")
+                        # 启动MongoDB
+                        mongodb_process = self.start_in_new_cmd(
+                            f'"{mongod_exe}" --dbpath "{data_dir}"',
+                            mongodb_path,
+                            f"MongoDB - {version}"
+                        )
+                        if mongodb_process:
+                            ui.print_success("MongoDB启动成功！")
+                            logger.info("MongoDB启动成功", path=mongod_exe)
+                            time.sleep(2)  # 等待MongoDB启动
+                            return True
                         else:
-                            ui.print_warning("在MongoDB路径中未找到mongod.exe")
-                            logger.warning("MongoDB可执行文件未找到", path=mongodb_path)
-                    except Exception as e:
-                        ui.print_warning(f"MongoDB启动失败：{str(e)}")
-                        logger.warning("MongoDB启动失败", error=str(e))
+                            return False
+                    else:
+                        ui.print_warning("在MongoDB路径中未找到mongod.exe")
+                        return False
                 else:
                     # 尝试启动系统服务
                     try:
@@ -301,20 +524,180 @@ class MaiLauncher:
                         )
                         ui.print_success("MongoDB服务启动成功！")
                         logger.info("MongoDB服务启动成功")
+                        return True
                     except subprocess.CalledProcessError as e:
                         ui.print_warning("MongoDB服务启动失败，请检查是否已安装MongoDB服务")
                         logger.warning("MongoDB服务启动失败", error=str(e))
+                        return False
             else:
                 ui.print_info("MongoDB已经在运行")
                 logger.info("MongoDB已经在运行")
-            
-            # 启动麦麦
-            ui.print_info("启动麦麦本体和适配器...")
-            return self.launch_mai_only(config)
-            
+                return True
+                
         except Exception as e:
-            ui.print_error(f"完整启动失败：{str(e)}")
-            logger.error("完整启动失败", error=str(e), config=config)
+            ui.print_error(f"MongoDB启动失败：{str(e)}")
+            logger.error("MongoDB启动失败", error=str(e))
+            return False
+    
+    def launch_full_stack(self, config: Dict[str, Any]) -> bool:
+        """
+        启动完整技术栈（所有已安装的组件）
+        
+        Args:
+            config: 配置字典
+            
+        Returns:
+            启动是否成功
+        """
+        try:
+            ui.print_info("🚀 启动模式：全栈启动（所有已安装组件）")
+            version = config.get("version_path", "")
+            install_options = config.get("install_options", {})
+            
+            success_count = 0
+            total_count = 0
+            
+            # 启动MongoDB（如果安装）
+            if install_options.get("install_mongodb", False):
+                total_count += 1
+                ui.print_info("启动MongoDB...")
+                if self._start_mongodb(config):
+                    success_count += 1
+                else:
+                    ui.print_warning("MongoDB启动失败，但继续启动其他组件")
+            
+            # 启动NapCat（如果安装）
+            if install_options.get("install_napcat", False):
+                total_count += 1
+                ui.print_info("启动NapCat...")
+                napcat_running = check_process("NapCatWinBootMain.exe")
+                if not napcat_running:
+                    napcat_path = config.get("napcat_path", "")
+                    if napcat_path and os.path.exists(napcat_path):
+                        napcat_process = self.start_executable_in_new_cmd(
+                            napcat_path,
+                            title=f"NapCatQQ - {version}"
+                        )
+                        if napcat_process:
+                            ui.print_success("NapCat启动成功！")
+                            logger.info("NapCat启动成功", path=napcat_path)
+                            time.sleep(3)  # 等待NapCat启动
+                            success_count += 1
+                        else:
+                            ui.print_warning("NapCat启动失败")
+                    else:
+                        ui.print_warning("NapCat路径无效，跳过启动")
+                else:
+                    ui.print_info("NapCat已经在运行")
+                    success_count += 1
+            
+            # 启动WebUI（如果安装）
+            if install_options.get("install_webui", False):
+                total_count += 1
+                ui.print_info("启动WebUI...")
+                webui_path = config.get("webui_path", "")
+                if webui_path and os.path.exists(webui_path):
+                    # 检查是否有package.json（Node.js项目）
+                    package_json = os.path.join(webui_path, "package.json")
+                    if os.path.exists(package_json):
+                        webui_process = self.start_in_new_cmd(
+                            "npm start",
+                            webui_path,
+                            f"WebUI - {version}"
+                        )
+                    else:
+                        # 尝试Python方式启动
+                        webui_process = self.start_in_new_cmd(
+                            "python app.py",
+                            webui_path,
+                            f"WebUI - {version}"
+                        )
+                    
+                    if webui_process:
+                        ui.print_success("WebUI启动成功！")
+                        logger.info("WebUI启动成功", path=webui_path)
+                        time.sleep(2)  # 等待WebUI启动
+                        success_count += 1
+                    else:
+                        ui.print_warning("WebUI启动失败")
+                else:
+                    ui.print_warning("WebUI路径无效，跳过启动")
+            
+            # 启动适配器（如果安装且不是旧版本）
+            if install_options.get("install_adapter", False) and not is_legacy_version(version):
+                total_count += 1
+                ui.print_info("启动适配器...")
+                adapter_path = config.get("adapter_path", "")
+                if (adapter_path and 
+                    adapter_path not in ["当前配置集的对象实例版本较低，无适配器", "跳过适配器安装"]):
+                    adapter_process = self.start_in_new_cmd(
+                        "python main.py",
+                        adapter_path,
+                        f"麦麦适配器 - {version}"
+                    )
+                    if adapter_process:
+                        ui.print_success("适配器启动成功！")
+                        logger.info("适配器启动成功", path=adapter_path)
+                        time.sleep(2)  # 等待适配器启动
+                        success_count += 1
+                    else:
+                        ui.print_warning("适配器启动失败")
+                else:
+                    ui.print_warning("适配器路径无效，跳过启动")
+            
+            # 最后启动麦麦本体（必须成功）
+            total_count += 1
+            ui.print_info("启动麦麦本体...")
+            mai_path = config.get("mai_path", "")
+            
+            if is_legacy_version(version):
+                # 旧版本启动逻辑
+                run_bat_path = os.path.join(mai_path, "run.bat")
+                if os.path.exists(run_bat_path):
+                    mai_process = self.start_in_new_cmd(
+                        f'"{run_bat_path}"',
+                        mai_path,
+                        f"麦麦本体 - {version}"
+                    )
+                    if mai_process:
+                        ui.print_success("麦麦本体启动成功！")
+                        success_count += 1
+                    else:
+                        ui.print_error("麦麦本体启动失败")
+                        return False
+                else:
+                    ui.print_error("未找到run.bat文件")
+                    return False
+            else:
+                # 新版本启动逻辑
+                mai_process = self.start_in_new_cmd(
+                    "python bot.py",
+                    mai_path,
+                    f"麦麦本体 - {version}"
+                )
+                if mai_process:
+                    ui.print_success("麦麦本体启动成功！")
+                    success_count += 1
+                else:
+                    ui.print_error("麦麦本体启动失败")
+                    return False
+            
+            # 显示启动结果
+            ui.console.print(f"\n[启动结果] {success_count}/{total_count} 组件启动成功", 
+                           style=ui.colors["success"] if success_count == total_count else ui.colors["warning"])
+            
+            if success_count == total_count:
+                ui.print_success("🎉 全栈启动完成！所有组件均启动成功")
+                logger.info("全栈启动成功", success=success_count, total=total_count)
+                return True
+            else:
+                ui.print_warning(f"⚠️ 部分组件启动失败，但核心功能正常")
+                logger.warning("部分组件启动失败", success=success_count, total=total_count)
+                return True  # 只要麦麦本体启动成功就算成功
+                
+        except Exception as e:
+            ui.print_error(f"全栈启动失败：{str(e)}")
+            logger.error("全栈启动失败", error=str(e), config=config)
             return False
     
     def stop_all_processes(self):
