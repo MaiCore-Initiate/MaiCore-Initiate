@@ -63,10 +63,6 @@ class ConfigManager:
                 else:
                     ui.print_error("版本号格式不正确，请重新输入（如0.7.0或classical）")
             # 版本号吐槽逻辑
-            if m:
-                major, minor, patch = map(int, m.groups())
-                if minor < 5:
-                    ui.print_warning("你这版本太老了，快升级！")
 
             # 获取安装选项
             install_options = self._get_install_options()
@@ -150,10 +146,7 @@ class ConfigManager:
                 else:
                     ui.print_error("版本号格式不正确，请重新输入（如0.7.0或classical）")
             # 版本号吐槽逻辑
-            if m:
-                major, minor, patch = map(int, m.groups())
-                if minor < 5:
-                    ui.print_warning("你这版本太老了，快升级！")
+
             
             # 配置麦麦路径
             mai_path = ui.get_input("请输入麦麦本体路径：")
@@ -424,16 +417,16 @@ class ConfigManager:
         ui.console.print("请选择需要安装的组件：")
         
         # 询问是否安装适配器
-        install_adapter = ui.confirm("是否安装适配器？(新版本通常需要)")
+        install_adapter = ui.confirm("是否安装了适配器？(0.6+需要)")
         
         # 询问是否安装NapCat
-        install_napcat = ui.confirm("是否安装NapCat？(QQ连接组件)")
+        install_napcat = ui.confirm("是否安装了NapCat？(QQ连接组件)")
         
         # 询问是否安装MongoDB
-        install_mongodb = ui.confirm("是否安装MongoDB？(数据库，旧版本建议安装)")
+        install_mongodb = ui.confirm("是否安装了MongoDB？(数据库)")
         
         # 询问是否安装WebUI
-        install_webui = ui.confirm("是否安装WebUI？(Web管理界面)")
+        install_webui = ui.confirm("是否安装了WebUI？(Web管理界面)")
         
         return {
             "install_adapter": install_adapter,
@@ -463,22 +456,22 @@ class ConfigManager:
         if is_legacy_version(version):
             ui.print_info("检测到旧版本，无需配置适配器")
             return "当前配置集的对象实例版本较低，无适配器"
-        
-        # 尝试自动检测适配器
-        adapter_path = auto_detector.detect_adapter_path(mai_path)
-        if adapter_path:
-            ui.print_success(f"自动检测到适配器：{adapter_path}")
+        else:
+            # 尝试自动检测适配器
+            adapter_path = auto_detector.detect_adapter_path(mai_path)
+            if adapter_path:
+                ui.print_success(f"自动检测到适配器：{adapter_path}")
+                return adapter_path
+            
+            # 自动检测失败，需要手动输入
+            ui.print_warning("未能自动检测到适配器，需要手动配置")
+            adapter_path = ui.get_input("请输入适配器路径：")
+            valid, msg = validate_path(adapter_path, check_file="main.py")
+            if not valid:
+                ui.print_error(f"适配器路径验证失败：{msg}")
+                return "适配器路径验证失败"
+            
             return adapter_path
-        
-        # 自动检测失败，需要手动输入
-        ui.print_warning("未能自动检测到适配器，需要手动配置")
-        adapter_path = ui.get_input("请输入适配器路径：")
-        valid, msg = validate_path(adapter_path, check_file="main.py")
-        if not valid:
-            ui.print_error(f"适配器路径验证失败：{msg}")
-            return "适配器路径验证失败"
-        
-        return adapter_path
     
     def _configure_adapter_manual(self, version: str, install_adapter: bool, mai_path: str) -> str:
         """
@@ -501,15 +494,15 @@ class ConfigManager:
         if is_legacy_version(version):
             ui.print_info("检测到旧版本，无需配置适配器")
             return "当前配置集的对象实例版本较低，无适配器"
-        
-        # 手动配置适配器
-        adapter_path = ui.get_input("请输入适配器路径：")
-        valid, msg = validate_path(adapter_path, check_file="main.py")
-        if not valid:
-            ui.print_error(f"适配器路径验证失败：{msg}")
-            return "适配器路径验证失败"
-        
-        return adapter_path
+        else:
+            # 手动配置适配器
+            adapter_path = ui.get_input("请输入适配器路径：")
+            valid, msg = validate_path(adapter_path, check_file="main.py")
+            if not valid:
+                ui.print_error(f"适配器路径验证失败：{msg}")
+                return "适配器路径验证失败"
+            
+            return adapter_path
     
     def _configure_napcat_auto(self, install_napcat: bool) -> str:
         """
@@ -575,14 +568,12 @@ class ConfigManager:
         from ..utils.common import is_legacy_version
         if is_legacy_version(version):
             ui.print_info("检测到旧版本，建议配置MongoDB")
-        else:
-            ui.print_info("新版本MongoDB为可选组件")
-        
-        # 尝试自动检测MongoDB（如果有相关检测功能）
-        # 这里可以添加自动检测逻辑
-        mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
-        
-        return mongodb_path or ""
+        else:        
+            # 尝试自动检测MongoDB（如果有相关检测功能）
+            # 这里可以添加自动检测逻辑
+            mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
+            
+            return mongodb_path or ""
     
     def _configure_mongodb_manual(self, version: str, install_mongodb: bool) -> str:
         """
@@ -603,10 +594,11 @@ class ConfigManager:
         from ..utils.common import is_legacy_version
         if is_legacy_version(version):
             ui.print_info("检测到旧版本，建议配置MongoDB")
+            mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
         else:
             ui.print_info("新版本MongoDB为可选组件")
+            return ""
         
-        mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
         
         return mongodb_path or ""
     
@@ -641,7 +633,7 @@ class ConfigManager:
             WebUI路径
         """
         if not install_webui:
-            ui.print_info("跳过WebUI安装")
+            ui.print_info("跳过WebUI配置")
             return ""
         
         webui_path = ui.get_input("请输入WebUI路径（可为空）：")

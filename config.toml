@@ -1,4 +1,4 @@
-current_config = "instance_114515"
+current_config = "default"
 
 [configurations.default]
 serial_number = "1"
@@ -8,50 +8,3 @@ nickname_path = "默认配置"
 mai_path = ""
 adapter_path = ""
 napcat_path = ""
-
-[configurations.instance_114514]
-serial_number = "114514"
-absolute_serial_number = 2
-version_path = "0.7.0-alpha"
-nickname_path = "114514"
-mai_path = "E:\\delveoper\\maimai-luncher\\test\\MaiBot"
-adapter_path = "v0.4.2适配器下载失败"
-napcat_path = "E:\\delveoper\\maimai-luncher\\test\\NapCat\\NapCat.34740.Shell\\NapCatWinBootMain.exe"
-venv_path = "E:\\delveoper\\maimai-luncher\\test\\MaiBot\\venv"
-mongodb_path = ""
-webui_path = "E:\\delveoper\\maimai-luncher\\test\\WebUI"
-
-[configurations.123]
-serial_number = "1919810"
-absolute_serial_number = 3
-version_path = "0.7.0"
-nickname_path = "114514"
-mai_path = "E:\\delveoper\\maimai-luncher\\test\\MaiBot"
-adapter_path = "跳过适配器安装"
-napcat_path = ""
-mongodb_path = ""
-webui_path = "E:\\delveoper\\maimai-luncher\\test\\WebUI"
-
-[configurations.instance_114515]
-serial_number = "114515"
-absolute_serial_number = 4
-version_path = "0.8.1-alpha"
-nickname_path = "TEST"
-mai_path = "E:\\delveoper\\maimai-luncher\\test\\WebUI\\MaiBot"
-adapter_path = "E:\\delveoper\\maimai-luncher\\test\\WebUI\\MaiBot\\adapter"
-napcat_path = "E:\\delveoper\\maimai-luncher\\test\\WebUI\\NapCat\\NapCat.34740.Shell\\NapCatWinBootMain.exe"
-venv_path = "E:\\delveoper\\maimai-luncher\\test\\WebUI\\MaiBot\\venv"
-mongodb_path = ""
-webui_path = ""
-
-[configurations.123.install_options]
-install_adapter = false
-install_napcat = false
-install_mongodb = false
-install_webui = true
-
-[configurations.instance_114515.install_options]
-install_adapter = true
-install_napcat = true
-install_mongodb = false
-install_webui = false

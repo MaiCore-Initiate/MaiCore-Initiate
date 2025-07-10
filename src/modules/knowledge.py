@@ -416,30 +416,145 @@ class KnowledgeBuilder:
         执行MongoDB到SQLite的数据迁移
         
         Args:
-            source_path: 源数据路径
-            target_path: 目标数据路径
+            source_path: 源数据路径 (已弃用，现通过配置选择)
+            target_path: 目标数据路径 (已弃用，现通过配置选择)
             
         Returns:
             迁移是否成功
         """
         try:
+            from ..core.config import config_manager
+            
             ui.print_info("开始数据库迁移（MongoDB → SQLite）")
+            ui.console.print("="*60, style=ui.colors["info"])
+            ui.console.print("📊 数据库迁移向导", style=ui.colors["primary"])
+            ui.console.print("="*60, style=ui.colors["info"])
             
-            if not source_path:
-                source_path = ui.get_input("请输入MongoDB数据路径：")
-            
-            if not target_path:
-                target_path = ui.get_input("请输入SQLite目标路径：")
-            
-            # 检查源路径
-            if not os.path.exists(source_path):
-                ui.print_error("源数据路径不存在")
+            # 获取所有配置
+            configurations = config_manager.get_all_configurations()
+            if not configurations:
+                ui.print_error("没有可用的配置，请先创建配置")
                 return False
             
+            # 第一步：选择源版本（MongoDB版本）
+            ui.console.print("\n📂 步骤1：选择源版本（包含MongoDB数据的旧版本）", style=ui.colors["info"])
+            ui.console.print("请选择一个包含MongoDB数据的配置（通常是0.7.0以下版本）：", style=ui.colors["warning"])
+            
+            # 显示配置列表
+            ui.show_instance_list(configurations)
+            
+            # 选择源配置
+            source_config = None
+            while not source_config:
+                choice = ui.get_input("请输入源版本的实例序列号（输入Q取消）：")
+                if choice.upper() == 'Q':
+                    ui.print_info("迁移已取消")
+                    return False
+                
+                # 根据序列号查找配置
+                for cfg in configurations.values():
+                    if (cfg.get("serial_number") == choice or 
+                        str(cfg.get("absolute_serial_number")) == choice):
+                        source_config = cfg
+                        break
+                
+                if not source_config:
+                    ui.print_error("未找到匹配的实例序列号！")
+            
+            source_version = source_config.get("version_path", "")
+            source_mai_path = source_config.get("mai_path", "")
+            ui.print_success(f"已选择源版本：{source_version}")
+            
+            # 第二步：选择目标版本（0.7.0+版本）
+            ui.console.print("\n🎯 步骤2：选择目标版本（0.7.0以上版本）", style=ui.colors["info"])
+            ui.console.print("请选择一个0.7.0以上版本的配置作为迁移目标：", style=ui.colors["warning"])
+            
+            # 过滤出0.7.0+版本
+            target_configs = {}
+            for name, cfg in configurations.items():
+                version = cfg.get("version_path", "")
+                if self._is_version_070_or_higher(version):
+                    target_configs[name] = cfg
+            
+            if not target_configs:
+                ui.print_error("没有找到0.7.0以上版本的配置，请先创建")
+                return False
+            
+            # 显示0.7.0+版本配置列表
+            ui.show_instance_list(target_configs)
+            
+            # 选择目标配置
+            target_config = None
+            while not target_config:
+                choice = ui.get_input("请输入目标版本的实例序列号（输入Q取消）：")
+                if choice.upper() == 'Q':
+                    ui.print_info("迁移已取消")
+                    return False
+                
+                # 根据序列号查找配置
+                for cfg in target_configs.values():
+                    if (cfg.get("serial_number") == choice or 
+                        str(cfg.get("absolute_serial_number")) == choice):
+                        target_config = cfg
+                        break
+                
+                if not target_config:
+                    ui.print_error("未找到匹配的实例序列号！")
+            
+            target_version = target_config.get("version_path", "")
+            target_mai_path = target_config.get("mai_path", "")
+            ui.print_success(f"已选择目标版本：{target_version}")
+            
+            # 第三步：启动MongoDB（源版本）
+            ui.console.print("\n🚀 步骤3：启动MongoDB服务", style=ui.colors["info"])
+            ui.console.print(f"即将为源版本 {source_version} 启动MongoDB服务", style=ui.colors["warning"])
+            
+            mongodb_path = source_config.get("mongodb_path", "")
+            if not mongodb_path or not os.path.exists(mongodb_path):
+                ui.print_error("源版本MongoDB路径未配置或不存在")
+                return False
+            
+            if not ui.confirm("是否启动MongoDB服务？"):
+                ui.print_info("迁移已取消")
+                return False
+            
+            # 启动MongoDB
+            ui.print_info("正在启动MongoDB服务...")
+            mongodb_cmd = f'start cmd /k "cd /d "{mongodb_path}\\bin" && mongod --dbpath ..\\data && pause"'
+            
+            subprocess.run(mongodb_cmd, shell=True, capture_output=False, text=True)
+            ui.print_success("MongoDB服务已在新窗口启动")
+            ui.console.print("请确保MongoDB服务正常运行后再继续", style=ui.colors["warning"])
+            
+            # 等待用户确认MongoDB启动
+            if not ui.confirm("MongoDB服务是否已正常启动？"):
+                ui.print_error("请确保MongoDB服务正常启动后再重试")
+                return False
+            
+            # 第四步：执行迁移脚本
+            ui.console.print("\n📋 步骤4：执行数据迁移脚本", style=ui.colors["info"])
+            
+            # 检查迁移脚本是否存在
+            script_path = os.path.join(target_mai_path, "scripts", "mongodb_to_sqlite.py")
+            migration_script = os.path.basename(script_path)
+
+            if not os.path.exists(script_path):
+                ui.print_error(f"迁移脚本不存在：{migration_script}")
+                ui.console.print(f"预期路径：{script_path}", style=ui.colors["warning"])
+                return False
+
+
+            # 显示迁移信息总览
+            ui.console.print("\n📊 迁移信息总览：", style=ui.colors["primary"])
+            ui.console.print(f"源版本：{source_version} (MongoDB)", style=ui.colors["info"])
+            ui.console.print(f"目标版本：{target_version} (SQLite)", style=ui.colors["info"])
+            ui.console.print(f"迁移脚本：{script_path}", style=ui.colors["info"])
+
             warnings = [
                 "此操作将把MongoDB数据迁移到SQLite",
+                "请确保MongoDB服务正在运行",
                 "请确保已备份重要数据",
-                "迁移过程中请勿关闭程序",
+                "迁移过程中请勿关闭任何窗口",
                 "迁移完成后请验证数据完整性"
             ]
             
@@ -451,20 +566,81 @@ class KnowledgeBuilder:
                 ui.print_info("迁移已取消")
                 return False
             
-            ui.print_info("正在执行数据迁移...")
-            logger.info("开始数据库迁移", source=source_path, target=target_path)
+            # 执行迁移脚本
+            ui.print_info("正在新窗口执行数据迁移脚本...")
+            logger.info("开始数据库迁移", 
+                       source_version=source_version, 
+                       target_version=target_version,
+                       script=migration_script)
             
-            # 这里应该实现具体的迁移逻辑
-            # 由于原始代码中没有具体实现，这里提供一个框架
-            ui.print_info("迁移功能待实现...")
-            logger.info("数据库迁移功能待实现")
+            # 构建迁移命令
+            if script_path == os.path.join(target_mai_path, migration_script):
+                # 脚本在目标版本根目录
+                cmd_command = f'start cmd /k "cd /d "{target_mai_path}" && python {migration_script} && echo. && echo 迁移完成！请检查结果 && pause"'
+            else:
+                # 脚本在其他位置
+                script_dir = os.path.dirname(script_path)
+                cmd_command = f'start cmd /k "cd /d "{script_dir}" && python "{migration_script}" && echo. && echo 迁移完成！请检查结果 && pause"'
             
-            ui.print_success("数据迁移完成！")
-            return True
+            # 执行命令
+            subprocess.run(cmd_command, shell=True, capture_output=False, text=True)
+            
+            ui.print_info("数据迁移脚本已在新窗口启动")
+            ui.console.print("请查看新打开的命令行窗口以确认迁移结果", style=ui.colors["warning"])
+            ui.console.print("迁移完成后，新窗口将显示确认信息", style=ui.colors["info"])
+            
+            logger.info("数据库迁移脚本已启动")
+            
+            # 等待用户确认迁移结果
+            ui.pause("迁移完成后，请按回车键继续...")
+            
+            if ui.confirm("数据迁移是否成功完成？"):
+                ui.print_success("数据迁移完成！")
+                ui.console.print("建议验证目标版本中的数据完整性", style=ui.colors["info"])
+                return True
+            else:
+                ui.print_warning("请检查迁移过程中的错误信息")
+                return False
             
         except Exception as e:
             ui.print_error(f"数据迁移失败：{str(e)}")
             logger.error("数据库迁移失败", error=str(e))
+            return False
+    
+    def _is_version_070_or_higher(self, version: str) -> bool:
+        """
+        检查版本是否为0.7.0或更高
+        
+        Args:
+            version: 版本号字符串
+            
+        Returns:
+            是否为0.7.0或更高版本
+        """
+        try:
+            if version.lower() in ('main', 'dev'):
+                return True
+            
+            # 解析版本号
+            version_number = version.split('-')[0]  # 去掉后缀如 -alpha
+            version_parts = version_number.split('.')
+            
+            major = int(version_parts[0])
+            minor = int(version_parts[1])
+            patch = int(version_parts[2]) if len(version_parts) > 2 else 0
+            
+            # 检查是否 >= 0.7.0
+            if major > 0:
+                return True
+            elif major == 0 and minor > 7:
+                return True
+            elif major == 0 and minor == 7 and patch >= 0:
+                return True
+            else:
+                return False
+                
+        except (ValueError, IndexError):
+            logger.warning("版本号解析失败", version=version)
             return False
 
     def _run_lpmm_script_internal(self, mai_path: str, script_name: str, description: str, 

@@ -77,8 +77,11 @@ class MongoDBInstaller:
         if not deployment_version:
             return False
         
+        # 检查版本号格式
+        if deployment_version.lower() in ("main",'dev'):
+            return False  # 开发版本不需要安装MongoDB
         # 特殊处理classical版本
-        if deployment_version.lower() == 'classical':
+        if deployment_version.lower() == 'classical' :
             return True
         
         # 比较版本号

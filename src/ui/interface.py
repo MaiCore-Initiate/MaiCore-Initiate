@@ -65,7 +65,7 @@ class UI:
         
         self.console.print("====>>功能类<<====")
         self.console.print(" [D] 知识库构建", style=self.colors["secondary"])
-        self.console.print(" [E] 知识库迁移（MongoDB → SQLite）", style="#28DCF0")
+        self.console.print(" [E] 数据库迁移（MongoDB → SQLite）", style="#28DCF0")
         
         self.console.print("====>>部署类<<====")
         self.console.print(" [F] 实例部署辅助系统", style=self.colors["error"])
@@ -83,17 +83,46 @@ class UI:
         """显示配置菜单"""
         self.clear_screen()
         panel = Panel(
-            "[🔧 配置模式]",
+            "[🔧 配置管理]",
             style=self.colors["warning"],
             title="配置管理"
         )
         self.console.print(panel)
         
+        self.console.print("====>>配置新建<<====")
         self.console.print(" [A] 自动检索麦麦", style=self.colors["success"])
         self.console.print(" [B] 手动配置", style=self.colors["success"])
-        self.console.print(" [C] 管理配置集(新建/删除)", style=self.colors["info"])
-        self.console.print(" [D] 检查现有配置", style=self.colors["info"])
+        
+        self.console.print("====>>配置管理<<====")
+        self.console.print(" [C] 配置管理（查看/编辑/删除配置）", style=self.colors["info"])
+        
+        self.console.print("====>>返回<<====")
         self.console.print(" [Q] 返回上级", style="#7E1DE4")
+    
+    def show_config_management_menu(self):
+        """显示统一的配置管理菜单"""
+        self.clear_screen()
+        panel = Panel(
+            "[🔧 配置管理]",
+            style=self.colors["info"],
+            title="配置管理"
+        )
+        self.console.print(panel)
+        
+        self.console.print("====>>配置操作<<====")
+        self.console.print(" [A] 查看配置详情", style=self.colors["info"])
+        self.console.print(" [B] 编辑配置", style=self.colors["warning"])
+        self.console.print(" [C] 验证配置", style=self.colors["success"])
+        self.console.print(" [D] 新建配置集", style=self.colors["success"])
+        self.console.print(" [E] 删除配置集", style=self.colors["error"])
+        
+        self.console.print("====>>返回<<====")
+        self.console.print(" [Q] 返回上级", style="#7E1DE4")
+    
+    def show_config_check_menu(self):
+        """显示配置检查菜单（保持兼容性）"""
+        # 重定向到统一的配置管理菜单
+        self.show_config_management_menu()
     
     def show_instance_list(self, configurations: Dict[str, Any]):
         """显示实例列表"""

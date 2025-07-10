@@ -66,38 +66,46 @@ class MaiMaiLauncher:
     
     def handle_config_menu(self):
         """处理配置菜单"""
-        while True:
-            ui.clear_screen()
-            ui.show_config_menu()
-            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "Q"])
-            
-            if choice == "Q":
-                break
-            elif choice == "A":
-                # 自动检索配置
-                name = ui.get_input("请输入新配置名称：")
-                if name:
-                    config_mgr.auto_detect_and_create(name)
-                    ui.pause()
-            elif choice == "B":
-                # 手动配置
-                name = ui.get_input("请输入新配置名称：")
-                if name:
-                    config_mgr.manual_create(name)
-                    ui.pause()
-            elif choice == "C":
-                # 管理配置集
-                self.handle_config_management()
-            elif choice == "D":
-                # 检查现有配置
-                self.handle_config_check()
+        self.handle_config_management()
     
     def handle_config_management(self):
         """处理配置管理"""
         while True:
-            ui.clear_screen()
-            ui.console.print("[🔧 配置集管理]", style=ui.colors["info"])
-            ui.console.print("================")
+            ui.show_config_menu()
+            choice = ui.get_choice("请选择操作", ["A", "B", "C", "Q"])
+            
+            if choice == "Q":
+                break
+            elif choice == "A":
+                # 自动检索麦麦
+                name = ui.get_input("请输入新配置集名称：")
+                if name:
+                    configurations = config_manager.get_all_configurations()
+                    if name not in configurations:
+                        config_mgr.auto_detect_and_create(name)
+                        ui.pause()
+                    else:
+                        ui.print_error("配置集名称已存在")
+                        ui.pause()
+            elif choice == "B":
+                # 手动配置
+                name = ui.get_input("请输入新配置集名称：")
+                if name:
+                    configurations = config_manager.get_all_configurations()
+                    if name not in configurations:
+                        config_mgr.manual_create(name)
+                        ui.pause()
+                    else:
+                        ui.print_error("配置集名称已存在")
+                        ui.pause()
+            elif choice == "C":
+                # 统一的配置管理
+                self.handle_unified_config_management()
+    
+    def handle_unified_config_management(self):
+        """处理统一的配置管理"""
+        while True:
+            ui.show_config_management_menu()
             
             # 显示所有配置
             configurations = config_manager.get_all_configurations()
@@ -108,21 +116,52 @@ class MaiMaiLauncher:
             
             ui.show_instance_list(configurations)
             
-            ui.console.print("\n[操作选项]")
-            ui.console.print(" [A] 新建配置集", style=ui.colors["success"])
-            ui.console.print(" [B] 删除配置集", style=ui.colors["error"])
-            ui.console.print(" [Q] 返回上级", style="#7E1DE4")
-            
-            choice = ui.get_choice("请选择操作", ["A", "B", "Q"])
+            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "E", "Q"])
             
             if choice == "Q":
                 break
-            elif choice == "A":
+            elif choice in ["A", "B", "C"]:
+                # 需要选择配置的操作
+                config = config_mgr.select_configuration()
+                if not config:
+                    continue
+                
+                # 找到配置名称
+                config_name = None
+                for name, cfg in configurations.items():
+                    if cfg == config:
+                        config_name = name
+                        break
+                
+                if not config_name:
+                    ui.print_error("无法找到配置名称")
+                    ui.pause()
+                    continue
+                
+                if choice == "A":
+                    # 查看配置详情
+                    ui.show_config_details(config_name, config)
+                    ui.pause()
+                elif choice == "B":
+                    # 编辑配置
+                    config_mgr.edit_configuration(config_name)
+                elif choice == "C":
+                    # 验证配置
+                    from src.modules.launcher import launcher
+                    errors = launcher.validate_configuration(config)
+                    if errors:
+                        ui.print_error("发现配置错误：")
+                        for error in errors:
+                            ui.console.print(f"  • {error}", style=ui.colors["error"])
+                    else:
+                        ui.print_success("配置验证通过")
+                    ui.pause()
+            elif choice == "D":
                 # 新建配置集
                 name = ui.get_input("请输入新配置集名称：")
                 if name and name not in configurations:
-                    method = ui.get_choice("选择配置方式", ["A", "B"])
-                    if method == "A":
+                    method_choice = ui.get_choice("选择配置方式：[A] 自动检索 [B] 手动配置", ["A", "B"])
+                    if method_choice == "A":
                         config_mgr.auto_detect_and_create(name)
                     else:
                         config_mgr.manual_create(name)
@@ -130,34 +169,13 @@ class MaiMaiLauncher:
                 elif name in configurations:
                     ui.print_error("配置集名称已存在")
                     ui.pause()
-            elif choice == "B":
+            elif choice == "E":
                 # 删除配置集
                 serial_input = ui.get_input("请输入要删除的用户序列号（多个用英文逗号分隔）：")
                 if serial_input:
                     serials = [s.strip() for s in serial_input.split(',')]
                     config_mgr.delete_configurations(serials)
                     ui.pause()
-    
-    def handle_config_check(self):
-        """处理配置检查"""
-        ui.clear_screen()
-        config = config_mgr.select_configuration()
-        if not config:
-            return
-        
-        # 找到配置名称
-        configurations = config_manager.get_all_configurations()
-        config_name = None
-        for name, cfg in configurations.items():
-            if cfg == config:
-                config_name = name
-                break
-        
-        if config_name:
-            config_mgr.edit_configuration(config_name)
-        else:
-            ui.print_error("无法找到配置名称")
-            ui.pause()
     
     def handle_knowledge_menu(self):
         """处理知识库菜单"""
@@ -289,7 +307,7 @@ class MaiMaiLauncher:
             ui.console.print(" [Q] 返回主菜单", style="#7E1DE4")
             
             while True:
-                choice = ui.get_input("请选择操作：").upper()
+                choice = ui.get_input("请选择操作").upper()
                 
                 if choice == "Q":
                     break
@@ -325,7 +343,7 @@ class MaiMaiLauncher:
             
             while self.running:
                 ui.show_main_menu()
-                choice = ui.get_input("请输入选项：").upper()
+                choice = ui.get_input("请输入选项").upper()
                 
                 logger.debug("用户选择", choice=choice)
                 

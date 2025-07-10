@@ -3421,7 +3421,7 @@ def main():
     while True:
         clear_screen()
         print_header()
-        choice = input("请输入选项：").upper()
+        choice = input("请输入选项:").upper()
 
         if choice == "Q":
             break
