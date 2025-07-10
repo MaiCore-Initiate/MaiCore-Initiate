@@ -1099,8 +1099,9 @@ pause
         
         # 根据版本智能推荐组件
         version_name = selected_version.get("name", "").lower()
-        from ..utils.common import is_legacy_version
-        is_legacy = is_legacy_version(version_name)
+        from ..utils.version_detector import get_version_requirements
+        version_reqs = get_version_requirements(version_name)
+        is_legacy = version_reqs["is_legacy"]
         
         # 显示版本信息和建议
         ui.console.print(f"选择的版本：{selected_version['display_name']}")
@@ -1109,7 +1110,7 @@ pause
         if is_legacy:
             ui.print_info("旧版本建议配置：MaiBot主体 + MongoDB")
         else:
-            ui.print_info("新版本建议配置：MaiBot + 适配器 + NapCat + mongodb(0.7-)")
+            ui.print_info("新版本建议配置：MaiBot + 适配器 + NapCat + MongoDB(0.7-)")
         
         ui.console.print()
         
@@ -1136,12 +1137,14 @@ pause
                 ui.print_info("已跳过NapCat下载")
                 install_napcat = False
         
-        # 询问是否需要安装MongoDB - 集成检查逻辑
+        # 询问是否需要安装MongoDB - 修正逻辑：0.7以下版本需要
         install_mongodb = False
         mongodb_path = ""
-        if is_legacy:
-            # 旧版本需要检查是否安装MongoDB
-            if ui.confirm("是否需要安装MongoDB？（数据库，旧版本建议安装）"):
+        needs_mongo = version_reqs["needs_mongodb"]
+        
+        if needs_mongo:
+            # 0.7以下版本需要检查是否安装MongoDB
+            if ui.confirm("是否需要安装MongoDB？（数据库，0.7以下版本建议安装）"):
                 ui.print_info("正在检查MongoDB安装状态...")
                 from ..modules.mongodb_installer import mongodb_installer
                 try:
@@ -1161,8 +1164,8 @@ pause
                     ui.print_error(f"MongoDB检查异常: {str(e)}")
                     install_mongodb = False
         else:
-            # 新版本默认不需要MongoDB
-            ui.print_info("新版本无需MongoDB，已自动跳过")
+            # 0.7及以上版本默认不需要MongoDB
+            ui.print_info("0.7及以上版本无需MongoDB，已自动跳过")
 
         # 询问是否需要安装WebUI
         install_webui = ui.confirm("是否需要安装WebUI？（Web管理界面）")
@@ -1407,63 +1410,31 @@ pause
                     ui.print_info(f"发现已存在的适配器：{path}")
                     return path
             
-            # 解析版本号并决定适配器
-            version_clean = version.lower().strip()
+            # 使用新的版本检测模块
+            from ..utils.version_detector import get_version_requirements
+            version_reqs = get_version_requirements(version)
             
-            # 处理分支版本 - 优先匹配分支名称，避免被当作数字版本号解析
-            # 支持 "main", "dev", "main (分支)", "dev (分支)" 等格式
-            if "main" in version_clean:
-                ui.print_info(f"检测到main分支版本：{version}")
+            ui.print_info(f"版本分析结果：")
+            ui.print_info(f"  版本号：{version}")
+            ui.print_info(f"  是否旧版本：{version_reqs['is_legacy']}")
+            ui.print_info(f"  需要适配器：{version_reqs['needs_adapter']}")
+            ui.print_info(f"  适配器版本：{version_reqs['adapter_version']}")
+            
+            # 检查是否需要适配器
+            if not version_reqs["needs_adapter"]:
+                return "无需适配器"
+            
+            adapter_version = version_reqs["adapter_version"]
+            
+            # 根据适配器版本下载
+            if adapter_version in ["main", "dev"]:
+                return self._download_branch_adapter(adapter_version, maibot_path)
+            elif adapter_version == "未知版本":
+                ui.print_warning("无法确定适配器版本，使用main分支")
                 return self._download_branch_adapter("main", maibot_path)
-            elif "dev" in version_clean:
-                ui.print_info(f"检测到dev分支版本：{version}")
-                return self._download_branch_adapter("dev", maibot_path)
-            
-            # 处理数字版本号（如 "0.8.1", "v0.8.1" 等）
-            # 移除可能的前缀和后缀
-            if version_clean.startswith("v"):
-                version_clean = version_clean[1:]
-            
-            # 移除可能的括号和说明文字（如 "0.8.1 (release)" -> "0.8.1"）
-            version_clean = re.sub(r'\s*\([^)]*\)', '', version_clean).strip()
-            
-            # 分离版本号和可能的后缀（如 -alpha, -beta）
-            version_parts = version_clean.split('-')[0].split('.')
-            
-            # 验证是否为有效的数字版本号
-            if not version_parts or not version_parts[0].isdigit():
-                ui.print_warning(f"无法识别版本格式: {version} (不是有效的数字版本号)")
-                return "版本格式无法识别"
-            
-            try:
-                # 解析主版本号和次版本号
-                major = int(version_parts[0]) if len(version_parts) > 0 and version_parts[0].isdigit() else 0
-                minor = int(version_parts[1]) if len(version_parts) > 1 and version_parts[1].isdigit() else 0
-                patch = int(version_parts[2]) if len(version_parts) > 2 and version_parts[2].isdigit() else 0
-                
-                ui.print_info(f"解析版本号：{major}.{minor}.{patch}")
-                
-                # 版本判断逻辑
-                if major == 0:
-                    if minor < 6:
-                        # 0.5.x 及以下版本不需要适配器
-                        return "无需适配器"
-                    elif minor == 6:
-                        # 0.6.x 版本使用 0.2.3 适配器
-                        return self._download_specific_adapter_version("0.2.3", maibot_path)
-                    elif minor in [7, 8]:
-                        # 0.7.x 和 0.8.x 版本使用 0.4.2 适配器
-                        if patch in [1, 2]:
-                            return self._download_branch_adapter("main", maibot_path)
-                        else:
-                            return self._download_specific_adapter_version("0.4.2", maibot_path)
-                else:
-                    ui.print_warning(f"无法识别版本格式: {version}")
-                    return "版本格式无法识别"
-                    
-            except (ValueError, IndexError) as e:
-                ui.print_warning(f"版本号解析失败: {version} - {str(e)}")
-                return "版本号解析失败"
+            else:
+                # 具体版本号，如 "0.2.3", "0.4.2"
+                return self._download_specific_adapter_version(adapter_version, maibot_path)
                 
         except Exception as e:
             ui.print_error(f"适配器处理失败：{str(e)}")

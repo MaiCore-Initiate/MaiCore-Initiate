@@ -348,7 +348,7 @@ class KnowledgeBuilder:
             return False
         
         # 检查版本
-        from ..utils.common import is_legacy_version
+        from ..utils.version_detector import is_legacy_version
         if not is_legacy_version(version):
             ui.print_error("此功能仅适用于0.6.0-alpha及更早版本")
             return False

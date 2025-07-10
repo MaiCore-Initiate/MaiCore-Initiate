@@ -129,46 +129,6 @@ def check_process(process_name: str) -> bool:
         return False
 
 
-def is_legacy_version(version: str) -> bool:
-    """
-    检测是否为旧版本（小于0.6.0或为classical）
-    
-    Args:
-        version: 版本号
-        
-    Returns:
-        是否为旧版本
-    """
-    if not version:
-        return False
-    
-    version = version.lower().strip()
-    
-    # 检查是否为classical版本
-    if version == "classical":
-        return True
-    
-    # 检查是否小于0.6.0
-    try:
-        # 提取主版本号（去掉-fix等后缀）
-        main_version = version.split('-')[0]
-        version_parts = main_version.split('.')
-        
-        # 确保至少有两个版本号部分
-        if len(version_parts) >= 2:
-            major = int(version_parts[0])
-            minor = int(version_parts[1])
-            
-            # 检查是否小于0.6.0
-            if major < 0 or (major == 0 and minor < 6):
-                return True
-    except (ValueError, IndexError):
-        logger.warning("版本号格式无法解析，默认为新版本", version=version)
-        return False
-    
-    return False
-
-
 def get_input_with_validation(prompt: str, validator=None, allow_empty: bool = False, is_exe: bool = False) -> str:
     """
     获取并验证用户输入

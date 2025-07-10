@@ -7,7 +7,8 @@ import subprocess
 import time
 import structlog
 from typing import Dict, Any, Optional, List
-from ..utils.common import check_process, is_legacy_version, validate_path
+from ..utils.common import check_process, validate_path
+from ..utils.version_detector import is_legacy_version
 from ..ui.interface import ui
 
 logger = structlog.get_logger(__name__)

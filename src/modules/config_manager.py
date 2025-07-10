@@ -452,7 +452,7 @@ class ConfigManager:
             return "跳过适配器安装"
         
         # 检查是否为旧版本
-        from ..utils.common import is_legacy_version
+        from ..utils.version_detector import is_legacy_version
         if is_legacy_version(version):
             ui.print_info("检测到旧版本，无需配置适配器")
             return "当前配置集的对象实例版本较低，无适配器"
@@ -490,7 +490,7 @@ class ConfigManager:
             return "跳过适配器安装"
         
         # 检查是否为旧版本
-        from ..utils.common import is_legacy_version
+        from ..utils.version_detector import is_legacy_version
         if is_legacy_version(version):
             ui.print_info("检测到旧版本，无需配置适配器")
             return "当前配置集的对象实例版本较低，无适配器"
@@ -565,9 +565,9 @@ class ConfigManager:
             return ""
         
         # 检查版本建议
-        from ..utils.common import is_legacy_version
-        if is_legacy_version(version):
-            ui.print_info("检测到旧版本，建议配置MongoDB")
+        from ..utils.version_detector import needs_mongodb
+        if needs_mongodb(version):
+            ui.print_info("检测到0.7以下版本，建议配置MongoDB")
         else:        
             # 尝试自动检测MongoDB（如果有相关检测功能）
             # 这里可以添加自动检测逻辑
@@ -591,12 +591,12 @@ class ConfigManager:
             return ""
         
         # 检查版本建议
-        from ..utils.common import is_legacy_version
-        if is_legacy_version(version):
-            ui.print_info("检测到旧版本，建议配置MongoDB")
+        from ..utils.version_detector import needs_mongodb
+        if needs_mongodb(version):
+            ui.print_info("检测到0.7以下版本，建议配置MongoDB")
             mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
         else:
-            ui.print_info("新版本MongoDB为可选组件")
+            ui.print_info("0.7及以上版本MongoDB为可选组件")
             return ""
         
         
