@@ -1025,21 +1025,12 @@ pause
             if deploy_config.get("install_napcat"):
                 adapter_path = self._install_adapter_if_needed(deploy_config, maibot_path)
 
-            # 第二点五步：检查并安装MongoDB（如果需要）
-            mongodb_path = ""
-            success, mongodb_path = self._check_and_install_mongodb(deploy_config, maibot_path)
-            if not success:
-                ui.print_warning("MongoDB安装检查失败，但部署将继续...")
-            
-            # 将MongoDB路径保存到部署配置中
-            deploy_config["mongodb_path"] = mongodb_path
-
             # 第三步：安装NapCat（如果选择了）
             napcat_path = ""
             if deploy_config.get("install_napcat") and deploy_config.get("napcat_version"):
                 napcat_path = self._install_napcat(deploy_config, maibot_path)
             
-            # 第三点五步：检查并安装WebUI（如果选择了）
+            # 第四步：检查并安装WebUI（如果选择了）
             webui_path = ""
             if deploy_config.get("install_webui"):
                 success, webui_path = self._check_and_install_webui(deploy_config, maibot_path)
@@ -1049,19 +1040,20 @@ pause
             # 将WebUI路径保存到部署配置中
             deploy_config["webui_path"] = webui_path
             
-            # 第四步：设置Python环境
+            # 第五步：设置Python环境
             venv_path = self._setup_python_environment(maibot_path, adapter_path)
 
-            # 第四点二步：如果安装了WebUI且有虚拟环境，重新安装WebUI后端依赖
+            # 第五点二步：如果安装了WebUI且有虚拟环境，重新安装WebUI后端依赖
             if webui_path and venv_path:
                 ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
                 webui_installer.install_webui_backend_dependencies(webui_path, venv_path)
 
-            # 第四点五步：配置文件设置
+            # 第五点五步：配置文件设置
+            mongodb_path = deploy_config.get("mongodb_path", "")  # 从配置中获取MongoDB路径
             if not self._setup_config_files(deploy_config, maibot_path, adapter_path, napcat_path, mongodb_path, webui_path):
                 ui.print_warning("配置文件设置失败，但部署将继续...")
 
-            # 第五步：创建配置和启动脚本
+            # 第六步：创建配置和启动脚本
             if not self._finalize_deployment(deploy_config, maibot_path, adapter_path, napcat_path, venv_path, webui_path):
                 return False
 
@@ -1144,11 +1136,33 @@ pause
                 ui.print_info("已跳过NapCat下载")
                 install_napcat = False
         
-        # 询问是否需要安装MongoDB
+        # 询问是否需要安装MongoDB - 集成检查逻辑
+        install_mongodb = False
+        mongodb_path = ""
         if is_legacy:
-            install_mongodb = ui.confirm("是否需要安装MongoDB？（数据库，旧版本建议安装）")
+            # 旧版本需要检查是否安装MongoDB
+            if ui.confirm("是否需要安装MongoDB？（数据库，旧版本建议安装）"):
+                ui.print_info("正在检查MongoDB安装状态...")
+                from ..modules.mongodb_installer import mongodb_installer
+                try:
+                    # 直接在这里进行MongoDB检查和安装
+                    success, mongodb_path = mongodb_installer.check_and_install_mongodb(
+                        selected_version.get("name", ""), "", force_install=False
+                    )
+                    if success:
+                        install_mongodb = True
+                        ui.print_success("✅ MongoDB检查完成")
+                        if mongodb_path:
+                            ui.print_info(f"MongoDB路径: {mongodb_path}")
+                    else:
+                        ui.print_warning("⚠️ MongoDB检查失败，将跳过MongoDB安装")
+                        install_mongodb = False
+                except Exception as e:
+                    ui.print_error(f"MongoDB检查异常: {str(e)}")
+                    install_mongodb = False
         else:
-            install_mongodb = False
+            # 新版本默认不需要MongoDB
+            ui.print_info("新版本无需MongoDB，已自动跳过")
 
         # 询问是否需要安装WebUI
         install_webui = ui.confirm("是否需要安装WebUI？（Web管理界面）")
@@ -1194,6 +1208,7 @@ pause
             "install_adapter": install_adapter,
             "install_napcat": install_napcat,
             "install_mongodb": install_mongodb,
+            "mongodb_path": mongodb_path,  # 直接保存MongoDB路径
             "install_webui": install_webui
         }
     
@@ -1226,8 +1241,10 @@ pause
             ui.console.print(f"  └─ NapCat版本：{deploy_config['napcat_version']['display_name']}")
         
         # MongoDB
-        mongodb_status = "✅ 安装" if deploy_config.get("install_mongodb") else "❌ 跳过"
+        mongodb_status = "✅ 已检查" if deploy_config.get("install_mongodb") else "❌ 跳过"
         ui.console.print(f"MongoDB：{mongodb_status}")
+        if deploy_config.get("mongodb_path"):
+            ui.console.print(f"  └─ MongoDB路径：{deploy_config['mongodb_path']}")
         
         # WebUI
         webui_status = "✅ 安装" if deploy_config.get("install_webui") else "❌ 跳过"
@@ -2200,36 +2217,6 @@ pause
             ui.print_error(f"删除失败：{str(e)}")
             logger.error("实例删除失败", error=str(e))
             return False
-    
-    def _check_and_install_mongodb(self, deploy_config: Dict, maibot_path: str) -> Tuple[bool, str]:
-        """检查版本并安装MongoDB（如果需要）"""
-        try:
-            ui.console.print("\n[🍃 MongoDB检查]", style=ui.colors["primary"])
-            
-            # 获取部署版本
-            selected_version = deploy_config.get("selected_version", {})
-            version_name = selected_version.get("name", "")
-            
-            logger.info("开始MongoDB检查", version=version_name, maibot_path=maibot_path)
-            
-            # 调用MongoDB安装器进行检查和安装，传递麦麦安装路径
-            success, mongodb_path = mongodb_installer.check_and_install_mongodb(
-                version_name, maibot_path, force_install=False
-            )
-            
-            if success:
-                ui.print_success("✅ MongoDB检查完成")
-                if mongodb_path:
-                    ui.print_info(f"MongoDB安装路径: {mongodb_path}")
-            else:
-                ui.print_warning("⚠️ MongoDB检查出现问题")
-            
-            return success, mongodb_path
-            
-        except Exception as e:
-            ui.print_error(f"MongoDB检查失败：{str(e)}")
-            logger.error("MongoDB检查失败", error=str(e))
-            return False, ""
     
     def _check_and_install_webui(self, deploy_config: Dict, maibot_path: str, venv_path: str = "") -> Tuple[bool, str]:
         """检查并安装WebUI（如果需要）"""

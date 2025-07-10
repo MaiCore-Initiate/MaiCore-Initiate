@@ -438,10 +438,24 @@ class KnowledgeBuilder:
             
             # 第一步：选择源版本（MongoDB版本）
             ui.console.print("\n📂 步骤1：选择源版本（包含MongoDB数据的旧版本）", style=ui.colors["info"])
-            ui.console.print("请选择一个包含MongoDB数据的配置（通常是0.7.0以下版本）：", style=ui.colors["warning"])
+            ui.console.print("请选择一个包含MongoDB数据的配置（0.7.0以下版本）：", style=ui.colors["warning"])
             
-            # 显示配置列表
-            ui.show_instance_list(configurations)
+            # 过滤出0.7.0以下版本
+            source_configs = {}
+            for name, cfg in configurations.items():
+                version = cfg.get("version_path", "")
+                if self._is_version_below_070(version):
+                    source_configs[name] = cfg
+            
+            if not source_configs:
+                ui.print_error("没有找到0.7.0以下版本的配置")
+                ui.console.print("MongoDB迁移需要至少有一个0.7.0以下版本的配置作为数据源", style=ui.colors["warning"])
+                ui.console.print("0.7.0以下版本通常使用MongoDB存储数据", style=ui.colors["info"])
+                ui.console.print("如果您没有旧版本的配置，请先创建或导入", style=ui.colors["info"])
+                return False
+            
+            # 显示可用的源版本配置列表
+            ui.show_instance_list(source_configs)
             
             # 选择源配置
             source_config = None
@@ -451,8 +465,8 @@ class KnowledgeBuilder:
                     ui.print_info("迁移已取消")
                     return False
                 
-                # 根据序列号查找配置
-                for cfg in configurations.values():
+                # 根据序列号查找配置（只在0.7.0以下版本中查找）
+                for cfg in source_configs.values():
                     if (cfg.get("serial_number") == choice or 
                         str(cfg.get("absolute_serial_number")) == choice):
                         source_config = cfg
@@ -468,6 +482,7 @@ class KnowledgeBuilder:
             # 第二步：选择目标版本（0.7.0+版本）
             ui.console.print("\n🎯 步骤2：选择目标版本（0.7.0以上版本）", style=ui.colors["info"])
             ui.console.print("请选择一个0.7.0以上版本的配置作为迁移目标：", style=ui.colors["warning"])
+            ui.console.print("0.7.0以上版本使用SQLite存储数据", style=ui.colors["info"])
             
             # 过滤出0.7.0+版本
             target_configs = {}
@@ -478,6 +493,8 @@ class KnowledgeBuilder:
             
             if not target_configs:
                 ui.print_error("没有找到0.7.0以上版本的配置，请先创建")
+                ui.console.print("迁移需要至少有一个0.7.0以上版本的配置作为目标", style=ui.colors["warning"])
+                ui.console.print("您可以通过部署功能创建0.7.0以上版本的实例", style=ui.colors["info"])
                 return False
             
             # 显示0.7.0+版本配置列表
@@ -520,7 +537,7 @@ class KnowledgeBuilder:
             
             # 启动MongoDB
             ui.print_info("正在启动MongoDB服务...")
-            mongodb_cmd = f'start cmd /k "cd /d "{mongodb_path}\\bin" && mongod --dbpath ..\\data && pause"'
+            mongodb_cmd = f'start cmd /k "cd /d "{mongodb_path}\\mongodb-win32-x64_windows-windows-8.2.0-alpha-2686-g3770008\\bin" && mongod --dbpath ..\\data && pause"'
             
             subprocess.run(mongodb_cmd, shell=True, capture_output=False, text=True)
             ui.print_success("MongoDB服务已在新窗口启动")
@@ -642,6 +659,43 @@ class KnowledgeBuilder:
         except (ValueError, IndexError):
             logger.warning("版本号解析失败", version=version)
             return False
+
+    def _is_version_below_070(self, version: str) -> bool:
+        """
+        检查版本是否低于0.7.0
+        
+        Args:
+            version: 版本号字符串
+            
+        Returns:
+            是否低于0.7.0版本
+        """
+        try:
+            # 分支版本的特殊处理
+            if version.lower() in ('main', 'dev'):
+                # main和dev分支通常是最新版本，不是低于0.7.0的版本
+                return False
+            
+            # 解析版本号
+            version_number = version.split('-')[0]  # 去掉后缀如 -alpha
+            version_parts = version_number.split('.')
+            
+            major = int(version_parts[0])
+            minor = int(version_parts[1])
+            patch = int(version_parts[2]) if len(version_parts) > 2 else 0
+            
+            # 检查是否 < 0.7.0
+            if major > 0:
+                return False
+            elif major == 0 and minor >= 7:
+                return False
+            else:
+                return True  # major == 0 and minor < 7
+                
+        except (ValueError, IndexError):
+            logger.warning("版本号解析失败，假设为旧版本", version=version)
+            # 解析失败时，保守假设为旧版本
+            return True
 
     def _run_lpmm_script_internal(self, mai_path: str, script_name: str, description: str, 
                                  skip_confirm: bool = False) -> bool:
