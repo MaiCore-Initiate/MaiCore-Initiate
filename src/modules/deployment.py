@@ -1054,7 +1054,7 @@ pause
 
             # 第四点二步：如果安装了WebUI且有虚拟环境，重新安装WebUI后端依赖
             if webui_path and venv_path:
-                ui.console.print("\n[🔄 在虚拟环境中重新安装WebUI后端依赖]", style=ui.colors["primary"])
+                ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
                 webui_installer.install_webui_backend_dependencies(webui_path, venv_path)
 
             # 第四点五步：配置文件设置
@@ -1477,17 +1477,40 @@ pause
                 ui.print_warning("适配器解压失败")
                 return "适配器解压失败"
             
-            # 查找解压后的目录并复制
+            # 查找解压后的目录并复制到正确位置
             extracted_dirs = [d for d in os.listdir(temp_extract) if os.path.isdir(os.path.join(temp_extract, d))]
+            adapter_extract_path = os.path.join(maibot_path, "adapter")
+            
             if extracted_dirs:
+                # 找到解压后的根目录
                 source_adapter_dir = os.path.join(temp_extract, extracted_dirs[0])
-                adapter_extract_path = os.path.join(maibot_path, "adapter")
+                
+                # 确保目标目录不存在，然后复制
+                if os.path.exists(adapter_extract_path):
+                    shutil.rmtree(adapter_extract_path)
                 shutil.copytree(source_adapter_dir, adapter_extract_path)
+                
                 ui.print_success(f"{adapter_branch}分支适配器安装完成")
+                logger.info("分支适配器安装成功", branch=adapter_branch, path=adapter_extract_path)
                 return adapter_extract_path
             else:
-                ui.print_warning("适配器目录结构异常")
-                return "适配器目录结构异常"
+                # 如果没有找到子目录，尝试直接移动整个解压目录的内容
+                if os.path.exists(adapter_extract_path):
+                    shutil.rmtree(adapter_extract_path)
+                os.makedirs(adapter_extract_path)
+                
+                # 移动所有内容到目标目录
+                for item in os.listdir(temp_extract):
+                    src = os.path.join(temp_extract, item)
+                    dst = os.path.join(adapter_extract_path, item)
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dst)
+                    else:
+                        shutil.copy2(src, dst)
+                
+                ui.print_success(f"{adapter_branch}分支适配器安装完成")
+                logger.info("分支适配器安装成功", branch=adapter_branch, path=adapter_extract_path)
+                return adapter_extract_path
     
     def _download_specific_adapter_version(self, adapter_version: str, maibot_path: str) -> str:
         """下载特定版本的适配器"""
@@ -1504,13 +1527,47 @@ pause
                 ui.print_warning(f"v{adapter_version}适配器下载失败")
                 return f"v{adapter_version}适配器下载失败"
             
-            adapter_extract_path = os.path.join(maibot_path, "adapter")
-            if self.extract_archive(adapter_zip, adapter_extract_path):
-                ui.print_success(f"v{adapter_version}适配器安装完成")
-                return adapter_extract_path
-            else:
+            # 解压到临时目录
+            temp_extract = os.path.join(temp_dir, f"adapter_extract_v{adapter_version}")
+            if not self.extract_archive(adapter_zip, temp_extract):
                 ui.print_warning("适配器解压失败")
                 return "适配器解压失败"
+            
+            # 查找解压后的目录并复制到正确位置
+            extracted_dirs = [d for d in os.listdir(temp_extract) if os.path.isdir(os.path.join(temp_extract, d))]
+            adapter_extract_path = os.path.join(maibot_path, "adapter")
+            
+            if extracted_dirs:
+                # 找到解压后的根目录（通常是 MaiBot-Napcat-Adapter-版本号）
+                source_adapter_dir = os.path.join(temp_extract, extracted_dirs[0])
+                
+                # 确保目标目录不存在，然后复制
+                if os.path.exists(adapter_extract_path):
+                    shutil.rmtree(adapter_extract_path)
+                shutil.copytree(source_adapter_dir, adapter_extract_path)
+                
+                ui.print_success(f"v{adapter_version}适配器安装完成")
+                logger.info("适配器安装成功", version=adapter_version, path=adapter_extract_path)
+                return adapter_extract_path
+            else:
+                # 如果没有找到子目录，可能是直接解压的文件
+                # 尝试直接移动整个解压目录的内容
+                if os.path.exists(adapter_extract_path):
+                    shutil.rmtree(adapter_extract_path)
+                os.makedirs(adapter_extract_path)
+                
+                # 移动所有内容到目标目录
+                for item in os.listdir(temp_extract):
+                    src = os.path.join(temp_extract, item)
+                    dst = os.path.join(adapter_extract_path, item)
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dst)
+                    else:
+                        shutil.copy2(src, dst)
+                
+                ui.print_success(f"v{adapter_version}适配器安装完成")
+                logger.info("适配器安装成功", version=adapter_version, path=adapter_extract_path)
+                return adapter_extract_path
     
     def _install_napcat(self, deploy_config: Dict, maibot_path: str) -> str:
         """第三步：安装NapCat"""
@@ -1613,7 +1670,7 @@ pause
         try:
             # 创建config目录
             config_dir = os.path.join(maibot_path, "config")
-            adapter_config_dir = os.path.join(maibot_path, "adapter", "config") if adapter_path and adapter_path != "无需适配器" else None
+            adapter_config_dir = os.path.join(maibot_path, "adapter") if adapter_path and adapter_path != "无需适配器" else None
             os.makedirs(config_dir, exist_ok=True)
             ui.print_info(f"创建config目录: {config_dir}")
             

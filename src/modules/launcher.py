@@ -759,6 +759,7 @@ class MaiLauncher:
                         )
                     else:
                         # 尝试Python方式启动
+                        webui_path = os.path.join(webui_path,"http_server", "main.py")
                         python_cmd = self._get_python_command(config, webui_path)
                         webui_process = self.start_in_new_cmd(
                             f"{python_cmd} app.py",

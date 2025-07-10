@@ -507,11 +507,6 @@ class WebUIInstaller:
                 ui.print_warning("WebUI前端依赖安装失败，但WebUI文件已下载")
                 ui.print_info("可以稍后手动在WebUI目录中执行 npm install")
             
-            # 安装WebUI后端依赖
-            if not self.install_webui_backend_dependencies(webui_dir, venv_path):
-                ui.print_warning("WebUI后端依赖安装失败，但WebUI文件已下载")
-                ui.print_info("可以稍后手动在WebUI目录中执行 pip install -r requirements.txt")
-            
             ui.print_success("✅ WebUI安装完成")
             logger.info("WebUI安装完成", path=webui_dir)
             return True, webui_dir
@@ -562,11 +557,6 @@ class WebUIInstaller:
             if not self.install_webui_dependencies(webui_dir, venv_path):
                 ui.print_warning("WebUI依赖安装失败，但WebUI文件已下载")
                 ui.print_info("可以稍后手动在WebUI目录中执行 npm install")
-            
-            # 安装WebUI后端依赖
-            if not self.install_webui_backend_dependencies(webui_dir, venv_path):
-                ui.print_warning("WebUI后端依赖安装失败，但WebUI文件已下载")
-                ui.print_info("可以稍后手动在WebUI目录中执行 pip install -r requirements.txt")
             
             ui.print_success("✅ WebUI安装完成")
             logger.info("WebUI安装完成", path=webui_dir)
