@@ -6,7 +6,9 @@
 import re
 import os
 from typing import Tuple, Optional, Dict, Any
-from ..core.logging import logger
+import structlog
+logger = structlog.get_logger(__name__)
+
 
 
 def is_legacy_version(version: str) -> bool:

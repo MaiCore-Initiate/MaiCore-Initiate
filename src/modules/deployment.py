@@ -1144,7 +1144,6 @@ pause
         
         if needs_mongo:
             # 0.7以下版本需要检查是否安装MongoDB
-            if ui.confirm("是否需要安装MongoDB？（数据库，0.7以下版本建议安装）"):
                 ui.print_info("正在检查MongoDB安装状态...")
                 from ..modules.mongodb_installer import mongodb_installer
                 try:

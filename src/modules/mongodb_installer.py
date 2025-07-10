@@ -357,7 +357,7 @@ class MongoDBInstaller:
             
             # 询问是否继续安装
             if not force_install:
-                if not ui.get_confirmation("是否继续安装MongoDB？"):
+                if not ui.get_confirmation("是否安装MongoDB？(数据库，0.7以下版本建议安装)"):
                     ui.print_info("用户取消MongoDB安装")
                     return True, ""
             
