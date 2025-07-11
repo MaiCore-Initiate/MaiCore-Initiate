@@ -1,0 +1,231 @@
+:root {
+    --bg: #f7f8fa;
+    --container-bg: #fff;
+    --container-shadow: #e0e0e0;
+    --card-bg: #f9fafc;
+    --card-border: #e0e0e0;
+    --card-shadow: #e0e0e055;
+    --card-shadow-hover: #b0b0b055;
+    --text-main: #222;
+    --text-sub: #555;
+    --title: #3a3a3a;
+    --border: #e0e0e0;
+    --modal-bg: #fff;
+    --modal-shadow: #b0b0b055;
+    --input-bg: #f7f7fa;
+    --input-border: #e0e0e0;
+    --install-bg: #f3f3f7;
+    --install-border: #e0e0e0;
+    --btn-bg: #4e8cff;         /* 亮色蓝色 */
+    --btn-bg-hover: #2566d6;
+    --btn-text: #fff;
+    --btn-cancel-bg: #aaa;
+    --btn-delete-bg: #e74c3c;
+}
+
+[data-theme="dark"] {
+    --bg: #23242a;
+    --container-bg: #2d2f36;
+    --container-shadow: #18181c;
+    --card-bg: #23242a;
+    --card-border: #393a40;
+    --card-shadow: #18181c88;
+    --card-shadow-hover: #7c5fff33;
+    --text-main: #fff;
+    --text-sub: #b0b0b0;
+    --title: #e0e0e0;
+    --border: #393a40;
+    --modal-bg: #23242a;
+    --modal-shadow: #7c5fff33;
+    --input-bg: #23242a;
+    --input-border: #393a40;
+    --install-bg: #282a32;
+    --install-border: #393a40;
+    --btn-bg: #a18fff;         /* 暗色淡紫色 */
+    --btn-bg-hover: #c3aaff;
+    --btn-text: #23242a;
+    --btn-cancel-bg: #555;
+    --btn-delete-bg: #ff5c5c;
+}
+
+body {
+    background: var(--bg);
+    margin: 0;
+    font-family: "Segoe UI", "微软雅黑", Arial, sans-serif;
+}
+.container {
+    width: 1200px;
+    max-width: 96vw;
+    margin: 30px auto;
+    background: var(--container-bg);
+    border-radius: 24px;
+    box-shadow: 0 4px 32px var(--container-shadow);
+    padding: 32px 24px;
+}
+h1 {
+    text-align: center;
+    color: var(--text-main);
+    margin-bottom: 32px;
+}
+.config-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    justify-content: flex-start;
+}
+.config-card {
+    width: 210px;
+    height: 140px;
+    background: var(--card-bg);
+    border-radius: 18px;
+    box-shadow: 0 2px 12px var(--card-shadow);
+    padding: 18px 20px;
+    transition: box-shadow 0.3s, transform 0.3s;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border: 1.5px solid var(--card-border);
+    animation: fadeInUp 0.5s;
+}
+.config-card:hover {
+    box-shadow: 0 6px 24px var(--card-shadow-hover);
+    transform: translateY(-6px) scale(1.03);
+}
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(40px);}
+    to { opacity: 1; transform: translateY(0);}
+}
+.config-title {
+    font-weight: bold;
+    font-size: 18px;
+    color: var(--title);
+    margin-bottom: 8px;
+}
+.config-info {
+    color: var(--text-sub);
+    font-size: 15px;
+    margin-bottom: 2px;
+}
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 99;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.18);
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s;
+}
+@keyframes fadeIn {
+    from { opacity: 0;}
+    to { opacity: 1;}
+}
+.modal.show {
+    display: flex;
+}
+.modal-content {
+    background: var(--modal-bg);
+    border-radius: 18px;
+    padding: 32px 36px;
+    min-width: 600px;
+    max-width: 60vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px var(--modal-shadow);
+    animation: popIn 0.3s;
+}
+/* 设置卡片标题颜色适配主题 */
+.modal-content h2 {
+    color: var(--title);
+    margin-top: 0;
+}
+/* 高级设置折叠样式 */
+#advanced-settings {
+    border-radius: 12px;
+    background: var(--install-bg);
+    border: 1px solid var(--install-border);
+    padding: 0 0 8px 0;
+    margin-bottom: 12px;
+    transition: background 0.2s;
+}
+#advanced-settings[open] {
+    background: var(--modal-bg);
+    box-shadow: 0 2px 8px var(--modal-shadow);
+}
+#advanced-settings summary {
+    font-weight: bold;
+    color: var(--title);
+    padding: 10px 0 6px 0;
+    outline: none;
+    user-select: none;
+}
+#advanced-settings[open] summary {
+    border-bottom: 1px solid var(--install-border);
+    margin-bottom: 8px;
+}
+#advanced-settings input[type="number"] {
+    background: var(--input-bg);
+    color: var(--text-main);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 15px;
+}
+@keyframes popIn {
+    from { transform: scale(0.8);}
+    to { transform: scale(1);}
+}
+.form-row {
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+}
+.form-row label {
+    width: 120px;
+    color: var(--text-main);
+    font-size: 15px;
+}
+.form-row input {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--input-border);
+    font-size: 15px;
+    background: var(--input-bg);
+    color: var(--text-main);
+}
+.install-options {
+    margin-top: 18px;
+    padding: 12px 18px;
+    background: var(--install-bg);
+    border-radius: 12px;
+    border: 1px solid var(--install-border);
+    color: var(--text-main);
+}
+.modal-actions {
+    text-align: right;
+    margin-top: 24px;
+}
+.btn {
+    padding: 8px 24px;
+    border-radius: 8px;
+    border: none;
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    font-size: 15px;
+    cursor: pointer;
+    margin-left: 12px;
+    transition: background 0.2s;
+}
+.btn.cancel {
+    background: var(--btn-cancel-bg);
+    color: #fff;
+}
+.btn.btn-delete {
+    background: var(--btn-delete-bg);
+    color: #fff;
+}
+.btn:hover {
+    background: var(--btn-bg-hover);
+}

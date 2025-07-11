@@ -1,0 +1,14 @@
+{
+  "instances": [
+    {
+      "name": "instance_test",
+      "absolute_serial_number": 2,
+      "serial_number": "test",
+      "nickname_path": "test"
+    }
+  ],
+  "ui_settings": {
+    "theme": "dark",
+    "port": 2000
+  }
+}
