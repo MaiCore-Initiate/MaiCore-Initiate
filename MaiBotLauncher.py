@@ -14,6 +14,8 @@ import shutil # 用于删除实例
 import winreg # 用于注册表操作
 import tempfile  # 添加tempfile模块
 from urllib.request import urlopen  # 添加urlopen
+from urllib.error import URLError, HTTPError  # 添加错误处理
+
 
 if sys.platform == 'win32':
     kernel32 = ctypes.windll.kernel32
@@ -2405,6 +2407,34 @@ def deployment_assistant():
     # 安装NapCat
     install_napcat = input("是否下载并安装NapCat？(Y/N) ").upper()
     if install_napcat == "Y":
+
+        try:
+            # 自动下载安装
+            version, download_url = get_latest_napcat_version()
+            temp_dir = tempfile.gettempdir()
+            installer_path = os.path.join(temp_dir, "NapCatInstaller.exe")
+            
+            print_rgb(f"正在下载NapCat {version}...", "#BADFFA")
+            download_napcat(download_url, installer_path)
+            
+            print_rgb("正在安装NapCat...", "#BADFFA")
+            install_napcat(installer_path)
+            
+            # 自动查找路径
+            napcat_path = find_napcat_exe()
+            if napcat_path:
+                print_rgb(f"✅ NapCat安装成功: {napcat_path}", "#6DFD8A")
+                # 自动保存到配置
+                selected_cfg["napcat_path"] = napcat_path
+            else:
+                print_rgb("⚠️ 无法自动找到NapCat路径，请手动指定", "#F2FF5D")
+                napcat_path = get_input("请输入NapCat路径:", "green", is_exe=True)
+                
+        except Exception as e:
+            print_rgb(f"❌ 自动安装失败: {str(e)}", "#FF6B6B")
+            # 回退到手动安装说明
+            print_rgb("请手动下载安装NapCat...", "#F2FF5D")
+
         print_rgb("请在浏览器中下载NapCatQQ:", "#FFF3C2")
         print_rgb("1. 打开 https://github.com/NapNeko/NapCatQQ/releases", "#A8B1FF")
         print_rgb('2. 下拉找到蓝色的"NapCat.Framework.Windows.OneKey.zip"', "#A8B1FF")
@@ -2538,6 +2568,26 @@ def deployment_assistant():
     
     print_rgb("配置集保存完成，您可以通过主菜单中的 [A] 选项对该实例进行二次启动！", "#FFF3C2")
     input("\n按回车键返回菜单...")
+
+def get_latest_napcat_version():
+    """获取最新的NapCat版本和下载链接"""
+    api_url = "https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest"
+    response = requests.get(api_url)
+    data = response.json()
+    return data["tag_name"], data["assets"][0]["browser_download_url"]
+
+def download_napcat(download_url, save_path):
+    """下载NapCat安装程序"""
+    with requests.get(download_url, stream=True) as r:
+        r.raise_for_status()
+        with open(save_path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+def install_napcat(installer_path):
+    """安装NapCat"""
+    # 静默安装参数
+    subprocess.run([installer_path, "/S"], check=True)
 
 def deploy_classical(install_dir):
     """部署classical版本"""
