@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi import Request
+from fastapi.staticfiles import StaticFiles
 import os
 import json
 
@@ -16,7 +17,9 @@ app.add_middleware(
 )
 
 CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../config.toml'))
-JSON_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../.config_UI.json'))
+JSON_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '.config_UI.json'))
+
+app.mount("/src/config_UI", StaticFiles(directory=os.path.dirname(__file__)), name="static")
 
 def load_config():
     with open(CONFIG_PATH, "rb") as f:
@@ -42,7 +45,18 @@ def sync_ui_json_with_toml():
     config = load_config()
     ui_json = load_ui_json()
     toml_names = set(config.get("configurations", {}).keys())
-    ui_json["instances"] = [i for i in ui_json["instances"] if i["name"] in toml_names]
+    # 只保留 json 中 name 在 toml 里的实例，且只保留指定字段
+    new_instances = []
+    for i in ui_json["instances"]:
+        if i["name"] in toml_names:
+            # 只保留 name/absolute_serial_number/serial_number/nickname_path
+            new_instances.append({
+                "name": i.get("name"),
+                "absolute_serial_number": i.get("absolute_serial_number"),
+                "serial_number": i.get("serial_number"),
+                "nickname_path": i.get("nickname_path")
+            })
+    ui_json["instances"] = new_instances
     save_ui_json(ui_json)
 
 @app.get("/api/configs")
@@ -91,7 +105,7 @@ async def create_config(request: Request):
             return {"success": False, "msg": f"路径无效: {k}"}
     config["configurations"][name] = new_config
     save_config(config)
-    # 记录到json
+    # 只在新建时写入 json，且只保留指定字段
     ui_json["instances"].append({
         "name": name,
         "absolute_serial_number": abs_num,
@@ -103,9 +117,12 @@ async def create_config(request: Request):
 
 @app.get("/api/configs/{name}/uiinfo")
 def get_uiinfo(name: str):
+    # 只有 json 和 toml 同时存在的配置集才可编辑安装项
+    config = load_config()
     ui_json = load_ui_json()
+    toml_names = set(config.get("configurations", {}).keys())
     for inst in ui_json["instances"]:
-        if inst["name"] == name:
+        if inst["name"] == name and name in toml_names:
             return {"editable_install_options": True}
     return {"editable_install_options": False}
 
@@ -135,6 +152,9 @@ def get_ui_settings():
 async def set_ui_settings(request: Request):
     data = load_ui_json()
     settings = await request.json()
-    data["ui_settings"] = settings
+    # 合并新设置到原有 ui_settings
+    ui_settings = data.get("ui_settings", {})
+    ui_settings.update(settings)
+    data["ui_settings"] = ui_settings
     save_ui_json(data)
     return {"success": True}

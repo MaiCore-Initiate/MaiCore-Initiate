@@ -1,10 +1,69 @@
-const apiBase = "http://127.0.0.1:8000/api";
+// 右下角多条消息提醒组件
+function showMessage(msg, type = 'info', duration = 5000) {
+    let container = document.getElementById('custom-message-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'custom-message-container';
+        container.style.position = 'fixed';
+        container.style.right = '32px';
+        container.style.bottom = '32px';
+        container.style.zIndex = 9999;
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column-reverse';
+        container.style.alignItems = 'flex-end';
+        document.body.appendChild(container);
+    }
+    const box = document.createElement('div');
+    box.className = 'custom-message-box';
+    box.style.background = type === 'error' ? '#ffeaea' : (type === 'success' ? '#eaffea' : type === 'warn' ? '#fffbe6' : '#f5f5f5');
+    box.style.color = type === 'error' ? '#d93026' : (type === 'success' ? '#1a7f37' : type === 'warn' ? '#b26a00' : '#333');
+    box.style.minWidth = '180px';
+    box.style.maxWidth = '320px';
+    box.style.marginTop = '12px';
+    box.style.padding = '14px 32px 18px 32px';
+    box.style.borderRadius = '8px';
+    box.style.fontSize = '16px';
+    box.style.boxShadow = '0 2px 16px rgba(0,0,0,0.08)';
+    box.style.textAlign = 'center';
+    box.style.position = 'relative';
+    box.style.opacity = 0;
+    box.style.transform = 'translateX(60px)';
+    box.style.transition = 'opacity 0.3s, transform 0.3s';
+    box.innerText = msg;
+    // 进度条
+    const bar = document.createElement('div');
+    bar.style.position = 'absolute';
+    bar.style.left = 0;
+    bar.style.bottom = 0;
+    bar.style.height = '4px';
+    bar.style.width = '0%';
+    bar.style.borderRadius = '0 0 8px 8px';
+    bar.style.background = type === 'error' ? '#ff4d4f' : (type === 'success' ? '#52c41a' : type === 'warn' ? '#faad14' : '#1890ff');
+    bar.style.transition = `width linear ${duration}ms`;
+    box.appendChild(bar);
+    container.appendChild(box);
+    // 动画滑入
+    setTimeout(() => {
+        box.style.opacity = 1;
+        box.style.transform = 'translateX(0)';
+        bar.style.width = '100%';
+    }, 10);
+    // 自动消失
+    setTimeout(() => {
+        box.style.opacity = 0;
+        box.style.transform = 'translateX(60px)';
+        setTimeout(() => {
+            box.remove();
+        }, 300);
+    }, duration);
+}
+const apiBase = `${location.protocol}//${location.hostname}:${location.port}/api`;
 
 const fieldLabels = {
     serial_number: "用户序列号",
     absolute_serial_number: "绝对序列号",
     version_path: "版本号",
-    nickname_path: "示例昵称",
+    nickname_path: "实例昵称",
     mai_path: "麦麦本体路径",
     adapter_path: "适配器路径",
     napcat_path: "NapCat路径",
@@ -52,26 +111,31 @@ function renderConfigs(configs) {
 }
 
 document.getElementById("add-config-btn").onclick = () => {
-    // 默认字段
-    const emptyConfig = {
-        serial_number: "",
-        absolute_serial_number: "",
-        version_path: "",
-        nickname_path: "",
-        mai_path: "",
-        adapter_path: "",
-        napcat_path: "",
-        venv_path: "",
-        mongodb_path: "",
-        webui_path: "",
-        install_options: {
-            install_adapter: false,
-            install_napcat: false,
-            install_mongodb: false,
-            install_webui: false
-        }
-    };
-    showModal("", emptyConfig, true);
+    // 获取全部配置集，生成唯一绝对序列号
+    fetch(`${apiBase}/configs`).then(r => r.json()).then(configs => {
+        const usedNums = new Set(Object.values(configs).map(c => parseInt(c.absolute_serial_number, 10) || 0));
+        let absNum = Object.keys(configs).length + 1;
+        while (usedNums.has(absNum)) absNum++;
+        const emptyConfig = {
+            serial_number: "",
+            absolute_serial_number: absNum,
+            version_path: "",
+            nickname_path: "",
+            mai_path: "",
+            adapter_path: "",
+            napcat_path: "",
+            venv_path: "",
+            mongodb_path: "",
+            webui_path: "",
+            install_options: {
+                install_adapter: false,
+                install_napcat: false,
+                install_mongodb: false,
+                install_webui: false
+            }
+        };
+        showModal("", emptyConfig, true);
+    });
 };
 
 async function showModal(name, data, isNew = false) {
@@ -86,7 +150,7 @@ async function showModal(name, data, isNew = false) {
         editableInstall = true;
     }
     const form = document.createElement("form");
-    form.onsubmit = (e) => {
+    form.onsubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(form);
         const update = {};
@@ -106,13 +170,41 @@ async function showModal(name, data, isNew = false) {
                 if (!(opt in update.install_options)) update.install_options[opt] = false;
             });
         }
-        if (isNew) {
-            // 新建时需输入配置集名称
-            const newName = formData.get("config_name");
-            if (!newName) {
-                alert("请填写配置集名称");
-                return;
+        // 检查名称、序列号、昵称重复
+        const configs = await fetch(`${apiBase}/configs`).then(r => r.json());
+        const allNames = Object.keys(configs);
+        const allSerials = Object.values(configs).map(c => c.serial_number);
+        const allNicknames = Object.values(configs).map(c => c.nickname_path);
+        let newName = isNew ? formData.get("config_name") : name;
+        if (!newName) {
+            showMessage("请填写配置集名称", 'error');
+            return;
+        }
+        if ((isNew && allNames.includes(newName)) || (!isNew && newName !== name && allNames.includes(newName))) {
+            showMessage("配置集名称已存在", 'error');
+            return;
+        }
+        if (update.serial_number && ((isNew && allSerials.includes(update.serial_number)) || (!isNew && update.serial_number !== configs[name]?.serial_number && allSerials.includes(update.serial_number)))) {
+            showMessage("用户序列号已存在", 'error');
+            return;
+        }
+        if (update.nickname_path && ((isNew && allNicknames.includes(update.nickname_path)) || (!isNew && update.nickname_path !== configs[name]?.nickname_path && allNicknames.includes(update.nickname_path)))) {
+            showMessage("实例昵称已存在", 'error');
+            return;
+        }
+        // 路径字段校验（只要填写了就校验）
+        const pathFields = ["mai_path","adapter_path","napcat_path","venv_path","mongodb_path","webui_path"];
+        for (const pf of pathFields) {
+            if (update[pf]) {
+                // 后端会二次校验，这里只做简单校验
+                if (!/^[a-zA-Z]:\\|^\\\\|^\//.test(update[pf])) {
+                    showMessage(`${fieldLabels[pf]||pf} 路径格式不正确`, 'error');
+                    return;
+                }
             }
+        }
+        // 提交
+        if (isNew) {
             fetch(`${apiBase}/configs`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -121,8 +213,9 @@ async function showModal(name, data, isNew = false) {
                 if (res.success) {
                     modal.classList.remove("show");
                     loadConfigs();
+                    showMessage("新建成功", 'success');
                 } else {
-                    alert("新建失败: " + (res.msg || ""));
+                    showMessage("新建失败: " + (res.msg || ""), 'error');
                 }
             });
         } else {
@@ -134,8 +227,9 @@ async function showModal(name, data, isNew = false) {
                 if (res.success) {
                     modal.classList.remove("show");
                     loadConfigs();
+                    showMessage("保存成功", 'success');
                 } else {
-                    alert("保存失败: " + (res.msg || ""));
+                    showMessage("保存失败: " + (res.msg || ""), 'error');
                 }
             });
         }
@@ -152,7 +246,8 @@ async function showModal(name, data, isNew = false) {
         const row = document.createElement("div");
         row.className = "form-row";
         let label = fieldLabels[k] || k;
-        let readonly = k === "absolute_serial_number" && !isNew ? "readonly" : "";
+        let readonly = "";
+        if (k === "absolute_serial_number") readonly = "readonly";
         row.innerHTML = `<label>${label}</label>
             <input name="${k}" value="${v ?? ""}" ${readonly}/>`;
         form.appendChild(row);
@@ -192,8 +287,9 @@ async function showModal(name, data, isNew = false) {
                         if (res.success) {
                             modal.classList.remove("show");
                             loadConfigs();
+                            showMessage("删除成功", 'success');
                         } else {
-                            alert("删除失败: " + (res.msg || ""));
+                            showMessage("删除失败: " + (res.msg || ""), 'error');
                         }
                     });
             }
@@ -254,62 +350,74 @@ window.onload = async () => {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
         if (loadTheme() === "auto") applyTheme("auto");
     });
+
+    // 与后端握手成功消息
+    try {
+        const uiSettings = await fetch(`${apiBase}/ui_settings`).then(r => r.json());
+        showMessage(`成功链接到后端服务器端口${location.port}`, 'success', 2500);
+    } catch {
+        showMessage('无法连接到后端服务器', 'error', 3500);
+    }
 };
 
 function showSettingsModal() {
     const modal = document.getElementById("modal");
     const content = document.getElementById("modal-content");
-    content.innerHTML = `
-        <h2 style="margin-top:0;">设置</h2>
-        <div class="form-row">
-            <label style="width:120px;">主题模式</label>
-            <select id="theme-select-modal" class="btn" style="min-width:120px;">
-                <option value="auto">跟随系统</option>
-                <option value="light">明亮</option>
-                <option value="dark">暗色</option>
-            </select>
-        </div>
-        <details id="advanced-settings" style="margin-top:18px;">
-            <summary style="font-size:16px;cursor:pointer;">高级设置</summary>
-            <div class="form-row" style="margin-top:12px;">
-                <label style="width:120px;">通信端口</label>
-                <input id="port-input" type="number" min="1" max="65535" style="flex:1;" placeholder="8000"/>
+    fetch(`${apiBase}/ui_settings`).then(res => res.json()).then(uiSettings => {
+        const currentPort = uiSettings.port || 8000;
+        const currentTheme = uiSettings.theme || 'auto';
+        content.innerHTML = `
+            <h2 style="margin-top:0;">设置</h2>
+            <div class="form-row">
+                <label style="width:120px;">主题模式</label>
+                <select id="theme-select-modal" class="btn" style="min-width:120px;">
+                    <option value="auto">跟随系统</option>
+                    <option value="light">明亮</option>
+                    <option value="dark">暗色</option>
+                </select>
             </div>
-            <div style="color:#888;font-size:13px;margin-left:120px;">修改端口后需重启服务生效</div>
-        </details>
-        <div class="modal-actions">
-            <button type="button" class="btn cancel">关闭</button>
-            <button type="button" class="btn" id="save-settings-btn">保存设置</button>
-        </div>
-    `;
-    // 设置当前主题
-    const themeSelect = content.querySelector("#theme-select-modal");
-    loadThemeFromServer().then(serverTheme => {
-        themeSelect.value = serverTheme;
+            <details id="advanced-settings" style="margin-top:18px;">
+                <summary style="font-size:16px;cursor:pointer;">高级设置</summary>
+                <div class="form-row" style="margin-top:12px;">
+                    <label style="width:120px;">通信端口</label>
+                    <input id="port-input" type="number" min="1" max="65535" style="flex:1;margin-right:12px;padding-left:12px;" value="${currentPort}"/>
+                </div>
+                <div style="color:#888;font-size:13px;margin-left:120px;">修改端口后需重启服务生效</div>
+            </details>
+            <div class="modal-actions">
+                <button type="button" class="btn cancel">关闭</button>
+                <button type="button" class="btn" id="save-settings-btn">保存设置</button>
+            </div>
+        `;
+        // 设置当前主题
+        const themeSelect = content.querySelector("#theme-select-modal");
+        themeSelect.value = currentTheme;
+        themeSelect.onchange = () => {
+            applyTheme(themeSelect.value);
+            saveTheme(themeSelect.value);
+        };
+        content.querySelector(".cancel").onclick = () => modal.classList.remove("show");
+        // 保存设置
+        content.querySelector("#save-settings-btn").onclick = async () => {
+            const port = parseInt(content.querySelector("#port-input").value, 10);
+            const theme = themeSelect.value;
+            // 受限端口列表（主流浏览器限制）
+            const unsafePorts = [1,7,9,11,13,15,17,19,20,21,22,23,25,37,42,43,53,77,79,87,95,101,102,103,104,109,110,111,113,115,117,119,123,135,139,143,179,389,427,465,512,513,514,515,526,530,531,532,540,548,556,563,587,601,636,993,995,2049,3659,4045,6000,6665,6666,6667,6668,6669,6697,10080,32768,32769,32770,32771,32772,32773,32774,32775,32776,32777,32778,32779,32780,32781,32782,32783,32784,32785,33354,65535];
+            if (unsafePorts.includes(port)) {
+                showMessage("该端口为浏览器受限端口，无法访问，请更换其他端口！\n建议使用 1024~49151 之间的常用端口，如 2000、3000、5000、8888、9000、23333 等。", 'error', 3500);
+                return;
+            }
+            // 保存到后端
+            await fetch(`${apiBase}/ui_settings`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ theme, port })
+            });
+            showMessage("设置已保存，端口修改需重启服务后生效。", 'success', 3000);
+            modal.classList.remove("show");
+            applyTheme(theme);
+            saveTheme(theme);
+        };
+        modal.classList.add("show");
     });
-    // 读取端口
-    fetch(`${apiBase}/ui_settings`).then(r => r.json()).then(res => {
-        if (res.port) content.querySelector("#port-input").value = res.port;
-    });
-    themeSelect.onchange = () => {
-        applyTheme(themeSelect.value);
-        saveTheme(themeSelect.value);
-    };
-    content.querySelector(".cancel").onclick = () => modal.classList.remove("show");
-    // 保存设置
-    content.querySelector("#save-settings-btn").onclick = async () => {
-        const port = content.querySelector("#port-input").value;
-        const theme = themeSelect.value;
-        // 保存到后端
-        await fetch(`${apiBase}/ui_settings`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ theme, port })
-        });
-        alert("设置已保存，端口修改需重启服务后生效。");
-        modal.classList.remove("show");
-        applyTheme(theme);
-        saveTheme(theme);
-    };
-    modal.classList.add("show");
 }
