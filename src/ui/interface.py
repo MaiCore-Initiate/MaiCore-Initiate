@@ -36,21 +36,20 @@ class UI:
         os.system('cls' if os.name == 'nt' else 'clear')
     
     def print_header(self):
-        """打印程序头部"""
-        header_text = """
-88b         d88           88 888888ba                                ,ad88ba,  88                                
-888         888           "" 88    "8b            88                d8"'  `"8b 88                    88     
-888b       d888              88    ,8P            88               d8'         88                    88     
-88 8b     d8'88 ,adPYYba, 88 88aaaa8P'  ,adPYba,  88MMM            88          88,dPPYba,  ,adPPYba, 88MMM  
-88 `8b   d8' 88 ""    `Y8 88 88“”“”8b, a8"    "8a 88     aaaaaaaa  88          88P'    "8a ""    `Y8 88     
-88  `8b d8'  88 ,adPPPP88 88 88    `8b 8b      d8 88     “”“”“”“”  Y8,         88       88 ,adPPPP88 88     
-88   `888'   88 88,   ,88 88 88    a8P "8a,  ,a8" 88,               Y8a.  .a8P 88       88 88,   ,88 88,    
-88           88 `"8bdP"Y8 88 888888P"   `"YbdP"'   "Y888             `"Y88Y"'  88       88 `"8bdP"Y8  "Y888  
-        """
-        
-        self.console.print(header_text, style=self.colors["primary"])
-        self.console.print("促进多元化艺术创作发展普及", style=self.colors["primary"])
-        self.console.print("\n🌈麦麦启动器控制台", style=self.colors["primary"])
+        """打印程序头部（仅用#BADFFA）"""
+        header_text = (
+            "&&b         d&&           && 888888ba                                ,ad&&ba,  &&\n"
+            "&&&         &&&              &&     8b             &&              d8       8b &&                     &&\n"
+            "888b       d888              &&    ,8P             &&             d8'          &&                     &&\n"
+            "&& 8b     d8'&& ,adPYYba, && &&aaaa8P    ,adPYba,  &&MMM          &&           &&,dPPYba,  ,adPPYba,  &&MMM\n"
+            "&&  8b   d8' &&        && && 8b,   a8   da      ab &&    aaaaaaaa &&           &&P      8a         Y8 &&\n"
+            "&&   8b d8'  && ,adPPPP&& && &&     8b  &&      && &&    ******** Y8,          &&       && ,adPPPP&&  &&\n"
+            "&&    &&&'   && &&,   ,&& && &&     a8  qa,    ,ap &&,              Y8a.  .a8P &&       && &&,   ,&&  &&,\n"
+            "&&           &&  *8bdP Y8 && 888888P'    *q&aa&P*   *Y&&8             *Y&&Y*   &&       &&  *8bdP Y8   *Y&&8\n"
+        )
+        self.console.print(header_text, style="#BADFFA")
+        self.console.print("促进多元化艺术创作发展普及", style="#BADFFA")
+        self.console.print("\n🌈麦麦启动器控制台", style="#BADFFA")
         self.console.print("——————————", style="bright_black")
         self.console.print("选择选项", style="bright_black")
     
