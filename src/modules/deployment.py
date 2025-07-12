@@ -1880,11 +1880,10 @@ pause
             ui.print_info(f"当前版本：{current_version}")
             
             # 选择新版本
-            version_info = self.show_version_menu()
-            if not version_info:
+            new_version_data = self.show_version_menu()
+            if not new_version_data:
                 return False
             
-            new_version_data, _ = version_info  # 忽略NapCat选择
             new_version = new_version_data["name"]
             
             if new_version == current_version:
