@@ -120,7 +120,7 @@ class MaiMaiLauncher:
             
             if choice == "Q":
                 break
-            elif choice in ["A", "B","C", "D"]:
+            elif choice in ["A", "B", "D"]:
                 # 需要选择配置的操作
                 config = config_mgr.select_configuration()
                 if not config:
@@ -145,19 +145,7 @@ class MaiMaiLauncher:
                 elif choice == "B":
                     # 编辑配置
                     config_mgr.edit_configuration(config_name)
-                elif choice == "C":
-                    # 可视化编辑配置，直接在新窗口中运行 run_with_ui_port.py
-                    import subprocess
-                    import sys
-                    import os
-                    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_with_ui_port.py")
-                    # Windows下用start命令新开窗口
-                    if sys.platform.startswith("win"):
-                        subprocess.Popen(["start", "", sys.executable, script_path], shell=True)
-                    else:
-                        subprocess.Popen([sys.executable, script_path])
-                    ui.print_info("已在新窗口启动可视化配置界面。请在浏览器中操作。")
-                    ui.pause()
+                
                 elif choice == "D":
                     # 验证配置
                     from src.modules.launcher import launcher
@@ -169,7 +157,22 @@ class MaiMaiLauncher:
                     else:
                         ui.print_success("配置验证通过")
                     ui.pause()
-            elif choice == "D":
+            
+            elif choice == "C":
+                # 可视化编辑配置，直接在新窗口中运行 run_with_ui_port.py
+                import subprocess
+                import sys
+                import os
+                script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_with_ui_port.py")
+                # Windows下用start命令新开窗口
+                if sys.platform.startswith("win"):
+                    subprocess.Popen(["start", "", sys.executable, script_path], shell=True)
+                else:
+                    subprocess.Popen([sys.executable, script_path])
+                ui.print_info("已在新窗口启动可视化配置界面。请在浏览器中操作。")
+                ui.pause()
+
+            elif choice == "E":
                 # 新建配置集
                 name = ui.get_input("请输入新配置集名称：")
                 if name and name not in configurations:
