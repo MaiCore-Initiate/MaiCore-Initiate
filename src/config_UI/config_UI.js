@@ -368,7 +368,7 @@ function showSettingsModal() {
         const currentTheme = uiSettings.theme || 'auto';
         content.innerHTML = `
             <h2 style="margin-top:0;">设置</h2>
-            <div class="form-row">
+            <div class="form-row" style="padding-left:16px;padding-right:16px;">
                 <label style="width:120px;">主题模式</label>
                 <select id="theme-select-modal" class="btn" style="min-width:120px;">
                     <option value="auto">跟随系统</option>
@@ -376,15 +376,15 @@ function showSettingsModal() {
                     <option value="dark">暗色</option>
                 </select>
             </div>
-            <details id="advanced-settings" style="margin-top:18px;">
-                <summary style="font-size:16px;cursor:pointer;">高级设置</summary>
-                <div class="form-row" style="margin-top:12px;">
+            <details id="advanced-settings" style="margin-top:18px;padding-left:8px;padding-right:8px;">
+                <summary style="font-size:16px;cursor:pointer;padding-left:8px;padding-right:8px;">高级设置</summary>
+                <div class="form-row" style="margin-top:16px;padding-left:16px;padding-right:16px;">
                     <label style="width:120px;">通信端口</label>
                     <input id="port-input" type="number" min="1" max="65535" style="flex:1;margin-right:12px;padding-left:12px;" value="${currentPort}"/>
                 </div>
-                <div style="color:#888;font-size:13px;margin-left:120px;">修改端口后需重启服务生效</div>
+                <div style="color:#888;font-size:13px;margin-left:136px;margin-top:4px;">修改端口后需重启服务生效</div>
             </details>
-            <div class="modal-actions">
+            <div class="modal-actions" style="padding-left:16px;padding-right:16px;">
                 <button type="button" class="btn cancel">关闭</button>
                 <button type="button" class="btn" id="save-settings-btn">保存设置</button>
             </div>

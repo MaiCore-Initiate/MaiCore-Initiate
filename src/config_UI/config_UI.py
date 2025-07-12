@@ -71,8 +71,7 @@ async def update_config(name: str, request: Request):
     data = await request.json()
     if name in config["configurations"]:
         for k, v in data.items():
-            if k != "install_options":
-                config["configurations"][name][k] = v
+            config["configurations"][name][k] = v
         save_config(config)
         return {"success": True}
     return {"success": False, "msg": "配置不存在"}
