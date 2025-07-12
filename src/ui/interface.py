@@ -113,10 +113,11 @@ class UI:
         
         self.console.print("====>>配置操作<<====")
         self.console.print(" [A] 查看配置详情", style=self.colors["info"])
-        self.console.print(" [B] 编辑配置", style=self.colors["warning"])
-        self.console.print(" [C] 验证配置", style=self.colors["success"])
-        self.console.print(" [D] 新建配置集", style=self.colors["success"])
-        self.console.print(" [E] 删除配置集", style=self.colors["error"])
+        self.console.print(" [B] 直接编辑配置", style=self.colors["warning"])
+        self.console.print(" [C] 可视化编辑配置", style=self.colors["success"])
+        self.console.print(" [D] 验证配置", style=self.colors["success"])
+        self.console.print(" [E] 新建配置集", style=self.colors["success"])
+        self.console.print(" [F] 删除配置集", style=self.colors["error"])
         
         self.console.print("====>>返回<<====")
         self.console.print(" [Q] 返回上级", style="#7E1DE4")
