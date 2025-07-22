@@ -82,10 +82,12 @@ class ConfigManager:
             # 获取其他配置
             nickname = ui.get_input("请输入配置昵称：")
             serial_number = ui.get_input("请输入用户序列号：")
+            qq_account = ui.get_input("请输入QQ账号：")
             
             # 创建配置
             new_config = {
                 "serial_number": serial_number,
+                "qq_account": qq_account,
                 "absolute_serial_number": self.config.generate_unique_serial(),
                 "version_path": version,
                 "nickname_path": nickname,
@@ -173,10 +175,12 @@ class ConfigManager:
             # 其他配置
             nickname = ui.get_input("请输入配置昵称：")
             serial_number = ui.get_input("请输入用户序列号：")
+            qq_account = ui.get_input("请输入QQ账号：")
             
             # 创建配置
             new_config = {
                 "serial_number": serial_number,
+                "qq_account": qq_account,
                 "absolute_serial_number": self.config.generate_unique_serial(),
                 "version_path": version,
                 "nickname_path": nickname,
@@ -312,6 +316,9 @@ class ConfigManager:
                         if ui.confirm("是否重新配置NapCat路径？"):
                             config['napcat_path'] = ui.get_input("请输入新的NapCat路径（可为空）：")
                         
+                        if ui.confirm("是否重新配置QQ账号？"):
+                            config['qq_account'] = ui.get_input("请输入新的QQ账号：")
+
                         if ui.confirm("是否重新配置MongoDB路径？"):
                             config['mongodb_path'] = ui.get_input("请输入新的MongoDB路径（可为空）：")
                         
@@ -383,6 +390,7 @@ class ConfigManager:
                         "nickname_path": "默认配置",
                         "mai_path": "",
                         "adapter_path": "",
+                        "qq_account": "",
                         "napcat_path": "",
                         "mongodb_path": "",
                         "webui_path": "",

@@ -732,9 +732,6 @@ class DeploymentManager:
                 if filename.endswith('.zip'):
                     with zipfile.ZipFile(temp_file, 'r') as zip_ref:
                         zip_ref.extractall(napcat_dir)
-                elif filename.endswith(('.tar.gz', '.tgz')):
-                    with tarfile.open(temp_file, 'r:gz') as tar_ref:
-                        tar_ref.extractall(napcat_dir)
                 else:
                     # 如果是其他格式，直接复制
                     shutil.copy2(temp_file, napcat_dir)
@@ -801,7 +798,7 @@ class DeploymentManager:
             # 优先查找无头版本 NapCat.34740.Shell\NapCatWinBootMain.exe
             shell_pattern = "NapCat.*.Shell"
             shell_exe_name = "NapCatWinBootMain.exe"
-            install_dir = Path(install_dir)/"NapCat"  # 确保安装目录正确
+            install_dir = os.path.join(install_dir, "NapCat")  # 确保安装目录正确
             # 遍历安装目录，查找匹配的Shell目录
             for item in os.listdir(install_dir):
                 item_path = os.path.join(install_dir, item)
@@ -886,10 +883,11 @@ pause
                 ui.print_info("请在弹出的命令行窗口中按照提示完成安装")
                 
             else:
-                # 在Linux/Mac上直接运行
-                subprocess.Popen([installer_path], cwd=installer_dir)
-                ui.print_success("NapCat安装程序已启动")
-            
+                # 在Linux或macOS上无法运行windows安装程序
+                ui.print_error("当前操作系统不支持自动运行NapCat安装程序")
+                logger.error("不支持的操作系统", system=platform.system())
+                return False
+
             logger.info("NapCat安装程序启动成功")
             return True
             
@@ -1189,6 +1187,12 @@ pause
             ui.print_error("昵称不能为空")
 
         while True:
+            qq_account = ui.get_input("请输入机器人QQ号：")
+            if qq_account.isdigit():
+                break
+            ui.print_error("QQ号必须为纯数字")
+
+        while True:
             base_dir = ui.get_input("请输入基础安装目录：")
             if not base_dir:
                 ui.print_error("基础安装目录不能为空")
@@ -1215,6 +1219,7 @@ pause
             "serial_number": serial_number,
             "install_dir": install_dir,
             "nickname": nickname,
+            "qq_account": qq_account,
             "install_adapter": install_adapter,
             "install_napcat": install_napcat,
             "install_mongodb": install_mongodb,
@@ -1232,6 +1237,7 @@ pause
         ui.console.print(f"版本：{deploy_config['selected_version']['display_name']}")
         ui.console.print(f"序列号：{deploy_config['serial_number']}")
         ui.console.print(f"昵称：{deploy_config['nickname']}")
+        ui.console.print(f"机器人QQ号：{deploy_config['qq_account']}")
         ui.console.print(f"安装目录：{deploy_config['install_dir']}")
         
         # 显示组件安装选择
@@ -1316,57 +1322,6 @@ pause
             logger.info("MaiBot安装成功", path=target_dir)
             return target_dir
     
-    def _detect_maibot_version(self, maibot_path: str) -> Optional[str]:
-        """检测MaiBot版本号"""
-        try:
-            # 检查多个可能的版本文件
-            version_files = [
-                os.path.join(maibot_path, "version.txt"),
-                os.path.join(maibot_path, "VERSION"),
-                os.path.join(maibot_path, "pyproject.toml"),
-                os.path.join(maibot_path, "setup.py"),
-                os.path.join(maibot_path, "bot.py")
-            ]
-            
-            # 首先尝试从version.txt或VERSION文件读取
-            for version_file in version_files[:2]:
-                if os.path.exists(version_file):
-                    with open(version_file, 'r', encoding='utf-8') as f:
-                        version = f.read().strip()
-                        if version:
-                            return version
-            
-            # 尝试从pyproject.toml读取
-            pyproject_path = os.path.join(maibot_path, "pyproject.toml")
-            if os.path.exists(pyproject_path):
-                with open(pyproject_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    match = re.search(r'version\s*=\s*["\']([^"\']+)["\']', content)
-                    if match:
-                        return match.group(1)
-            
-            # 尝试从bot.py文件中提取版本信息
-            bot_py_path = os.path.join(maibot_path, "bot.py")
-            if os.path.exists(bot_py_path):
-                with open(bot_py_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    # 查找常见的版本定义模式
-                    patterns = [
-                        r'__version__\s*=\s*["\']([^"\']+)["\']',
-                        r'VERSION\s*=\s*["\']([^"\']+)["\']',
-                        r'version\s*=\s*["\']([^"\']+)["\']'
-                    ]
-                    for pattern in patterns:
-                        match = re.search(pattern, content)
-                        if match:
-                            return match.group(1)
-            
-            return None
-            
-        except Exception as e:
-            logger.warning("版本检测失败", error=str(e))
-            return None
-    
     def _install_adapter_if_needed(self, deploy_config: Dict, maibot_path: str) -> str:
         """第二步：检测版本并安装适配器"""
         ui.console.print("\n[🔌 第二步：检测版本并安装适配器]", style=ui.colors["primary"])
@@ -1434,78 +1389,12 @@ pause
             adapter_version = version_reqs["adapter_version"]
             
             # 根据适配器版本下载
-            if adapter_version in ["main", "dev"]:
-                return self._download_branch_adapter(adapter_version, maibot_path)
-            elif adapter_version == "未知版本":
-                ui.print_warning("无法确定适配器版本，使用main分支")
-                return self._download_branch_adapter("main", maibot_path)
-            else:
-                # 具体版本号，如 "0.2.3", "0.4.2"
-                return self._download_specific_adapter_version(adapter_version, maibot_path)
+            return self._download_specific_adapter_version(adapter_version, maibot_path)
                 
         except Exception as e:
             ui.print_error(f"适配器处理失败：{str(e)}")
             logger.error("适配器处理异常", error=str(e))
             return "适配器处理失败"
-    
-    def _download_branch_adapter(self, branch: str, maibot_path: str) -> str:
-        """下载分支版本的适配器"""
-        ui.print_info(f"正在下载{branch}分支的适配器...")
-        
-        # main分支默认使用main适配器，dev分支使用dev适配器
-        adapter_branch = branch  # 直接使用对应的分支
-        
-        with tempfile.TemporaryDirectory() as temp_dir:
-            adapter_repo = "MaiM-with-u/MaiBot-Napcat-Adapter"
-            adapter_url = f"https://github.com/{adapter_repo}/archive/refs/heads/{adapter_branch}.zip"
-            adapter_zip = os.path.join(temp_dir, f"adapter_{adapter_branch}.zip")
-            
-            ui.print_info(f"下载适配器URL: {adapter_url}")
-            
-            if not self.download_file(adapter_url, adapter_zip):
-                ui.print_warning(f"{adapter_branch}分支适配器下载失败")
-                return f"{adapter_branch}分支适配器下载失败"
-            
-            # 解压到临时目录
-            temp_extract = os.path.join(temp_dir, f"adapter_extract_{adapter_branch}")
-            if not self.extract_archive(adapter_zip, temp_extract):
-                ui.print_warning("适配器解压失败")
-                return "适配器解压失败"
-            
-            # 查找解压后的目录并复制到正确位置
-            extracted_dirs = [d for d in os.listdir(temp_extract) if os.path.isdir(os.path.join(temp_extract, d))]
-            adapter_extract_path = os.path.join(maibot_path, "adapter")
-            
-            if extracted_dirs:
-                # 找到解压后的根目录
-                source_adapter_dir = os.path.join(temp_extract, extracted_dirs[0])
-                
-                # 确保目标目录不存在，然后复制
-                if os.path.exists(adapter_extract_path):
-                    shutil.rmtree(adapter_extract_path)
-                shutil.copytree(source_adapter_dir, adapter_extract_path)
-                
-                ui.print_success(f"{adapter_branch}分支适配器安装完成")
-                logger.info("分支适配器安装成功", branch=adapter_branch, path=adapter_extract_path)
-                return adapter_extract_path
-            else:
-                # 如果没有找到子目录，尝试直接移动整个解压目录的内容
-                if os.path.exists(adapter_extract_path):
-                    shutil.rmtree(adapter_extract_path)
-                os.makedirs(adapter_extract_path)
-                
-                # 移动所有内容到目标目录
-                for item in os.listdir(temp_extract):
-                    src = os.path.join(temp_extract, item)
-                    dst = os.path.join(adapter_extract_path, item)
-                    if os.path.isdir(src):
-                        shutil.copytree(src, dst)
-                    else:
-                        shutil.copy2(src, dst)
-                
-                ui.print_success(f"{adapter_branch}分支适配器安装完成")
-                logger.info("分支适配器安装成功", branch=adapter_branch, path=adapter_extract_path)
-                return adapter_extract_path
     
     def _download_specific_adapter_version(self, adapter_version: str, maibot_path: str) -> str:
         """下载特定版本的适配器"""
@@ -1800,6 +1689,7 @@ pause
             "absolute_serial_number": config_manager.generate_unique_serial(),
             "version_path": deploy_config["selected_version"]["name"],
             "nickname_path": deploy_config["nickname"],
+            "qq_account": deploy_config.get("qq_account", ""),
             "mai_path": maibot_path,
             "adapter_path": adapter_path,
             "napcat_path": napcat_path,

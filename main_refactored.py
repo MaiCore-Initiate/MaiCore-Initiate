@@ -15,7 +15,7 @@ from src.ui.interface import ui
 from src.modules.launcher import launcher
 from src.modules.config_manager import config_mgr
 from src.modules.knowledge import knowledge_builder
-from src.utils.common import setup_console, clear_screen
+from src.utils.common import setup_console
 
 # 设置日志
 setup_logging()

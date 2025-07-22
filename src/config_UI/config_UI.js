@@ -69,7 +69,8 @@ const fieldLabels = {
     napcat_path: "NapCat路径",
     venv_path: "虚拟环境路径",
     mongodb_path: "MongoDB路径",
-    webui_path: "WebUI路径"
+    webui_path: "WebUI路径",
+    qq_account: "QQ账号"
 };
 
 function createCard(name, data) {
@@ -84,6 +85,7 @@ function createCard(name, data) {
         <div class="config-info">绝对序号: ${data.absolute_serial_number || ""}</div>
         <div class="config-info">版本: ${data.version_path || ""}</div>
         <div class="config-info">昵称: ${data.nickname_path || ""}</div>
+        <div class="config-info">QQ账号: ${data.qq_account || ""}</div>
     `;
     card.onclick = (e) => {
         if (e.target.classList.contains("btn-delete")) return;
@@ -127,6 +129,7 @@ document.getElementById("add-config-btn").onclick = () => {
             venv_path: "",
             mongodb_path: "",
             webui_path: "",
+            qq_account: "",
             install_options: {
                 install_adapter: false,
                 install_napcat: false,

@@ -24,7 +24,8 @@ class Config:
                 "nickname_path": "默认配置",
                 "mai_path": "",
                 "adapter_path": "",
-                "napcat_path": ""
+                "napcat_path": "",
+                "qq_account": ""
             }
         }
     }
