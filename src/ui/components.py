@@ -19,6 +19,12 @@ class Components:
         self.colors = COLORS
         self.symbols = SYMBOLS
 
+    def show_title(self, title: str, symbol: str = ""):
+        """显示一个带有样式的标题"""
+        symbol_text = f"[{self.colors['primary']}]{self.symbols.get(symbol, '')}[/{self.colors['primary']}] " if symbol else ""
+        self.console.print(f"\n{symbol_text}[bold {self.colors['header']}]{title}[/bold {self.colors['header']}]")
+        self.console.print(f"[{self.colors['border']}] {'-' * (len(title) + 4)} [/{self.colors['border']}]")
+
     def show_instance_list(self, configurations: Dict[str, Any]):
         """显示实例列表"""
         self.console.print("请选择您要使用的实例：", style=self.colors["info"])
