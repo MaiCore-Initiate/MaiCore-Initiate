@@ -61,6 +61,7 @@ class Components:
             ("绝对序列号", str(config.get('absolute_serial_number', '未配置'))),
             ("昵称", config.get('nickname_path', '未配置')),
             ("版本", config.get('version_path', '未配置')),
+            ("QQ", config.get('qq_account', '未配置')),
             ("麦麦本体路径", config.get('mai_path', '未配置')),
         ]
         

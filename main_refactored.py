@@ -114,7 +114,6 @@ class MaiMaiLauncher:
                 ui.pause()
                 break
             
-            ui.show_instance_list(configurations)
             
             choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "E", "F","Q"])
             
