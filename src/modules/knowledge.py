@@ -35,6 +35,9 @@ class KnowledgeBuilder:
         
         # 解析版本号
         try:
+            if version.lower() in ('main', 'dev'):
+                # main和dev分支通常是最新版本，直接返回True
+                return True
             # 提取版本号中的数字部分，如 "0.6.3-alpha" -> "0.6.3"
             version_number = version.split('-')[0]
             version_parts = version_number.split('.')
@@ -414,10 +417,6 @@ class KnowledgeBuilder:
     def migrate_mongodb_to_sqlite(self, source_path: str = "", target_path: str = "") -> bool:
         """
         执行MongoDB到SQLite的数据迁移
-        
-        Args:
-            source_path: 源数据路径 (已弃用，现通过配置选择)
-            target_path: 目标数据路径 (已弃用，现通过配置选择)
             
         Returns:
             迁移是否成功

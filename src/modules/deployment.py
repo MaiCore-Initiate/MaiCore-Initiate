@@ -1145,7 +1145,6 @@ pause
         if needs_mongo:
             # 0.7以下版本需要检查是否安装MongoDB
                 ui.print_info("正在检查MongoDB安装状态...")
-                from ..modules.mongodb_installer import mongodb_installer
                 try:
                     # 直接在这里进行MongoDB检查和安装
                     success, mongodb_path = mongodb_installer.check_and_install_mongodb(
@@ -1172,7 +1171,7 @@ pause
         # 获取基本信息
         existing_configs = config_manager.get_all_configurations()
         existing_serials = {cfg["serial_number"] for cfg in existing_configs.values()}
-        
+
         while True:
             serial_number = ui.get_input("请输入实例序列号（用于识别）：")
             if not serial_number:
@@ -1182,24 +1181,33 @@ pause
                 ui.print_error("该序列号已存在，请使用其他序列号")
                 continue
             break
-        
+
         while True:
-            install_dir = ui.get_input("请输入安装目录路径：")
-            if not install_dir:
-                ui.print_error("安装目录不能为空")
-                continue
-            
-            target_path = os.path.join(install_dir, "MaiBot")
-            if os.path.exists(target_path):
-                ui.print_error("目标目录已存在MaiBot文件夹，请选择其他目录")
-                continue
-            break
-        
-        while True:
-            nickname = ui.get_input("请输入实例昵称：")
+            nickname = ui.get_input("请输入实例昵称（将作为文件夹名称）：")
             if nickname:
                 break
             ui.print_error("昵称不能为空")
+
+        while True:
+            base_dir = ui.get_input("请输入基础安装目录：")
+            if not base_dir:
+                ui.print_error("基础安装目录不能为空")
+                continue
+            
+            # 使用昵称作为文件夹名
+            install_dir = os.path.join(base_dir, nickname)
+            
+            if os.path.exists(install_dir):
+                ui.print_warning(f"目录 '{install_dir}' 已存在。")
+                if not ui.confirm("是否继续在此目录中安装？"):
+                    continue
+            
+            # 验证路径有效性
+            if not validate_path(install_dir):
+                ui.print_error("安装路径无效，请重新输入。")
+                continue
+
+            break
         
         return {
             "selected_version": selected_version,
@@ -1762,8 +1770,6 @@ pause
             if webui_path:
                 ui.print_info("WebUI配置完成:")
                 ui.console.print(f"  • WebUI路径: {webui_path}")
-                ui.console.print("  • 可以通过浏览器访问WebUI界面")
-                ui.console.print("  • 如需启动WebUI，请在WebUI目录中执行 npm start")
             
             ui.print_success("✅ 配置文件设置完成")
             logger.info("配置文件设置完成", maibot_path=maibot_path)
@@ -1838,7 +1844,6 @@ pause
         ui.console.print("2. 修改 config.toml 中的机器人配置")
         ui.console.print("3. 如需要知识库功能，配置相关设置")
         ui.console.print("4. 如安装了NapCat，请配置QQ登录信息")
-        ui.console.print("5. 如安装了WebUI，可以通过浏览器访问管理界面")
         ui.console.print("\n您现在可以通过主菜单的启动选项来运行该实例")
     
     def update_instance(self) -> bool:

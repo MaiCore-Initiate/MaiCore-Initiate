@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 MaiMbot 一键启动器 V3.4.2
+# 🚀 MaiMbot 一键启动器 V4.0.0
 
 **智能聊天机器人一站式部署与管理工具**
 
@@ -368,7 +368,7 @@ graph LR
 本项目采用 [Apache License 2.0](LICENSE) 开源许可证。
 
 ```
-Copyright 2024 xiaoCZX
+Copyright 2025 xiaoCZX
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -389,7 +389,7 @@ limitations under the License.
 
 ### 🌟 如果这个项目对您有帮助，请给一个Star！
 
-**Made with ❤️ by [xiaoCZX](https://github.com/xiaoCZX)**
+**Made with ❤️ by [xiaoCZX](https://github.com/xiaoCZX) and **
 
 *促进多元化艺术创作发展普及*
 
