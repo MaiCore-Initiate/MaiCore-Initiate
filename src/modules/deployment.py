@@ -3,26 +3,29 @@
 负责实例的部署、更新和删除操作
 支持从官方GitHub获取版本列表和更新日志
 """
+import fnmatch
+import glob
+import json
 import os
+import platform
+import re
+import shutil
 import subprocess
 import tempfile
-import shutil
-import zipfile
-import tarfile
-import glob
-from pathlib import Path
 import time
+import venv
+import zipfile
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 import requests
 import structlog
-import json
-import platform
-import venv
-import fnmatch
-import re
-from typing import Dict, Any, Optional, List, Tuple
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.table import Table
 from tqdm import tqdm
-from pathlib import Path
-from datetime import datetime
+
 from ..core.config import config_manager
 from ..ui.interface import ui
 from ..utils.common import validate_path
@@ -505,32 +508,43 @@ class DeploymentManager:
     def show_version_menu(self) -> Optional[Dict]:
         """显示版本选择菜单，返回选中的版本信息"""
         ui.clear_screen()
-        ui.console.print("[🚀 选择部署版本]", style=ui.colors["primary"])
-        ui.console.print("="*50)
-        
+        ui.components.show_title("选择部署版本", symbol="🚀")
+
         # 获取版本列表
         ui.print_info("正在获取最新版本信息...")
         versions = self.get_maimai_versions()
-        
+
         if not versions:
             ui.print_error("无法获取版本信息，请检查网络连接")
             return None
-        
+
         # 创建版本表格
         from rich.table import Table
-        table = Table(show_header=True, header_style="bold magenta", show_lines=True)
-        table.add_column("选项", style="cyan", width=6)
-        table.add_column("版本", style="white", width=15)
-        table.add_column("类型", style="yellow", width=8)
-        table.add_column("说明", style="green", width=30)
-        table.add_column("发布时间", style="blue", width=12)
-        
+        table = Table(
+            show_header=True,
+            header_style=ui.colors["table_header"],
+            title="[bold]MaiBot 可用版本[/bold]",
+            title_style=ui.colors["primary"],
+            border_style=ui.colors["border"],
+            show_lines=True
+        )
+        table.add_column("选项", style="cyan", width=6, justify="center")
+        table.add_column("版本", style=ui.colors["primary"], width=20)
+        table.add_column("类型", style="yellow", width=10, justify="center")
+        table.add_column("说明", style="green", width=40)
+        table.add_column("发布时间", style=ui.colors["blue"], width=12, justify="center")
+
         # 显示前20个版本
         display_versions = versions[:20]
-        
+
         for i, version in enumerate(display_versions, 1):
-            version_type = "🌟分支" if version["type"] == "branch" else ("🧪预览" if version["prerelease"] else "✅正式")
-            
+            if version["type"] == "branch":
+                version_type = f"{ui.symbols['new']} 分支"
+            elif version["prerelease"]:
+                version_type = f"{ui.symbols['warning']} 预览"
+            else:
+                version_type = f"{ui.symbols['success']} 正式"
+
             published_date = ""
             if version["published_at"]:
                 try:
@@ -539,8 +553,8 @@ class DeploymentManager:
                 except:
                     published_date = "未知"
             else:
-                published_date = "最新"
-            
+                published_date = "[bold]最新[/bold]"
+
             table.add_row(
                 f"[{i}]",
                 version["display_name"],
@@ -548,11 +562,9 @@ class DeploymentManager:
                 version["description"],
                 published_date
             )
-        
+
         ui.console.print(table)
-        ui.console.print("\n[C] 查看版本更新日志")
-        ui.console.print("[R] 刷新版本列表") 
-        ui.console.print("[Q] 返回上级菜单", style="#7E1DE4")
+        ui.console.print("\n[C] 查看版本更新日志  [R] 刷新版本列表  [Q] 返回上级菜单", style=ui.colors["info"])
         
         while True:
             choice = ui.get_input("请选择版本或操作：").strip()
@@ -582,22 +594,32 @@ class DeploymentManager:
     def show_changelog_menu(self, versions: List[Dict]):
         """显示版本更新日志菜单"""
         ui.clear_screen()
-        ui.console.print("[📋 版本更新日志]", style=ui.colors["primary"])
-        ui.console.print("="*40)
-        
+        ui.components.show_title("版本更新日志", symbol="📋")
+
         # 显示版本列表供选择
         from rich.table import Table
-        table = Table(show_header=True, header_style="bold magenta")
-        table.add_column("选项", style="cyan", width=6)
-        table.add_column("版本", style="white", width=20)
-        table.add_column("类型", style="yellow", width=10)
-        
+        table = Table(
+            show_header=True,
+            header_style=ui.colors["table_header"],
+            title="[bold]选择要查看更新日志的版本[/bold]",
+            title_style=ui.colors["primary"],
+            border_style=ui.colors["border"]
+        )
+        table.add_column("选项", style="cyan", width=6, justify="center")
+        table.add_column("版本", style=ui.colors["primary"], width=25)
+        table.add_column("类型", style="yellow", width=12, justify="center")
+
         for i, version in enumerate(versions, 1):
-            version_type = "分支" if version["type"] == "branch" else ("预览版" if version["prerelease"] else "正式版")
+            if version["type"] == "branch":
+                version_type = f"{ui.symbols['new']} 分支"
+            elif version["prerelease"]:
+                version_type = f"{ui.symbols['warning']} 预览"
+            else:
+                version_type = f"{ui.symbols['success']} 正式"
             table.add_row(f"[{i}]", version["display_name"], version_type)
-        
+
         ui.console.print(table)
-        ui.console.print("\n[Q] 返回版本选择")
+        ui.console.print("\n[Q] 返回版本选择", style=ui.colors["info"])
         
         while True:
             choice = ui.get_input("请选择要查看更新日志的版本：").strip()
@@ -619,54 +641,48 @@ class DeploymentManager:
     def show_version_changelog(self, version: Dict):
         """显示特定版本的更新日志"""
         ui.clear_screen()
-        ui.console.print(f"[📋 {version['display_name']} - 更新日志]", style=ui.colors["primary"])
-        ui.console.print("="*60)
+        from rich.panel import Panel
+        from rich.markdown import Markdown
+
+        title = f"{ui.symbols['info']} {version['display_name']} - 更新日志"
         
-        # 显示基本信息
-        ui.console.print(f"版本: {version['display_name']}")
-        ui.console.print(f"类型: {'分支版本' if version['type'] == 'branch' else '发布版本'}")
-        
+        info_text = f"[bold]版本:[/bold] {version['display_name']}\n"
+        info_text += f"[bold]类型:[/bold] {'分支版本' if version['type'] == 'branch' else '发布版本'}\n"
         if version["published_at"]:
             try:
                 dt = datetime.fromisoformat(version["published_at"].replace('Z', '+00:00'))
-                ui.console.print(f"发布时间: {dt.strftime('%Y年%m月%d日 %H:%M')}")
+                info_text += f"[bold]发布时间:[/bold] {dt.strftime('%Y年%m月%d日 %H:%M')}"
             except:
-                ui.console.print("发布时间: 未知")
+                info_text += "[bold]发布时间:[/bold] 未知"
+
+        changelog_content = version.get("changelog", "暂无详细更新日志")
+        if not changelog_content.strip():
+            changelog_content = "暂无详细更新日志"
+
+        # 使用Markdown组件渲染更新日志
+        changelog_markdown = Markdown(changelog_content)
+
+        # 将所有内容放入一个Panel
+        full_content = f"{info_text}\n\n---\n\n"
         
-        ui.console.print("\n" + "="*60)
-        ui.console.print("更新内容:")
-        ui.console.print("-"*40)
+        panel_content = Panel(
+            changelog_markdown,
+            title=title,
+            title_align="left",
+            border_style=ui.colors["primary"],
+            subtitle="按回车键返回",
+            subtitle_align="right"
+        )
         
-        # 显示更新日志
-        changelog = version.get("changelog", "暂无更新日志")
-        if changelog.strip():
-            # 简单的markdown渲染
-            lines = changelog.split('\n')
-            for line in lines:
-                line = line.strip()
-                if line.startswith('# '):
-                    ui.console.print(f"\n[bold]{line[2:]}[/bold]")
-                elif line.startswith('## '):
-                    ui.console.print(f"\n[yellow]{line[3:]}[/yellow]")
-                elif line.startswith('### '):
-                    ui.console.print(f"\n[cyan]{line[4:]}[/cyan]")
-                elif line.startswith('- ') or line.startswith('* '):
-                    ui.console.print(f"  • {line[2:]}")
-                elif line:
-                    ui.console.print(line)
-        else:
-            ui.console.print("暂无详细更新日志")
-        
-        ui.console.print("\n" + "="*60)
-        ui.pause()
+        ui.console.print(panel_content)
+        ui.pause("")
     
     def select_napcat_version(self) -> Optional[Dict]:
         """选择NapCat版本"""
         ui.clear_screen()
-        ui.console.print("[🐱 选择NapCat版本]", style=ui.colors["primary"])
-        ui.console.print("="*40)
+        ui.components.show_title("选择NapCat版本", symbol="🐱")
         
-        ui.print_info("NapCat v4.8.90 稳定版本")
+        ui.print_info("当前仅支持 NapCat v4.8.90 稳定版本")
         napcat_versions = self.get_napcat_versions()
         
         if not napcat_versions:
@@ -675,10 +691,16 @@ class DeploymentManager:
         
         # 创建简化的版本表格
         from rich.table import Table
-        table = Table(show_header=True, header_style="bold magenta")
-        table.add_column("选项", style="cyan", width=6)
-        table.add_column("版本类型", style="white", width=20)
-        table.add_column("大小", style="yellow", width=10)
+        table = Table(
+            show_header=True,
+            header_style=ui.colors["table_header"],
+            title="[bold]NapCat 可用版本[/bold]",
+            title_style=ui.colors["primary"],
+            border_style=ui.colors["border"]
+        )
+        table.add_column("选项", style="cyan", width=6, justify="center")
+        table.add_column("版本类型", style=ui.colors["primary"], width=20)
+        table.add_column("大小", style="yellow", width=12, justify="center")
         table.add_column("说明", style="green")
         
         for i, version in enumerate(napcat_versions, 1):
@@ -692,7 +714,7 @@ class DeploymentManager:
             )
         
         ui.console.print(table)
-        ui.console.print("\n[Q] 跳过NapCat下载", style="#7E1DE4")
+        ui.console.print("\n[Q] 跳过NapCat下载", style=ui.colors["info"])
         
         while True:
             choice = ui.get_input("请选择NapCat版本类型：").strip()
@@ -994,73 +1016,34 @@ pause
         """部署新实例 - 重构版本"""
         try:
             ui.clear_screen()
-            ui.console.print("[🚀 实例部署助手]", style=ui.colors["primary"])
-            ui.console.print("="*50)
-            
-            # 网络连接检查
+            ui.components.show_title("实例部署助手", symbol="🚀")
+
             if not self._check_network_for_deployment():
                 return False
-            
-            # 获取部署配置
+
             deploy_config = self._get_deployment_config()
             if not deploy_config:
                 return False
-            
-            # 确认部署信息
+
             if not self._confirm_deployment(deploy_config):
                 return False
-            
+
             ui.print_info("🚀 开始部署流程...")
             logger.info("开始部署实例", config=deploy_config)
-            
-            # 第一步：安装MaiBot
-            maibot_path = self._install_maibot(deploy_config)
-            if not maibot_path:
-                return False
-            
-            # 第二步：检测版本并安装适配器（如果选择了NapCat）
-            adapter_path = ""
-            if deploy_config.get("install_napcat"):
-                adapter_path = self._install_adapter_if_needed(deploy_config, maibot_path)
 
-            # 第三步：安装NapCat（如果选择了）
-            napcat_path = ""
-            if deploy_config.get("install_napcat") and deploy_config.get("napcat_version"):
-                napcat_path = self._install_napcat(deploy_config, maibot_path)
-            
-            # 第四步：检查并安装WebUI（如果选择了）
-            webui_path = ""
-            if deploy_config.get("install_webui"):
-                success, webui_path = self._check_and_install_webui(deploy_config, maibot_path)
-                if not success:
-                    ui.print_warning("WebUI安装检查失败，但部署将继续...")
-            
-            # 将WebUI路径保存到部署配置中
-            deploy_config["webui_path"] = webui_path
-            
-            # 第五步：设置Python环境
-            venv_path = self._setup_python_environment(maibot_path, adapter_path)
+            # 部署流程
+            paths = self._run_deployment_steps(deploy_config)
 
-            # 第五点二步：如果安装了WebUI且有虚拟环境，重新安装WebUI后端依赖
-            if webui_path and venv_path:
-                ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
-                webui_installer.install_webui_backend_dependencies(webui_path, venv_path)
-
-            # 第五点五步：配置文件设置
-            mongodb_path = deploy_config.get("mongodb_path", "")  # 从配置中获取MongoDB路径
-            if not self._setup_config_files(deploy_config, maibot_path, adapter_path, napcat_path, mongodb_path, webui_path):
-                ui.print_warning("配置文件设置失败，但部署将继续...")
-
-            # 第六步：创建配置和启动脚本
-            if not self._finalize_deployment(deploy_config, maibot_path, adapter_path, napcat_path, venv_path, webui_path):
+            # 完成部署
+            if not self._finalize_deployment(deploy_config, **paths):
                 return False
 
             ui.print_success(f"🎉 实例 '{deploy_config['nickname']}' 部署完成！")
             self._show_post_deployment_info()
-            
+
             logger.info("实例部署完成", serial=deploy_config['serial_number'])
             return True
-            
+
         except Exception as e:
             ui.print_error(f"部署失败：{str(e)}")
             logger.error("实例部署失败", error=str(e))
@@ -1547,9 +1530,14 @@ pause
             ui.print_warning("⚠️ 虚拟环境创建失败，将使用系统Python")
             return ""
     
-    def _setup_config_files(self, deploy_config: Dict, maibot_path: str, adapter_path: str, napcat_path: str, mongodb_path: str, webui_path: str) -> bool:
-        """第四点五步：配置文件设置"""
-        ui.console.print("\n[⚙️ 第四点五步：配置文件设置]", style=ui.colors["primary"])
+    def _setup_config_files(self, deploy_config: Dict, **paths: str) -> bool:
+        """第六步：配置文件设置"""
+        ui.console.print("\n[⚙️ 第六步：配置文件设置]", style=ui.colors["primary"])
+        maibot_path = paths["maibot_path"]
+        adapter_path = paths["adapter_path"]
+        napcat_path = paths["napcat_path"]
+        mongodb_path = paths["mongodb_path"]
+        webui_path = paths["webui_path"]
         
         try:
             # 创建config目录
@@ -1669,9 +1657,58 @@ pause
             logger.error("配置文件设置失败", error=str(e))
             return False
 
-    def _finalize_deployment(self, deploy_config: Dict, maibot_path: str, adapter_path: str, napcat_path: str, venv_path: str, webui_path: str) -> bool:
-        """第五步：完成部署配置"""
-        ui.console.print("\n[⚙️ 第五步：完成部署配置]", style=ui.colors["primary"])
+    def _run_deployment_steps(self, deploy_config: Dict) -> Dict[str, str]:
+        """执行所有部署步骤"""
+        paths = {
+            "maibot_path": "",
+            "adapter_path": "",
+            "napcat_path": "",
+            "venv_path": "",
+            "webui_path": "",
+            "mongodb_path": deploy_config.get("mongodb_path", ""),
+        }
+
+        # 步骤1：安装MaiBot
+        paths["maibot_path"] = self._install_maibot(deploy_config)
+        if not paths["maibot_path"]:
+            raise Exception("MaiBot安装失败")
+
+        # 步骤2：安装适配器
+        if deploy_config.get("install_adapter"):
+            paths["adapter_path"] = self._install_adapter_if_needed(deploy_config, paths["maibot_path"])
+
+        # 步骤3：安装NapCat
+        if deploy_config.get("install_napcat") and deploy_config.get("napcat_version"):
+            paths["napcat_path"] = self._install_napcat(deploy_config, paths["maibot_path"])
+
+        # 步骤4：安装WebUI
+        if deploy_config.get("install_webui"):
+            success, paths["webui_path"] = self._check_and_install_webui(deploy_config, paths["maibot_path"])
+            if not success:
+                ui.print_warning("WebUI安装检查失败，但部署将继续...")
+
+        # 步骤5：设置Python环境
+        paths["venv_path"] = self._setup_python_environment(paths["maibot_path"], paths["adapter_path"])
+        
+        if paths["webui_path"] and paths["venv_path"]:
+            ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
+            webui_installer.install_webui_backend_dependencies(paths["webui_path"], paths["venv_path"])
+
+        # 步骤6：配置文件设置
+        if not self._setup_config_files(deploy_config, **paths):
+            ui.print_warning("配置文件设置失败，但部署将继续...")
+
+        return paths
+
+    def _finalize_deployment(self, deploy_config: Dict, **paths: str) -> bool:
+        """第七步：完成部署配置"""
+        ui.console.print("\n[⚙️ 第七步：完成部署配置]", style=ui.colors["primary"])
+        maibot_path = paths["maibot_path"]
+        adapter_path = paths["adapter_path"]
+        napcat_path = paths["napcat_path"]
+        venv_path = paths["venv_path"]
+        webui_path = paths["webui_path"]
+        mongodb_path = paths["mongodb_path"]
         
         # 创建配置
         ui.print_info("正在创建实例配置...")
@@ -1694,7 +1731,7 @@ pause
             "adapter_path": adapter_path,
             "napcat_path": napcat_path,
             "venv_path": venv_path,
-            "mongodb_path": deploy_config.get("mongodb_path", ""),
+            "mongodb_path": mongodb_path,
             "webui_path": webui_path,
             "install_options": install_options
         }
