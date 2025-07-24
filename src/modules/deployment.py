@@ -567,7 +567,7 @@ class DeploymentManager:
         ui.console.print("\n[C] 查看版本更新日志  [R] 刷新版本列表  [Q] 返回上级菜单", style=ui.colors["info"])
         
         while True:
-            choice = ui.get_input("请选择版本或操作：").strip()
+            choice = ui.get_input("请选择版本所对应的选项或操作：").strip()
             
             if choice.upper() == 'Q':
                 return None
@@ -577,7 +577,8 @@ class DeploymentManager:
             elif choice.upper() == 'C':
                 # 查看更新日志
                 self.show_changelog_menu(display_versions)
-                continue
+                # 返回后重新显示菜单
+                return self.show_version_menu()
             
             try:
                 choice_num = int(choice)
@@ -1091,8 +1092,8 @@ pause
         if is_legacy:
             ui.print_info("旧版本建议配置：MaiBot主体 + MongoDB")
         else:
-            ui.print_info("新版本建议配置：MaiBot + 适配器 + NapCat + MongoDB(0.7-)")
-        
+            ui.print_info("新版本建议配置：MaiBot + 适配器 + NapCat")
+
         ui.console.print()
         
         # 询问适配器安装（新版本默认推荐）
@@ -1147,8 +1148,8 @@ pause
             ui.print_info("0.7及以上版本无需MongoDB，已自动跳过")
 
         # 询问是否需要安装WebUI
-        install_webui = ui.confirm("是否需要安装WebUI？（Web管理界面）")
-        
+        install_webui = ui.confirm("是否需要安装WebUI？（Web聊天室界面）(目前处于预览版, 可能不稳定)")
+
         # 获取基本信息
         existing_configs = config_manager.get_all_configurations()
         existing_serials = {cfg["serial_number"] for cfg in existing_configs.values()}
