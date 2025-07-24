@@ -380,6 +380,9 @@ class MaiMaiLauncher:
                     self.handle_about_menu()
                 elif choice == "H":
                     self.handle_process_status()
+                elif choice == "P":
+                    # 插件管理
+                    ui.show_plugin_menu()
                 else:
                     ui.print_error("无效选项")
                     ui.countdown(1)

@@ -48,6 +48,7 @@ class Menus:
         self.console.print("====>>功能类<<====")
         self.console.print(f" [D] {self.symbols['knowledge']} 知识库构建", style=self.colors["secondary"])
         self.console.print(f" [E] {self.symbols['database']} 数据库迁移（MongoDB → SQLite）", style=self.colors["secondary"])
+        self.console.print(f" [P] {self.symbols['plugin']} 插件管理（目前只是一个ui）", style=self.colors["primary"])
         
         self.console.print("====>>部署类<<====")
         self.console.print(f" [F] {self.symbols['deployment']} 实例部署辅助系统", style=self.colors["error"])
@@ -99,3 +100,20 @@ class Menus:
         
         self.console.print("====>>返回<<====")
         self.console.print(f" [Q] {self.symbols['back']} 返回上级", style=self.colors["exit"])
+
+    def show_instance_plugin_menu(self, instance_name: str):
+        """显示实例的插件管理菜单"""
+        panel = Panel(
+            f"[{self.symbols['plugin']} 插件管理: {instance_name}]",
+            style=self.colors["primary"],
+            title="插件管理"
+        )
+        self.console.print(panel)
+        
+        self.console.print("====>> 插件操作 <<====")
+        self.console.print(f" [A] {self.symbols['new']} 安装新插件", style=self.colors["success"])
+        self.console.print(f" [B] {self.symbols['delete']} 卸载已安装的插件", style=self.colors["error"])
+        self.console.print(f" [C] {self.symbols['view']} 查看已安装插件列表", style=self.colors["info"])
+        
+        self.console.print("====>> 返回 <<====")
+        self.console.print(f" [Q] {self.symbols['back']} 返回主菜单", style=self.colors["exit"])

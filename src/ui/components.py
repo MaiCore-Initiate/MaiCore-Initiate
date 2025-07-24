@@ -6,7 +6,7 @@ UI组件模块
 import os
 from rich.console import Console
 from rich.table import Table
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from .theme import COLORS, SYMBOLS
 
@@ -123,3 +123,54 @@ class Components:
                 option_table.add_row(name, status)
             
             self.console.print(option_table)
+
+    def show_installed_plugins(self, instance_name: str, installed_plugins: List[Dict[str, str]]):
+        """显示已安装的插件列表"""
+        self.show_title(f"实例 '{instance_name}' 的已安装插件", symbol="plugin")
+        
+        if not installed_plugins:
+            self.console.print("  没有找到已安装的插件。", style=self.colors["warning"])
+            return
+
+        table = Table(show_header=True, header_style=self.colors["table_header"])
+        table.add_column("插件名称", style=self.colors["primary"])
+        table.add_column("版本", style=self.colors["white"])
+        table.add_column("作者", style=self.colors["info"])
+        table.add_column("描述", style=self.colors["secondary"])
+        
+        for plugin in installed_plugins:
+            table.add_row(
+                plugin.get("name", "N/A"),
+                plugin.get("version", "N/A"),
+                plugin.get("author", "N/A"),
+                plugin.get("description", "N/A")
+            )
+        
+        self.console.print(table)
+
+    def show_available_plugins(self, available_plugins: List[Dict[str, str]]):
+        """显示可供安装的插件列表"""
+        self.show_title("可用的新插件", symbol="new")
+
+        if not available_plugins:
+            self.console.print("  没有找到可用的新插件。", style=self.colors["info"])
+            return
+
+        table = Table(show_header=True, header_style=self.colors["table_header"])
+        table.add_column("序号", style=self.colors["cyan"])
+        table.add_column("插件名称", style=self.colors["primary"])
+        table.add_column("版本", style=self.colors["white"])
+        table.add_column("作者", style=self.colors["info"])
+        table.add_column("描述", style=self.colors["secondary"])
+        
+        for idx, plugin in enumerate(available_plugins, 1):
+            table.add_row(
+                str(idx),
+                plugin.get("name", "N/A"),
+                plugin.get("version", "N/A"),
+                plugin.get("author", "N/A"),
+                plugin.get("description", "N/A")
+            )
+        
+        self.console.print(table)
+        self.console.print("请输入您想安装的插件序号，或输入 'Q' 取消。", style=self.colors["info"])

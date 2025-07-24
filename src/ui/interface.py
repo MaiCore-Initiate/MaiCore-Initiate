@@ -52,6 +52,66 @@ class UI:
         """显示配置检查菜单（保持兼容性）"""
         self.show_config_management_menu()
 
+    def show_plugin_menu(self):
+        """显示插件管理菜单"""
+        self.clear_screen()
+        # 这是一个示例流程，后续会替换为真实的逻辑
+        self.components.show_title("插件管理", symbol="plugin")
+        
+        # 1. 选择实例
+        # 假设我们有一个函数来获取实例，这里我们用假数据
+        all_configs = {"instance1": {}, "instance2": {}} # 替换为 config_manager.get_all_configs()
+        self.show_instance_list(all_configs)
+        instance_name = self.get_input("请输入要管理插件的实例名称: ")
+
+        if not instance_name:
+            self.print_warning("没有输入实例名称，操作取消。")
+            self.countdown(3)
+            return
+
+        # 2. 显示插件管理菜单
+        while True:
+            self.clear_screen()
+            
+            # 假设的已安装插件列表
+            installed_plugins = [
+                {"name": "maimai-help", "version": "1.2.0", "author": "Alice", "description": "一个帮助插件"},
+                {"name": "maimai-stats", "version": "0.5.0", "author": "Bob", "description": "统计B50和单曲数据"}
+            ]
+            self.components.show_installed_plugins(instance_name, installed_plugins)
+            
+            self.menus.show_instance_plugin_menu(instance_name)
+            
+            choice = self.get_choice("请选择操作: ", ["A", "B", "C", "Q"])
+            
+            if choice == 'A':
+                # 假设的可安装插件列表
+                available_plugins = [
+                    {"name": "maimai-themes", "version": "1.0.0", "author": "Charlie", "description": "为MaiMbot更换主题"},
+                    {"name": "maimai-gacha", "version": "2.1.0", "author": "David", "description": "模拟抽卡"}
+                ]
+                self.components.show_available_plugins(available_plugins)
+                plugin_choice = self.get_input("请输入要安装的插件序号 (或 Q 取消): ")
+                if plugin_choice.upper() == 'Q':
+                    continue
+                self.print_success(f"插件 '{plugin_choice}' 已成功安装到 '{instance_name}' (模拟)。")
+                self.pause()
+
+            elif choice == 'B':
+                plugin_to_uninstall = self.get_input("请输入要卸载的插件名称 (或 Q 取消): ")
+                if plugin_to_uninstall.upper() == 'Q':
+                    continue
+                self.print_success(f"插件 '{plugin_to_uninstall}' 已从 '{instance_name}' 卸载 (模拟)。")
+                self.pause()
+
+            elif choice == 'C':
+                # 刷新列表，循环开始时已执行
+                self.print_info("已刷新插件列表。")
+                self.pause()
+                
+            elif choice == 'Q':
+                break
+
     def show_instance_list(self, configurations: Dict[str, Any]):
         """显示实例列表"""
         self.components.show_instance_list(configurations)

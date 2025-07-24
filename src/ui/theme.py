@@ -45,4 +45,5 @@ SYMBOLS = {
     "delete": "🗑️",
     "validate": "🔍",
     "new": "✨",
+    "plugin": "🧩",
 }
