@@ -63,14 +63,14 @@
 
 | 版本 | 描述 | 下载链接 |
 |------|------|----------|
-| **V3.4.2 标准版** | 基础版本，功能完整 | [📦 下载](https://github.com/xiaoCZX/MaiMbot-initiate/releases/tag/v3.4.2) |
-| **V3.4.2-PATH 增强版** | 添加环境变量支持，可通过 `mbl` 命令全局启动 | [📦 下载](https://github.com/xiaoCZX/MaiMbot-initiate/releases/tag/v3.4.2-PATH) |
+| **V4.0.0 标准版** | 基础版本，功能完整 | [📦 下载](https://github.com/xiaoCZX/MaiMbot-initiate/releases/tag/v4.0.0) |
+| **V4.0.0-PATH 增强版** | 添加环境变量支持，可通过 `mbl` 命令全局启动 | [📦 下载](https://github.com/xiaoCZX/MaiMbot-initiate/releases/tag/v4.0.0-PATH) |
 
 ### 🚀 启动程序
 
 ```bash
 # 双击运行
-MaiLauncher-v3.4.2.exe
+MaiLauncher-v4.0.0.exe
 
 # 或使用 PATH 版本的全局命令
 mbl
@@ -102,7 +102,7 @@ mbl
 <div align="center">
 
 | 选项 | 功能类别 | 功能描述 | 使用场景 |
-|:----:|:--------:|----------|----------|
+|:----|:--------|:----------|:----------|
 | **🚀 A** | 启动类 | 仅运行麦麦本体 | 日常使用，轻量启动 |
 | **🔥 B** | 启动类 | 完整启动（麦麦+适配器+NapCat+MongoDB） | 完整功能，生产环境 |
 | **⚙️ C** | 配置类 | 多实例配置管理 | 新建/修改/删除配置 |
@@ -198,21 +198,35 @@ graph LR
 - 🐛 常见问题解决
 
 ### 🆘 技术支持优先级
-```
-上上策是询问智慧的小草神
-上策是询问万能的千石可乐
-中策是不用
-下策是进群询问焊武姬@一闪
-下下策是询问一个废物@小城之雪
-```
-*建议优先查阅文档和教程自行解决问题*
+- **上上策**：询问智慧的小草神
+- **上策**：询问万能的千石可乐
+- **中策**：不用
+- **下策**：进群询问焊武姬@一闪 / 神秘NPC猫娘@ikun两年半
+- **下下策**：询问一个废物@小城之雪
+
+*建议优先查阅文档和教程自行解决问题，或在社区寻求帮助。*
 
 ---
 
 ## 📋 更新日志
 
 <details>
-<summary><strong>🔥 V3.4.2 (当前版本)</strong></summary>
+<summary><strong>🔥 V4.0.0 (当前版本)</strong></summary>
+
+- **🏗️ 全新架构**：采用面向对象的设计，代码更清晰、可维护性更高。
+- **🧩 组件化启动**：实现按需、动态、灵活的启动组合，资源占用更少。
+- **🌐 可视化配置**：新增基于 Web 的配置编辑器，告别手动修改 `config.toml`。
+- **📊 进程状态管理**：提供实时的进程监控面板，轻松掌握运行状态。
+- **🎨 现代化UI**：基于 `rich` 库重制精美的命令行界面，视觉体验升级。
+- **🔌 插件化框架**：为未来的功能扩展奠定坚实基础，更具拓展性。
+
+</details>
+
+<details>
+<summary><strong>📚 历史版本</strong></summary>
+
+<details>
+<summary><strong>🚀 V3.4.2 - 重大更新</strong></summary>
 
 ### ✨ 新增功能
 - 📝 完善 `[F] → [G] 实例更新` 功能
@@ -220,7 +234,6 @@ graph LR
 
 ### 🐛 问题修复
 - 🔧 优化部署辅助系统稳定性
-
 </details>
 
 <details>
@@ -249,11 +262,7 @@ graph LR
 
 ### 🔒 安全更新
 - 📄 开源许可证从 MIT 变更为 Apache 2.0
-
 </details>
-
-<details>
-<summary><strong>📚 历史版本</strong></summary>
 
 ### V3.3
 - 🔄 配置文件格式从JSON迁移到TOML
@@ -368,7 +377,7 @@ graph LR
 本项目采用 [Apache License 2.0](LICENSE) 开源许可证。
 
 ```
-Copyright 2025 xiaoCZX
+Copyright (c) 2023-2025 xiaoCZX
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -389,9 +398,9 @@ limitations under the License.
 
 ### 🌟 如果这个项目对您有帮助，请给一个Star！
 
-**Made with ❤️ by [xiaoCZX](https://github.com/xiaoCZX) and **
+*<p align="center">促进多元化艺术创作发展普及</p>*
 
-*促进多元化艺术创作发展普及*
+**Made with ❤️ by [xiaoCZX](https://github.com/xiaoCZX) and other contributors**
 
 ```
      88b         d88           88 888888ba                                ,ad88ba,  88                                
