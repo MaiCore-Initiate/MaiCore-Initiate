@@ -295,7 +295,7 @@ class MaiMaiLauncher:
         ui.console.print("  • 更好的代码组织", style="white")
         
         ui.console.print("\n技术栈：", style=ui.colors["info"])
-        ui.console.print("  • Python 3.8+", style="white")
+        ui.console.print("  • Python 3.12.8", style="white")
         ui.console.print("  • structlog - 结构化日志", style="white")
         ui.console.print("  • rich - 终端UI", style="white")
         ui.console.print("  • toml - 配置管理", style="white")        
