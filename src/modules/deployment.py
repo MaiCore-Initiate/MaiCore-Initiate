@@ -1382,12 +1382,14 @@ pause
     
     def _download_specific_adapter_version(self, adapter_version: str, maibot_path: str) -> str:
         """下载特定版本的适配器"""
-        ui.print_info(f"正在下载v{adapter_version}版本的适配器...")
+        
         
         with tempfile.TemporaryDirectory() as temp_dir:
             if adapter_version == "main" or adapter_version == "dev":
-                adapter_url = f"https://github.com/MaiM-with-u/MaiBot-Napcat-Adapter/releases/download/{adapter_version}/MaiBot-Napcat-Adapter-{adapter_version}.zip"
+                ui.print_info(f"正在下载{adapter_version}的适配器...")
+                adapter_url = f"https://codeload.github.com/MaiM-with-u/MaiBot-Napcat-Adapter/zip/refs/heads/{adapter_version}"
             else:
+                ui.print_info(f"正在下载v{adapter_version}版本的适配器...")
                 adapter_url = f"https://codeload.github.com/MaiM-with-u/MaiBot-Napcat-Adapter/zip/refs/tags/{adapter_version}"
             adapter_zip = os.path.join(temp_dir, f"adapter_v{adapter_version}.zip")
             
