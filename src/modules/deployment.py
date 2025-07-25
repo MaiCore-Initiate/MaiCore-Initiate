@@ -1939,56 +1939,36 @@ pause
                                 shutil.rmtree(target_path)
                             shutil.copytree(data, target_path)
                 
+                # 更新适配器
+                ui.print_info("正在检查和更新适配器...")
+                adapter_path = self._determine_adapter_requirements(new_version_data["display_name"], mai_path)
+                config["adapter_path"] = adapter_path
+                
                 # 更新依赖
-                requirements_path = os.path.join(mai_path, "requirements.txt")
-                if os.path.exists(requirements_path):
-                    # 检查是否有虚拟环境
-                    venv_path = config.get("venv_path", "")
-                    if venv_path and os.path.exists(venv_path):
-                        # 使用虚拟环境更新依赖
-                        ui.print_info("正在虚拟环境中更新依赖...")
-                        if platform.system() == "Windows":
-                            pip_exe = os.path.join(venv_path, "Scripts", "pip.exe")
-                        else:
-                            pip_exe = os.path.join(venv_path, "bin", "pip")
-                        
-                        if os.path.exists(pip_exe):
-                            try:
-                                subprocess.run([
-                                    pip_exe, "install", "-r", requirements_path, "--upgrade", 
-                                    "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"
-                                ], check=True)
-                                ui.print_success("依赖更新完成")
-                            except subprocess.CalledProcessError:
-                                ui.print_warning("依赖更新失败，请手动更新")
-                        else:
-                            ui.print_warning("虚拟环境中的pip未找到，尝试重新创建虚拟环境")
-                            # 重新创建虚拟环境并安装依赖
-                            venv_success, new_venv_path = self.create_virtual_environment(mai_path)
-                            if venv_success:
-                                deps_success = self.install_dependencies_in_venv(new_venv_path, requirements_path)
-                                if deps_success:
-                                    # 更新配置中的虚拟环境路径
-                                    config["venv_path"] = new_venv_path
+                venv_path = config.get("venv_path", "")
+                if not venv_path or not os.path.exists(venv_path):
+                    # 如果没有虚拟环境，创建一个
+                    ui.print_info("未找到有效虚拟环境，正在创建新的虚拟环境...")
+                    venv_success, venv_path = self.create_virtual_environment(mai_path)
+                    if venv_success:
+                        config["venv_path"] = venv_path
                     else:
-                        # 没有虚拟环境，创建一个新的
-                        ui.print_info("创建虚拟环境并安装依赖...")
-                        venv_success, new_venv_path = self.create_virtual_environment(mai_path)
-                        if venv_success:
-                            deps_success = self.install_dependencies_in_venv(new_venv_path, requirements_path)
-                            if deps_success:
-                                # 更新配置中的虚拟环境路径
-                                config["venv_path"] = new_venv_path
-                        else:
-                            ui.print_warning("虚拟环境创建失败，使用系统Python安装依赖")
-                            try:
-                                subprocess.run([
-                                    "pip", "install", "-r", requirements_path, "--upgrade", 
-                                    "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"
-                                ], check=True)
-                                ui.print_success("依赖更新完成")
-                            except subprocess.CalledProcessError:
-                                ui.print_warning("依赖更新失败，请手动更新")
+                        ui.print_error("虚拟环境创建失败，跳过依赖更新")
+                        venv_path = "" # 确保后续不会使用无效路径
+                
+                if venv_path:
+                    # 更新MaiBot主依赖
+                    requirements_path = os.path.join(mai_path, "requirements.txt")
+                    if os.path.exists(requirements_path):
+                        ui.print_info("正在更新MaiBot主程序依赖...")
+                        self.install_dependencies_in_venv(venv_path, requirements_path)
+                    
+                    # 更新适配器依赖
+                    if adapter_path and adapter_path != "无需适配器" and not ("失败" in adapter_path or "版本较低" in adapter_path):
+                        adapter_requirements_path = os.path.join(adapter_path, "requirements.txt")
+                        if os.path.exists(adapter_requirements_path):
+                            ui.print_info("正在更新适配器依赖...")
+                            self.install_dependencies_in_venv(venv_path, adapter_requirements_path)
                 
                 # 更新配置中的版本号
                 config["version_path"] = new_version
