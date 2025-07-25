@@ -577,12 +577,9 @@ class ConfigManager:
         if needs_mongodb(version):
             ui.print_info("检测到0.7以下版本，建议配置MongoDB")
             mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
-        else:        
-            # 尝试自动检测MongoDB（如果有相关检测功能）
-            # 这里可以添加自动检测逻辑
-            mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
-            
-            return mongodb_path or ""
+        else:
+            ui.print_info("0.7及以上版本MaiMbot不需要MongoDB")            
+        return mongodb_path or ""
     
     def _configure_mongodb_manual(self, version: str, install_mongodb: bool) -> str:
         """
