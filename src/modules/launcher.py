@@ -170,10 +170,11 @@ class _NapCatComponent(_LaunchComponent):
         # 检查是否有QQ号配置
         qq_account = self.config.get("qq_account")
         if qq_account:
-            command += f" -q {qq_account}"
+            command += f" {qq_account}"
             logger.info("检测到QQ号配置，为NapCat启动添加-q参数", qq=qq_account)
 
         cwd = os.path.dirname(napcat_path)
+        logger.info("NapCat启动路径", "参数", path=cwd, args=command)
         title = f"NapCatQQ - {self.config.get('version_path', 'N/A')}"
         return command, cwd, title
 
