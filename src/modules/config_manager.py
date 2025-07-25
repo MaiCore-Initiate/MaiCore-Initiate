@@ -47,7 +47,7 @@ class ConfigManager:
             import re
             old_version_count = 0
             while True:
-                version = ui.get_input("请输入版本号（如0.7.0或classical,main,dev）：")
+                version = ui.get_input("请输入版本号（如0.7.0或classical,main,dev）：").lower()
                 m = re.match(r'^(\d+)\.(\d+)\.(\d+)$', version)
                 if m:
                     major, minor, patch = map(int, m.groups())
@@ -132,7 +132,7 @@ class ConfigManager:
             import re
             old_version_count = 0
             while True:
-                version = ui.get_input("请输入版本号（如0.7.0或classical,main,dev）：")
+                version = ui.get_input("请输入版本号（如0.7.0或classical,main,dev）：").lower()
                 m = re.match(r'^(\d+)\.(\d+)\.(\d+)$', version)
                 if m:
                     major, minor, patch = map(int, m.groups())
@@ -576,6 +576,7 @@ class ConfigManager:
         from ..utils.version_detector import needs_mongodb
         if needs_mongodb(version):
             ui.print_info("检测到0.7以下版本，建议配置MongoDB")
+            mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
         else:        
             # 尝试自动检测MongoDB（如果有相关检测功能）
             # 这里可以添加自动检测逻辑
@@ -604,7 +605,7 @@ class ConfigManager:
             ui.print_info("检测到0.7以下版本，建议配置MongoDB")
             mongodb_path = ui.get_input("请输入MongoDB路径（可为空）：")
         else:
-            ui.print_info("0.7及以上版本MongoDB为可选组件")
+            ui.print_info("0.7及以上版本MaiMbot不需要MongoDB")
             return ""
         
         
