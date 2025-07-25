@@ -1391,7 +1391,7 @@ pause
             else:
                 ui.print_info(f"正在下载v{adapter_version}版本的适配器...")
                 adapter_url = f"https://codeload.github.com/MaiM-with-u/MaiBot-Napcat-Adapter/zip/refs/tags/{adapter_version}"
-            adapter_zip = os.path.join(temp_dir, f"adapter_v{adapter_version}.zip")
+            adapter_zip = os.path.join(temp_dir, f"adapter_{adapter_version}.zip")
             
             if not self.download_file(adapter_url, adapter_zip):
                 ui.print_warning(f"v{adapter_version}适配器下载失败")
@@ -1435,7 +1435,7 @@ pause
                     else:
                         shutil.copy2(src, dst)
                 
-                ui.print_success(f"v{adapter_version}适配器安装完成")
+                ui.print_success(f"{adapter_version}适配器安装完成")
                 logger.info("适配器安装成功", version=adapter_version, path=adapter_extract_path)
                 return adapter_extract_path
     

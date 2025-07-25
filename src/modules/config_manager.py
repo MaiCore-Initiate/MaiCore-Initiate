@@ -534,7 +534,7 @@ class ConfigManager:
         
         # 自动检测失败，需要手动输入
         ui.print_info("未检测到NapCat，需要手动配置")
-        napcat_path = ui.get_input("请输入NapCat路径（可为空）：")
+        napcat_path = ui.get_input("请输入NapCat路径（NapCatWinBootMain.exe)(可为空）：")
         
         return napcat_path or ""
     
@@ -553,7 +553,7 @@ class ConfigManager:
             return ""
         
         # 手动配置NapCat
-        napcat_path = ui.get_input("请输入NapCat路径（可为空）：")
+        napcat_path = ui.get_input("请输入NapCat路径(NapCatWinBootMain.exe)（可为空）：")
         
         return napcat_path or ""
     
