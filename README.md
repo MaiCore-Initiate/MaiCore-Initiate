@@ -450,3 +450,9 @@ limitations under the License.
 
 ## 仓库状态
 
+![Alt](https://repobeats.axiom.co/api/embed/ff5f6f1d31a3efb31d5d7c64d3eec1899fd93cda.svg "Repobeats analytics image")
+
+## star统计
+
+![GitHub Star Chart](https://starchart.cc/xiaoCZX/MaiMbot-initiate.svg)
+
