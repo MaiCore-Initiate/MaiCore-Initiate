@@ -43,21 +43,21 @@ class Menus:
         self.console.print(f" [A] {self.symbols['rocket']} 运行麦麦", style=self.colors["success"])
         
         self.console.print("====>>配置类<<====")
-        self.console.print(f" [C] {self.symbols['config']} 配置管理（新建/修改/检查配置）", style=self.colors["warning"])
+        self.console.print(f" [B] {self.symbols['config']} 配置管理（新建/修改/检查配置）", style=self.colors["warning"])
         
         self.console.print("====>>功能类<<====")
-        self.console.print(f" [D] {self.symbols['knowledge']} 知识库构建", style=self.colors["secondary"])
-        self.console.print(f" [E] {self.symbols['database']} 数据库迁移（MongoDB → SQLite）", style=self.colors["secondary"])
-        self.console.print(f" [P] {self.symbols['plugin']} 插件管理（目前只是一个ui）", style=self.colors["primary"])
+        self.console.print(f" [C] {self.symbols['knowledge']} 知识库构建", style=self.colors["secondary"])
+        self.console.print(f" [D] {self.symbols['database']} 数据库迁移（MongoDB → SQLite）", style=self.colors["secondary"])
+        self.console.print(f" [E] {self.symbols['plugin']} 插件管理（目前只是一个ui）", style=self.colors["primary"])
         
         self.console.print("====>>部署类<<====")
         self.console.print(f" [F] {self.symbols['deployment']} 实例部署辅助系统", style=self.colors["error"])
         
         self.console.print("====>>进程管理<<====")
-        self.console.print(f" [H] {self.symbols['status']} 查看运行状态", style=self.colors["info"])
+        self.console.print(f" [G] {self.symbols['status']} 查看运行状态", style=self.colors["info"])
         
         self.console.print("====>>关于类<<====")
-        self.console.print(f" [G] {self.symbols['about']} 关于本程序", style=self.colors["info"])
+        self.console.print(f" [H] {self.symbols['about']} 关于本程序", style=self.colors["info"])
         
         self.console.print("====>>退出类<<====")
         self.console.print(f" [Q] {self.symbols['quit']} 退出程序", style=self.colors["exit"])

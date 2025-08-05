@@ -410,100 +410,6 @@ class DeploymentManager:
         
         self._napcat_versions_cache = napcat_versions
         return napcat_versions
-    
-    def delete_instance(self) -> bool:
-        """删除实例"""
-        try:
-            ui.clear_screen()
-            ui.console.print("[🗑️ 实例删除]", style=ui.colors["error"])
-            ui.console.print("="*30)
-            
-            ui.print_warning("⚠️ 危险操作警告 ⚠️")
-            ui.console.print("此操作将：")
-            ui.console.print("  • 删除实例的所有文件")
-            ui.console.print("  • 删除相关配置")
-            ui.console.print("  • 此操作不可撤销")
-            
-            # 选择要删除的实例
-            from ..modules.config_manager import config_mgr
-            config = config_mgr.select_configuration()
-            if not config:
-                return False
-            
-            nickname = config.get("nickname_path", "未知")
-            serial_number = config.get("serial_number", "未知")
-            mai_path = config.get("mai_path", "")
-            
-            ui.console.print(f"\n[要删除的实例信息]", style=ui.colors["error"])
-            ui.console.print(f"昵称：{nickname}")
-            ui.console.print(f"序列号：{serial_number}")
-            ui.console.print(f"路径：{mai_path}")
-            
-            # 三次确认
-            ui.print_warning("\n请进行三次确认以防误操作：")
-            
-            if not ui.confirm("第一次确认：是否删除此实例？"):
-                ui.print_info("操作已取消")
-                return False
-            
-            if not ui.confirm("第二次确认：此操作将永久删除所有文件，确定继续？"):
-                ui.print_info("操作已取消")
-                return False
-            
-            confirm_text = f"delete-{serial_number}"
-            user_input = ui.get_input(f"第三次确认：请输入 '{confirm_text}' 以确认删除：")
-            if user_input != confirm_text:
-                ui.print_error("确认文本不匹配，操作已取消")
-                return False
-            
-            # 开始删除
-            ui.print_info("正在删除实例...")
-            logger.info("开始删除实例", serial=serial_number, nickname=nickname)
-            
-            # 删除文件
-            if mai_path and os.path.exists(mai_path):
-                try:
-                    # 检查是否是MaiBot目录
-                    if os.path.basename(mai_path) == "MaiBot" or "MaiBot" in mai_path:
-                        # 删除整个项目目录的父目录
-                        project_root = os.path.dirname(mai_path)
-                        if os.path.exists(project_root):
-                            shutil.rmtree(project_root)
-                            ui.print_success("实例文件删除完成")
-                            logger.info("实例文件删除成功", path=project_root)
-                    else:
-                        ui.print_warning("路径格式异常，跳过文件删除")
-                except Exception as e:
-                    ui.print_error(f"删除文件失败：{str(e)}")
-                    logger.error("删除文件失败", error=str(e))
-                    return False
-            
-            # 删除配置
-            configurations = config_manager.get_all_configurations()
-            config_name = None
-            for name, cfg in configurations.items():
-                if cfg.get("serial_number") == serial_number:
-                    config_name = name
-                    break
-            
-            if config_name:
-                if config_manager.delete_configuration(config_name):
-                    config_manager.save()
-                    ui.print_success("配置删除完成")
-                    logger.info("配置删除成功", config_name=config_name)
-                else:
-                    ui.print_error("配置删除失败")
-                    return False
-            
-            ui.print_success(f"🗑️ 实例 '{nickname}' 删除完成")
-            logger.info("实例删除完成", serial=serial_number)
-            return True
-            
-        except Exception as e:
-            ui.print_error(f"删除失败：{str(e)}")
-            logger.error("实例删除失败", error=str(e))
-            return False
-
 
     def show_version_menu(self) -> Optional[Dict]:
         """显示版本选择菜单，返回选中的版本信息"""
@@ -1621,15 +1527,16 @@ pause
                         if target_filename.startswith('template.'):
                             target_filename = target_filename[9:]  # 移除 'template.'
                         
-                        target_file = os.path.join(adapter_config_dir, target_filename)
-                        
-                        try:
-                            shutil.copy2(source_file, target_file)
-                            ui.print_success(f"✅ 适配器配置文件: {target_filename}")
-                            logger.info("适配器配置文件复制成功", source=source_file, target=target_file)
-                        except Exception as e:
-                            ui.print_warning(f"⚠️ 适配器配置文件复制失败: {config_file} - {str(e)}")
-                            logger.warning("适配器配置文件复制失败", error=str(e), file=config_file)
+                        if adapter_config_dir:
+                            target_file = os.path.join(adapter_config_dir, target_filename)
+                            
+                            try:
+                                shutil.copy2(source_file, target_file)
+                                ui.print_success(f"✅ 适配器配置文件: {target_filename}")
+                                logger.info("适配器配置文件复制成功", source=source_file, target=target_file)
+                            except Exception as e:
+                                ui.print_warning(f"⚠️ 适配器配置文件复制失败: {config_file} - {str(e)}")
+                                logger.warning("适配器配置文件复制失败", error=str(e), file=config_file)
                 else:
                     ui.print_info("适配器无需额外配置文件")
             

@@ -375,19 +375,19 @@ class MaiMaiLauncher:
                     logger.info("用户退出程序")
                 elif choice == "A":
                     self.handle_launch_mai()
-                elif choice == "C":
+                elif choice == "B":
                     self.handle_config_menu()
-                elif choice == "D":
+                elif choice == "C":
                     self.handle_knowledge_menu()
-                elif choice == "E":
+                elif choice == "D":
                     self.handle_migration()
-                elif choice == "F":
+                elif choice == "E":
                     self.handle_deployment_menu()
-                elif choice == "G":
+                elif choice == "F":
                     self.handle_about_menu()
-                elif choice == "H":
+                elif choice == "G":
                     self.handle_process_status()
-                elif choice == "P":
+                elif choice == "H":
                     # 插件管理
                     ui.show_plugin_menu()
                 else:
