@@ -382,14 +382,14 @@ class MaiMaiLauncher:
                 elif choice == "D":
                     self.handle_migration()
                 elif choice == "E":
-                    self.handle_deployment_menu()
+                    # 插件管理
+                    ui.show_plugin_menu()
                 elif choice == "F":
-                    self.handle_about_menu()
+                    self.handle_deployment_menu()
                 elif choice == "G":
                     self.handle_process_status()
                 elif choice == "H":
-                    # 插件管理
-                    ui.show_plugin_menu()
+                    self.handle_about_menu()
                 else:
                     ui.print_error("无效选项")
                     ui.countdown(1)
