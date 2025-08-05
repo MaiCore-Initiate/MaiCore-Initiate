@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
 
 :: 安装依赖
 echo 正在检查并安装依赖...
-pip install -r requirements.txt
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 :: 启动程序
 echo 依赖安装完成，正在启动程序...

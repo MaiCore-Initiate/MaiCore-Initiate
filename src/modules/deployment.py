@@ -1416,7 +1416,7 @@ pause
         if venv_success:           
             requirements_path = os.path.join(maibot_path, "requirements.txt")
             
-            ui.print_info("正在安装Python依赖...")
+            ui.print_info("正在安装MaiBot本体依赖...")
             deps_success = self.install_dependencies_in_venv(venv_path, requirements_path)
             
             # 安装适配器依赖（如果适配器存在且有requirements.txt）
@@ -1424,7 +1424,7 @@ pause
             if adapter_path and adapter_path != "无需适配器" and not ("失败" in adapter_path or "版本较低" in adapter_path):
                 adapter_requirements_path = os.path.join(adapter_path, "requirements.txt")
                 if os.path.exists(adapter_requirements_path):
-                    ui.print_info("正在安装适配器依赖...")
+                    ui.print_info("正在安装napcat适配器依赖...")
                     adapter_deps_success = self.install_dependencies_in_venv(venv_path, adapter_requirements_path)
                 else:
                     ui.print_info("适配器无requirements.txt文件，跳过适配器依赖安装")
