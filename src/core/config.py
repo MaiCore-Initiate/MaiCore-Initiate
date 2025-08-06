@@ -31,7 +31,7 @@ class Config:
     }
     
     def __init__(self):
-        self.config = None
+        self.config: Dict[str, Any] = {}
         self.load()
     
     def load(self) -> Dict[str, Any]:
@@ -55,6 +55,10 @@ class Config:
             if "current_config" not in self.config:
                 logger.warning("配置缺少 'current_config'，使用默认值 'default'")
                 self.config["current_config"] = "default"
+                
+            # 验证并修复序列号
+            if self._validate_and_repair_serials():
+                self.save()
                 
             return self.config
             
@@ -97,6 +101,14 @@ class Config:
         try:
             if "configurations" not in self.config:
                 self.config["configurations"] = {}
+            
+            # 检查 absolute_serial_number 的唯一性
+            new_serial = config.get("absolute_serial_number")
+            for existing_config in self.config["configurations"].values():
+                if existing_config.get("absolute_serial_number") == new_serial:
+                    logger.error("添加配置失败：absolute_serial_number 已存在", new_serial=new_serial)
+                    return False
+            
             self.config["configurations"][name] = config
             logger.info("添加新配置", name=name)
             return True
@@ -123,6 +135,31 @@ class Config:
         configurations = self.get_all_configurations()
         existing_serials = {cfg.get("absolute_serial_number", 0) for cfg in configurations.values()}
         return max(existing_serials) + 1 if existing_serials else 1
+
+    def _validate_and_repair_serials(self) -> bool:
+        """验证并修复绝对序列号，确保其唯一且升序"""
+        repaired = False
+        configurations = self.get_all_configurations()
+        if not configurations:
+            return False
+
+        # 获取所有配置项，保持原始顺序
+        config_items = list(configurations.items())
+
+        # 检查是否存在问题（重复或不连续）
+        serials = [cfg.get("absolute_serial_number") for _, cfg in config_items]
+        is_problematic = len(serials) != len(set(serials)) or sorted(serials) != list(range(1, len(serials) + 1))
+
+        if is_problematic:
+            logger.warning("检测到绝对序列号存在问题，开始修复...")
+            repaired = True
+            # 按原始顺序重新分配序列号
+            for i, (name, config) in enumerate(config_items):
+                self.config["configurations"][name]["absolute_serial_number"] = i + 1
+            
+            logger.info("绝对序列号修复完成。")
+
+        return repaired
 
 
 # 全局配置实例
