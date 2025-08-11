@@ -303,7 +303,7 @@ class MaiMaiLauncher:
         ui.console.print("\n开源许可：Apache License 2.0", style=ui.colors["secondary"])
         ui.console.print("GitHub：https://github.com/xiaoCZX/MaiMbot-initiate", style="#46AEF8")
         ui.console.print("你喜欢的话，请给个Star支持一下哦~", style="white")
-        ui.console.print("欢迎加入我们的社区！", style="white")
+        ui.console.print("欢迎加入我们的社区！（我们的QQ群聊：1025509724）", style="white")
 
         ui.console.print("\n感谢以下为此项目做出贡献的开发者：", style=ui.colors["header"])
         ui.console.print("  • 小城之雪 - 整个项目的提出者和主要开发者", style="white")
