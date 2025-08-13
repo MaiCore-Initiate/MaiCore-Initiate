@@ -3,3 +3,4 @@ config.toml
 *.pyc
 test-but-napcat-on-lunix
 venv
+mongodb.zip
