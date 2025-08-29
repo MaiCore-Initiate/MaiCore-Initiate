@@ -1,7 +1,7 @@
 {
   "instances": [],
   "ui_settings": {
-    "theme": "light",
+    "theme": "auto",
     "port": 1000
   }
 }

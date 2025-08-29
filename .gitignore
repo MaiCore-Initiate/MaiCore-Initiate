@@ -4,3 +4,4 @@ config.toml
 test-but-napcat-on-lunix
 venv
 mongodb.zip
+.config_UI.json
