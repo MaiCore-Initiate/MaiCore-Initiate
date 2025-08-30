@@ -200,10 +200,23 @@ def main():
         print("可能需要手动设置目录权限")
     
     if create_virtualenv(suitable_python, venv_dir):
-        print("操作完成!")
+        print("虚拟环境创建成功，正在安装依赖...")
+        requirements_path = os.path.join(working_dir, "requirements.txt")
+        venv_python = os.path.join(venv_dir, "Scripts", "python.exe")
+        if not os.path.exists(requirements_path):
+            print(f"未找到依赖文件: {requirements_path}")
+        elif not os.path.exists(venv_python):
+            print(f"未找到虚拟环境Python: {venv_python}")
+        else:
+            # 安装依赖
+            print(f"正在安装依赖: {requirements_path}")
+            result = subprocess.run([venv_python, "-m", "pip", "install", "-r", requirements_path, "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"])
+            if result.returncode == 0:
+                print("依赖安装完成!")
+            else:
+                print(f"依赖安装失败，返回码: {result.returncode}")
     else:
         print("操作失败!")
-    
     input("按回车键退出...")
 
 if __name__ == "__main__":
