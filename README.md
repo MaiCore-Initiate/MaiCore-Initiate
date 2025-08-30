@@ -64,18 +64,18 @@
 ### 🔽 下载安装
 
 
-| 版本              | 描述               | 下载链接                                                                   |
-| ----------------- | ------------------ | -------------------------------------------------------------------------- |
-| **V4.0.0.2** | 最新版 | [📦 下载](https://github.com/xiaoCZX/MaiMbot-initiate/releases/tag/v4.0.0.2) |
+| 版本         | 描述   | 下载链接                                                                     |
+| ------------ | ------ | ---------------------------------------------------------------------------- |
+| **V4.0.0.3** | 最新版 | [📦 下载](https://github.com/xiaoCZX/MaiMbot-initiate/releases/tag/v4.0.0.3-dev) |
 
 ### 🚀 启动程序
 
 ```bash
 # 双击运行以安装程序
-MaiBotInitiate-V4.0.0.2-dev-Insall.exe
+MaiBotInitiate-V4.0.0.3-dev-Insall.exe
 
 # 快捷方式启动或使用全局命令
-mbl4002dev
+mbl4003dev
 ```
 
 ### ⚡ 快速上手指南
@@ -479,7 +479,7 @@ limitations under the License.
 **Made with ❤️ by [xiaoCZX](https://github.com/xiaoCZX) and other contributors**
 
 ```
-88b         d88           88 888888ba                                ,ad88ba,  88                            
+88b         d88           88 888888ba                                ,ad88ba,  88                          
 888         888           "" 88    "8b            88                d8"'  `"8b 88                    88   
 888b       d888              88    ,8P            88               d8'         88                    88   
 88 8b     d8'88 ,adPYYba, 88 88aaaa8P'  ,adPYba,  88MMM            88          88,dPPYba,  ,adPPYba, 88MMM  
