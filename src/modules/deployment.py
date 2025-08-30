@@ -996,9 +996,9 @@ pause
         ui.console.print(f"版本类型：{'旧版本 (classical/0.5.x)' if is_legacy else '新版本 (0.6.0+)'}")
         
         if is_legacy:
-            ui.print_info("旧版本建议配置：MaiBot主体 + MongoDB")
+            ui.print_info("classical版本建议组件：MaiBot主体 + MongoDB + NapCat")
         else:
-            ui.print_info("新版本建议配置：MaiBot + 适配器 + NapCat")
+            ui.print_info("新版本建议组件：MaiBot + 适配器 + NapCat")
 
         ui.console.print()
         
@@ -1677,11 +1677,11 @@ pause
     def _show_post_deployment_info(self):
         """显示部署后的信息"""
         ui.console.print("\n[📝 后续配置提醒]", style=ui.colors["info"])
-        ui.console.print("1. 配置 .env 文件中的API密钥")
-        ui.console.print("2. 修改 config.toml 中的机器人配置")
-        ui.console.print("3. 如需要知识库功能，配置相关设置")
-        ui.console.print("4. 如安装了NapCat，请配置QQ登录信息")
-        ui.console.print("\n您现在可以通过主菜单的启动选项来运行该实例")
+        ui.console.print("1. 0.10.0版本以前则需在 .env 文件中配置API密钥。0.10.0及以后版本需在chofig文件夹下的model_config.toml中配置", style=ui.colors["error"])
+        ui.console.print("2. 修改 bot_config.toml 中的机器人配置", style=ui.colors["error"])
+        ui.console.print("3. 如需要知识库功能，配置相关设置", style=ui.colors["error"])
+        ui.console.print("4. 如安装了NapCat，请配置QQ登录信息", style=ui.colors["error"])
+        ui.console.print("\n您现在可以通过主菜单的启动选项来运行该实例", style=ui.colors["success"])
     
     def update_instance(self) -> bool:
         """更新实例"""
@@ -1735,7 +1735,7 @@ pause
             
             # 备份提醒
             ui.print_warning("更新前建议备份重要文件：")
-            ui.console.print("  • .env 文件（API密钥）")
+            ui.console.print("  • .env 文件（API密钥，0.10.0版本已迁移至model_config.toml）")
             ui.console.print("  • config.toml（配置文件）")
             ui.console.print("  • data/ 目录（数据文件）")
             ui.console.print("  • *.db 文件（数据库文件）")
@@ -1777,7 +1777,7 @@ pause
                     source_dir = os.path.join(temp_dir, extracted_dirs[0])
                     
                     # 保护重要文件
-                    protected_files = [".env", "config.toml", "bot_config.toml", "data", "*.db"]
+                    protected_files = [".env", "config.toml", "bot_config.toml", "data", "*.db", "model_config.toml"]
                     protected_data = {}
                     
                     for pattern in protected_files:
