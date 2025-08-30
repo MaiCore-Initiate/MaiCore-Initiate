@@ -50,7 +50,7 @@ def main():
                             version = winreg.EnumKey(pycore, i)
                             if tuple(map(int, version.split('.'))) >= (3, 8):
                                 with winreg.OpenKey(pycore, version + r"\InstallPath") as ipath:
-                                    path, _ = winreg.QueryValueEx(ipath, None)
+                                    path, _ = winreg.QueryValueEx(ipath, "")
                                     exe = Path(path) / 'python.exe'
                                     if exe.exists():
                                         return str(exe), version
@@ -88,8 +88,22 @@ def main():
                 sys.exit(1)
         print(f"[INFO] 检测到系统 Python {py_ver}，路径: {python_exe}")
         print(f"[INFO] 正在用系统 Python 创建虚拟环境: venv")
-        subprocess.run([python_exe, '-m', 'venv', 'venv'])
-        print("[INFO] 虚拟环境创建完成。")
+        try:
+            subprocess.run([python_exe, '-m', 'venv', 'venv'], check=True)
+            print("[INFO] 虚拟环境创建完成。")
+        except Exception as e:
+            print(f"[WARN] 本地Python创建虚拟环境失败: {e}\n尝试调用create_venv.exe以管理员权限创建虚拟环境...")
+            venv_exe = Path(__file__).parent / 'create_venv.exe'
+            if venv_exe.exists():
+                result = subprocess.run([str(venv_exe)], shell=True)
+                if result.returncode == 0:
+                    print("[INFO] create_venv.exe创建虚拟环境成功。")
+                else:
+                    print(f"[ERROR] create_venv.exe创建虚拟环境失败，返回码: {result.returncode}")
+                    sys.exit(1)
+            else:
+                print("[ERROR] 未找到 create_venv.exe，无法自动创建虚拟环境。请手动创建！")
+                sys.exit(1)
         venv_path = Path('venv')
     python_exe = get_venv_python(venv_path)
     # 检查并安装依赖
@@ -115,7 +129,7 @@ def find_installed_python():
                         version = winreg.EnumKey(pycore, i)
                         if tuple(map(int, version.split('.'))) >= (3, 8):
                             with winreg.OpenKey(pycore, version + r"\InstallPath") as ipath:
-                                path, _ = winreg.QueryValueEx(ipath, None)
+                                path, _ = winreg.QueryValueEx(ipath, "")
                                 exe = Path(path) / 'python.exe'
                                 if exe.exists():
                                     return str(exe), version
