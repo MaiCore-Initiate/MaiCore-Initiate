@@ -1,3 +1,24 @@
+def get_venv_exe_path():
+    import sys
+    from pathlib import Path
+    # 1. 程序实际目录（兼容打包和源码）
+    if getattr(sys, 'frozen', False):
+        base_dir = Path(sys.executable).parent
+    else:
+        base_dir = Path(__file__).parent
+    candidate = base_dir / 'create_venv.exe'
+    if candidate.exists():
+        return candidate
+    # 2. 当前工作目录
+    candidate = Path.cwd() / 'create_venv.exe'
+    if candidate.exists():
+        return candidate
+    # 3. 项目根目录（假设 run.py 在根目录或 src 下）
+    candidate = base_dir.parent / 'create_venv.exe'
+    if candidate.exists():
+        return candidate
+    # 4. 兜底：直接返回 base_dir / 'create_venv.exe'
+    return base_dir / 'create_venv.exe'
 import os
 import sys
 import subprocess
@@ -76,32 +97,36 @@ def main():
 
     venv_path = find_existing_venv()
     if venv_path is None:
-            print("[INFO] 未检测到可用虚拟环境，强制调用 .create_venv.exe 创建虚拟环境...")
-            venv_exe = Path(__file__).parent / '.create_venv.exe'
+            print("[INFO] 未检测到可用虚拟环境，强制调用 create_venv.exe 创建虚拟环境...")
+            venv_exe = get_venv_exe_path()
+            if not venv_exe.exists():
+                print(f"[ERROR] 未找到 create_venv.exe，尝试路径: {venv_exe}")
+                input("按回车键退出...")
+                sys.exit(1)
             if venv_exe.exists():
                 try:
-                    # 阻塞等待 .create_venv.exe 运行完成
+                    # 阻塞等待 create_venv.exe 运行完成
                     result = subprocess.run([str(venv_exe)], creationflags=subprocess.CREATE_NEW_CONSOLE)
                     if result.returncode == 0:
-                        print("[INFO] .create_venv.exe创建虚拟环境成功。")
+                        print("[INFO] create_venv.exe创建虚拟环境成功。")
                     else:
-                        print(f"[ERROR] .create_venv.exe创建虚拟环境失败，返回码: {result.returncode}")
+                        print(f"[ERROR] create_venv.exe创建虚拟环境失败，返回码: {result.returncode}")
                         input("按回车键退出...")
                         sys.exit(1)
                 except Exception as e:
-                    print(f"[ERROR] 启动 .create_venv.exe 失败: {e}")
+                    print(f"[ERROR] 启动 create_venv.exe 失败: {e}")
                     input("按回车键退出...")
                     sys.exit(1)
             else:
-                print("[ERROR] 未找到 .create_venv.exe，无法自动创建虚拟环境。请手动创建！")
+                print("[ERROR] 未找到 create_venv.exe，无法自动创建虚拟环境。请手动创建！")
                 input("按回车键退出...")
                 sys.exit(1)
-            # 提示用户等待 .create_venv.exe 完成后再继续
-            input("请确认 .create_venv.exe 已运行完成并成功创建虚拟环境后，按回车键继续...")
+            # 提示用户等待 create_venv.exe 完成后再继续
+            input("请确认 create_venv.exe 已运行完成并成功创建虚拟环境后，按回车键继续...")
             # 再次检测虚拟环境
             venv_path = find_existing_venv()
             if venv_path is None:
-                print("[ERROR] .create_venv.exe创建虚拟环境后仍未检测到虚拟环境，程序退出。")
+                print("[ERROR] create_venv.exe创建虚拟环境后仍未检测到虚拟环境，程序退出。")
                 input("按回车键退出...")
                 sys.exit(1)
     python_exe = get_venv_python(venv_path)
@@ -152,4 +177,15 @@ def prompt_install_python():
         print("[INFO] 用户取消安装。程序退出。")
         sys.exit(1)
 if __name__ == '__main__':
+    import sys
+    import os
+
+    if getattr(sys, 'frozen', False):
+        # 打包后
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        # 源码运行
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    venv_exe = os.path.join(base_dir, 'create_venv.exe')
     main()
