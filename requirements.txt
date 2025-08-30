@@ -1,0 +1,9 @@
+colorama==0.4.6
+tqdm==4.65.0
+toml==0.10.2
+requests==2.31.0
+structlog==23.1.0
+rich==13.5.2
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+tomli==2.0.1
