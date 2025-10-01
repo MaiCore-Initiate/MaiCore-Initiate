@@ -35,7 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../config.toml'))
+CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../config/config.toml'))
 JSON_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '.config_UI.json'))
 
 app.mount("/src/config_UI", StaticFiles(directory=os.path.dirname(__file__)), name="static")
@@ -118,7 +118,7 @@ async def create_config(request: Request):
         abs_num += 1
     new_config["absolute_serial_number"] = str(abs_num)
     # 路径校验
-    for k in ["mai_path", "adapter_path", "napcat_path", "venv_path", "mongodb_path", "webui_path"]:
+    for k in ["mai_path", "mofox_path", "adapter_path", "napcat_path", "venv_path", "mongodb_path", "webui_path"]:
         if not is_valid_path(new_config.get(k, "")):
             return {"success": False, "msg": f"路径无效: {k}"}
     config["configurations"][name] = new_config

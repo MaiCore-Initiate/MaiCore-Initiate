@@ -13,7 +13,7 @@ logger = structlog.get_logger(__name__)
 class Config:
     """配置管理类"""
     
-    CONFIG_FILE = "config.toml"
+    CONFIG_FILE = "config/config.toml"
     CONFIG_TEMPLATE = {
         "current_config": "default",
         "configurations": {
@@ -22,9 +22,12 @@ class Config:
                 "absolute_serial_number": 1,
                 "version_path": "0.0.0",
                 "nickname_path": "默认配置",
+                "bot_type": "MaiBot",  # 新增字段，标识bot类型 ("MaiBot" 或 "MoFox_bot")
                 "mai_path": "",
+                "mofox_path": "",  # 新增字段，墨狐本体路径
                 "adapter_path": "",
                 "napcat_path": "",
+                "napcat_version": "",  # 新增字段，标识NapCatQQ版本 (如 "NapCat.Shell")
                 "qq_account": ""
             }
         }

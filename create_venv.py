@@ -200,10 +200,79 @@ def main():
         print("可能需要手动设置目录权限")
     
     if create_virtualenv(suitable_python, venv_dir):
-        print("操作完成!")
+        print("虚拟环境创建成功，正在安装依赖...")
+        requirements_path = os.path.join(working_dir, "requirements.txt")
+        venv_python = os.path.join(venv_dir, "Scripts", "python.exe")
+        if not os.path.exists(requirements_path):
+            print(f"未找到依赖文件: {requirements_path}")
+        elif not os.path.exists(venv_python):
+            print(f"未找到虚拟环境Python: {venv_python}")
+        else:
+            # 安装依赖
+            print(f"正在安装依赖: {requirements_path}")
+            
+            # 检查uv是否可用
+            def is_uv_available():
+                try:
+                    subprocess.run(["uv", "--version"], check=True, capture_output=True)
+                    return True
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    return False
+            
+            # 运行命令并实时显示输出
+            def run_command_with_output(cmd, description):
+                print(f"正在{description}...")
+                try:
+                    # 使用Popen来实时显示输出
+                    process = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=1,
+                        universal_newlines=True
+                    )
+                    
+                    # 实时读取输出
+                    if process.stdout:
+                        for line in process.stdout:
+                            print(line, end='')  # 直接打印到终端
+                    
+                    # 等待进程完成
+                    process.wait()
+                    
+                    if process.returncode == 0:
+                        print(f"{description}完成")
+                        return True
+                    else:
+                        print(f"{description}失败，返回码: {process.returncode}")
+                        return False
+                except Exception as e:
+                    print(f"{description}时发生异常: {str(e)}")
+                    return False
+            
+            # 使用uv或pip安装依赖
+            if is_uv_available():
+                print("使用uv安装依赖...")
+                # 使用uv安装依赖
+                install_cmd = [
+                    "uv", "pip", "install", "-r", requirements_path,
+                    "-i", "https://pypi.tuna.tsinghua.edu.cn/simple",
+                    "--python", venv_python
+                ]
+                success = run_command_with_output(install_cmd, "使用uv安装依赖")
+            else:
+                print("未找到uv，使用pip安装依赖...")
+                # 回退到pip
+                install_cmd = [venv_python, "-m", "pip", "install", "-r", requirements_path, "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"]
+                success = run_command_with_output(install_cmd, "使用pip安装依赖")
+            
+            if success:
+                print("依赖安装完成!")
+            else:
+                print("依赖安装失败!")
     else:
         print("操作失败!")
-    
     input("按回车键退出...")
 
 if __name__ == "__main__":

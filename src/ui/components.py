@@ -34,6 +34,7 @@ class Components:
         table.add_column("序列号", style=self.colors["blue"])
         table.add_column("昵称", style=self.colors["blue"])
         table.add_column("版本", style=self.colors["white"])
+        table.add_column("Bot类型", style=self.colors["white"])
         table.add_column("状态", style=self.colors["green"])
         
         for idx, (cfg_name, cfg) in enumerate(configurations.items(), 1):
@@ -41,8 +42,14 @@ class Components:
             absolute_serial = cfg.get('absolute_serial_number', 'N/A')
             nickname = cfg.get('nickname_path', '未命名')
             version = cfg.get('version_path', 'N/A')
+            bot_type = cfg.get('bot_type', 'MaiBot')  # 获取bot类型，默认为MaiBot
             
-            mai_path = cfg.get('mai_path', '')
+            # 根据bot_type字段选择正确的路径字段
+            if bot_type == "MoFox_bot":
+                mai_path = cfg.get('mofox_path', '')
+            else:
+                mai_path = cfg.get('mai_path', '')
+            
             status = f"{self.symbols['success']} 已配置" if mai_path and os.path.exists(mai_path) else f"{self.symbols['error']} 未配置"
             
             table.add_row(
@@ -50,6 +57,7 @@ class Components:
                 f"{serial_number} (绝对: {absolute_serial})",
                 nickname,
                 version,
+                bot_type,
                 status
             )
         
@@ -68,8 +76,14 @@ class Components:
             ("昵称", config.get('nickname_path', '未配置')),
             ("版本", config.get('version_path', '未配置')),
             ("QQ", config.get('qq_account', '未配置')),
-            ("麦麦本体路径", config.get('mai_path', '未配置')),
         ]
+        
+        # 根据bot_type字段选择正确的路径字段
+        bot_type = config.get('bot_type', 'MaiBot')  # 获取bot类型，默认为MaiBot
+        if bot_type == "MoFox_bot":
+            items.append(("墨狐本体路径", config.get('mofox_path', '未配置')))
+        else:
+            items.append(("麦麦本体路径", config.get('mai_path', '未配置')))
         
         install_options = config.get('install_options', {})
         

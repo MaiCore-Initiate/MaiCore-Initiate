@@ -15,6 +15,8 @@ import winreg # 用于注册表操作
 import tempfile  # 添加tempfile模块
 import logging
 from urllib.request import urlopen  # 添加urlopen
+from urllib.error import URLError, HTTPError  # 添加错误处理
+
 
 if sys.platform == 'win32':
     kernel32 = ctypes.windll.kernel32
@@ -2640,6 +2642,26 @@ def deployment_assistant():
     
     print_rgb("配置集保存完成，您可以通过主菜单中的 [A] 选项对该实例进行二次启动！", "#FFF3C2")
     input("\n按回车键返回菜单...")
+
+def get_latest_napcat_version():
+    """获取最新的NapCat版本和下载链接"""
+    api_url = "https://api.github.com/repos/NapNeko/NapCatQQ/releases/latest"
+    response = requests.get(api_url)
+    data = response.json()
+    return data["tag_name"], data["assets"][0]["browser_download_url"]
+
+def download_napcat(download_url, save_path):
+    """下载NapCat安装程序"""
+    with requests.get(download_url, stream=True) as r:
+        r.raise_for_status()
+        with open(save_path, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+def install_napcat(installer_path):
+    """安装NapCat"""
+    # 静默安装参数
+    subprocess.run([installer_path, "/S"], check=True)
 
 def deploy_classical(install_dir):
     """部署classical版本"""

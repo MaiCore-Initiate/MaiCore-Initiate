@@ -64,9 +64,12 @@ const fieldLabels = {
     absolute_serial_number: "绝对序列号",
     version_path: "版本号",
     nickname_path: "实例昵称",
+    bot_type: "Bot类型",
     mai_path: "麦麦本体路径",
+    mofox_path: "墨狐本体路径",
     adapter_path: "适配器路径",
     napcat_path: "NapCat路径",
+    napcat_version: "NapCat版本",
     venv_path: "虚拟环境路径",
     mongodb_path: "MongoDB路径",
     webui_path: "WebUI路径",
@@ -82,7 +85,7 @@ function createCard(name, data) {
             <button class="btn btn-delete" title="删除" style="padding:2px 10px;font-size:14px;">×</button>
         </div>
         <div class="config-info">序列号: ${data.serial_number || ""}</div>
-        <div class="config-info">绝对序号: ${data.absolute_serial_number || ""}</div>
+        <div class="config-info">Bot类型: ${data.bot_type || "MaiBot"}</div>
         <div class="config-info">版本: ${data.version_path || ""}</div>
         <div class="config-info">昵称: ${data.nickname_path || ""}</div>
         <div class="config-info">QQ账号: ${data.qq_account || ""}</div>
@@ -123,9 +126,12 @@ document.getElementById("add-config-btn").onclick = () => {
             absolute_serial_number: absNum,
             version_path: "",
             nickname_path: "",
+            bot_type: "MaiBot",  // 默认为MaiBot
             mai_path: "",
+            mofox_path: "",  // 添加mofox_path字段
             adapter_path: "",
             napcat_path: "",
+            napcat_version: "",
             venv_path: "",
             mongodb_path: "",
             webui_path: "",

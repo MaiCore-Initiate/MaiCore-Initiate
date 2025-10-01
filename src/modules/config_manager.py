@@ -91,7 +91,8 @@ class ConfigManager:
                 "absolute_serial_number": self.config.generate_unique_serial(),
                 "version_path": version,
                 "nickname_path": nickname,
-                "mai_path": mai_path,
+                "bot_type": "MaiBot",  # 默认为MaiBot
+                "mai_path": mai_path,  # 默认使用mai_path字段
                 "adapter_path": adapter_path,
                 "napcat_path": napcat_path,
                 "mongodb_path": mongodb_path,
@@ -184,7 +185,8 @@ class ConfigManager:
                 "absolute_serial_number": self.config.generate_unique_serial(),
                 "version_path": version,
                 "nickname_path": nickname,
-                "mai_path": mai_path,
+                "bot_type": "MaiBot",  # 默认为MaiBot
+                "mai_path": mai_path,  # 默认使用mai_path字段
                 "adapter_path": adapter_path,
                 "napcat_path": napcat_path,
                 "mongodb_path": mongodb_path,
@@ -281,10 +283,19 @@ class ConfigManager:
                         config['nickname_path'] = ui.get_input("请输入新的配置昵称：")
                     
                     if ui.confirm("是否重新配置麦麦本体路径？"):
-                        mai_path = ui.get_input("请输入新的麦麦本体路径：")
+                        # 根据bot_type字段选择正确的路径字段
+                        bot_type = config.get('bot_type', 'MaiBot')  # 获取bot类型，默认为MaiBot
+                        if bot_type == "MoFox_bot":
+                            path_label = "墨狐本体路径"
+                            path_key = "mofox_path"
+                        else:
+                            path_label = "麦麦本体路径"
+                            path_key = "mai_path"
+                        
+                        mai_path = ui.get_input(f"请输入新的{path_label}：")
                         valid, msg = validate_path(mai_path, check_file="bot.py")
                         if valid:
-                            config['mai_path'] = mai_path
+                            config[path_key] = mai_path
                         else:
                             ui.print_error(f"路径验证失败：{msg}")
                             continue
@@ -388,10 +399,13 @@ class ConfigManager:
                         "absolute_serial_number": 1,
                         "version_path": "0.0.0",
                         "nickname_path": "默认配置",
+                        "bot_type": "MaiBot",  # 默认为MaiBot
                         "mai_path": "",
+                        "mofox_path": "",  # 添加mofox_path字段
                         "adapter_path": "",
                         "qq_account": "",
                         "napcat_path": "",
+                        "napcat_version": "",  # 添加napcat_version字段
                         "mongodb_path": "",
                         "webui_path": "",
                         "install_options": {

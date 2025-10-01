@@ -7,6 +7,28 @@ import webbrowser
 import json
 import os
 import subprocess
+import ctypes
+import sys
+
+def is_admin():
+    """检查是否具有管理员权限"""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def run_as_admin():
+    """以管理员权限重新运行当前脚本"""
+    script = os.path.abspath(sys.argv[0])
+    # 保存当前工作目录
+    current_dir = os.getcwd()
+    # 将当前目录作为参数传递
+    params = ' '.join([script, f'--working-dir="{current_dir}"'] + sys.argv[1:])
+    
+    # 请求UAC提升
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 1)
+    sys.exit(0)
+
 
 # 读取 .config_UI.json 中的端口号
 json_path = os.path.join(os.path.dirname(__file__), 'src', 'config_UI', '.config_UI.json')
