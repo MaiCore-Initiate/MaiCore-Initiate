@@ -9,6 +9,7 @@ from rich.table import Table
 from typing import Dict, Any, List
 
 from .theme import COLORS, SYMBOLS
+import subprocess
 
 
 class Components:
@@ -18,6 +19,28 @@ class Components:
         self.console = console
         self.colors = COLORS
         self.symbols = SYMBOLS
+    def check_mongodb_service_status(self) -> str:
+        """
+        检查MongoDB服务状态
+        
+        Returns:
+            MongoDB服务状态字符串
+        """
+        try:
+            # 使用sc query命令检查MongoDB服务状态
+            result = subprocess.run(["sc", "query", "MongoDB"], capture_output=True, text=True, timeout=10)
+            
+            if "RUNNING" in result.stdout:
+                return "已启动"
+            elif "STOPPED" in result.stdout:
+                return "已安装，未启动"
+            else:
+                return "未安装"
+                
+        except subprocess.TimeoutExpired:
+            return "检查超时"
+        except Exception as e:
+            return "检查失败"
 
     def show_title(self, title: str, symbol: str = ""):
         """显示一个带有样式的标题"""
@@ -98,9 +121,11 @@ class Components:
             items.append(("NapCat路径", "已跳过安装"))
         
         if install_options.get('install_mongodb', False):
-            items.append(("MongoDB路径", config.get('mongodb_path', '未配置') or '未配置'))
+            # 检查MongoDB服务状态
+            mongodb_status = self.check_mongodb_service_status()
+            items.append(("MongoDB状态", mongodb_status))
         else:
-            items.append(("MongoDB路径", "已跳过安装"))
+            items.append(("MongoDB状态", "已跳过安装"))
         
         if install_options.get('install_webui', False):
             items.append(("WebUI路径", config.get('webui_path', '未配置') or '未配置'))
@@ -110,6 +135,16 @@ class Components:
         for name, value in items:
             if "路径" in name and value not in ["未配置", "已跳过安装"]:
                 status = f"{self.symbols['success']} 存在" if os.path.exists(value) else f"{self.symbols['error']} 不存在"
+            elif "状态" in name:
+                # 处理MongoDB状态显示
+                if value == "已启动":
+                    status = f"{self.symbols['success']} {value}"
+                elif value == "已安装，未启动":
+                    status = f"{self.symbols['warning']} {value}"
+                elif value == "未安装":
+                    status = f"{self.symbols['error']} {value}"
+                else:
+                    status = f"{self.symbols['error']} {value}"
             elif value == "已跳过安装":
                 status = f"{self.symbols['skipped']} 跳过"
             else:

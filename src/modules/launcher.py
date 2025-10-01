@@ -120,35 +120,53 @@ class _MongoDbComponent(_LaunchComponent):
         self.is_enabled = self.config.get("install_options", {}).get("install_mongodb", False)
 
     def get_launch_details(self) -> Optional[Tuple[str, str, str]]:
-        mongodb_path = self.config.get("mongodb_path", "")
-        if not (mongodb_path and os.path.exists(mongodb_path)):
-            logger.warning("MongoDB路径无效", path=mongodb_path)
-            return None
-        
-        mongod_exe = next((os.path.join(root, f) for root, _, files in os.walk(mongodb_path) for f in files if f == "mongod.exe"), None)
-        
-        if not mongod_exe:
-            logger.error("在MongoDB路径中未找到mongod.exe", path=mongodb_path)
-            return None
-            
-        data_dir = os.path.join(mongodb_path, "data")
-        os.makedirs(data_dir, exist_ok=True)
-        
-        command = f'"{mongod_exe}" --dbpath "{data_dir}"'
-        title = f"MongoDB - {self.config.get('version_path', 'N/A')}"
-        return command, mongodb_path, title
+        # 不再需要启动详情，因为我们将检测系统服务
+        return None
 
     def start(self, process_manager: _ProcessManager) -> bool:
         if not self.is_enabled:
-            return True # 如果没配置，也算作“成功”
+            return True # 如果没配置，也算作"成功"
         
-        if check_process("mongod.exe"):
-            ui.print_info("MongoDB 已经在运行。")
-            logger.info("MongoDB已经在运行")
-            return True
-        
-        ui.print_info("尝试启动 MongoDB...")
-        return super().start(process_manager)
+        # 检查系统服务中的MongoDB服务是否启动
+        try:
+            # 使用sc query命令检查MongoDB服务状态
+            result = subprocess.run(["sc", "query", "MongoDB"], capture_output=True, text=True, timeout=10)
+            
+            if "RUNNING" in result.stdout:
+                ui.print_info("MongoDB服务已经在运行。")
+                logger.info("MongoDB服务已经在运行")
+                return True
+            elif "STOPPED" in result.stdout:
+                ui.print_warning("MongoDB服务未启动。")
+                ui.print_info("请前往系统服务管理页面手动启动MongoDB服务。")
+                
+                # 尝试打开系统服务管理程序
+                services_lnk = r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\services.lnk"
+                if os.path.exists(services_lnk):
+                    try:
+                        os.startfile(services_lnk)
+                        ui.print_success("已打开系统服务管理程序，请找到MongoDB服务并手动启动。")
+                    except Exception as e:
+                        ui.print_warning(f"无法自动打开系统服务管理程序: {e}")
+                        ui.print_info("请手动打开'运行'对话框(win+R)，输入'services.msc'来打开系统服务管理程序。")
+                else:
+                    ui.print_info("请手动打开'运行'对话框(win+R)，输入'services.msc'来打开系统服务管理程序。")
+                    ui.print_info("在服务列表中找到“MongoDB Server(MongoDB)”服务，右键点击并选择'启动'。")
+                
+                return False
+            else:
+                ui.print_warning("未找到MongoDB服务。")
+                ui.print_info("请确认MongoDB是否已正确安装为系统服务。")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            ui.print_error("检查MongoDB服务状态超时。")
+            logger.error("检查MongoDB服务状态超时")
+            return False
+        except Exception as e:
+            ui.print_error(f"检查MongoDB服务状态时发生错误: {e}")
+            logger.error("检查MongoDB服务状态时发生错误", error=str(e))
+            return False
 
 
 class _NapCatComponent(_LaunchComponent):

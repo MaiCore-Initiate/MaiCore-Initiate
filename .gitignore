@@ -6,4 +6,3 @@ venv
 mongodb.zip
 .config_UI.json
 utils/__pycache__/
-utils/__pycache__/

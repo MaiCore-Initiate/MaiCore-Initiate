@@ -340,7 +340,7 @@ class MongoDBInstaller:
             (是否成功完成检查和安装流程, MongoDB路径)
         """
         try:
-            logger.info("开始MongoDB安装检查", 
+            logger.info("开始MongoDB安装检查",
                        deployment_version=deployment_version,
                        maibot_path=maibot_path,
                        force_install=force_install)
@@ -354,6 +354,35 @@ class MongoDBInstaller:
                 return True, ""
             
             ui.print_warning(f"检测到版本 {deployment_version} < 0.7.0，需要安装MongoDB")
+            
+            # 在安装前先检查系统服务中是否存在MongoDB服务
+            try:
+                result = subprocess.run(["sc", "query", "MongoDB"], capture_output=True, text=True, timeout=10)
+                
+                if "RUNNING" in result.stdout:
+                    ui.print_success("✅ MongoDB服务已在运行")
+                    ui.print_info("检测到系统中已安装并运行MongoDB服务，将使用该服务。")
+                    return True, "system_service"
+                elif "STOPPED" in result.stdout:
+                    ui.print_success("✅ MongoDB服务已安装但未运行")
+                    ui.print_info("检测到系统中已安装MongoDB服务但未运行，请手动启动该服务。")
+                    # 提示用户启动服务
+                    services_lnk = r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\services.lnk"
+                    if os.path.exists(services_lnk):
+                        try:
+                            os.startfile(services_lnk)
+                            ui.print_info("已打开系统服务管理程序，请找到MongoDB服务并手动启动。")
+                        except Exception as e:
+                            ui.print_warning(f"无法自动打开系统服务管理程序: {e}")
+                            ui.print_info("请手动打开'运行'对话框(win+R)，输入'services.msc'来打开系统服务管理程序。")
+                    else:
+                        ui.print_info("请手动打开'运行'对话框(win+R)，输入'services.msc'来打开系统服务管理程序。")
+                        ui.print_info("在服务列表中找到MongoDB服务，右键点击并选择'启动'。")
+                    return True, "system_service"
+            except subprocess.TimeoutExpired:
+                ui.print_warning("检查MongoDB服务状态超时，将继续安装流程。")
+            except Exception as e:
+                ui.print_warning(f"检查MongoDB服务状态时发生错误: {e}，将继续安装流程。")
             
             # 询问是否继续安装
             if not force_install:

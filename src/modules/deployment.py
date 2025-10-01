@@ -1313,21 +1313,80 @@ pause
                 # 0.7以下版本需要检查是否安装MongoDB
                     ui.print_info("正在检查MongoDB安装状态...")
                     try:
-                        # 直接在这里进行MongoDB检查和安装
-                        success, mongodb_path = mongodb_installer.check_and_install_mongodb(
-                            selected_version.get("name", ""), "", force_install=False
-                        )
-                        if success:
+                        # 检查系统服务中是否存在MongoDB服务
+                        import subprocess
+                        result = subprocess.run(["sc", "query", "MongoDB"], capture_output=True, text=True, timeout=10)
+                        
+                        if "RUNNING" in result.stdout:
                             install_mongodb = True
-                            ui.print_success("✅ MongoDB检查完成")
-                            if mongodb_path:
-                                ui.print_info(f"MongoDB路径: {mongodb_path}")
+                            ui.print_success("✅ MongoDB服务已在运行")
+                            ui.print_info("检测到系统中已安装并运行MongoDB服务，将使用该服务。")
+                        elif "STOPPED" in result.stdout:
+                            install_mongodb = True
+                            ui.print_success("✅ MongoDB服务已安装但未运行")
+                            ui.print_info("检测到系统中已安装MongoDB服务但未运行，请手动启动该服务。")
+                            # 提示用户启动服务
+                            services_lnk = r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools\services.lnk"
+                            if os.path.exists(services_lnk):
+                                try:
+                                    os.startfile(services_lnk)
+                                    ui.print_info("已打开系统服务管理程序，请找到MongoDB服务并手动启动。")
+                                except Exception as e:
+                                    ui.print_warning(f"无法自动打开系统服务管理程序: {e}")
+                                    ui.print_info("请手动打开'运行'对话框(win+R)，输入'services.msc'来打开系统服务管理程序。")
+                            else:
+                                ui.print_info("请手动打开'运行'对话框(win+R)，输入'services.msc'来打开系统服务管理程序。")
+                                ui.print_info("在服务列表中找到MongoDB服务，右键点击并选择'启动'。")
                         else:
-                            ui.print_warning("⚠️ MongoDB检查失败，将跳过MongoDB安装")
+                            # 系统服务中未找到MongoDB，使用原来的安装逻辑
+                            ui.print_info("系统服务中未找到MongoDB服务，将使用原来的安装逻辑。")
+                            success, mongodb_path = mongodb_installer.check_and_install_mongodb(
+                                selected_version.get("name", ""), "", force_install=False
+                            )
+                            if success:
+                                install_mongodb = True
+                                ui.print_success("✅ MongoDB检查完成")
+                                if mongodb_path:
+                                    ui.print_info(f"MongoDB路径: {mongodb_path}")
+                            else:
+                                ui.print_warning("⚠️ MongoDB检查失败，将跳过MongoDB安装")
+                                install_mongodb = False
+                    except subprocess.TimeoutExpired:
+                        ui.print_error("检查MongoDB服务状态超时，将使用原来的安装逻辑。")
+                        # 超时情况下也使用原来的安装逻辑
+                        try:
+                            success, mongodb_path = mongodb_installer.check_and_install_mongodb(
+                                selected_version.get("name", ""), "", force_install=False
+                            )
+                            if success:
+                                install_mongodb = True
+                                ui.print_success("✅ MongoDB检查完成")
+                                if mongodb_path:
+                                    ui.print_info(f"MongoDB路径: {mongodb_path}")
+                            else:
+                                ui.print_warning("⚠️ MongoDB检查失败，将跳过MongoDB安装")
+                                install_mongodb = False
+                        except Exception as e:
+                            ui.print_error(f"MongoDB检查异常: {str(e)}")
                             install_mongodb = False
                     except Exception as e:
-                        ui.print_error(f"MongoDB检查异常: {str(e)}")
-                        install_mongodb = False
+                        ui.print_error(f"检查MongoDB服务状态时发生错误: {e}，将使用原来的安装逻辑。")
+                        # 出现其他异常也使用原来的安装逻辑
+                        try:
+                            success, mongodb_path = mongodb_installer.check_and_install_mongodb(
+                                selected_version.get("name", ""), "", force_install=False
+                            )
+                            if success:
+                                install_mongodb = True
+                                ui.print_success("✅ MongoDB检查完成")
+                                if mongodb_path:
+                                    ui.print_info(f"MongoDB路径: {mongodb_path}")
+                            else:
+                                ui.print_warning("⚠️ MongoDB检查失败，将跳过MongoDB安装")
+                                install_mongodb = False
+                        except Exception as e:
+                            ui.print_error(f"MongoDB检查异常: {str(e)}")
+                            install_mongodb = False
             else:
                 # 0.7及以上版本默认不需要MongoDB
                 ui.print_info("0.7及以上版本无需MongoDB，已自动跳过")
