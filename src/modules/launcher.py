@@ -165,17 +165,61 @@ class _NapCatComponent(_LaunchComponent):
             logger.error("NapCat路径无效", path=napcat_path)
             return None
         
-        command = f'"{napcat_path}"'
+        # 获取NapCat版本
+        napcat_version = self.config.get("napcat_version", "")
         
         # 检查是否有QQ号配置
         qq_account = self.config.get("qq_account")
-        if qq_account:
-            command += f" {qq_account}"
-
-        cwd = os.path.dirname(napcat_path)
-        logger.info("NapCat启动路径", path=cwd, args=command)
-        title = f"NapCatQQ - {self.config.get('version_path', 'N/A')}"
-        return command, cwd, title
+        
+        # 根据NapCat版本确定启动命令
+        if napcat_version == "NapCat.Shell":
+            # NapCat.Shell版本的启动方式
+            # 获取NapCat根目录
+            napcat_dir = os.path.dirname(napcat_path)
+            
+            # 检测操作系统版本
+            import platform
+            is_win10 = platform.release() == "10"
+            
+            # 确定启动脚本名称
+            if is_win10:
+                preferred_script = "launcher-win10-user.bat"
+                fallback_script = "launcher-win10.bat"
+            else:
+                preferred_script = "launcher-user.bat"
+                fallback_script = "launcher.bat"
+            
+            # 检查首选脚本是否存在
+            preferred_script_path = os.path.join(napcat_dir, preferred_script)
+            if os.path.exists(preferred_script_path):
+                command = f'"{preferred_script_path}"'
+                if qq_account:
+                    command += f" {qq_account}"
+                cwd = napcat_dir
+                title = f"NapCatQQ - {self.config.get('version_path', 'N/A')} (Shell)"
+                return command, cwd, title
+            
+            # 检查备选脚本是否存在
+            fallback_script_path = os.path.join(napcat_dir, fallback_script)
+            if os.path.exists(fallback_script_path):
+                command = f'"{fallback_script_path}"'
+                if qq_account:
+                    command += f" {qq_account}"
+                cwd = napcat_dir
+                title = f"NapCatQQ - {self.config.get('version_path', 'N/A')} (Shell)"
+                return command, cwd, title
+            
+            # 如果都没有找到，返回None
+            logger.error("未找到NapCat.Shell启动脚本", preferred=preferred_script_path, fallback=fallback_script_path)
+            return None
+        else:
+            # 默认启动方式（OneKey版本）
+            command = f'"{napcat_path}"'
+            if qq_account:
+                command += f" {qq_account}"
+            cwd = os.path.dirname(napcat_path)
+            title = f"NapCatQQ - {self.config.get('version_path', 'N/A')}"
+            return command, cwd, title
 
     def start(self, process_manager: _ProcessManager) -> bool:
         if not self.is_enabled:
@@ -186,11 +230,75 @@ class _NapCatComponent(_LaunchComponent):
             logger.info("NapCat已经在运行")
             return True
             
-        ui.print_info("尝试启动 NapCat...")
-        if super().start(process_manager):
-            time.sleep(3) # 等待NapCat启动
-            return True
-        return False
+        # 获取NapCat版本
+        napcat_version = self.config.get("napcat_version", "")
+        
+        # 如果是NapCat.Shell版本，需要特殊处理
+        if napcat_version == "NapCat.Shell":
+            napcat_path = self.config.get("napcat_path", "")
+            napcat_dir = os.path.dirname(napcat_path)
+            
+            # 检测操作系统版本
+            import platform
+            is_win10 = platform.release() == "10"
+            
+            # 确定启动脚本名称
+            if is_win10:
+                preferred_script = "launcher-win10-user.bat"
+                fallback_script = "launcher-win10.bat"
+            else:
+                preferred_script = "launcher-user.bat"
+                fallback_script = "launcher.bat"
+            
+            # 尝试启动首选脚本
+            ui.print_info("尝试启动 NapCat (Shell)...")
+            preferred_script_path = os.path.join(napcat_dir, preferred_script)
+            if os.path.exists(preferred_script_path):
+                command = f'"{preferred_script_path}"'
+                qq_account = self.config.get("qq_account")
+                if qq_account:
+                    command += f" {qq_account}"
+                
+                process = process_manager.start_in_new_cmd(command, napcat_dir, f"NapCatQQ - {self.config.get('version_path', 'N/A')} (Shell)")
+                if process:
+                    time.sleep(3)  # 等待NapCat启动
+                    # 询问用户是否启动成功
+                    ui.print_warning("NapCat可能启动失败，这应该不是您或我们的问题，我们可以换一种方式启动...")
+                    if ui.confirm("您的NapCat启动成功了吗？"):
+                        return True
+                    else:
+                        # 尝试启动备选脚本
+                        ui.print_info("尝试使用备选启动脚本...")
+                        fallback_script_path = os.path.join(napcat_dir, fallback_script)
+                        if os.path.exists(fallback_script_path):
+                            command = f'"{fallback_script_path}"'
+                            if qq_account:
+                                command += f" {qq_account}"
+                            process = process_manager.start_in_new_cmd(command, napcat_dir, f"NapCatQQ - {self.config.get('version_path', 'N/A')} (Shell)")
+                            if process:
+                                time.sleep(3)  # 等待NapCat启动
+                                return True
+            else:
+                # 首选脚本不存在，直接尝试备选脚本
+                fallback_script_path = os.path.join(napcat_dir, fallback_script)
+                if os.path.exists(fallback_script_path):
+                    ui.print_info("尝试启动 NapCat (Shell)...")
+                    command = f'"{fallback_script_path}"'
+                    qq_account = self.config.get("qq_account")
+                    if qq_account:
+                        command += f" {qq_account}"
+                    process = process_manager.start_in_new_cmd(command, napcat_dir, f"NapCatQQ - {self.config.get('version_path', 'N/A')} (Shell)")
+                    if process:
+                        time.sleep(3)  # 等待NapCat启动
+                        return True
+            return False
+        else:
+            # 默认启动方式（OneKey版本）
+            ui.print_info("尝试启动 NapCat...")
+            if super().start(process_manager):
+                time.sleep(3)  # 等待NapCat启动
+                return True
+            return False
 
 
 class _AdapterComponent(_LaunchComponent):
@@ -276,9 +384,14 @@ class _MaiComponent(_LaunchComponent):
         self.is_enabled = True # 本体总是启用
 
     def get_launch_details(self) -> Optional[Tuple[str, str, str]]:
-        mai_path = self.config.get("mai_path", "")
-        version = self.config.get("version_path", "")
+        # 根据bot_type字段选择正确的路径字段
         bot_type = self.config.get("bot_type", "MaiBot")  # 获取bot类型，默认为MaiBot
+        if bot_type == "MoFox_bot":
+            mai_path = self.config.get("mofox_path", "")
+        else:
+            mai_path = self.config.get("mai_path", "")
+        
+        version = self.config.get("version_path", "")
         
         if is_legacy_version(version):
             run_bat = os.path.join(mai_path, "run.bat")
@@ -349,7 +462,14 @@ class MaiLauncher:
     def validate_configuration(self, config: Dict[str, Any]) -> list:
         """验证配置的有效性。"""
         errors = []
-        mai_path = config.get("mai_path", "")
+        
+        # 根据bot_type字段选择正确的路径字段
+        bot_type = config.get("bot_type", "MaiBot")  # 获取bot类型，默认为MaiBot
+        if bot_type == "MoFox_bot":
+            mai_path = config.get("mofox_path", "")
+        else:
+            mai_path = config.get("mai_path", "")
+        
         valid, msg = validate_path(mai_path, check_file="bot.py")
         if not valid:
             errors.append(f"麦麦本体路径: {msg}")

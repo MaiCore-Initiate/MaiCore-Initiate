@@ -982,6 +982,14 @@ class DeploymentManager:
             shell_pattern = "NapCat.*.Shell"
             shell_exe_name = "NapCatWinBootMain.exe"
             install_dir = os.path.join(install_dir, "NapCat")  # 确保安装目录正确
+            
+            # 首先检查根目录下是否有可执行文件（适配NapCat.Shell版本）
+            root_exe_path = os.path.join(install_dir, shell_exe_name)
+            if os.path.exists(root_exe_path):
+                ui.print_success(f"找到NapCat无头版本（根目录）: {root_exe_path}")
+                logger.info("发现NapCat Shell版本（根目录）", path=root_exe_path)
+                return root_exe_path
+            
             # 遍历安装目录，查找匹配的Shell目录
             for item in os.listdir(install_dir):
                 item_path = os.path.join(install_dir, item)
@@ -1282,7 +1290,7 @@ pause
                 else:
                     install_napcat = True  # 新版本默认需要NapCat
         else:  # MoFox_bot
-            install_adapter = ui.confirm("是否需要安装适配器？（MoFox_bot推荐安装）")
+            install_adapter = ui.confirm("是否需要安装适配器？（MoFox_bot可以不安装，正常来讲已经将适配器作为插件内置在主程序中）")
             install_napcat = True  # MoFox_bot默认需要NapCat
         
         # 询问是否需要安装NapCat
