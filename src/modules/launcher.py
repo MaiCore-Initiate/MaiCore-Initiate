@@ -278,6 +278,7 @@ class _MaiComponent(_LaunchComponent):
     def get_launch_details(self) -> Optional[Tuple[str, str, str]]:
         mai_path = self.config.get("mai_path", "")
         version = self.config.get("version_path", "")
+        bot_type = self.config.get("bot_type", "MaiBot")  # 获取bot类型，默认为MaiBot
         
         if is_legacy_version(version):
             run_bat = os.path.join(mai_path, "run.bat")
@@ -287,7 +288,12 @@ class _MaiComponent(_LaunchComponent):
             command = f'"{run_bat}"'
         else:
             python_cmd = MaiLauncher._get_python_command(self.config, mai_path)
-            command = f"{python_cmd} bot.py"
+            # 根据bot类型确定启动文件
+            if bot_type == "MoFox_bot":
+                start_file = "bot.py"
+            else:
+                start_file = "bot.py"
+            command = f"{python_cmd} {start_file}"
             
         title = f"麦麦本体 - {version}"
         return command, mai_path, title

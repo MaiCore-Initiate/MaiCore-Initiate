@@ -91,6 +91,7 @@ class ConfigManager:
                 "absolute_serial_number": self.config.generate_unique_serial(),
                 "version_path": version,
                 "nickname_path": nickname,
+                "bot_type": "MaiBot",  # 默认为MaiBot
                 "mai_path": mai_path,
                 "adapter_path": adapter_path,
                 "napcat_path": napcat_path,
@@ -184,6 +185,7 @@ class ConfigManager:
                 "absolute_serial_number": self.config.generate_unique_serial(),
                 "version_path": version,
                 "nickname_path": nickname,
+                "bot_type": "MaiBot",  # 默认为MaiBot
                 "mai_path": mai_path,
                 "adapter_path": adapter_path,
                 "napcat_path": napcat_path,
@@ -394,6 +396,7 @@ class ConfigManager:
                         "napcat_path": "",
                         "mongodb_path": "",
                         "webui_path": "",
+                        "bot_type": "MaiBot",  # 默认为MaiBot
                         "install_options": {
                             "install_adapter": False,
                             "install_napcat": False,

@@ -119,60 +119,134 @@ class DeploymentManager:
             "https://mirrors.aliyun.com/pypi/simple",
             "https://pypi.douban.com/simple"
         ]
+        
+        def is_uv_available() -> bool:
+            """检查uv是否可用"""
+            try:
+                subprocess.run(["uv", "--version"], check=True, capture_output=True)
+                return True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                return False
+        
+        def run_command_with_output(cmd: List[str], description: str) -> bool:
+            """运行命令并实时显示输出"""
+            ui.print_info(f"正在{description}...")
+            logger.info(f"开始{description}", command=" ".join(cmd))
+            
+            try:
+                # 使用Popen来实时显示输出
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    universal_newlines=True
+                )
+                
+                # 实时读取输出
+                if process.stdout:
+                    for line in process.stdout:
+                        print(line, end='')  # 直接打印到终端
+                
+                # 等待进程完成
+                process.wait()
+                
+                if process.returncode == 0:
+                    ui.print_success(f"{description}完成")
+                    logger.info(f"{description}成功")
+                    return True
+                else:
+                    ui.print_error(f"{description}失败，返回码: {process.returncode}")
+                    logger.error(f"{description}失败", returncode=process.returncode)
+                    return False
+            except Exception as e:
+                ui.print_error(f"{description}时发生异常: {str(e)}")
+                logger.error(f"{description}异常", error=str(e))
+                return False
+        
         try:
             if not os.path.exists(requirements_path):
                 ui.print_warning("未找到requirements.txt文件，跳过依赖安装")
                 return True
 
-            # 确定pip可执行文件路径
-            if platform.system() == "Windows":
-                pip_exe = os.path.join(venv_path, "Scripts", "pip.exe")
+            # 检查uv是否可用
+            if not is_uv_available():
+                ui.print_warning("未找到uv工具，建议安装uv以获得更快的依赖安装速度")
+                ui.print_info("安装uv: pip install uv")
+                # 回退到pip
+                use_uv = False
+                # 确定pip可执行文件路径
+                if platform.system() == "Windows":
+                    pip_exe = os.path.join(venv_path, "Scripts", "pip.exe")
+                else:
+                    pip_exe = os.path.join(venv_path, "bin", "pip")
+                
+                if not os.path.exists(pip_exe):
+                    ui.print_error("虚拟环境中未找到pip")
+                    return False
             else:
-                pip_exe = os.path.join(venv_path, "bin", "pip")
-
-            if not os.path.exists(pip_exe):
-                ui.print_error("虚拟环境中未找到pip")
-                return False
+                use_uv = True
+                # 确定uv可执行文件路径（假设uv在系统PATH中）
+                uv_exe = "uv"
 
             ui.print_info("正在虚拟环境中安装Python依赖...")
-            logger.info("开始在虚拟环境中安装依赖", venv_path=venv_path, requirements=requirements_path)
+            logger.info("开始在虚拟环境中安装依赖", venv_path=venv_path, requirements=requirements_path, use_uv=use_uv)
 
-            # 先升级pip，自动切换源
-            pip_upgraded = False
-            for mirror in pypi_mirrors:
-                upgrade_cmd = [pip_exe, "install", "--upgrade", "pip", "-i", mirror]
-                try:
-                    subprocess.run(upgrade_cmd, check=True, capture_output=True, text=True)
-                    pip_upgraded = True
-                    ui.print_info(f"pip升级成功，使用源：{mirror}")
-                    break
-                except subprocess.CalledProcessError as e:
-                    ui.print_warning(f"pip升级失败，尝试下一个源：{mirror}")
-            if not pip_upgraded:
-                ui.print_error("所有pip源升级均失败")
-                return False
-
-            # 安装依赖，自动切换源
-            deps_installed = False
-            for mirror in pypi_mirrors:
+            if use_uv:
+                # 使用uv安装依赖
+                # uv会自动处理镜像源和pip升级
                 install_cmd = [
-                    pip_exe, "install", "-r", requirements_path,
-                    "-i", mirror
+                    uv_exe, "pip", "install", "-r", requirements_path,
+                    "-i", pypi_mirrors[0]  # 使用第一个镜像源
                 ]
-                try:
-                    subprocess.run(install_cmd, check=True, capture_output=True, text=True)
-                    deps_installed = True
-                    ui.print_info(f"依赖安装成功，使用源：{mirror}")
-                    break
-                except subprocess.CalledProcessError as e:
-                    ui.print_warning(f"依赖安装失败，尝试下一个源：{mirror}")
-            if not deps_installed:
-                ui.print_error("所有pip源依赖安装均失败")
-                return False
+                
+                # 添加虚拟环境路径
+                if platform.system() == "Windows":
+                    python_exe = os.path.join(venv_path, "Scripts", "python.exe")
+                else:
+                    python_exe = os.path.join(venv_path, "bin", "python")
+                install_cmd.extend(["--python", python_exe])
+                
+                return run_command_with_output(install_cmd, "使用uv安装依赖")
+            else:
+                # 使用原有的pip逻辑作为后备
+                # 先升级pip，自动切换源
+                pip_upgraded = False
+                for mirror in pypi_mirrors:
+                    upgrade_cmd = [pip_exe, "install", "--upgrade", "pip", "-i", mirror]
+                    try:
+                        subprocess.run(upgrade_cmd, check=True, capture_output=True, text=True)
+                        pip_upgraded = True
+                        ui.print_info(f"pip升级成功，使用源：{mirror}")
+                        break
+                    except subprocess.CalledProcessError as e:
+                        ui.print_warning(f"pip升级失败，尝试下一个源：{mirror}")
+                if not pip_upgraded:
+                    ui.print_error("所有pip源升级均失败")
+                    return False
 
-            ui.print_success("依赖安装完成")
-            logger.info("依赖安装成功", venv_path=venv_path)
-            return True
+                # 安装依赖，自动切换源
+                deps_installed = False
+                for mirror in pypi_mirrors:
+                    install_cmd = [
+                        pip_exe, "install", "-r", requirements_path,
+                        "-i", mirror
+                    ]
+                    try:
+                        subprocess.run(install_cmd, check=True, capture_output=True, text=True)
+                        deps_installed = True
+                        ui.print_info(f"依赖安装成功，使用源：{mirror}")
+                        break
+                    except subprocess.CalledProcessError as e:
+                        ui.print_warning(f"依赖安装失败，尝试下一个源：{mirror}")
+                if not deps_installed:
+                    ui.print_error("所有pip源依赖安装均失败")
+                    return False
+
+                ui.print_success("依赖安装完成")
+                logger.info("依赖安装成功", venv_path=venv_path)
+                return True
             
         except subprocess.CalledProcessError as e:
             error_msg = f"依赖安装失败: {e.stderr if e.stderr else str(e)}"
@@ -282,8 +356,8 @@ class DeploymentManager:
             response.raise_for_status()
             
             branches = response.json()
-            # 只返回支持的分支
-            return [b for b in branches if b["name"] in self.supported_branches]
+            # 返回所有分支
+            return branches
             
         except requests.RequestException as e:
             ui.print_error(f"获取分支信息失败: {str(e)}")
@@ -382,43 +456,197 @@ class DeploymentManager:
         
         return versions
     
-    def get_napcat_versions(self) -> List[Dict]:
-        """获取NapCat版本列表 - 固定使用v4.8.90版本"""
-        # 固定返回v4.8.90版本的两个选项
+    def get_mofox_versions(self) -> List[Dict]:
+        """获取MoFox_bot版本列表"""
+        if not self._is_cache_valid() or not self._versions_cache:
+            # 获取MoFox_bot的版本信息
+            try:
+                url = f"{self.github_api_base}/repos/MoFox-Studio/MoFox_Bot/releases"
+                headers = {"Accept": "application/vnd.github.v3+json"}
+                
+                ui.print_info("正在获取 MoFox_bot 的版本信息...")
+                response = requests.get(url, headers=headers, timeout=30, verify=False)
+                response.raise_for_status()
+                
+                releases = response.json()
+                
+                versions = []
+                for release in releases:
+                    versions.append({
+                        "type": "release",
+                        "name": release["tag_name"],
+                        "display_name": release["name"] or release["tag_name"],
+                        "description": release["body"][:100] + "..." if len(release["body"]) > 100 else release["body"],
+                        "published_at": release["published_at"],
+                        "prerelease": release.get("prerelease", False),
+                        "download_url": release["zipball_url"],
+                        "changelog": release["body"]
+                    })
+                
+                # 获取分支
+                branches_url = f"{self.github_api_base}/repos/MoFox-Studio/MoFox_Bot/branches"
+                branches_response = requests.get(branches_url, headers=headers, timeout=30, verify=False)
+                branches_response.raise_for_status()
+                
+                branches = branches_response.json()
+                
+                for branch in branches:
+                    versions.append({
+                        "type": "branch",
+                        "name": branch["name"],
+                        "display_name": f"{branch['name']} (分支)",
+                        "description": f"{branch['name']} 分支 - 开发版本",
+                        "published_at": None,
+                        "prerelease": True,
+                        "download_url": f"https://github.com/MoFox-Studio/MoFox_Bot/archive/refs/heads/{branch['name']}.zip",
+                        "changelog": f"来自 {branch['name']} 分支的最新代码"
+                    })
+                
+                # 按发布时间排序，分支版本置顶
+                versions.sort(key=lambda x: (
+                    x["type"] != "branch",  # 分支优先
+                    x["published_at"] is None,  # 有发布时间的优先
+                    x["published_at"] if x["published_at"] else ""
+                ), reverse=True)
+                
+                self._versions_cache = versions
+                import time
+                self._cache_timestamp = time.time()
+                
+                return versions
+                
+            except requests.RequestException as e:
+                ui.print_error(f"获取MoFox_bot releases失败: {str(e)}")
+                logger.error("GitHub API请求失败", error=str(e), repo="MoFox-Studio/MoFox_Bot")
+                return []
+            except Exception as e:
+                ui.print_error(f"解析MoFox_bot版本信息失败: {str(e)}")
+                logger.error("版本信息解析失败", error=str(e))
+                return []
+        
+        return self._versions_cache
+    
+    def get_napcat_versions(self, force_refresh: bool = False) -> List[Dict]:
+        """获取NapCat版本列表 - 从GitHub API获取最新5个版本"""
+        # 检查缓存
+        if not force_refresh and self._is_cache_valid() and self._napcat_versions_cache:
+            return self._napcat_versions_cache
+        
+        try:
+            # 从GitHub API获取NapCatQQ的最新releases
+            url = f"{self.github_api_base}/repos/{self.napcat_repo}/releases"
+            headers = {"Accept": "application/vnd.github.v3+json"}
+            
+            ui.print_info("正在获取 NapCatQQ 的最新版本信息...")
+            response = requests.get(url, headers=headers, timeout=30, verify=False)
+            response.raise_for_status()
+            
+            releases = response.json()
+            
+            # 获取最新的5个版本
+            latest_releases = releases[:5] if isinstance(releases, list) else []
+            
+            napcat_versions = []
+            for release in latest_releases:
+                version_name = release.get("tag_name", "unknown")
+                
+                # 为每个版本创建基础版和一键包版本
+                # 基础版下载链接
+                shell_url = f"https://github.com/NapNeko/NapCatQQ/releases/download/{version_name}/NapCat.Shell.zip"
+                
+                # 一键包版本（有头版本）
+                framework_onekey_url = f"https://github.com/NapNeko/NapCatQQ/releases/download/{version_name}/NapCat.Framework.Windows.OneKey.zip"
+                
+                # 一键包版本（无头版本）
+                shell_onekey_url = f"https://github.com/NapNeko/NapCatQQ/releases/download/{version_name}/NapCat.Shell.Windows.OneKey.zip"
+                
+                # 添加基础版
+                napcat_versions.append({
+                    "name": f"{version_name}-shell",
+                    "display_name": f"{version_name} 基础版 (推荐)",
+                    "description": "最推荐的版本，适合大多数用户",
+                    "published_at": release.get("published_at", ""),
+                    "download_url": shell_url,
+                    "size": 0,  # 大小需要额外获取
+                    "changelog": release.get("body", "暂无更新日志"),
+                    "asset_name": "NapCat.Shell.zip",
+                    "version": version_name
+                })
+                
+                # 添加有头一键包版本
+                napcat_versions.append({
+                    "name": f"{version_name}-framework-onekey",
+                    "display_name": f"{version_name} 有头一键包",
+                    "description": "带QQ界面的一键包版本，适合挂机器人的同时附体发消息",
+                    "published_at": release.get("published_at", ""),
+                    "download_url": framework_onekey_url,
+                    "size": 0,  # 大小需要额外获取
+                    "changelog": release.get("body", "暂无更新日志"),
+                    "asset_name": "NapCat.Framework.Windows.OneKey.zip",
+                    "version": version_name
+                })
+                
+                # 添加无头一键包版本
+                napcat_versions.append({
+                    "name": f"{version_name}-shell-onekey",
+                    "display_name": f"{version_name} 无头一键包",
+                    "description": "无界面的一键包版本",
+                    "published_at": release.get("published_at", ""),
+                    "download_url": shell_onekey_url,
+                    "size": 0,  # 大小需要额外获取
+                    "changelog": release.get("body", "暂无更新日志"),
+                    "asset_name": "NapCat.Shell.Windows.OneKey.zip",
+                    "version": version_name
+                })
+            
+            # 更新缓存
+            self._napcat_versions_cache = napcat_versions
+            import time
+            self._cache_timestamp = time.time()
+            
+            return napcat_versions
+            
+        except requests.RequestException as e:
+            ui.print_error(f"获取NapCat releases失败: {str(e)}")
+            logger.error("GitHub API请求失败", error=str(e), repo=self.napcat_repo)
+            # 返回默认版本作为备选
+            return self._get_default_napcat_versions()
+        except Exception as e:
+            ui.print_error(f"解析NapCat版本信息失败: {str(e)}")
+            logger.error("版本信息解析失败", error=str(e))
+            # 返回默认版本作为备选
+            return self._get_default_napcat_versions()
+    
+    def _get_default_napcat_versions(self) -> List[Dict]:
+        """获取默认的NapCat版本列表"""
+        # 固定返回默认版本的选项
         napcat_versions = [
             {
-                "name": "v4.8.90-framework",
-                "display_name": "v4.8.90 有头版本",
-                "description": "带界面的NapCat版本，适合调试和查看日志",
-                "published_at": "2024-12-01T00:00:00Z",
-                "download_url": "https://github.com/NapNeko/NapCatQQ/releases/download/v4.8.90/NapCat.Framework.Windows.OneKey.zip",
-                "size": 50 * 1024 * 1024,  # 估算大小
-                "changelog": "v4.8.90 稳定版本",
-                "asset_name": "NapCat.Framework.Windows.OneKey.zip"
-            },
-            {
                 "name": "v4.8.90-shell",
-                "display_name": "v4.8.90 无头版本",
-                "description": "无界面的NapCat版本，适合服务器部署",
+                "display_name": "v4.8.90 基础版 (推荐)",
+                "description": "基础版本，适合大多数用户",
                 "published_at": "2024-12-01T00:00:00Z",
-                "download_url": "https://github.com/NapNeko/NapCatQQ/releases/download/v4.8.90/NapCat.Shell.Windows.OneKey.zip",
+                "download_url": "https://github.com/NapNeko/NapCatQQ/releases/download/v4.8.90/NapCat.Shell.zip",
                 "size": 45 * 1024 * 1024,  # 估算大小
                 "changelog": "v4.8.90 稳定版本",
-                "asset_name": "NapCat.Shell.Windows.OneKey.zip"
+                "asset_name": "NapCat.Shell.zip",
+                "version": "v4.8.90"
             }
         ]
         
-        self._napcat_versions_cache = napcat_versions
         return napcat_versions
 
-    def show_version_menu(self) -> Optional[Dict]:
+    def show_version_menu(self, bot_type: str = "MaiBot") -> Optional[Dict]:
         """显示版本选择菜单，返回选中的版本信息"""
         ui.clear_screen()
-        ui.components.show_title("选择部署版本", symbol="🚀")
+        ui.components.show_title(f"选择部署版本 - {bot_type}", symbol="🚀")
 
         # 获取版本列表
         ui.print_info("正在获取最新版本信息...")
-        versions = self.get_maimai_versions()
+        if bot_type == "MaiBot":
+            versions = self.get_maimai_versions()
+        else:  # MoFox_bot
+            versions = self.get_mofox_versions()
 
         if not versions:
             ui.print_error("无法获取版本信息，请检查网络连接")
@@ -429,7 +657,7 @@ class DeploymentManager:
         table = Table(
             show_header=True,
             header_style=ui.colors["table_header"],
-            title="[bold]MaiBot 可用版本[/bold]",
+            title=f"[bold]{bot_type} 可用版本[/bold]",
             title_style=ui.colors["primary"],
             border_style=ui.colors["border"],
             show_lines=True
@@ -479,12 +707,12 @@ class DeploymentManager:
                 return None
             elif choice.upper() == 'R':
                 # 刷新版本列表
-                return self.show_version_menu()
+                return self.show_version_menu(bot_type)
             elif choice.upper() == 'C':
                 # 查看更新日志
                 self.show_changelog_menu(display_versions)
                 # 返回后重新显示菜单
-                return self.show_version_menu()
+                return self.show_version_menu(bot_type)
             
             try:
                 choice_num = int(choice)
@@ -589,42 +817,66 @@ class DeploymentManager:
         ui.clear_screen()
         ui.components.show_title("选择NapCat版本", symbol="🐱")
         
-        ui.print_info("当前仅支持 NapCat v4.8.90 稳定版本")
+        ui.print_info("正在获取 NapCatQQ 的最新版本信息...")
         napcat_versions = self.get_napcat_versions()
         
         if not napcat_versions:
             ui.print_error("无法获取NapCat版本信息")
             return None
         
-        # 创建简化的版本表格
+        # 创建版本表格
         from rich.table import Table
         table = Table(
             show_header=True,
             header_style=ui.colors["table_header"],
             title="[bold]NapCat 可用版本[/bold]",
             title_style=ui.colors["primary"],
-            border_style=ui.colors["border"]
+            border_style=ui.colors["border"],
+            show_lines=True
         )
         table.add_column("选项", style="cyan", width=6, justify="center")
-        table.add_column("版本类型", style=ui.colors["primary"], width=20)
-        table.add_column("大小", style="yellow", width=12, justify="center")
+        table.add_column("版本", style=ui.colors["primary"], width=20)
+        table.add_column("类型", style="yellow", width=15, justify="center")
         table.add_column("说明", style="green")
+        table.add_column("发布时间", style=ui.colors["blue"], width=12, justify="center")
         
+        # 显示版本信息
         for i, version in enumerate(napcat_versions, 1):
-            size_mb = f"{version['size'] / 1024 / 1024:.1f} MB" if version['size'] else "未知"
+            # 提取版本类型
+            version_type = "基础版" if "shell" in version["name"] and "onekey" not in version["name"] else \
+                           "有头一键包" if "framework" in version["name"] else \
+                           "无头一键包" if "shell" in version["name"] and "onekey" in version["name"] else "未知"
+            
+            # 发布时间格式化
+            published_date = ""
+            if version["published_at"]:
+                try:
+                    dt = datetime.fromisoformat(version["published_at"].replace('Z', '+00:00'))
+                    published_date = dt.strftime("%Y-%m-%d")
+                except:
+                    published_date = "未知"
+            else:
+                published_date = "未知"
             
             table.add_row(
                 f"[{i}]",
-                version["display_name"],
-                size_mb,
-                version["description"]
+                version["version"],
+                version_type,
+                version["description"],
+                published_date
             )
         
         ui.console.print(table)
-        ui.console.print("\n[Q] 跳过NapCat下载", style=ui.colors["info"])
+        ui.console.print("\n[Enter] 使用默认版本(第一个选项)  [Q] 跳过NapCat下载", style=ui.colors["info"])
+        ui.console.print("提示：推荐使用基础版，适合大多数用户", style=ui.colors["success"])
         
         while True:
-            choice = ui.get_input("请选择NapCat版本类型：").strip()
+            choice = ui.get_input("请选择NapCat版本(直接回车使用默认版本)：").strip()
+            
+            # 如果用户直接按回车，使用默认版本(第一个选项)
+            if choice == "":
+                ui.print_info("使用默认版本: " + napcat_versions[0]["display_name"])
+                return napcat_versions[0]
             
             if choice.upper() == 'Q':
                 return None
@@ -632,11 +884,13 @@ class DeploymentManager:
             try:
                 choice_num = int(choice)
                 if 1 <= choice_num <= len(napcat_versions):
-                    return napcat_versions[choice_num - 1]
+                    selected_version = napcat_versions[choice_num - 1]
+                    ui.print_info("已选择版本: " + selected_version["display_name"])
+                    return selected_version
                 else:
                     ui.print_error("无效选项，请重新选择")
             except ValueError:
-                ui.print_error("请输入有效的数字")
+                ui.print_error("请输入有效的数字或直接回车使用默认版本")
     
     def download_napcat(self, napcat_version: Dict, install_dir: str) -> Optional[str]:
         """下载并解压NapCat"""
@@ -974,8 +1228,17 @@ pause
     
     def _get_deployment_config(self) -> Optional[Dict]:
         """获取部署配置信息"""
+        # 询问用户要部署的Bot类型
+        ui.console.print("\n[🤖 Bot类型选择]", style=ui.colors["primary"])
+        ui.console.print("请选择要部署的Bot类型：")
+        ui.console.print(" [1] MaiBot (默认)")
+        ui.console.print(" [2] MoFox_bot")
+        
+        bot_type_choice = ui.get_input("请选择Bot类型 (1/2): ").strip()
+        bot_type = "MaiBot" if bot_type_choice != "2" else "MoFox_bot"
+        
         # 选择版本
-        selected_version = self.show_version_menu()
+        selected_version = self.show_version_menu(bot_type)
         if not selected_version:
             return None
         
@@ -995,25 +1258,32 @@ pause
         ui.console.print(f"选择的版本：{selected_version['display_name']}")
         ui.console.print(f"版本类型：{'旧版本 (classical/0.5.x)' if is_legacy else '新版本 (0.6.0+)'}")
         
-        if is_legacy:
-            ui.print_info("classical版本建议组件：MaiBot主体 + MongoDB + NapCat")
-        else:
-            ui.print_info("新版本建议组件：MaiBot + 适配器 + NapCat")
+        if bot_type == "MaiBot":
+            if is_legacy:
+                ui.print_info("classical版本建议组件：MaiBot主体 + MongoDB + NapCat")
+            else:
+                ui.print_info("新版本建议组件：MaiBot + 适配器 + NapCat")
+        else:  # MoFox_bot
+            ui.print_info("MoFox_bot版本建议组件：MoFox_bot + 适配器 + NapCat")
 
         ui.console.print()
         
         # 询问适配器安装（新版本默认推荐）
-        if is_legacy:
-            install_adapter = False
-            ui.print_info("旧版本无需适配器，已自动跳过")
-            install_napcat = ui.confirm("是否需要安装NapCat？（QQ连接组件）")
-        else:
-            install_adapter = ui.confirm("是否需要安装适配器？（新版本推荐安装）")
-            if install_adapter == False:
-                ui.print_info("已跳过适配器安装")
-                install_napcat = False
+        if bot_type == "MaiBot":
+            if is_legacy:
+                install_adapter = False
+                ui.print_info("旧版本无需适配器，已自动跳过")
+                install_napcat = ui.confirm("是否需要安装NapCat？（QQ连接组件）")
             else:
-                install_napcat = True  # 新版本默认需要NapCat
+                install_adapter = ui.confirm("是否需要安装适配器？（新版本推荐安装）")
+                if install_adapter == False:
+                    ui.print_info("已跳过适配器安装")
+                    install_napcat = False
+                else:
+                    install_napcat = True  # 新版本默认需要NapCat
+        else:  # MoFox_bot
+            install_adapter = ui.confirm("是否需要安装适配器？（MoFox_bot推荐安装）")
+            install_napcat = True  # MoFox_bot默认需要NapCat
         
         # 询问是否需要安装NapCat
         
@@ -1030,28 +1300,31 @@ pause
         mongodb_path = ""
         needs_mongo = version_reqs["needs_mongodb"]
         
-        if needs_mongo:
-            # 0.7以下版本需要检查是否安装MongoDB
-                ui.print_info("正在检查MongoDB安装状态...")
-                try:
-                    # 直接在这里进行MongoDB检查和安装
-                    success, mongodb_path = mongodb_installer.check_and_install_mongodb(
-                        selected_version.get("name", ""), "", force_install=False
-                    )
-                    if success:
-                        install_mongodb = True
-                        ui.print_success("✅ MongoDB检查完成")
-                        if mongodb_path:
-                            ui.print_info(f"MongoDB路径: {mongodb_path}")
-                    else:
-                        ui.print_warning("⚠️ MongoDB检查失败，将跳过MongoDB安装")
+        if bot_type == "MaiBot":  # 只有MaiBot需要考虑MongoDB
+            if needs_mongo:
+                # 0.7以下版本需要检查是否安装MongoDB
+                    ui.print_info("正在检查MongoDB安装状态...")
+                    try:
+                        # 直接在这里进行MongoDB检查和安装
+                        success, mongodb_path = mongodb_installer.check_and_install_mongodb(
+                            selected_version.get("name", ""), "", force_install=False
+                        )
+                        if success:
+                            install_mongodb = True
+                            ui.print_success("✅ MongoDB检查完成")
+                            if mongodb_path:
+                                ui.print_info(f"MongoDB路径: {mongodb_path}")
+                        else:
+                            ui.print_warning("⚠️ MongoDB检查失败，将跳过MongoDB安装")
+                            install_mongodb = False
+                    except Exception as e:
+                        ui.print_error(f"MongoDB检查异常: {str(e)}")
                         install_mongodb = False
-                except Exception as e:
-                    ui.print_error(f"MongoDB检查异常: {str(e)}")
-                    install_mongodb = False
-        else:
-            # 0.7及以上版本默认不需要MongoDB
-            ui.print_info("0.7及以上版本无需MongoDB，已自动跳过")
+            else:
+                # 0.7及以上版本默认不需要MongoDB
+                ui.print_info("0.7及以上版本无需MongoDB，已自动跳过")
+        else:  # MoFox_bot
+            ui.print_info("MoFox_bot无需MongoDB，已自动跳过")
 
         # 询问是否需要安装WebUI
         install_webui = ui.confirm("是否需要安装WebUI？（Web聊天室界面）(目前处于预览版, 可能不稳定)")
@@ -1110,6 +1383,7 @@ pause
             "install_dir": install_dir,
             "nickname": nickname,
             "qq_account": qq_account,
+            "bot_type": bot_type,  # 添加bot类型
             "install_adapter": install_adapter,
             "install_napcat": install_napcat,
             "install_mongodb": install_mongodb,
@@ -1171,26 +1445,27 @@ pause
         return ui.confirm("确认开始部署吗？")
     
     def _install_maibot(self, deploy_config: Dict) -> Optional[str]:
-        """第一步：安装MaiBot"""
-        ui.console.print("\n[📦 第一步：安装MaiBot]", style=ui.colors["primary"])
+        """第一步：安装MaiBot或MoFox_bot"""
+        bot_type = deploy_config.get("bot_type", "MaiBot")
+        ui.console.print(f"\n[📦 第一步：安装{bot_type}]", style=ui.colors["primary"])
         
         selected_version = deploy_config["selected_version"]
         install_dir = deploy_config["install_dir"]
         
         with tempfile.TemporaryDirectory() as temp_dir:
-            # 下载MaiBot源码
-            ui.print_info("正在下载MaiBot源码...")
+            # 下载源码
+            ui.print_info(f"正在下载{bot_type}源码...")
             download_url = selected_version["download_url"]
             archive_path = os.path.join(temp_dir, f"{selected_version['name']}.zip")
             
             if not self.download_file(download_url, archive_path):
-                ui.print_error("MaiBot下载失败")
+                ui.print_error(f"{bot_type}下载失败")
                 return None
             
             # 解压到临时目录
-            ui.print_info("正在解压MaiBot...")
+            ui.print_info(f"正在解压{bot_type}...")
             if not self.extract_archive(archive_path, temp_dir):
-                ui.print_error("MaiBot解压失败")
+                ui.print_error(f"{bot_type}解压失败")
                 return None
             
             # 查找解压后的目录
@@ -1203,18 +1478,19 @@ pause
             
             # 创建目标目录并复制文件
             os.makedirs(install_dir, exist_ok=True)
-            target_dir = os.path.join(install_dir, "MaiBot")
+            target_dir = os.path.join(install_dir, bot_type)
             
-            ui.print_info("正在安装MaiBot文件...")
+            ui.print_info(f"正在安装{bot_type}文件...")
             shutil.copytree(source_dir, target_dir)
             
-            ui.print_success("✅ MaiBot安装完成")
-            logger.info("MaiBot安装成功", path=target_dir)
+            ui.print_success(f"✅ {bot_type}安装完成")
+            logger.info(f"{bot_type}安装成功", path=target_dir)
             return target_dir
     
-    def _install_adapter_if_needed(self, deploy_config: Dict, maibot_path: str) -> str:
+    def _install_adapter_if_needed(self, deploy_config: Dict, bot_path: str) -> str:
         """第二步：检测版本并安装适配器"""
-        ui.console.print("\n[🔌 第二步：检测版本并安装适配器]", style=ui.colors["primary"])
+        bot_type = deploy_config.get("bot_type", "MaiBot")
+        ui.console.print(f"\n[🔌 第二步：检测版本并安装适配器]", style=ui.colors["primary"])
         
         # 使用配置版本信息进行判断
         selected_version = deploy_config["selected_version"]
@@ -1235,7 +1511,13 @@ pause
         ui.console.print("  • dev分支：使用dev分支适配器")
         
         # 判断是否需要适配器
-        adapter_path = self._determine_adapter_requirements(version_to_check, maibot_path)
+        adapter_path = self._determine_adapter_requirements(version_to_check, bot_path)
+        
+        # 提醒用户关于外置适配器的信息
+        ui.console.print("\n[ℹ️  外置适配器提醒]", style=ui.colors["info"])
+        ui.console.print("墨狐已经将适配器作为插件内置在主程序中。", style="white")
+        ui.console.print("如需获取外置适配器，请访问：", style="white")
+        ui.console.print("https://github.com/MoFox-Studio/NapCat-Adapter", style="#46AEF8")
         
         if adapter_path == "无需适配器":
             ui.print_success("✅ 当前版本无需适配器")
@@ -1345,7 +1627,7 @@ pause
                 logger.info("适配器安装成功", version=adapter_version, path=adapter_extract_path)
                 return adapter_extract_path
     
-    def _install_napcat(self, deploy_config: Dict, maibot_path: str) -> str:
+    def _install_napcat(self, deploy_config: Dict, bot_path: str) -> str:
         """第三步：安装NapCat"""
         ui.console.print("\n[🐱 第三步：安装NapCat]", style=ui.colors["primary"])
         
@@ -1406,17 +1688,17 @@ pause
         logger.error("NapCat路径检测失败", install_dir=install_dir, max_attempts=max_attempts)
         return None
 
-    def _setup_python_environment(self, maibot_path: str, adapter_path: str) -> str:
+    def _setup_python_environment(self, bot_path: str, adapter_path: str) -> str:
         """第四步：设置Python环境"""
         ui.console.print("\n[🐍 第四步：设置Python环境]", style=ui.colors["primary"])
         
         ui.print_info("正在创建Python虚拟环境...")
-        venv_success, venv_path = self.create_virtual_environment(maibot_path)
+        venv_success, venv_path = self.create_virtual_environment(bot_path)
         
-        if venv_success:           
-            requirements_path = os.path.join(maibot_path, "requirements.txt")
+        if venv_success:
+            requirements_path = os.path.join(bot_path, "requirements.txt")
             
-            ui.print_info("正在安装MaiBot本体依赖...")
+            ui.print_info("正在安装Bot本体依赖...")
             deps_success = self.install_dependencies_in_venv(venv_path, requirements_path)
             
             # 安装适配器依赖（如果适配器存在且有requirements.txt）
@@ -1441,8 +1723,11 @@ pause
     
     def _setup_config_files(self, deploy_config: Dict, **paths: str) -> bool:
         """第六步：配置文件设置"""
+        bot_type = deploy_config.get("bot_type", "MaiBot")
+        bot_path_key = "maibot_path" if bot_type == "MaiBot" else "mofox_path"
+        bot_path = paths.get(bot_path_key, "")
+        
         ui.console.print("\n[⚙️ 第六步：配置文件设置]", style=ui.colors["primary"])
-        maibot_path = paths["maibot_path"]
         adapter_path = paths["adapter_path"]
         napcat_path = paths["napcat_path"]
         mongodb_path = paths["mongodb_path"]
@@ -1450,16 +1735,16 @@ pause
         
         try:
             # 创建config目录
-            config_dir = os.path.join(maibot_path, "config")
-            adapter_config_dir = os.path.join(maibot_path, "adapter") if adapter_path and adapter_path != "无需适配器" else None
+            config_dir = os.path.join(bot_path, "config")
+            adapter_config_dir = os.path.join(bot_path, "adapter") if adapter_path and adapter_path != "无需适配器" else None
             os.makedirs(config_dir, exist_ok=True)
             ui.print_info(f"创建config目录: {config_dir}")
             
-            # 1. 处理MaiBot主程序配置文件
-            ui.print_info("正在设置MaiBot配置文件...")
+            # 1. 处理Bot主程序配置文件
+            ui.print_info(f"正在设置{bot_type}配置文件...")
             
             # 复制bot_config_template.toml到config目录并重命名
-            template_dir = os.path.join(maibot_path, "template")
+            template_dir = os.path.join(bot_path, "template")
             bot_config_template = os.path.join(template_dir, "bot_config_template.toml")
             bot_config_target = os.path.join(config_dir, "bot_config.toml")
             
@@ -1471,9 +1756,22 @@ pause
                 ui.print_warning(f"⚠️ 未找到模板文件: {bot_config_template}")
                 logger.warning("bot_config模板文件不存在", path=bot_config_template)
             
+            # 对于MoFox_bot，还需要复制model_config_template.toml
+            if bot_type == "MoFox_bot":
+                model_config_template = os.path.join(template_dir, "model_config_template.toml")
+                model_config_target = os.path.join(config_dir, "model_config.toml")
+                
+                if os.path.exists(model_config_template):
+                    shutil.copy2(model_config_template, model_config_target)
+                    ui.print_success(f"✅ model_config.toml 配置完成")
+                    logger.info("model_config.toml复制成功", source=model_config_template, target=model_config_target)
+                else:
+                    ui.print_warning(f"⚠️ 未找到模板文件: {model_config_template}")
+                    logger.warning("model_config模板文件不存在", path=model_config_template)
+            
             # 复制template.env到根目录并重命名为.env
             env_template = os.path.join(template_dir, "template.env")
-            env_target = os.path.join(maibot_path, ".env")
+            env_target = os.path.join(bot_path, ".env")
             
             if os.path.exists(env_template):
                 shutil.copy2(env_template, env_target)
@@ -1559,7 +1857,7 @@ pause
                 ui.console.print(f"  • WebUI路径: {webui_path}")
             
             ui.print_success("✅ 配置文件设置完成")
-            logger.info("配置文件设置完成", maibot_path=maibot_path)
+            logger.info("配置文件设置完成", bot_path=bot_path)
             return True
             
         except Exception as e:
@@ -1569,8 +1867,11 @@ pause
 
     def _run_deployment_steps(self, deploy_config: Dict) -> Dict[str, str]:
         """执行所有部署步骤"""
+        bot_type = deploy_config.get("bot_type", "MaiBot")
+        bot_path_key = "maibot_path" if bot_type == "MaiBot" else "mofox_path"
+        
         paths = {
-            "maibot_path": "",
+            bot_path_key: "",
             "adapter_path": "",
             "napcat_path": "",
             "venv_path": "",
@@ -1578,27 +1879,27 @@ pause
             "mongodb_path": deploy_config.get("mongodb_path", ""),
         }
 
-        # 步骤1：安装MaiBot
-        paths["maibot_path"] = self._install_maibot(deploy_config)
-        if not paths["maibot_path"]:
-            raise Exception("MaiBot安装失败")
+        # 步骤1：安装Bot
+        paths[bot_path_key] = self._install_maibot(deploy_config)
+        if not paths[bot_path_key]:
+            raise Exception(f"{bot_type}安装失败")
 
         # 步骤2：安装适配器
         if deploy_config.get("install_adapter"):
-            paths["adapter_path"] = self._install_adapter_if_needed(deploy_config, paths["maibot_path"])
+            paths["adapter_path"] = self._install_adapter_if_needed(deploy_config, paths[bot_path_key])
 
         # 步骤3：安装NapCat
         if deploy_config.get("install_napcat") and deploy_config.get("napcat_version"):
-            paths["napcat_path"] = self._install_napcat(deploy_config, paths["maibot_path"])
+            paths["napcat_path"] = self._install_napcat(deploy_config, paths[bot_path_key])
 
         # 步骤4：安装WebUI
         if deploy_config.get("install_webui"):
-            success, paths["webui_path"] = self._check_and_install_webui(deploy_config, paths["maibot_path"])
+            success, paths["webui_path"] = self._check_and_install_webui(deploy_config, paths[bot_path_key])
             if not success:
                 ui.print_warning("WebUI安装检查失败，但部署将继续...")
 
         # 步骤5：设置Python环境
-        paths["venv_path"] = self._setup_python_environment(paths["maibot_path"], paths["adapter_path"])
+        paths["venv_path"] = self._setup_python_environment(paths[bot_path_key], paths["adapter_path"])
         
         if paths["webui_path"] and paths["venv_path"]:
             ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
@@ -1612,8 +1913,11 @@ pause
 
     def _finalize_deployment(self, deploy_config: Dict, **paths: str) -> bool:
         """第七步：完成部署配置"""
+        bot_type = deploy_config.get("bot_type", "MaiBot")
+        bot_path_key = "maibot_path" if bot_type == "MaiBot" else "mofox_path"
+        bot_path = paths.get(bot_path_key, "")
+        
         ui.console.print("\n[⚙️ 第七步：完成部署配置]", style=ui.colors["primary"])
-        maibot_path = paths["maibot_path"]
         adapter_path = paths["adapter_path"]
         napcat_path = paths["napcat_path"]
         venv_path = paths["venv_path"]
@@ -1636,8 +1940,9 @@ pause
             "absolute_serial_number": config_manager.generate_unique_serial(),
             "version_path": deploy_config["selected_version"]["name"],
             "nickname_path": deploy_config["nickname"],
+            "bot_type": bot_type,  # 添加bot类型
             "qq_account": deploy_config.get("qq_account", ""),
-            "mai_path": maibot_path,
+            bot_path_key: bot_path,
             "adapter_path": adapter_path,
             "napcat_path": napcat_path,
             "venv_path": venv_path,
@@ -1660,11 +1965,12 @@ pause
         ui.console.print("\n[📋 部署摘要]", style=ui.colors["info"])
         ui.console.print(f"实例名称：{deploy_config['nickname']}")
         ui.console.print(f"序列号：{deploy_config['serial_number']}")
+        ui.console.print(f"Bot类型：{bot_type}")
         ui.console.print(f"版本：{deploy_config['selected_version']['name']}")
-        ui.console.print(f"安装路径：{maibot_path}")
+        ui.console.print(f"安装路径：{bot_path}")
         
         ui.console.print("\n[🔧 已安装组件]", style=ui.colors["success"])
-        ui.console.print(f"  • MaiBot主体：✅")
+        ui.console.print(f"  • {bot_type}主体：✅")
         ui.console.print(f"  • 适配器：{'✅' if install_options['install_adapter'] else '❌'}")
         ui.console.print(f"  • NapCat：{'✅' if install_options['install_napcat'] else '❌'}")
         ui.console.print(f"  • MongoDB：{'✅' if install_options['install_mongodb'] else '❌'}")
@@ -2009,7 +2315,7 @@ pause
             logger.error("实例删除失败", error=str(e))
             return False
     
-    def _check_and_install_webui(self, deploy_config: Dict, maibot_path: str, venv_path: str = "") -> Tuple[bool, str]:
+    def _check_and_install_webui(self, deploy_config: Dict, bot_path: str, venv_path: str = "") -> Tuple[bool, str]:
         """检查并安装WebUI（如果需要）"""
         try:
             ui.console.print("\n[🌐 WebUI安装检查]", style=ui.colors["primary"])
@@ -2017,7 +2323,7 @@ pause
             # 获取安装目录
             install_dir = deploy_config.get("install_dir", "")
             
-            logger.info("开始WebUI安装检查", install_dir=install_dir, maibot_path=maibot_path)
+            logger.info("开始WebUI安装检查", install_dir=install_dir, bot_path=bot_path)
             
             # 调用WebUI安装器进行直接安装，传入虚拟环境路径
             success, webui_path = webui_installer.install_webui_directly(install_dir, venv_path)
