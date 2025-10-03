@@ -515,56 +515,120 @@ class MaiLauncher:
         return errors
 
     def show_launch_menu(self, config: Dict[str, Any]) -> bool:
-        """显示启动选择菜单并处理用户选择。"""
+        """根据bot类型显示不同的启动菜单并处理用户选择。"""
         self._register_components(config)
-        
+        bot_type = config.get("bot_type", "MaiBot")
+
         ui.clear_screen()
         ui.console.print("[🚀 启动选择菜单]", style=ui.colors["primary"])
         ui.console.print("="*50)
         ui.console.print(f"实例版本: {config.get('version_path', '未知')}")
         ui.console.print(f"实例昵称: {config.get('nickname_path', '未知')}")
+        ui.console.print(f"Bot 类型: {bot_type}")
         ui.console.print("\n[可用组件]", style=ui.colors["info"])
         
-        # 定义菜单选项
-        menu_options = {
-            "1": ("仅启动麦麦本体", ["mai"]),
-        }
-        next_key = 2
-
-        if self._components['adapter'].is_enabled:
-            menu_options[str(next_key)] = ("启动麦麦 + 适配器", ["adapter", "mai"])
-            next_key += 1
-        if self._components['napcat'].is_enabled:
-            menu_options[str(next_key)] = ("启动麦麦 + 适配器 + NapCat", ["napcat", "adapter", "mai"])
-            next_key += 1
-        if self._components['webui'].is_enabled:
-            menu_options[str(next_key)] = ("启动麦麦 + WebUI", ["webui", "mai"])
-            next_key += 1
-        
-        enabled_components = [c for c in self._components.values() if c.is_enabled and c.name != "麦麦本体"]
-        if len(enabled_components) >= 2:
-            menu_options[str(next_key)] = ("全栈启动 (所有已安装组件)", ["full_stack"])
-
-        # 打印组件状态和菜单
+        # 打印组件状态
         for comp in self._components.values():
             if comp.name != "麦麦本体":
-                 ui.console.print(f"  • {comp.name}: {'✅ 可用' if comp.is_enabled else '❌ 未配置'}")
+                ui.console.print(f"  • {comp.name}: {'✅ 可用' if comp.is_enabled else '❌ 未配置'}")
         ui.console.print(f"  • 麦麦本体: ✅ 可用")
 
-        ui.console.print("\n[启动选项]", style=ui.colors["success"])
+        # 根据 bot_type 定义菜单
+        if bot_type == "MaiBot":
+            menu_options = {
+                "1": ("主程序+适配器", ["mai", "adapter"]),
+                "2": ("主程序+适配器+NapCatQQ", ["mai", "adapter", "napcat"]),
+                "3": ("主程序+适配器+检查MongoDB", ["mai", "adapter", "mongodb"]),
+                "4": ("主程序+适配器+NapCatQQ+检查MongoDB", ["mai", "adapter", "napcat", "mongodb"]),
+            }
+        elif bot_type == "MoFox_bot":
+            menu_options = {
+                "1": ("主程序", ["mai"]),
+                "2": ("主程序+适配器", ["mai", "adapter"]),
+                "3": ("主程序+NapCatQQ", ["mai", "napcat"]),
+                "4": ("主程序+适配器+NapCatQQ", ["mai", "adapter", "napcat"]),
+            }
+        else:
+            # 默认或未知bot类型的菜单
+            menu_options = {
+                "1": ("仅启动主程序", ["mai"]),
+            }
+
+        ui.console.print("\n[预设启动项]", style=ui.colors["success"])
         for key, (text, _) in menu_options.items():
             ui.console.print(f" [{key}] {text}")
-        ui.console.print(" [Q] 返回上级菜单", style="#7E1DE4")
+        
+        ui.console.print(f" [H] 高级启动项", style=ui.colors["warning"])
+        ui.console.print(f" [Q] 返回", style=ui.colors["exit"])
 
         while True:
             choice = ui.get_input("请选择启动方式: ").strip().upper()
             if choice == 'Q':
                 return False
+            if choice == 'H':
+                return self._show_advanced_launch_menu()
             if choice in menu_options:
+                # 检查所选选项中的组件是否都已启用
                 _, components_to_start = menu_options[choice]
-                return self.launch(components_to_start)
+                all_enabled = True
+                for comp_name in components_to_start:
+                    if not self._components[comp_name].is_enabled:
+                        ui.print_error(f"组件 '{self._components[comp_name].name}' 未配置或未启用，无法使用该启动项。")
+                        all_enabled = False
+                        break
+                if all_enabled:
+                    return self.launch(components_to_start)
             else:
                 ui.print_error("无效选项，请重新选择。")
+
+    def _show_advanced_launch_menu(self) -> bool:
+        """显示高级启动菜单，支持多选。"""
+        ui.clear_screen()
+        ui.console.print("[🛠️ 高级启动项]", style=ui.colors["warning"])
+        ui.console.print("="*50)
+        ui.console.print("可多选，请使用英文逗号','分隔选项（例如: 1,3）")
+
+        advanced_options = {
+            "1": ("主程序", "mai"),
+            "2": ("适配器", "adapter"),
+            "3": ("NapCatQQ", "napcat"),
+            "4": ("检查MongoDB", "mongodb"),
+        }
+        
+        for key, (text, comp_name) in advanced_options.items():
+            is_enabled = self._components[comp_name].is_enabled
+            status = '✅ 可用' if is_enabled else '❌ 未配置'
+            ui.console.print(f" [{key}] {text} - {status}")
+
+        ui.console.print(f" [Q] 返回", style=ui.colors["exit"])
+
+        while True:
+            choices_str = ui.get_input("请选择要启动的组件: ").strip().upper()
+            if choices_str == 'Q':
+                return False
+
+            choices = [c.strip() for c in choices_str.split(',')]
+            components_to_start = []
+            valid_choices = True
+
+            for choice in choices:
+                if choice in advanced_options:
+                    _, comp_name = advanced_options[choice]
+                    if self._components[comp_name].is_enabled:
+                        components_to_start.append(comp_name)
+                    else:
+                        ui.print_error(f"组件 '{self._components[comp_name].name}' 未配置，无法启动。")
+                        valid_choices = False
+                        break
+                else:
+                    ui.print_error(f"无效选项 '{choice}'。")
+                    valid_choices = False
+                    break
+            
+            if valid_choices and components_to_start:
+                return self.launch(list(dict.fromkeys(components_to_start))) # 去重并保持顺序
+            elif valid_choices and not components_to_start:
+                ui.print_warning("未选择任何有效组件。")
 
     def launch(self, components_to_start: List[str]) -> bool:
         """根据给定的组件列表启动。"""

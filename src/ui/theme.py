@@ -22,6 +22,7 @@ COLORS = {
     "white": "white",
     "green": "green",
     "blue": "#005CFA",
+    "attention":"#FF45F6"
 }
 
 # 符号定义
@@ -46,4 +47,5 @@ SYMBOLS = {
     "validate": "🔍",
     "new": "✨",
     "plugin": "🧩",
+    "attention": "🚨"
 }

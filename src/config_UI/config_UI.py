@@ -7,25 +7,6 @@ from fastapi.staticfiles import StaticFiles
 import os
 import json
 
-# 虚拟环境自启动逻辑
-import sys
-def _maybe_restart_in_venv():
-    # 仅在直接运行时生效
-    if not hasattr(sys, 'argv') or not sys.argv or not __name__ == "__main__":
-        return
-    venv_candidates = ["venv", ".venv", "env", ".env"]
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
-    for venv_name in venv_candidates:
-        venv_python = os.path.join(base_dir, venv_name, "Scripts", "python.exe")
-        if os.path.exists(venv_python):
-            # 检查当前 python 路径
-            if os.path.abspath(sys.executable) != os.path.abspath(venv_python):
-                print(f"[INFO] 检测到虚拟环境，自动用 {venv_python} 重启...")
-                os.execv(venv_python, [venv_python] + sys.argv)
-            break
-
-_maybe_restart_in_venv()
-
 app = FastAPI()
 
 app.add_middleware(

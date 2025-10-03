@@ -46,6 +46,7 @@ class DeploymentManager:
         
         # 缓存
         self._versions_cache = None
+        self._mofox_versions_cache = None  # 为MoFox单独设置缓存
         self._napcat_versions_cache = None
         self._cache_timestamp = None
         self._cache_duration = 300  # 5分钟缓存
@@ -456,75 +457,75 @@ class DeploymentManager:
         
         return versions
     
-    def get_mofox_versions(self) -> List[Dict]:
+    def get_mofox_versions(self, force_refresh: bool = False) -> List[Dict]:
         """获取MoFox_bot版本列表"""
-        if not self._is_cache_valid() or not self._versions_cache:
-            # 获取MoFox_bot的版本信息
-            try:
-                url = f"{self.github_api_base}/repos/MoFox-Studio/MoFox_Bot/releases"
-                headers = {"Accept": "application/vnd.github.v3+json"}
-                
-                ui.print_info("正在获取 MoFox_bot 的版本信息...")
-                response = requests.get(url, headers=headers, timeout=30, verify=False)
-                response.raise_for_status()
-                
-                releases = response.json()
-                
-                versions = []
-                for release in releases:
-                    versions.append({
-                        "type": "release",
-                        "name": release["tag_name"],
-                        "display_name": release["name"] or release["tag_name"],
-                        "description": release["body"][:100] + "..." if len(release["body"]) > 100 else release["body"],
-                        "published_at": release["published_at"],
-                        "prerelease": release.get("prerelease", False),
-                        "download_url": release["zipball_url"],
-                        "changelog": release["body"]
-                    })
-                
-                # 获取分支
-                branches_url = f"{self.github_api_base}/repos/MoFox-Studio/MoFox_Bot/branches"
-                branches_response = requests.get(branches_url, headers=headers, timeout=30, verify=False)
-                branches_response.raise_for_status()
-                
-                branches = branches_response.json()
-                
-                for branch in branches:
-                    versions.append({
-                        "type": "branch",
-                        "name": branch["name"],
-                        "display_name": f"{branch['name']} (分支)",
-                        "description": f"{branch['name']} 分支 - 开发版本",
-                        "published_at": None,
-                        "prerelease": True,
-                        "download_url": f"https://github.com/MoFox-Studio/MoFox_Bot/archive/refs/heads/{branch['name']}.zip",
-                        "changelog": f"来自 {branch['name']} 分支的最新代码"
-                    })
-                
-                # 按发布时间排序，分支版本置顶
-                versions.sort(key=lambda x: (
-                    x["type"] != "branch",  # 分支优先
-                    x["published_at"] is None,  # 有发布时间的优先
-                    x["published_at"] if x["published_at"] else ""
-                ), reverse=True)
-                
-                self._versions_cache = versions
-                import time
-                self._cache_timestamp = time.time()
-                
-                return versions
-                
-            except requests.RequestException as e:
-                ui.print_error(f"获取MoFox_bot releases失败: {str(e)}")
-                logger.error("GitHub API请求失败", error=str(e), repo="MoFox-Studio/MoFox_Bot")
-                return []
-            except Exception as e:
-                ui.print_error(f"解析MoFox_bot版本信息失败: {str(e)}")
-                logger.error("版本信息解析失败", error=str(e))
-                return []
-        
-        return self._versions_cache
+        if not force_refresh and self._is_cache_valid() and self._mofox_versions_cache:
+            return self._mofox_versions_cache
+            
+        # 获取MoFox_bot的版本信息
+        try:
+            url = f"{self.github_api_base}/repos/MoFox-Studio/MoFox_Bot/releases"
+            headers = {"Accept": "application/vnd.github.v3+json"}
+            
+            ui.print_info("正在获取 MoFox_bot 的版本信息...")
+            response = requests.get(url, headers=headers, timeout=30, verify=False)
+            response.raise_for_status()
+            
+            releases = response.json()
+            
+            versions = []
+            for release in releases:
+                versions.append({
+                    "type": "release",
+                    "name": release["tag_name"],
+                    "display_name": release["name"] or release["tag_name"],
+                    "description": release["body"][:100] + "..." if len(release["body"]) > 100 else release["body"],
+                    "published_at": release["published_at"],
+                    "prerelease": release.get("prerelease", False),
+                    "download_url": release["zipball_url"],
+                    "changelog": release["body"]
+                })
+            
+            # 获取分支
+            branches_url = f"{self.github_api_base}/repos/MoFox-Studio/MoFox_Bot/branches"
+            branches_response = requests.get(branches_url, headers=headers, timeout=30, verify=False)
+            branches_response.raise_for_status()
+            
+            branches = branches_response.json()
+            
+            for branch in branches:
+                versions.append({
+                    "type": "branch",
+                    "name": branch["name"],
+                    "display_name": f"{branch['name']} (分支)",
+                    "description": f"{branch['name']} 分支 - 开发版本",
+                    "published_at": None,
+                    "prerelease": True,
+                    "download_url": f"https://github.com/MoFox-Studio/MoFox_Bot/archive/refs/heads/{branch['name']}.zip",
+                    "changelog": f"来自 {branch['name']} 分支的最新代码"
+                })
+            
+            # 按发布时间排序，分支版本置顶
+            versions.sort(key=lambda x: (
+                x["type"] != "branch",  # 分支优先
+                x["published_at"] is None,  # 有发布时间的优先
+                x["published_at"] if x["published_at"] else ""
+            ), reverse=True)
+            
+            self._mofox_versions_cache = versions
+            import time
+            self._cache_timestamp = time.time()
+            
+            return versions
+            
+        except requests.RequestException as e:
+            # ui.print_error(f"获取MoFox_bot releases失败: {str(e)}") # 交由上层处理
+            logger.error("GitHub API请求失败", error=str(e), repo="MoFox-Studio/MoFox_Bot")
+            return []
+        except Exception as e:
+            # ui.print_error(f"解析MoFox_bot版本信息失败: {str(e)}") # 交由上层处理
+            logger.error("版本信息解析失败", error=str(e))
+            return []
     
     def get_napcat_versions(self, force_refresh: bool = False) -> List[Dict]:
         """获取NapCat版本列表 - 从GitHub API获取最新5个版本"""
@@ -648,9 +649,17 @@ class DeploymentManager:
         else:  # MoFox_bot
             versions = self.get_mofox_versions()
 
-        if not versions:
-            ui.print_error("无法获取版本信息，请检查网络连接")
-            return None
+        while not versions:
+            ui.print_error("无法获取版本信息，请检查网络连接。")
+            choice = ui.get_choice("[R] 重试 [Q] 返回", ["R", "Q"])
+            if choice == "Q":
+                return None
+            
+            ui.print_info("正在重试获取最新版本信息...")
+            if bot_type == "MaiBot":
+                versions = self.get_maimai_versions(force_refresh=True)
+            else:
+                versions = self.get_mofox_versions(force_refresh=True)
 
         # 创建版本表格
         from rich.table import Table
@@ -820,9 +829,14 @@ class DeploymentManager:
         ui.print_info("正在获取 NapCatQQ 的最新版本信息...")
         napcat_versions = self.get_napcat_versions()
         
-        if not napcat_versions:
-            ui.print_error("无法获取NapCat版本信息")
-            return None
+        while not napcat_versions:
+            ui.print_error("无法获取NapCat版本信息，请检查网络连接。")
+            choice = ui.get_choice("[R] 重试 [Q] 跳过NapCat下载", ["R", "Q"])
+            if choice == "Q":
+                return None
+            
+            ui.print_info("正在重试获取 NapCatQQ 的最新版本信息...")
+            napcat_versions = self.get_napcat_versions(force_refresh=True)
         
         # 创建版本表格
         from rich.table import Table
@@ -1208,7 +1222,11 @@ pause
                 return False
 
             ui.print_success(f"🎉 实例 '{deploy_config['nickname']}' 部署完成！")
-            self._show_post_deployment_info()
+            
+            # 定义bot_path_key以传递给后续函数
+            bot_type = deploy_config.get("bot_type", "MaiBot")
+            bot_path_key = "maibot_path" if bot_type == "MaiBot" else "mofox_path"
+            self._show_post_deployment_info(paths.get(bot_path_key, ""), deploy_config)
 
             logger.info("实例部署完成", serial=deploy_config['serial_number'])
             return True
@@ -1800,6 +1818,10 @@ pause
         mongodb_path = paths["mongodb_path"]
         webui_path = paths["webui_path"]
         
+        # 获取版本信息以进行条件判断
+        version_name = deploy_config.get("selected_version", {}).get("name", "")
+        from ..utils.version_detector import compare_versions
+
         try:
             # 创建config目录
             config_dir = os.path.join(bot_path, "config")
@@ -1835,6 +1857,19 @@ pause
                 else:
                     ui.print_warning(f"⚠️ 未找到模板文件: {model_config_template}")
                     logger.warning("model_config模板文件不存在", path=model_config_template)
+
+            # 新增逻辑：处理lpmm_config_template.toml
+            if bot_type == "MaiBot" and \
+               compare_versions(version_name, "0.6.3") >= 0 and \
+               compare_versions(version_name, "0.10.0") < 0:
+                lpmm_template = os.path.join(template_dir, "lpmm_config_template.toml")
+                lpmm_target = os.path.join(config_dir, "lpmm_config.toml")
+                if os.path.exists(lpmm_template):
+                    shutil.copy2(lpmm_template, lpmm_target)
+                    ui.print_success(f"✅ lpmm_config.toml 配置完成 (适配版本 {version_name})")
+                    logger.info("lpmm_config.toml复制成功", source=lpmm_template, target=lpmm_target)
+                else:
+                    ui.print_warning(f"⚠️ 未找到 lpmm_config_template.toml，跳过")
             
             # 复制template.env到根目录并重命名为.env
             env_template = os.path.join(template_dir, "template.env")
@@ -1935,7 +1970,7 @@ pause
     def _run_deployment_steps(self, deploy_config: Dict) -> Dict[str, str]:
         """执行所有部署步骤"""
         bot_type = deploy_config.get("bot_type", "MaiBot")
-        bot_path_key = "maibot_path" if bot_type == "MaiBot" else "mofox_path"
+        bot_path_key = "mai_path" if bot_type == "MaiBot" else "mofox_path"
         
         paths = {
             bot_path_key: "",
@@ -1981,7 +2016,7 @@ pause
     def _finalize_deployment(self, deploy_config: Dict, **paths: str) -> bool:
         """第七步：完成部署配置"""
         bot_type = deploy_config.get("bot_type", "MaiBot")
-        bot_path_key = "maibot_path" if bot_type == "MaiBot" else "mofox_path"
+        bot_path_key = "mai_path" if bot_type == "MaiBot" else "mofox_path"
         bot_path = paths.get(bot_path_key, "")
         
         ui.console.print("\n[⚙️ 第七步：完成部署配置]", style=ui.colors["primary"])
@@ -2047,14 +2082,48 @@ pause
         logger.info("配置创建成功", config=new_config)
         return True
     
-    def _show_post_deployment_info(self):
-        """显示部署后的信息"""
+    def _show_post_deployment_info(self, bot_path: str, bot_config: Dict):
+        """显示部署后的信息并提供打开配置文件的选项"""
+        version_name = bot_config.get("selected_version", {}).get("name", "")
+        from ..utils.version_detector import compare_versions
+        from ..utils.common import open_files_in_editor
+
+        is_modern_config = compare_versions(version_name, "0.10.0") >= 0
+
         ui.console.print("\n[📝 后续配置提醒]", style=ui.colors["info"])
-        ui.console.print("1. 0.10.0版本以前则需在 .env 文件中配置API密钥。0.10.0及以后版本需在chofig文件夹下的model_config.toml中配置", style=ui.colors["error"])
-        ui.console.print("2. 修改 bot_config.toml 中的机器人配置", style=ui.colors["error"])
-        ui.console.print("3. 如需要知识库功能，配置相关设置", style=ui.colors["error"])
-        ui.console.print("4. 如安装了NapCat，请配置QQ登录信息", style=ui.colors["error"])
-        ui.console.print("\n您现在可以通过主菜单的启动选项来运行该实例", style=ui.colors["success"])
+        if is_modern_config:
+            ui.console.print("1. 在 'config/model_config.toml' 文件中配置您的API密钥。", style=ui.colors["attention"])
+        else:
+            ui.console.print("1. 在根目录的 '.env' 文件中配置您的APIKey（MaiCore的0.10.0及以上版本已经转移至model_config.toml文件中，LPMM知识库构建所需模型亦在此文件中配置）。", style=ui.colors["attention"])
+
+        ui.console.print("2. 修改 'config/bot_config.toml' 中的机器人配置。", style=ui.colors["attention"])
+
+        # 检查是否有 lpmm_config.toml
+        if os.path.exists(os.path.join(bot_path, 'config', 'lpmm_config.toml')):
+            ui.console.print("3. 如需使用LPMM知识库，请在 'config/lpmm_config.toml'中添加用于LPMM知识库构建所需的APIKey。", style=ui.colors["attention"])
+
+        ui.console.print("4. 如安装了NapCat，请配置QQ登录和WebSocket连接参数。", style=ui.colors["attention"])
+        ui.console.print("\n您现在可以通过主菜单的启动选项来运行该实例。", style=ui.colors["success"])
+
+        # 询问是否打开配置文件
+        if ui.confirm("\n是否立即在文本编辑器中打开主要配置文件？"):
+            files_to_open = []
+            
+            # 确定要打开的配置文件
+            if is_modern_config:
+                model_config = os.path.join(bot_path, "config", "model_config.toml")
+                if os.path.exists(model_config):
+                    files_to_open.append(model_config)
+            else:
+                env_file = os.path.join(bot_path, ".env")
+                if os.path.exists(env_file):
+                    files_to_open.append(env_file)
+            
+            bot_config_file = os.path.join(bot_path, "config", "bot_config.toml")
+            if os.path.exists(bot_config_file):
+                files_to_open.append(bot_config_file)
+
+            open_files_in_editor(files_to_open)
     
     def update_instance(self) -> bool:
         """更新实例"""
@@ -2124,8 +2193,22 @@ pause
             # 创建备份
             backup_dir = f"{mai_path}_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             ui.print_info("创建备份...")
-            shutil.copytree(mai_path, backup_dir)
-            ui.print_success(f"备份创建完成：{backup_dir}")
+
+            # 询问是否保留虚拟环境
+            keep_venv = ui.confirm("是否在备份中保留虚拟环境(venv)？（推荐保留，但会占据较大空间）")
+            
+            try:
+                if keep_venv:
+                    shutil.copytree(mai_path, backup_dir)
+                    logger.info("创建完整备份（包含venv）", backup_dir=backup_dir)
+                else:
+                    shutil.copytree(mai_path, backup_dir, ignore=shutil.ignore_patterns('venv'))
+                    logger.info("创建备份（不含venv）", backup_dir=backup_dir)
+                ui.print_success(f"备份创建完成：{backup_dir}")
+            except Exception as e:
+                ui.print_error(f"创建备份失败: {e}")
+                logger.error("创建备份失败", error=str(e))
+                return False
             
             try:
                 # 创建临时目录下载新版本
@@ -2133,94 +2216,54 @@ pause
                     # 下载新版本
                     download_url = new_version_data["download_url"]
                     archive_path = os.path.join(temp_dir, f"{new_version}.zip")
-                    
                     if not self.download_file(download_url, archive_path):
                         raise Exception("下载新版本失败")
                     
-                   
                     # 解压新版本
                     if not self.extract_archive(archive_path, temp_dir):
                         raise Exception("解压新版本失败")
-                    
+                        
                     # 查找解压后的目录
                     extracted_dirs = [d for d in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, d)) and d != "__MACOSX"]
                     if not extracted_dirs:
                         raise Exception("解压后未找到项目目录")
-                    
                     source_dir = os.path.join(temp_dir, extracted_dirs[0])
-                    
-                    # 保护重要文件
-                    protected_files = [".env", "config.toml", "bot_config.toml", "data", "*.db", "model_config.toml"]
-                    protected_data = {}
-                    
-                    for pattern in protected_files:
-                        if '*' in pattern:
-                            matching_files = glob.glob(os.path.join(mai_path, pattern))
-                            for file_path in matching_files:
-                                if os.path.exists(file_path):
-                                    rel_path = os.path.relpath(file_path, mai_path)
-                                    if os.path.isfile(file_path):
-                                        with open(file_path, 'rb') as f:
-                                            protected_data[rel_path] = f.read()
-                                    elif os.path.isdir(file_path):
-                                        temp_backup = os.path.join(temp_dir, f"backup_{rel_path}")
-                                        shutil.copytree(file_path, temp_backup)
-                                        protected_data[rel_path] = temp_backup
-                        else:
-                            file_path = os.path.join(mai_path, pattern)
-                            if os.path.exists(file_path):
-                                if os.path.isfile(file_path):
-                                    with open(file_path, 'rb') as f:
-                                        protected_data[pattern] = f.read()
-                                elif os.path.isdir(file_path):
-                                    temp_backup = os.path.join(temp_dir, f"backup_{pattern}")
-                                    shutil.copytree(file_path, temp_backup)
-                                    protected_data[pattern] = temp_backup
-                    
-                    # 删除旧版本文件（保留protected_files）
-                    ui.print_info("删除旧版本文件...")
-                    for item in os.listdir(mai_path):
-                        item_path = os.path.join(mai_path, item)
-                        if item not in protected_files and not any(item.endswith(ext) for ext in ['.db']):
-                            if os.path.isfile(item_path):
-                                os.remove(item_path)
-                            elif os.path.isdir(item_path) and item != 'data':
-                                shutil.rmtree(item_path)
-                    
-                    # 复制新版本文件
-                    ui.print_info("复制新版本文件...")
-                    for item in os.listdir(source_dir):
-                        src_path = os.path.join(source_dir, item)
-                        dst_path = os.path.join(mai_path, item)
-                        
-                        if item in protected_data:
-                            continue  # 跳过受保护的文件
-                        
-                        if os.path.isfile(src_path):
-                            shutil.copy2(src_path, dst_path)
-                        elif os.path.isdir(src_path):
-                            if os.path.exists(dst_path):
-                                shutil.rmtree(dst_path)
-                            shutil.copytree(src_path, dst_path)
-                    
-                    # 恢复保护的文件
-                    ui.print_info("恢复配置文件...")
-                    for rel_path, data in protected_data.items():
-                        target_path = os.path.join(mai_path, rel_path)
-                        
-                        if isinstance(data, bytes):
-                            # 文件数据
-                            os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                            with open(target_path, 'wb') as f:
-                                f.write(data)
-                        elif isinstance(data, str) and os.path.isdir(data):
-                            # 目录备份
-                            if os.path.exists(target_path):
-                                shutil.rmtree(target_path)
-                            shutil.copytree(data, target_path)
-                
+
+                    # --- 重构的文件处理逻辑 ---
+                    # 1. 完全清空旧目录
+                    ui.print_info("正在清空旧版本文件...")
+                    shutil.rmtree(mai_path)
+                    os.makedirs(mai_path)
+
+                    # 2. 复制新版本文件
+                    ui.print_info("正在安装新版本文件...")
+                    shutil.copytree(source_dir, mai_path, dirs_exist_ok=True)
+
+                    # 3. 从备份中恢复data文件夹
+                    backup_data_path = os.path.join(backup_dir, 'data')
+                    if os.path.isdir(backup_data_path):
+                        ui.print_info("正在恢复data文件夹...")
+                        shutil.copytree(backup_data_path, os.path.join(mai_path, 'data'), dirs_exist_ok=True)
+
+                    # 4. 重新生成新的默认配置文件
+                    ui.print_info("正在生成新版本的模板配置文件...")
+                    # 构造一个临时的deploy_config和paths以复用_setup_config_files
+                    temp_deploy_config = {"selected_version": new_version_data, "bot_type": config.get("bot_type", "MaiBot")}
+                    temp_paths = {
+                        ("mai_path" if temp_deploy_config["bot_type"] == "MaiBot" else "mofox_path"): mai_path,
+                        "adapter_path": "", "napcat_path": "", "mongodb_path": "", "webui_path": "" # 传入空值
+                    }
+                    self._setup_config_files(temp_deploy_config, **temp_paths)
+
+                # 5. 提醒用户手动迁移配置
+                ui.print_warning("\n重要：请手动迁移您的配置！")
+                ui.console.print(f"  • 新版本的默认配置文件已在 '{os.path.join(mai_path, 'config')}' 中生成。")
+                ui.console.print(f"  • 您旧的配置文件已安全备份在 '{backup_dir}' 中。")
+                ui.console.print("  • [bold red]请务必手动对比新旧配置文件，并将您的设置（如API密钥、QQ号等）复制到新文件中。[/bold red]")
+                ui.console.print("  • 注意：新版本的配置文件格式可能与旧版不同，直接覆盖可能会导致错误！")
+
                 # 更新适配器
-                ui.print_info("正在检查和更新适配器...")
+                ui.print_info("\n正在检查和更新适配器...")
                 adapter_path = self._determine_adapter_requirements(new_version_data["display_name"], mai_path)
                 config["adapter_path"] = adapter_path
                 
@@ -2290,96 +2333,123 @@ pause
             return False
     
     def delete_instance(self) -> bool:
-        """删除实例"""
+        """删除实例并提供备份选项"""
         try:
             ui.clear_screen()
-            ui.console.print("[🗑️ 实例删除]", style=ui.colors["error"])
-            ui.console.print("="*20)
+            ui.components.show_title("实例删除", symbol="🗑️")
             
             ui.print_warning("⚠️ 危险操作警告 ⚠️")
-            ui.console.print("此操作将：")
-            ui.console.print("  • 删除实例的所有文件")
-            ui.console.print("  • 删除相关配置")
-            ui.console.print("  • 此操作不可撤销")
-            
-            # 选择要删除的实例
+            ui.console.print("此操作将删除实例的文件夹和配置，但会提供重要文件备份选项。")
+
+            # 1. 选择要删除的实例
             from ..modules.config_manager import config_mgr
             config = config_mgr.select_configuration()
             if not config:
                 return False
-            
+
+            # 2. 获取实例信息
             nickname = config.get("nickname_path", "未知")
             serial_number = config.get("serial_number", "未知")
-            mai_path = config.get("mai_path", "")
+            bot_type = config.get("bot_type", "MaiBot")
+            bot_path_key = "mai_path" if bot_type == "MaiBot" else "mofox_path"
+            bot_path = config.get(bot_path_key)
+
+            if not bot_path or not os.path.exists(bot_path):
+                ui.print_error("实例路径无效或不存在，无法继续删除。")
+                logger.error("删除失败：实例路径无效", path=bot_path)
+                return False
             
+            # 整个实例的根目录（昵称文件夹）
+            project_root = os.path.dirname(bot_path)
+
             ui.console.print(f"\n[要删除的实例信息]", style=ui.colors["error"])
             ui.console.print(f"昵称：{nickname}")
             ui.console.print(f"序列号：{serial_number}")
-            ui.console.print(f"路径：{mai_path}")
-            
-            # 三次确认
-            ui.print_warning("\n请进行三次确认以防误操作：")
-            
-            if not ui.confirm("第一次确认：是否删除此实例？"):
-                ui.print_info("操作已取消")
+            ui.console.print(f"Bot类型：{bot_type}")
+            ui.console.print(f"根目录：{project_root}")
+
+            # 3. 三次确认
+            if not ui.confirm("\n第一次确认：是否确定要删除此实例？"):
                 return False
-            
-            if not ui.confirm("第二次确认：此操作将永久删除所有文件，确定继续？"):
-                ui.print_info("操作已取消")
+            if not ui.confirm("第二次确认：此操作将删除实例文件夹，确定继续？"):
                 return False
-            
             confirm_text = f"delete-{serial_number}"
             user_input = ui.get_input(f"第三次确认：请输入 '{confirm_text}' 以确认删除：")
             if user_input != confirm_text:
-                ui.print_error("确认文本不匹配，操作已取消")
+                ui.print_error("确认文本不匹配，操作已取消。")
                 return False
-            
-            # 开始删除
-            ui.print_info("正在删除实例...")
+
+            # 4. 询问是否保留数据
+            keep_data = ui.confirm("是否保留 config 和 data 文件夹的其余内容？")
+
+            # 5. 执行备份和删除
+            ui.print_info("正在处理实例文件...")
             logger.info("开始删除实例", serial=serial_number, nickname=nickname)
+
+            backup_folder_name = f"delete-{nickname}"
+            backup_path = os.path.join(os.path.dirname(project_root), backup_folder_name)
             
-                # 删除文件
-            if mai_path and os.path.exists(mai_path):
-                try:
-                    # 检查是否是MaiBot目录
-                    if os.path.basename(mai_path) == "MaiBot" or "MaiBot" in mai_path:
-                        # 删除整个项目目录的父目录
-                        project_root = os.path.dirname(mai_path)
-                        if os.path.exists(project_root):
-                            shutil.rmtree(project_root)
-                            ui.print_success("实例文件删除完成")
-                            logger.info("实例文件删除成功", path=project_root)
-                    else:
-                        ui.print_warning("路径格式异常，跳过文件删除")
-                except Exception as e:
-                    ui.print_error(f"删除文件失败：{str(e)}")
-                    logger.error("删除文件失败", error=str(e))
-                    return False
-            
-            # 删除配置
+            try:
+                # 创建备份目录
+                os.makedirs(backup_path, exist_ok=True)
+                
+                # --- 强制备份 ---
+                # 备份 bot_config.toml
+                bot_config_src = os.path.join(bot_path, "config", "bot_config.toml")
+                if os.path.exists(bot_config_src):
+                    shutil.copy2(bot_config_src, backup_path)
+                    logger.info("已备份 bot_config.toml", to=backup_path)
+
+                # 备份 .db 文件
+                data_dir_src = os.path.join(bot_path, "data")
+                if os.path.isdir(data_dir_src):
+                    db_files = glob.glob(os.path.join(data_dir_src, "*.db"))
+                    if db_files:
+                        backup_data_path = os.path.join(backup_path, "data")
+                        os.makedirs(backup_data_path, exist_ok=True)
+                        for db_file in db_files:
+                            shutil.copy2(db_file, backup_data_path)
+                        logger.info(f"已备份 {len(db_files)} 个 .db 文件", to=backup_data_path)
+
+                # --- 可选备份 ---
+                if keep_data:
+                    config_dir_src = os.path.join(bot_path, "config")
+                    if os.path.isdir(config_dir_src):
+                        shutil.copytree(config_dir_src, os.path.join(backup_path, "config"), dirs_exist_ok=True)
+                        logger.info("已备份完整的 config 文件夹")
+                    if os.path.isdir(data_dir_src):
+                        shutil.copytree(data_dir_src, os.path.join(backup_path, "data"), dirs_exist_ok=True)
+                        logger.info("已备份完整的 data 文件夹")
+
+                # --- 删除原始文件夹 ---
+                shutil.rmtree(project_root)
+                ui.print_success("实例文件夹已删除。")
+                logger.info("实例文件夹删除成功", path=project_root)
+
+            except Exception as e:
+                ui.print_error(f"处理文件时出错：{e}")
+                logger.error("删除/备份文件失败", error=str(e))
+                return False
+
+            # 6. 删除配置
             configurations = config_manager.get_all_configurations()
-            config_name = None
-            for name, cfg in configurations.items():
-                if cfg.get("serial_number") == serial_number:
-                    config_name = name
-                    break
-            
-            if config_name:
-                if config_manager.delete_configuration(config_name):
-                    config_manager.save()
-                    ui.print_success("配置删除完成")
-                    logger.info("配置删除成功", config_name=config_name)
-                else:
-                    ui.print_error("配置删除失败")
-                    return False
-            
-            ui.print_success(f"🗑️ 实例 '{nickname}' 删除完成")
-            logger.info("实例删除完成", serial=serial_number)
+            config_name = next((name for name, cfg in configurations.items() if cfg.get("serial_number") == serial_number), None)
+
+            if config_name and config_manager.delete_configuration(config_name):
+                config_manager.save()
+                ui.print_success("实例配置已删除。")
+                logger.info("配置删除成功", config_name=config_name)
+            else:
+                ui.print_warning("未找到或无法删除对应的实例配置。")
+
+            ui.print_success(f"🗑️ 实例 '{nickname}' 删除完成。")
+            ui.print_attention(f"重要文件已备份到：{backup_path}")
+            logger.info("实例删除完成", serial=serial_number, backup_path=backup_path)
             return True
-            
+
         except Exception as e:
-            ui.print_error(f"删除失败：{str(e)}")
-            logger.error("实例删除失败", error=str(e))
+            ui.print_error(f"删除过程中发生未知错误：{str(e)}")
+            logger.error("删除实例失败", error=str(e))
             return False
     
     def _check_and_install_webui(self, deploy_config: Dict, bot_path: str, venv_path: str = "") -> Tuple[bool, str]:

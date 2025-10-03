@@ -115,11 +115,11 @@ class MaiMaiLauncher:
                 break
             
             
-            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "E", "F","Q"])
+            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "E", "F", "G", "Q"])
             
             if choice == "Q":
                 break
-            elif choice in ["A", "B", "D"]:
+            elif choice in ["A", "B", "D", "G"]:
                 # 需要选择配置的操作
                 config = config_mgr.select_configuration()
                 if not config:
@@ -190,6 +190,12 @@ class MaiMaiLauncher:
                 if serial_input:
                     serials = [s.strip() for s in serial_input.split(',')]
                     config_mgr.delete_configurations(serials)
+                    ui.pause()
+            elif choice == "G":
+                # 打开配置文件
+                config = config_mgr.select_configuration()
+                if config:
+                    config_mgr.open_config_files(config)
                     ui.pause()
     
     def handle_knowledge_menu(self):

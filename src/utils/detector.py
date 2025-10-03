@@ -22,31 +22,53 @@ class AutoDetector:
             "D:/MaiBot"
         ]
     
+    def detect_bot_path(self, base_dir: str) -> Optional[str]:
+        """
+        在指定基目录下递归搜索Bot路径（bot.py所在目录）。
+        搜索深度最多为3级，并会忽略虚拟环境目录。
+        """
+        from ..ui.interface import ui # 延迟导入
+        logger.info("开始在指定目录中搜索Bot...", base_dir=base_dir)
+        
+        ignore_dirs = {'venv', '.venv', 'env', '.env', '__pycache__'}
+
+        for root, dirs, files in os.walk(base_dir, topdown=True):
+            # 过滤掉需要忽略的目录
+            dirs[:] = [d for d in dirs if d not in ignore_dirs]
+            
+            # 计算当前深度
+            depth = root.replace(base_dir, '').count(os.sep)
+            
+            if depth >= 2: # 即将搜索第三级目录
+                if not ui.confirm(f"是否继续搜索 '{root}' 的子目录（第三级）？"):
+                    # 如果用户选择否，则不再继续深入此分支
+                    dirs[:] = []
+
+            if "bot.py" in files:
+                bot_path = os.path.abspath(root)
+                logger.info("成功检测到Bot", path=bot_path)
+                return bot_path
+
+        logger.warning("在指定目录中未能检测到Bot路径")
+        return None
+
     def detect_mai_path(self) -> Optional[str]:
         """
-        自动检测麦麦本体路径
-        
-        Returns:
-            检测到的路径或None
+        自动检测麦麦本体路径 (旧版逻辑，保留以备不时之需)
         """
         logger.info("开始自动检测麦麦本体路径")
         
-        # 搜索路径列表
-        search_paths = self.common_paths + [
-            os.path.join(path, "MaiBot") for path in self.common_paths
-        ]
+        search_paths = self.common_paths + [os.path.join(path, "MaiBot") for path in self.common_paths]
         
         for base_path in search_paths:
             if not os.path.exists(base_path):
                 continue
                 
-            # 检查是否包含 bot.py
             bot_py_path = os.path.join(base_path, "bot.py")
             if os.path.exists(bot_py_path):
                 logger.info("检测到麦麦本体", path=base_path)
                 return os.path.abspath(base_path)
                 
-            # 递归搜索子目录
             try:
                 for root, dirs, files in os.walk(base_path):
                     if "bot.py" in files:

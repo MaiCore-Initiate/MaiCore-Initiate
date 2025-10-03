@@ -93,10 +93,11 @@ class Menus:
         self.console.print("====>>配置操作<<====")
         self.console.print(f" [A] {self.symbols['view']} 查看配置详情", style=self.colors["info"])
         self.console.print(f" [B] {self.symbols['edit']} 直接编辑配置", style=self.colors["warning"])
-        self.console.print(f" [C] {self.symbols['edit']} 可视化编辑配置", style=self.colors["success"])
+        self.console.print(f" [C] {self.symbols['view']} 可视化编辑配置", style=self.colors["success"])
         self.console.print(f" [D] {self.symbols['validate']} 验证配置", style=self.colors["success"])
         self.console.print(f" [E] {self.symbols['new']} 新建配置集", style=self.colors["success"])
         self.console.print(f" [F] {self.symbols['delete']} 删除配置集", style=self.colors["error"])
+        self.console.print(f" [G] {self.symbols['edit']} 打开配置文件", style=self.colors["info"])
         
         self.console.print("====>>返回<<====")
         self.console.print(f" [Q] {self.symbols['back']} 返回上级", style=self.colors["exit"])

@@ -167,3 +167,49 @@ def get_input_with_validation(prompt: str, validator=None, allow_empty: bool = F
                 continue
         
         return user_input
+
+
+def is_vscode_installed() -> bool:
+    """检查VSCode是否安装并可用"""
+    try:
+        # 尝试运行 'code --version' 命令来检测VSCode
+        result = subprocess.run(["code", "--version"], capture_output=True, text=True, shell=True, check=True)
+        return result.returncode == 0
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+def open_files_in_editor(files_to_open: list):
+    """在合适的编辑器中打开文件列表"""
+    from ..ui.interface import ui # 延迟导入以避免循环依赖
+    
+    if not files_to_open:
+        ui.print_warning("没有找到可供打开的配置文件。")
+        return
+
+    use_vscode = is_vscode_installed()
+    editor_name = "VSCode" if use_vscode else "记事本"
+    
+    ui.print_info(f"正在尝试使用 {editor_name} 打开配置文件...")
+
+    try:
+        if use_vscode:
+            # VSCode可以一次性打开多个文件
+            command = ["code"] + [f'"{f}"' for f in files_to_open]
+            subprocess.Popen(" ".join(command), shell=True)
+        else:
+            # Notepad需要为每个文件单独启动进程
+            for file_path in files_to_open:
+                subprocess.Popen(["notepad", file_path])
+        
+        ui.print_success(f"已发送打开命令到 {editor_name}。")
+
+    except Exception as e:
+        ui.print_error(f"无法使用 {editor_name} 打开文件: {e}")
+        if use_vscode:
+            ui.print_info("尝试使用记事本作为备选...")
+            try:
+                for file_path in files_to_open:
+                    subprocess.Popen(["notepad", file_path])
+                ui.print_success("已在记事本中打开。")
+            except Exception as ne:
+                ui.print_error(f"无法使用记事本打开文件: {ne}")

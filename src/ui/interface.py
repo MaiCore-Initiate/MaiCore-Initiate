@@ -131,6 +131,9 @@ class UI:
     
     def print_info(self, message: str):
         self.console.print(f"{self.symbols['info']} {message}", style=self.colors["info"])
+
+    def print_attention(self, message: str):
+        self.console.print(f"{self.symbols['attention']} {message}", style=self.colors["attention"])
     
     def get_input(self, prompt_text: str, default: str = "") -> str:
         return Prompt.ask(prompt_text, default=default, console=self.console).strip().strip('"')
