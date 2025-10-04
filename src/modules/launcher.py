@@ -6,7 +6,10 @@ import os
 import subprocess
 import time
 import structlog
+from datetime import datetime
 from typing import Dict, Any, Optional, List, Tuple
+import psutil
+from rich.table import Table
 
 from ..ui.interface import ui
 from ..utils.common import check_process, validate_path
@@ -27,10 +30,20 @@ class _ProcessManager:
     def start_in_new_cmd(self, command: str, cwd: str, title: str) -> Optional[subprocess.Popen]:
         """在新的CMD窗口中启动命令。"""
         try:
-            cmd_command = f'start "{title}" cmd /k "chcp 65001 && cd /d "{cwd}" && {command}"'
-            logger.info("在新CMD窗口启动进程", title=title, command=command, cwd=cwd)
-            
-            process = subprocess.Popen(cmd_command, shell=True, cwd=cwd)
+            # 构造在新控制台中执行的命令
+            full_command = f'cmd /k "chcp 65001 && title {title} && cd /d "{cwd}" && {command}"'
+            logger.info("在新控制台启动进程", title=title, command=full_command, cwd=cwd)
+
+            creationflags = 0
+            if os.name == 'nt':
+                creationflags = subprocess.CREATE_NEW_CONSOLE
+
+            process = subprocess.Popen(
+                full_command,
+                cwd=cwd,
+                shell=False, # shell=False更安全，且CREATE_NEW_CONSOLE需要它
+                creationflags=creationflags
+            )
             
             process_info = {
                 "process": process,
@@ -49,31 +62,121 @@ class _ProcessManager:
 
     def stop_all(self):
         """停止所有由该管理器启动的进程。"""
+        # 创建一个pid列表的副本进行迭代，因为stop_process会修改running_processes列表
+        pids_to_stop = [info["process"].pid for info in self.running_processes if info.get("process")]
+        
+        if not pids_to_stop:
+            return
+
         stopped_count = 0
-        for info in self.running_processes:
-            process = info["process"]
-            if process.poll() is None:  # 如果进程仍在运行
-                try:
-                    process.terminate()
-                    stopped_count += 1
-                    logger.info("终止进程", pid=process.pid, title=info['title'])
-                except Exception as e:
-                    logger.warning("终止进程失败", pid=process.pid, title=info['title'], error=str(e))
+        for pid in pids_to_stop:
+            if self.stop_process(pid):
+                stopped_count += 1
         
         if stopped_count > 0:
             ui.print_info(f"已成功停止 {stopped_count} 个相关进程。")
-        
-        self.running_processes.clear()
 
     def get_running_processes_info(self) -> List[Dict]:
-        """获取当前仍在运行的进程信息。"""
+        """获取当前仍在运行的进程信息，包括资源占用。"""
         active_processes = []
         # 过滤掉已经结束的进程
         self.running_processes = [p for p in self.running_processes if p["process"].poll() is None]
         for info in self.running_processes:
-            info["running_time"] = time.time() - info["start_time"]
-            active_processes.append(info)
+            try:
+                p = psutil.Process(info["process"].pid)
+                info["pid"] = p.pid
+                # CPU percent is now calculated in show_running_processes to avoid conflicts
+                info["memory_mb"] = p.memory_info().rss / (1024 * 1024)
+                info["running_time"] = time.time() - info["start_time"]
+                active_processes.append(info)
+            except psutil.NoSuchProcess:
+                # 获取pid用于日志记录，如果process对象不存在则返回None
+                pid = getattr(info.get("process"), 'pid', None)
+                logger.warning("进程已消失，无法获取信息", pid=pid)
+            except Exception as e:
+                logger.error("获取进程信息失败", error=str(e))
         return active_processes
+
+    def stop_process(self, pid: int) -> bool:
+        """通过PID停止单个进程及其子进程。"""
+        process_info = next((info for info in self.running_processes if info.get("process") and info["process"].pid == pid), None)
+        
+        if not process_info:
+            logger.warning("尝试停止一个非托管进程", pid=pid)
+            return False
+
+        title = process_info["title"]
+        try:
+            # 优先使用 taskkill (仅限Windows) 来确保终止整个进程树
+            if os.name == 'nt':
+                # /F: 强制终止
+                # /T: 终止进程树
+                # /PID: 指定进程ID
+                kill_command = ["taskkill", "/F", "/T", "/PID", str(pid)]
+                result = subprocess.run(
+                    kill_command,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    creationflags=subprocess.CREATE_NO_WINDOW # 防止弹出窗口
+                )
+                if result.returncode == 0 or "已终止" in result.stdout or "terminated" in result.stdout.lower():
+                    logger.info("已通过 taskkill 成功终止进程树", pid=pid, title=title)
+                elif "not found" in result.stderr.lower(): # 进程已经不存在
+                     logger.warning("尝试停止的进程已不存在 (taskkill)", pid=pid)
+                else:
+                    # 如果taskkill失败，回退到psutil方法
+                    logger.warning("taskkill 失败，回退到 psutil", pid=pid, stderr=result.stderr)
+                    parent = psutil.Process(pid)
+                    for child in parent.children(recursive=True):
+                        child.terminate()
+                    parent.terminate()
+            else:
+                # 对于非Windows系统，使用psutil
+                parent = psutil.Process(pid)
+                for child in parent.children(recursive=True):
+                    child.terminate()
+                parent.terminate()
+            
+            ui.print_success(f"进程 '{title}' (PID: {pid}) 已成功请求停止。")
+
+        except psutil.NoSuchProcess:
+            logger.warning("尝试停止的进程已不存在 (psutil)", pid=pid)
+            # 进程已不存在，也视为成功
+        except Exception as e:
+            logger.error("终止进程时发生未知错误", pid=pid, title=title, error=str(e))
+            ui.print_error(f"停止进程 '{title}' (PID: {pid}) 失败: {e}")
+            return False
+        finally:
+            # 无论成功与否，都从管理列表中移除
+            if process_info in self.running_processes:
+                self.running_processes.remove(process_info)
+        
+        return True
+
+    def restart_process(self, pid: int) -> bool:
+        """通过PID重启单个进程。"""
+        process_info = next((info for info in self.running_processes if info.get("process") and info["process"].pid == pid), None)
+            
+        if process_info:
+            command = process_info["command"]
+            cwd = process_info["cwd"]
+            title = process_info["title"]
+            
+            ui.print_info(f"正在重启进程 '{title}' (PID: {pid})...")
+            
+            if self.stop_process(pid):
+                time.sleep(1) # 等待端口释放等
+                new_process = self.start_in_new_cmd(command, cwd, title)
+                if new_process:
+                    ui.print_success(f"进程 '{title}' 重启成功。")
+                    return True
+            
+            ui.print_error(f"进程 '{title}' (PID: {pid}) 重启失败。")
+            return False
+        else:
+            ui.print_warning(f"未找到PID为 {pid} 的进程，无法重启。")
+            return False
 
 
 class _LaunchComponent:
@@ -668,24 +771,86 @@ class MaiLauncher:
         """停止所有由启动器启动的进程。"""
         ui.print_info("正在停止所有相关进程...")
         self._process_manager.stop_all()
+    
+    def stop_process(self, pid: int) -> bool:
+        """停止单个托管进程。"""
+        return self._process_manager.stop_process(pid)
+
+    def restart_process(self, pid: int) -> bool:
+        """重启单个托管进程。"""
+        return self._process_manager.restart_process(pid)
 
     def show_running_processes(self):
-        """显示当前正在运行的进程状态。"""
-        active_processes = self._process_manager.get_running_processes_info()
+        """以表格形式显示当前正在运行的进程状态。"""
+        managed_procs_info = self._process_manager.get_running_processes_info()
         
-        if not active_processes:
+        # --- 构建表格 ---
+        table = Table(title="[📊 进程状态管理]", show_header=True, header_style="bold magenta")
+        table.add_column("PID", style="dim", width=8)
+        table.add_column("进程名称", style="cyan", no_wrap=True)
+        table.add_column("CPU %", style="green", justify="right")
+        table.add_column("内存 (MB)", style="yellow", justify="right")
+        table.add_column("运行时间 (s)", style="blue", justify="right")
+
+        # --- 统一处理所有进程 ---
+        all_process_meta = [{"pid": os.getpid(), "title": "麦麦启动器 (主程序)"}]
+        for info in managed_procs_info:
+            all_process_meta.append({"pid": info["process"].pid, "title": info["title"], "start_time": info["start_time"]})
+
+        if not all_process_meta:
             ui.print_info("当前没有由本启动器启动的正在运行的进程。")
-            return
+            return table
+
+        for meta in all_process_meta:
+            pid = meta["pid"]
+            try:
+                p = psutil.Process(pid)
+                # 为每个进程独立计算CPU占用率，间隔0.1秒
+                cpu_percent = p.cpu_percent(interval=0.1)
+                memory_mb = p.memory_info().rss / (1024 * 1024)
+                running_time = time.time() - (meta.get("start_time") or p.create_time())
+
+                table.add_row(
+                    str(pid),
+                    meta['title'],
+                    f"{cpu_percent:.2f}",
+                    f"{memory_mb:.2f}",
+                    f"{int(running_time)}"
+                )
+            except (psutil.NoSuchProcess, Exception) as e:
+                logger.warning("获取进程信息失败", pid=pid, error=str(e))
         
-        ui.console.print("\n[📊 正在运行的进程]", style=ui.colors["primary"])
-        for info in active_processes:
-            running_time = int(info["running_time"])
-            ui.console.print(
-                f"• {info['title']} - 运行时间: {running_time}秒",
-                style=ui.colors["success"]
-            )
-            ui.console.print(f"  路径: {info['cwd']}", style="dim")
-            ui.console.print(f"  命令: {info['command']}", style="dim")
+        return table
+
+    def get_process_details(self, pid: int) -> Optional[Dict[str, Any]]:
+        """获取单个进程的详细信息。"""
+        try:
+            p = psutil.Process(pid)
+            
+            # 查找是否为托管进程以获取额外信息
+            managed_info = next((info for info in self._process_manager.running_processes if info.get("process") and info["process"].pid == pid), None)
+            
+            # 使用一个小的阻塞间隔来获取有意义的CPU值
+            cpu_percent = p.cpu_percent(interval=0.1)
+
+            details = {
+                "PID": p.pid,
+                "名称": p.name(),
+                "状态": p.status(),
+                "CPU %": f"{cpu_percent:.2f}",
+                "内存 (MB)": f"{p.memory_info().rss / (1024 * 1024):.2f}",
+                "启动时间": datetime.fromtimestamp(p.create_time()).strftime("%Y-%m-%d %H:%M:%S"),
+                "命令行": " ".join(p.cmdline()),
+                "工作目录": p.cwd(),
+                "父进程ID": p.ppid(),
+            }
+            if managed_info:
+                details["托管标题"] = managed_info["title"]
+
+            return details
+        except (psutil.NoSuchProcess, Exception) as e:
+            logger.warning("获取进程详细信息失败", pid=pid, error=str(e))
+            return None
 
 
 # 全局启动器实例
