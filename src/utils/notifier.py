@@ -142,10 +142,31 @@ class NotificationLogHandler(logging.Handler):
         if not self.notifier.is_enabled():
             return
         try:
-            msg = self.format(record)
+            # 尝试提取纯文本消息，而不是格式化后的完整日志
+            msg = self._extract_pure_message(record)
             self.notifier.send(self.title, msg)
         except Exception as exc:
             logger.warning("日志通知发送失败", error=str(exc))
+    
+    def _extract_pure_message(self, record: logging.LogRecord) -> str:
+        """
+        从日志记录中提取纯文本消息
+        """
+        # 尝试从消息中提取纯文本
+        msg = record.getMessage()
+        
+        # 如果消息是JSON格式，尝试解析并提取事件
+        if msg.startswith('{') and msg.endswith('}'):
+            try:
+                import json
+                data = json.loads(msg)
+                if 'event' in data:
+                    return str(data['event'])
+            except:
+                pass
+        
+        # 否则返回原始消息
+        return msg
 
 
 windows_notifier = WindowsNotifier()
