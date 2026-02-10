@@ -253,14 +253,19 @@ class NapCatDeployer(BaseDeployer):
         ui.console.print("\n[🐱 第三步：安装NapCat]", style=ui.colors["primary"])
         
         napcat_version = deploy_config["napcat_version"]
-        install_dir = deploy_config["install_dir"]
+        
+        # 从bot_path推断出实例目录
+        # bot_path = D:\instances\test\MaiBot
+        # instance_dir = D:\instances\test
+        instance_dir = os.path.dirname(bot_path)
         
         ui.print_info(f"开始安装NapCat {napcat_version['display_name']}...")
+        ui.print_info(f"实例目录: {instance_dir}")
         
-        napcat_exe = self.download_napcat(napcat_version, install_dir)
+        napcat_exe = self.download_napcat(napcat_version, instance_dir)
         if napcat_exe:
             # 等待用户完成安装并进行3次检测
-            napcat_path = self._wait_for_napcat_installation(install_dir)
+            napcat_path = self._wait_for_napcat_installation(instance_dir)
             if napcat_path:
                 ui.print_success("✅ NapCat安装并检测完成")
                 logger.info("NapCat安装成功", path=napcat_path)

@@ -200,7 +200,7 @@ class DeploymentManager:
                 # 版本未内置WebUI，引导到组件下载页
                 ui.console.print("\n[🌐 WebUI配置]", style=ui.colors["info"])
                 ui.console.print(f"当前版本 {version_name} 未内置WebUI", style="yellow")
-                ui.console.print("如需WebUI功能，请前往'杂项菜单 -> 组件下载中心'下载WebUI组件", style="cyan")
+                ui.console.print("如需WebUI功能，请前往'杂项菜单 -> 组件下载中心'下载WebUI组件，请注意适配的版本", style="cyan")
                 install_webui = False  # 改为从组件下载页获取
             
             install_mofox_admin_ui = False
