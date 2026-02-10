@@ -19,6 +19,7 @@ from ..utils.version_detector import is_legacy_version, is_legacy_version_with_b
 
 logger = structlog.get_logger(__name__)
 
+
 # --- 内部辅助类 ---
 
 class _ProcessManager:
@@ -28,6 +29,79 @@ class _ProcessManager:
     """
     def __init__(self):
         self.running_processes: List[Dict[str, Any]] = []
+
+    def _is_process_alive(self, pid: int) -> bool:
+        """检查进程是否仍在运行且不是僵尸进程"""
+        try:
+            p = psutil.Process(pid)
+            return p.is_running() and p.status() != psutil.STATUS_ZOMBIE
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return False
+
+    def _kill_process_tree_recursive(self, pid: int) -> bool:
+        """
+        递归终止进程树，包括所有层级的子进程和孙进程。
+        使用psutil的递归方式，比taskkill /T更彻底。
+        """
+        try:
+            parent = psutil.Process(pid)
+            if not parent.is_running():
+                return True
+            
+            # 递归终止所有子进程
+            for child in parent.children(recursive=True):
+                self._kill_process_tree_recursive(child.pid)
+            
+            # 终止父进程
+            parent.terminate()
+            
+            # 等待进程结束，最多3秒
+            try:
+                parent.wait(timeout=3)
+            except psutil.TimeoutExpired:
+                # 如果超时，强制杀死
+                parent.kill()
+                parent.wait(timeout=1)
+            
+            return True
+        except psutil.NoSuchProcess:
+            # 进程已不存在，视为成功
+            return True
+        except psutil.AccessDenied:
+            # 权限不足，尝试使用taskkill
+            return self._kill_with_taskkill(pid)
+        except Exception as e:
+            logger.error("递归终止进程树失败", pid=pid, error=str(e))
+            return False
+
+    def _kill_with_taskkill(self, pid: int, title: str = "") -> bool:
+        """使用taskkill强制终止进程树"""
+        try:
+            # 使用 /T 终止进程树，/F 强制终止
+            kill_command = ["taskkill", "/F", "/T", "/PID", str(pid)]
+            result = subprocess.run(
+                kill_command,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            
+            if result.returncode == 0:
+                logger.info("taskkill成功终止进程树", pid=pid, title=title)
+                return True
+            elif "not found" in result.stderr.lower() or "not found" in result.stdout.lower():
+                logger.info("进程已不存在", pid=pid, title=title)
+                return True
+            else:
+                logger.warning("taskkill失败", pid=pid, title=title, stderr=result.stderr)
+                return False
+        except subprocess.TimeoutExpired:
+            logger.error("taskkill超时", pid=pid, title=title)
+            return False
+        except Exception as e:
+            logger.error("taskkill异常", pid=pid, title=title, error=str(e))
+            return False
 
     def start_in_new_cmd(self, command: str, cwd: str, title: str) -> Optional[subprocess.Popen]:
         """在新的CMD窗口中启动命令。"""
@@ -43,7 +117,7 @@ class _ProcessManager:
             process = subprocess.Popen(
                 full_command,
                 cwd=cwd,
-                shell=False, # shell=False更安全，且CREATE_NEW_CONSOLE需要它
+                shell=False,  # shell=False更安全，且CREATE_NEW_CONSOLE需要它
                 creationflags=creationflags
             )
             
@@ -52,7 +126,8 @@ class _ProcessManager:
                 "title": title,
                 "command": command,
                 "cwd": cwd,
-                "start_time": time.time()
+                "start_time": time.time(),
+                "pid": process.pid
             }
             self.running_processes.append(process_info)
             ui.print_success(f"组件 '{title}' 启动成功！")
@@ -64,28 +139,62 @@ class _ProcessManager:
 
     def stop_all(self):
         """停止所有由该管理器启动的进程。"""
-        # 创建一个pid列表的副本进行迭代，因为stop_process会修改running_processes列表
-        pids_to_stop = [info["process"].pid for info in self.running_processes if info.get("process")]
+        # 首先清理已结束的进程
+        self.running_processes = [p for p in self.running_processes if self._is_process_alive(p.get("pid", 0))]
         
-        if not pids_to_stop:
+        if not self.running_processes:
+            ui.print_info("当前没有正在运行的进程。")
             return
 
         stopped_count = 0
-        for pid in pids_to_stop:
+        failed_count = 0
+        
+        # 复制列表以避免迭代时修改
+        processes_to_stop = self.running_processes.copy()
+        
+        for process_info in processes_to_stop:
+            pid = process_info.get("pid") or process_info["process"].pid
+            title = process_info["title"]
+            
+            # 检查进程是否还在运行
+            if not self._is_process_alive(pid):
+                # 进程已结束，从列表中移除
+                if process_info in self.running_processes:
+                    self.running_processes.remove(process_info)
+                continue
+            
+            ui.print_info(f"正在停止进程 '{title}' (PID: {pid})...")
+            
             if self.stop_process(pid):
                 stopped_count += 1
+            else:
+                failed_count += 1
+                # 再次检查，如果进程已结束则移除
+                if not self._is_process_alive(pid):
+                    if process_info in self.running_processes:
+                        self.running_processes.remove(process_info)
+        
+        # 再次清理已结束的进程
+        self.running_processes = [p for p in self.running_processes if self._is_process_alive(p.get("pid", 0))]
         
         if stopped_count > 0:
-            ui.print_info(f"已成功停止 {stopped_count} 个相关进程。")
+            ui.print_success(f"已成功停止 {stopped_count} 个进程。")
+        if failed_count > 0:
+            ui.print_warning(f"有 {failed_count} 个进程停止失败，可能需要手动处理。")
+        if not self.running_processes:
+            ui.print_info("所有进程已停止。")
 
     def get_running_processes_info(self) -> List[Dict]:
         """获取当前仍在运行的进程信息，包括资源占用。"""
         active_processes = []
         # 过滤掉已经结束的进程
-        self.running_processes = [p for p in self.running_processes if p["process"].poll() is None]
+        self.running_processes = [p for p in self.running_processes if self._is_process_alive(p.get("pid", 0))]
         for info in self.running_processes:
             try:
-                p = psutil.Process(info["process"].pid)
+                pid = info.get("pid") or info["process"].pid
+                if not self._is_process_alive(pid):
+                    continue
+                p = psutil.Process(pid)
                 info["pid"] = p.pid
                 # CPU percent is now calculated in show_running_processes to avoid conflicts
                 info["memory_mb"] = p.memory_info().rss / (1024 * 1024)
@@ -100,51 +209,57 @@ class _ProcessManager:
         return active_processes
 
     def stop_process(self, pid: int) -> bool:
-        """通过PID停止单个进程及其子进程。"""
-        process_info = next((info for info in self.running_processes if info.get("process") and info["process"].pid == pid), None)
+        """通过PID停止单个进程及其所有子进程。"""
+        # 首先验证进程是否存在
+        if not self._is_process_alive(pid):
+            logger.info("进程已不存在，跳过停止", pid=pid)
+            return True
+        
+        process_info = next((info for info in self.running_processes if info.get("process") and (info.get("pid") or info["process"].pid) == pid), None)
         
         if not process_info:
             logger.warning("尝试停止一个非托管进程", pid=pid)
             return False
 
         title = process_info["title"]
+        
         try:
-            # 优先使用 taskkill (仅限Windows) 来确保终止整个进程树
+            # 优先使用递归方式终止进程树（更彻底）
             if os.name == 'nt':
-                # /F: 强制终止
-                # /T: 终止进程树
-                # /PID: 指定进程ID
-                kill_command = ["taskkill", "/F", "/T", "/PID", str(pid)]
-                result = subprocess.run(
-                    kill_command,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    creationflags=subprocess.CREATE_NO_WINDOW # 防止弹出窗口
-                )
-                if result.returncode == 0 or "已终止" in result.stdout or "terminated" in result.stdout.lower():
-                    logger.info("已通过 taskkill 成功终止进程树", pid=pid, title=title)
-                elif "not found" in result.stderr.lower(): # 进程已经不存在
-                     logger.warning("尝试停止的进程已不存在 (taskkill)", pid=pid)
-                else:
-                    # 如果taskkill失败，回退到psutil方法
-                    logger.warning("taskkill 失败，回退到 psutil", pid=pid, stderr=result.stderr)
-                    parent = psutil.Process(pid)
-                    for child in parent.children(recursive=True):
-                        child.terminate()
-                    parent.terminate()
+                # Windows系统优先使用递归方式
+                success = self._kill_process_tree_recursive(pid)
+                if not success:
+                    # 如果递归方式失败，尝试taskkill
+                    logger.warning("递归终止失败，尝试taskkill", pid=pid)
+                    success = self._kill_with_taskkill(pid, title)
             else:
-                # 对于非Windows系统，使用psutil
-                parent = psutil.Process(pid)
-                for child in parent.children(recursive=True):
-                    child.terminate()
-                parent.terminate()
+                # 非Windows系统使用psutil
+                success = self._kill_process_tree_recursive(pid)
             
-            ui.print_success(f"进程 '{title}' (PID: {pid}) 已成功请求停止。")
+            if success:
+                logger.info("成功终止进程树", pid=pid, title=title)
+                # 等待进程完全结束
+                time.sleep(0.5)
+                # 验证进程是否真的结束了
+                if self._is_process_alive(pid):
+                    logger.warning("进程仍然运行，尝试强制杀死", pid=pid)
+                    if os.name == 'nt':
+                        self._kill_with_taskkill(pid, title)
+                    else:
+                        try:
+                            p = psutil.Process(pid)
+                            p.kill()
+                        except:
+                            pass
+            else:
+                logger.error("终止进程树失败", pid=pid, title=title)
+                return False
+            
+            ui.print_success(f"进程 '{title}' (PID: {pid}) 已成功停止。")
 
         except psutil.NoSuchProcess:
-            logger.warning("尝试停止的进程已不存在 (psutil)", pid=pid)
-            # 进程已不存在，也视为成功
+            logger.info("进程已不存在", pid=pid, title=title)
+            # 进程已不存在，视为成功
         except Exception as e:
             logger.error("终止进程时发生未知错误", pid=pid, title=title, error=str(e))
             ui.print_error(f"停止进程 '{title}' (PID: {pid}) 失败: {e}")
@@ -158,7 +273,7 @@ class _ProcessManager:
 
     def restart_process(self, pid: int) -> bool:
         """通过PID重启单个进程。"""
-        process_info = next((info for info in self.running_processes if info.get("process") and info["process"].pid == pid), None)
+        process_info = next((info for info in self.running_processes if info.get("process") and (info.get("pid") or info["process"].pid) == pid), None)
             
         if process_info:
             command = process_info["command"]
@@ -168,7 +283,7 @@ class _ProcessManager:
             ui.print_info(f"正在重启进程 '{title}' (PID: {pid})...")
             
             if self.stop_process(pid):
-                time.sleep(1) # 等待端口释放等
+                time.sleep(1)  # 等待端口释放等
                 new_process = self.start_in_new_cmd(command, cwd, title)
                 if new_process:
                     ui.print_success(f"进程 '{title}' 重启成功。")
@@ -230,7 +345,7 @@ class _MongoDbComponent(_LaunchComponent):
 
     def start(self, process_manager: _ProcessManager) -> bool:
         if not self.is_enabled:
-            return True # 如果没配置，也算作"成功"
+            return True  # 如果没配置，也算作"成功"
         
         # 检查系统服务中的MongoDB服务是否启动
         try:
@@ -256,7 +371,7 @@ class _MongoDbComponent(_LaunchComponent):
                         ui.print_info("请手动打开'运行'对话框(win+R)，输入'services.msc'来打开系统服务管理程序。")
                 else:
                     ui.print_info("请手动打开'运行'对话框(win+R)，输入'services.msc'来打开系统服务管理程序。")
-                    ui.print_info("在服务列表中找到“MongoDB Server(MongoDB)”服务，右键点击并选择'启动'。")
+                    ui.print_info('在服务列表中找到"MongoDB Server(MongoDB)"服务，右键点击并选择\'启动\'。')
                 
                 return False
             else:
@@ -455,7 +570,7 @@ class _AdapterComponent(_LaunchComponent):
         
         ui.print_info("尝试启动适配器...")
         if super().start(process_manager):
-            time.sleep(2) # 等待适配器启动
+            time.sleep(2)  # 等待适配器启动
             return True
         return False
 
@@ -563,7 +678,7 @@ class _MaiComponent(_LaunchComponent):
         bot_type = config.get("bot_type", "MaiBot")
         component_name = "MoFox本体" if bot_type == "MoFox_bot" else "麦麦本体"
         super().__init__(component_name, config)
-        self.is_enabled = True # 本体总是启用
+        self.is_enabled = True  # 本体总是启用
 
     def get_launch_details(self) -> Optional[Tuple[str, str, str]]:
         # 根据bot_type字段选择正确的路径字段
@@ -856,7 +971,7 @@ class MaiLauncher:
                     break
             
             if valid_choices and components_to_start:
-                return self.launch(list(dict.fromkeys(components_to_start))) # 去重并保持顺序
+                return self.launch(list(dict.fromkeys(components_to_start)))  # 去重并保持顺序
             elif valid_choices and not components_to_start:
                 ui.print_warning("未选择任何有效组件。")
 
@@ -912,7 +1027,7 @@ class MaiLauncher:
         # 添加启动器自身的PID
         pids = [os.getpid()]
         # 添加所有由_process_manager管理的子进程PID
-        pids.extend([info["process"].pid for info in self._process_manager.running_processes if info.get("process") and info["process"].poll() is None])
+        pids.extend([info.get("pid") or info["process"].pid for info in self._process_manager.running_processes if info.get("process") and self._process_manager._is_process_alive(info.get("pid") or info["process"].pid)])
         return pids
 
     def show_running_processes(self):
@@ -926,7 +1041,7 @@ class MaiLauncher:
         table.add_column("内存 (MB)", style="yellow", justify="right")
         table.add_column("运行时间 (s)", style="blue", justify="right")
 
-        current_pids = {info["process"].pid for info in managed_procs_info}
+        current_pids = {info.get("pid") or info["process"].pid for info in managed_procs_info}
         current_pids.add(os.getpid())
 
         # 清理已结束进程的缓存
@@ -936,7 +1051,7 @@ class MaiLauncher:
         
         all_process_meta = [{"pid": os.getpid(), "title": "麦麦启动器 (主程序)"}]
         for info in managed_procs_info:
-            all_process_meta.append({"pid": info["process"].pid, "title": info["title"], "start_time": info["start_time"]})
+            all_process_meta.append({"pid": info.get("pid") or info["process"].pid, "title": info["title"], "start_time": info["start_time"]})
 
         if not all_process_meta:
             ui.print_info("当前没有由本启动器启动的正在运行的进程。")
@@ -952,7 +1067,7 @@ class MaiLauncher:
                     self._process_cache[pid] = p
                     cpu_percent = 0.0
                 else:
-                    cpu_percent = p.cpu_percent() # 后续调用将返回有意义的值
+                    cpu_percent = p.cpu_percent()  # 后续调用将返回有意义的值
                 
                 memory_mb = p.memory_info().rss / (1024 * 1024)
                 running_time = time.time() - (meta.get("start_time") or p.create_time())
@@ -975,7 +1090,7 @@ class MaiLauncher:
         """获取单个进程的详细信息（不包括冲突的CPU数据）。"""
         try:
             p = psutil.Process(pid)
-            managed_info = next((info for info in self._process_manager.running_processes if info.get("process") and info["process"].pid == pid), None)
+            managed_info = next((info for info in self._process_manager.running_processes if info.get("process") and (info.get("pid") or info["process"].pid) == pid), None)
             
             details = {
                 "PID": p.pid,

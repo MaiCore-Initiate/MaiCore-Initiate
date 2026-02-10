@@ -25,6 +25,15 @@ class PortManager:
         "webui": (7990, 8090),         # 控制面板端口范围
     }
     
+    # 多开实例专用端口池 (4000-6000)
+    MULTI_INSTANCE_PORTS = {
+        "mai_main": (4000, 5000),      # MaiBot主程序
+        "mai_webui": (5001, 5500),    # MaiBot WebUI
+        "mofox_main": (4000, 5000),    # MoFox_bot主程序
+        "napcat": (5001, 5500),        # NapCat端口
+        "webui": (5501, 6000),         # 控制面板
+    }
+    
     # 特殊端口（避免使用）
     RESERVED_PORTS = {
         1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 77, 79, 87, 95, 101, 102, 103, 104,
@@ -97,50 +106,94 @@ class PortManager:
         
         raise RuntimeError("无法找到可用端口")
     
-    def get_next_instance_port(self, instance_type: str, base_config: Dict) -> Tuple[int, int]:
+    def get_next_instance_port(self, instance_type: str, base_config: Dict, 
+                               use_multi_pool: bool = False) -> Tuple[int, int]:
         """
-        为新实例获取下一个可用端口组合，支持多实例混用
+        为新实例获取下一个可用端口组合，支持多实例混用和多开专用端口池
         
         Args:
             instance_type: 实例类型 ("MaiBot" 或 "MoFox_bot")
             base_config: 基础配置，用于获取当前端口
+            use_multi_pool: 是否使用多开专用端口池 (4000-6000)
             
         Returns:
             (主程序端口, 适配器端口/NapCat端口)
         """
+        # 选择端口范围
+        if use_multi_pool:
+            ports_config = self.MULTI_INSTANCE_PORTS
+            logger.info("使用多开实例专用端口池 (4000-6000)")
+        else:
+            ports_config = self.COMMON_PORTS
+        
         if instance_type == "MaiBot":
             # MaiBot需要主程序端口和WebUI端口
+            mai_main_range = ports_config["mai_main"]
+            mai_webui_range = ports_config["mai_webui"]
+            
             # 优先使用mai_main范围，但如果冲突则扩展到其他范围
             try:
-                main_port = self.find_available_port("mai_main")
-            except:
-                main_port = self.find_available_port("mofox_main")  # 扩展搜索
+                main_port = self._find_available_port_in_range(mai_main_range)
+            except RuntimeError:
+                main_port = self._find_available_port_in_range(ports_config["mofox_main"])  # 扩展搜索
             
             try:
-                webui_port = self.find_available_port("mai_webui", main_port + 1)
-            except:
-                webui_port = self.find_available_port("webui", main_port + 1)  # 扩展搜索
+                webui_port = self._find_available_port_in_range(mai_webui_range, main_port + 1)
+            except RuntimeError:
+                webui_port = self._find_available_port_in_range(ports_config["webui"], main_port + 1)  # 扩展搜索
                 
             return main_port, webui_port
             
         elif instance_type == "MoFox_bot":
             # MoFox_bot需要主程序端口和NapCat端口
+            mofox_main_range = ports_config["mofox_main"]
+            napcat_range = ports_config["napcat"]
+            
             # 优先使用mofox_main范围，但如果冲突则扩展
             try:
-                main_port = self.find_available_port("mofox_main")
-            except:
-                main_port = self.find_available_port("mai_main")  # 扩展搜索
+                main_port = self._find_available_port_in_range(mofox_main_range)
+            except RuntimeError:
+                main_port = self._find_available_port_in_range(ports_config["mai_main"])  # 扩展搜索
             
             try:
-                napcat_port = self.find_available_port("napcat", main_port + 1)
-            except:
-                # 如果napcat范围也冲突，使用mai_webui范围
-                napcat_port = self.find_available_port("mai_webui", main_port + 1)
+                napcat_port = self._find_available_port_in_range(napcat_range, main_port + 1)
+            except RuntimeError:
+                # 如果napcat范围也冲突，扩展搜索
+                napcat_port = self._find_available_port_in_range(ports_config["mai_webui"], main_port + 1)
                 
             return main_port, napcat_port
             
         else:
             raise ValueError(f"不支持的实例类型: {instance_type}")
+    
+    def _find_available_port_in_range(self, port_range: Tuple[int, int], start_from: Optional[int] = None) -> int:
+        """
+        在指定范围内查找可用端口
+        
+        Args:
+            port_range: (起始端口, 结束端口)
+            start_from: 从指定端口开始搜索
+            
+        Returns:
+            可用端口号
+        
+        Raises:
+            RuntimeError: 范围内无可用端口
+        """
+        start_port, end_port = port_range
+        search_start = max(start_from or start_port, start_port)
+        
+        # 在指定范围内搜索
+        for port in range(search_start, end_port + 1):
+            if self.is_port_available(port):
+                return port
+        
+        # 如果指定范围内没有，搜索整个范围
+        for port in range(start_port, end_port + 1):
+            if self.is_port_available(port):
+                return port
+        
+        raise RuntimeError(f"端口范围 {start_port}-{end_port} 内无可用端口")
     
     def update_env_file(self, env_path: str, main_port: int, webui_port: Optional[int] = None) -> bool:
         """

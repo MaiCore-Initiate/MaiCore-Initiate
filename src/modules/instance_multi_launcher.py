@@ -45,13 +45,15 @@ class InstanceMultiLauncher:
         except Exception as e:
             logger.error("保存多开实例失败", error=str(e))
     
-    def create_multi_instance(self, base_config: Dict[str, Any], instance_name: Optional[str] = None) -> str:
+    def create_multi_instance(self, base_config: Dict[str, Any], instance_name: Optional[str] = None, 
+                              use_multi_pool: bool = True) -> str:
         """
         创建多开实例
         
         Args:
             base_config: 基础配置
             instance_name: 实例名称，如果为None则自动生成
+            use_multi_pool: 是否使用多开专用端口池 (4000-6000)，默认为True
             
         Returns:
             多开实例ID
@@ -65,8 +67,8 @@ class InstanceMultiLauncher:
             # 获取实例类型
             bot_type = base_config.get("bot_type", "MaiBot")
             
-            # 配置端口 - 只获取端口信息，不保存整个配置对象
-            main_port, secondary_port = port_manager.get_next_instance_port(bot_type, base_config)
+            # 配置端口 - 使用多开专用端口池 (4000-6000)
+            main_port, secondary_port = port_manager.get_next_instance_port(bot_type, base_config, use_multi_pool=use_multi_pool)
             
             # 创建多开实例配置 - 避免循环引用，只保存必要的配置信息
             multi_instance = {
@@ -76,6 +78,7 @@ class InstanceMultiLauncher:
                 "base_config_name": self._get_config_name_from_config(base_config),  # 保存配置名称而不是整个对象
                 "created_time": str(Path().cwd()),  # 记录创建时的路径
                 "status": "created",  # created, running, stopped
+                "use_multi_pool": use_multi_pool,  # 记录是否使用专用端口池
                 "ports": {
                     "main_port": main_port,
                     "secondary_port": secondary_port
@@ -86,7 +89,8 @@ class InstanceMultiLauncher:
             self.multi_instances[instance_id] = multi_instance
             self._save_multi_instances()
             
-            logger.info("成功创建多开实例", instance_id=instance_id, name=instance_name, bot_type=bot_type)
+            logger.info("成功创建多开实例", instance_id=instance_id, name=instance_name, bot_type=bot_type, 
+                       use_multi_pool=use_multi_pool, main_port=main_port, secondary_port=secondary_port)
             return instance_id
             
         except Exception as e:
@@ -483,14 +487,31 @@ class InstanceMultiLauncher:
                     ui.console.print("⚠️ 检测到独立WebUI版本 - 可能存在端口冲突", style=ui.colors["warning"])
                     ui.console.print("   建议：多开时考虑升级到内置WebUI版本", style="white")
             
+            # 询问是否使用专用端口池
+            use_multi_pool = ui.confirm("是否使用多开专用端口池 (4000-6000)？推荐选择是以避免端口冲突")
+            
+            if use_multi_pool:
+                ui.console.print("✅ 将使用多开专用端口池 (4000-6000)", style=ui.colors["success"])
+            else:
+                ui.console.print("⚠️ 将使用默认端口池，可能与其他服务冲突", style=ui.colors["warning"])
+            
             # 输入实例名称
             instance_name = ui.get_input("请输入多开实例名称 (回车自动生成): ").strip()
             
             # 创建多开实例
-            instance_id = self.create_multi_instance(base_config, instance_name if instance_name else None)
+            instance_id = self.create_multi_instance(base_config, instance_name if instance_name else None, use_multi_pool=use_multi_pool)
             
             ui.print_success(f"多开实例创建成功！")
             ui.console.print(f"实例ID: {instance_id}", style=ui.colors["info"])
+            
+            # 显示端口信息
+            multi_instance = self.get_multi_instance(instance_id)
+            if multi_instance:
+                ports = multi_instance.get("ports", {})
+                pool_type = "专用端口池 (4000-6000)" if multi_instance.get("use_multi_pool") else "默认端口池"
+                ui.console.print(f"端口池类型: {pool_type}", style=ui.colors["info"])
+                ui.console.print(f"主程序端口: {ports.get('main_port', 'N/A')}", style=ui.colors["info"])
+                ui.console.print(f"适配器/WebUI端口: {ports.get('secondary_port', 'N/A')}", style=ui.colors["info"])
             
             # 询问是否立即启动
             if ui.confirm("是否立即启动这个多开实例？"):
@@ -697,6 +718,8 @@ class InstanceMultiLauncher:
         
         ports = instance.get("ports", {})
         if ports:
+            pool_type = "专用端口池 (4000-6000)" if instance.get("use_multi_pool") else "默认端口池"
+            ui.console.print(f"端口池类型: {pool_type}", style="yellow")
             ui.console.print(f"主程序端口: {ports.get('main_port', 'N/A')}", style="yellow")
             ui.console.print(f"适配器端口: {ports.get('secondary_port', 'N/A')}", style="yellow")
         
