@@ -216,16 +216,59 @@ def setup_logging(level: str = "INFO"):
 
     # 4. 配置structlog
     # structlog的处理器是按顺序执行的，最终结果交给logger处理
+    
+    def remove_conflicting_fields(logger, name, event_dict):
+        """
+        移除与 LogRecord 冲突的字段
+        防止 'filename', 'name' 等字段导致 "Attempt to overwrite 'xxx' in LogRecord" 错误
+        """
+        # 复制一份 event_dict，避免修改原始数据
+        result = dict(event_dict)
+        
+        # 移除与 LogRecord 属性冲突的所有字段
+        # LogRecord 的标准属性列表
+        conflicting_fields = [
+            "name",           # logger name
+            "filename",       # source file name
+            "funcName",       # function name
+            "levelname",      # level name (DEBUG, INFO, etc.)
+            "levelno",        # level number
+            "processName",    # process name
+            "process",        # process ID
+            "threadName",     # thread name
+            "thread",         # thread ID
+            "msecs",          # milliseconds
+            "created",        # time when record was created
+            "relativeCreated",# time relative to module import
+            "lineno",         # line number in source file
+            "module",         # module name
+            "pathname",       # full source file path
+            "getMessage",     # message getter method
+            "msg",            # message format string
+            "args",           # arguments for message
+            "exc_info",       # exception info
+            "exc_text",       # exception text
+            "stack_info",     # stack info
+            "style",          # logging style
+            "stacklevel",     # stack level adjustment
+        ]
+        
+        for field in conflicting_fields:
+            result.pop(field, None)
+        
+        return result
+    
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.TimeStamper(fmt="iso"), # 使用ISO 8601格式时间戳
+            structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
+            remove_conflicting_fields,  # 在 render_to_log_kwargs 之前移除冲突字段
             # 使用自定义处理器来生成控制台和文件的不同格式
             lambda logger, name, event_dict: {
                 **event_dict,
@@ -296,11 +339,13 @@ def setup_logging(level: str = "INFO"):
                         log_data[attr] = getattr(record, attr)
                 
                 # 如果有额外的属性，也添加进去
+                # 注意：排除 filename 字段，因为它与 LogRecord 的属性冲突
                 for key, value in record.__dict__.items():
                     if key not in ["name", "msg", "args", "levelname", "levelno", "pathname", 
                                   "filename", "module", "lineno", "funcName", "created", 
                                   "msecs", "relativeCreated", "thread", "threadName", 
-                                  "processName", "process", "getMessage", "_original_event"]:
+                                  "processName", "process", "getMessage", "_original_event",
+                                  "event"]:  # event 已经在外面处理了
                         log_data[key] = value
                 
                 # 设置JSON消息
