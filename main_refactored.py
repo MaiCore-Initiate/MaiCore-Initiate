@@ -340,7 +340,7 @@ class MaiMaiLauncher:
         """处理杂项菜单"""
         while True:
             ui.show_misc_menu()
-            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "Q"])
+            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "E", "Q"])
             
             if choice == "Q":
                 break
@@ -352,6 +352,8 @@ class MaiMaiLauncher:
                 self.handle_component_download()
             elif choice == "D":
                 self.handle_instance_statistics()
+            elif choice == "E":
+                self.handle_show_webui_token()
 
     def handle_program_settings(self):
         """处理程序设置"""
@@ -790,6 +792,104 @@ class MaiMaiLauncher:
             ui.print_error(f"查看实例运行数据过程出错：{str(e)}")
             logger.error("实例运行数据查看异常", error=str(e))
             ui.pause()
+    
+    def handle_show_webui_token(self):
+        """处理查看WebUI Token"""
+        import re
+        
+        ui.clear_screen()
+        ui.console.print("[🔐 WebUI Token查看]", style=ui.colors["secondary"])
+        ui.console.print("==================")
+        
+        # 获取Token
+        from src.core.p_config import p_config_manager
+        token = p_config_manager.get("webui.webui_token", "")
+        webui_host = p_config_manager.get("webui.host", "0.0.0.0")
+        webui_port = p_config_manager.get("webui.port", 10086)
+        
+        # Token验证函数
+        def validate_token(token_str: str) -> tuple[bool, str]:
+            """验证Token是否符合安全要求"""
+            if len(token_str) < 16:
+                return False, "Token长度必须至少16位"
+            if not re.search(r"[A-Z]", token_str):
+                return False, "Token必须包含至少一个大写英文字母"
+            if not re.search(r"[a-z]", token_str):
+                return False, "Token必须包含至少一个小写英文字母"
+            if not re.search(r"\d", token_str):
+                return False, "Token必须包含至少一个数字"
+            if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\x5c|,.<>/?]", token_str):
+                return False, "Token必须包含至少一个特殊字符 (!@#$%^&*...)"
+            return True, "Token验证通过"
+        
+        # 生成符合安全要求的随机Token
+        def generate_secure_token(length: int = 24) -> str:
+            import secrets
+            import string
+            alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+            while True:
+                new_token = ''.join(secrets.choice(alphabet) for _ in range(length))
+                is_valid, _ = validate_token(new_token)
+                if is_valid:
+                    return new_token
+        
+        if not token:
+            # 如果没有token，自动生成一个符合要求的
+            token = generate_secure_token()
+            p_config_manager.set("webui.webui_token", token)
+            p_config_manager.save()
+            ui.console.print("已自动生成符合安全要求的Token", style=ui.colors["success"])
+        
+        ui.console.print(f"\nWebUI访问地址: http://localhost:{webui_port}", style=ui.colors["info"])
+        ui.console.print(f"\n[bold]当前Token:[/bold] {token}", style=ui.colors["primary"])
+        
+        # 显示Token安全状态
+        is_valid, msg = validate_token(token)
+        if is_valid:
+            ui.console.print(f"Token状态: ✅ {msg}", style=ui.colors["success"])
+        else:
+            ui.console.print(f"Token状态: ❌ {msg}", style=ui.colors["error"])
+        
+        ui.console.print("\n请妥善保管此Token，登录时需要输入", style=ui.colors["warning"])
+        
+        # 操作选择
+        ui.console.print("\n====== 操作 ======")
+        ui.console.print(" [A] 设置自定义Token", style=ui.colors["success"])
+        ui.console.print(" [B] 重新生成随机Token", style=ui.colors["warning"])
+        ui.console.print(" [Q] 返回上级菜单", style=ui.colors["exit"])
+        
+        choice = ui.get_choice("请选择操作", ["A", "B", "Q"])
+        
+        if choice == "A":
+            # 设置自定义Token
+            while True:
+                custom_token = ui.get_input("请输入自定义Token（至少16位，包含大写、小写、数字和特殊字符）: ")
+                if not custom_token:
+                    ui.print_warning("Token不能为空")
+                    continue
+                
+                is_valid, msg = validate_token(custom_token)
+                if is_valid:
+                    p_config_manager.set("webui.webui_token", custom_token)
+                    p_config_manager.save()
+                    ui.console.print(f"\n✅ 自定义Token设置成功！", style=ui.colors["success"])
+                    ui.console.print(f"新Token: {custom_token}", style=ui.colors["primary"])
+                    break
+                else:
+                    ui.console.print(f"❌ Token不符合要求: {msg}", style=ui.colors["error"])
+                    if not ui.confirm("是否重新输入？"):
+                        break
+                        
+        elif choice == "B":
+            # 重新生成随机Token
+            if ui.confirm("确定要重新生成Token吗？之前的Token将失效！"):
+                new_token = generate_secure_token()
+                p_config_manager.set("webui.webui_token", new_token)
+                p_config_manager.save()
+                ui.console.print(f"\n✅ 新Token已生成！", style=ui.colors["success"])
+                ui.console.print(f"新Token: {new_token}", style=ui.colors["primary"])
+        
+        ui.pause()
     
     def _validate_maibot_instance(self, instance_path: str) -> bool:
         """验证是否为有效的MaiBot实例"""

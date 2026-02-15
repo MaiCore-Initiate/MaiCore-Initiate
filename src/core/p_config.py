@@ -77,6 +77,12 @@ class PConfig:
             "selected_mirror": "",
             "timeout": 30,
             "depth": 1
+        },
+        "webui": {
+            "webui_token": "",
+            "token_max_attempts": 5,
+            "host": "0.0.0.0",
+            "port": 10086
         }
     }
 

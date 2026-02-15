@@ -169,6 +169,7 @@ o&o        o&&&o `Y&bood&P'         &*`&&&&&P'    `&&&` `Y&&&``qo d&&&b      `&&
         self.console.print(f" [B] {self.symbols['edit']} 程序设置", style=self.colors["warning"])
         self.console.print(f" [C] {self.symbols['download']} 组件下载", style=self.colors["success"])
         self.console.print(f" [D] {self.symbols['status']} 查看实例运行数据", style=self.colors["secondary"])
+        self.console.print(f" [E] {self.symbols['key']} 查看WebUI Token", style=self.colors["primary"])
         
         self.console.print("====>>返回<<====")
         self.console.print(f" [Q] {self.symbols['back']} 返回上级", style=self.colors["exit"])
