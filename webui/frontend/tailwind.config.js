@@ -6,6 +6,11 @@ export default {
   ],
   theme: {
     extend: {
+      boxShadow:{
+        "login-card": "5px 5px 4px rgba(0, 0, 0, 0.3)",
+        "content-card": "3px 3px 4px rgba(0, 0, 0, 0.57)",
+        "shadow-light": "3px 3px 4px rgba(0, 0, 0, 0.2)"
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

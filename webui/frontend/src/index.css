@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 汉仪文黑字体 - 需要用户自行放置字体文件到 public/fonts/ */
+@font-face {
+  font-family: 'HYWenHei';
+  src: url('/fonts/HYWenHei-85W.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -55,6 +64,6 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: 'HYWenHei', 'Microsoft YaHei', sans-serif;
   }
 }

@@ -9,6 +9,7 @@ import json
 import logging
 import asyncio
 import secrets
+import platform
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Set
@@ -111,26 +112,48 @@ def setup_logging():
 
 # Token管理
 class TokenManager:
-    """WebUI Token管理器"""
-    
+    """WebUI Token管理器 - 始终读取项目根目录的配置文件"""
+
     def __init__(self):
-        self.config = p_config_manager
+        self.config_path = project_root / "config" / "P-config.toml"
         self._ensure_token()
-    
+
+    def _load_config(self) -> dict:
+        """从项目根目录加载配置"""
+        try:
+            if self.config_path.exists():
+                import toml as toml_lib
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    return toml_lib.load(f)
+        except Exception as e:
+            logging.error(f"读取配置文件失败: {e}")
+        return {}
+
+    def _save_config(self, config: dict):
+        """保存配置到项目根目录"""
+        try:
+            import toml as toml_lib
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                toml_lib.dump(config, f)
+        except Exception as e:
+            logging.error(f"保存配置文件失败: {e}")
+
     def _ensure_token(self):
         """确保token存在，如果不存在则生成"""
-        token = self.config.get("webui.webui_token", "")
+        config = self._load_config()
+        token = config.get("webui", {}).get("webui_token", "")
         if not token:
-            # 生成32位随机token
-            token = secrets.token_hex(16)  # 16字节 = 32位十六进制字符
-            self.config.set("webui.webui_token", token)
-            self.config.save()
+            token = secrets.token_hex(16)
+            config.setdefault("webui", {})["webui_token"] = token
+            self._save_config(config)
             logging.info("已生成新的WebUI Token")
-    
+
     def get_token(self) -> str:
-        """获取当前token"""
-        return self.config.get("webui.webui_token", "")
-    
+        """获取当前token - 每次从文件读取，确保一致"""
+        config = self._load_config()
+        return config.get("webui", {}).get("webui_token", "")
+
     def verify_token(self, input_token: str) -> bool:
         """验证token"""
         return input_token == self.get_token()
@@ -141,56 +164,77 @@ token_manager = TokenManager()
 
 # 登录会话管理
 class SessionManager:
-    """登录会话管理"""
-    
+    """登录会话管理 - 带指数退避锁定"""
+
     def __init__(self):
         self.sessions: Dict[str, Dict[str, Any]] = {}
         self.max_attempts = 5
-    
+
     def create_session(self, session_id: str) -> Dict[str, Any]:
-        """创建新会话"""
         self.sessions[session_id] = {
             "attempts": 0,
-            "locked": False,
+            "lock_count": 0,
+            "locked_until": None,
             "login_time": None
         }
         return self.sessions[session_id]
-    
+
     def get_session(self, session_id: str) -> Dict[str, Any]:
-        """获取会话"""
         if session_id not in self.sessions:
             return self.create_session(session_id)
         return self.sessions[session_id]
-    
-    def verify_login(self, session_id: str, input_token: str) -> bool:
-        """验证登录"""
-        session = self.get_session(session_id)
-        
-        if session.get("locked"):
-            return False
-        
-        if token_manager.verify_token(input_token):
-            # 登录成功
+
+    def _check_unlock(self, session: Dict[str, Any]):
+        """检查锁定是否已过期，过期则解锁"""
+        locked_until = session.get("locked_until")
+        if locked_until and datetime.now() >= datetime.fromisoformat(locked_until):
+            session["locked_until"] = None
             session["attempts"] = 0
+
+    def is_locked(self, session_id: str) -> bool:
+        session = self.get_session(session_id)
+        self._check_unlock(session)
+        return session.get("locked_until") is not None
+
+    def get_lock_remaining_seconds(self, session_id: str) -> int:
+        """获取锁定剩余秒数"""
+        session = self.get_session(session_id)
+        locked_until = session.get("locked_until")
+        if not locked_until:
+            return 0
+        remaining = (datetime.fromisoformat(locked_until) - datetime.now()).total_seconds()
+        return max(0, int(remaining))
+
+    def verify_login(self, session_id: str, input_token: str) -> bool:
+        session = self.get_session(session_id)
+        self._check_unlock(session)
+
+        if session.get("locked_until"):
+            return False
+
+        if token_manager.verify_token(input_token):
+            session["attempts"] = 0
+            session["lock_count"] = 0
             session["login_time"] = datetime.now().isoformat()
             return True
-        
-        # 登录失败
+
         session["attempts"] = session.get("attempts", 0) + 1
-        
+
         if session["attempts"] >= self.max_attempts:
-            session["locked"] = True
-            logging.warning(f"登录尝试过多，会话已锁定: {session_id}")
-        
+            # 指数退避：1m, 2m, 4m, 8m...
+            session["lock_count"] = session.get("lock_count", 0) + 1
+            lock_minutes = 2 ** (session["lock_count"] - 1)
+            from datetime import timedelta
+            session["locked_until"] = (datetime.now() + timedelta(minutes=lock_minutes)).isoformat()
+            logging.warning(f"登录尝试过多，会话锁定 {lock_minutes} 分钟: {session_id}")
+
         return False
-    
+
     def is_logged_in(self, session_id: str) -> bool:
-        """检查是否已登录"""
         session = self.get_session(session_id)
-        return session.get("login_time") is not None and not session.get("locked")
-    
+        return session.get("login_time") is not None and not session.get("locked_until")
+
     def get_remaining_attempts(self, session_id: str) -> int:
-        """获取剩余尝试次数"""
         session = self.get_session(session_id)
         return max(0, self.max_attempts - session.get("attempts", 0))
 
@@ -332,12 +376,20 @@ async def verify_token(request: VerifyRequest, http_request: Request):
 @app.post("/api/auth/login")
 async def login(request: LoginRequest, http_request: Request):
     """登录验证"""
-    # 获取或创建会话ID
     session_id = http_request.cookies.get("webui_session", "")
     if not session_id:
         session_id = secrets.token_hex(16)
-    
-    # 验证token
+
+    # 检查是否被锁定
+    if session_manager.is_locked(session_id):
+        lock_seconds = session_manager.get_lock_remaining_seconds(session_id)
+        return {
+            "success": False,
+            "message": f"登录已锁定，请等待",
+            "locked": True,
+            "lock_seconds": lock_seconds
+        }
+
     if session_manager.verify_login(session_id, request.token):
         return {
             "success": True,
@@ -346,10 +398,14 @@ async def login(request: LoginRequest, http_request: Request):
         }
     else:
         remaining = session_manager.get_remaining_attempts(session_id)
+        lock_seconds = session_manager.get_lock_remaining_seconds(session_id)
+        locked = lock_seconds > 0
         return {
             "success": False,
-            "message": f"Token错误，剩余尝试次数: {remaining}",
-            "remaining_attempts": remaining
+            "message": f"Token错误，剩余尝试次数: {remaining}" if not locked else "登录已锁定，请等待",
+            "remaining_attempts": remaining,
+            "locked": locked,
+            "lock_seconds": lock_seconds
         }
 
 
@@ -632,6 +688,31 @@ async def login_page():
     return HTMLResponse(content=LOGIN_HTML, status_code=200)
 
 
+@app.get("/api/system/info")
+async def system_info():
+    """获取系统静态信息"""
+    import psutil
+    gpu_name = "N/A"
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            gpu_name = result.stdout.strip().split("\n")[0]
+    except Exception:
+        pass
+    return {
+        "hostname": platform.node(),
+        "os": f"{platform.system()} {platform.release()}",
+        "processor": platform.processor() or "Unknown",
+        "gpu": gpu_name,
+        "total_memory_mb": round(psutil.virtual_memory().total / (1024**2)),
+        "cpu_count": psutil.cpu_count(),
+    }
+
+
 @app.get("/api/health")
 async def health_check():
     """健康检查"""
@@ -767,16 +848,17 @@ async def periodic_status_update():
                 "data": {
                     "cpu_percent": cpu_percent,
                     "memory_percent": memory.percent,
-                    "memory_used_gb": memory.used / (1024**3),
-                    "memory_total_gb": memory.total / (1024**3)
+                    "memory_used_mb": round(memory.used / (1024**2)),
+                    "memory_total_mb": round(memory.total / (1024**2)),
+                    "cpu_count": psutil.cpu_count(),
                 },
                 "timestamp": datetime.now().isoformat()
             })
-            
+
         except Exception as e:
             logging.error(f"定期状态更新错误: {e}")
-        
-        await asyncio.sleep(5)  # 每5秒更新一次
+
+        await asyncio.sleep(1)  # 每1秒更新一次
 
 
 @app.on_event("startup")
