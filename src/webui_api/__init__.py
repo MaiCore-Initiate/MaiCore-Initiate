@@ -10,6 +10,7 @@ from .knowledge_api import router as knowledge_router
 from .port_api import router as port_router
 from .process_api import router as process_router
 from .stats_api import router as stats_router
+from .webui_config_api import router as webui_config_router
 
 __all__ = [
     "deploy_router",
@@ -18,5 +19,6 @@ __all__ = [
     "knowledge_router",
     "port_router",
     "process_router",
-    "stats_router"
+    "stats_router",
+    "webui_config_router"
 ]

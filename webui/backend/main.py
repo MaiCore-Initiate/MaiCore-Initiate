@@ -17,6 +17,7 @@ from typing import Dict, Any, Set
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
+os.chdir(project_root)  # 确保相对路径基于项目根目录
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -344,6 +345,10 @@ app.include_router(process_router, prefix="/api/process", tags=["进程管理"])
 # 统计API
 from src.webui_api import stats_router
 app.include_router(stats_router, prefix="/api/stats", tags=["统计"])
+
+# WebUI配置API
+from src.webui_api import webui_config_router
+app.include_router(webui_config_router, prefix="/api/webui", tags=["WebUI配置"])
 
 
 # --- 登录相关API ---
