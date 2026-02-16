@@ -14,19 +14,19 @@ const sections = [
     title: '摘要',
     items: [
       { id: 'home' as Page, label: '首页', icon: HomeIcon },
-      { id: 'instances' as Page, label: '实例管理', icon: InstancesIcon },
     ]
   },
   {
     title: '功能',
     items: [
+      { id: 'instances' as Page, label: '实例启动/多开', icon: InstancesIcon },
       { id: 'config' as Page, label: '配置管理', icon: ConfigIcon },
-      { id: 'knowledge' as Page, label: '知识库', icon: KnowledgeIcon },
+      { id: 'knowledge' as Page, label: '知识库构建', icon: KnowledgeIcon },
       { id: 'db-migration' as Page, label: '数据库迁移', icon: DbMigrationIcon },
       { id: 'plugins' as Page, label: '插件管理', icon: PluginsIcon },
-      { id: 'deploy' as Page, label: '部署管理', icon: DeployIcon },
-      { id: 'status' as Page, label: '运行状态', icon: StatusIcon },
-      { id: 'logs' as Page, label: '日志查看', icon: LogsIcon },
+      { id: 'deploy' as Page, label: '实例部署辅助系统', icon: DeployIcon },
+      { id: 'status' as Page, label: '查看运行状态', icon: StatusIcon },
+      { id: 'logs' as Page, label: '日志查看器', icon: LogsIcon },
     ]
   },
   {
@@ -40,14 +40,14 @@ const sections = [
 
 export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   return (
-    <aside className="w-[340px] h-screen flex flex-col shrink-0 bg-white/5 backdrop-blur-[50px] border-r border-black/10">
+    <aside className="w-[340px] h-full flex flex-col shrink-0 border-r border-black/10">
       {/* 品牌区 */}
-      <div className="flex flex-col items-center justify-center pt-8 pb-4">
-        <span className="text-black/80 select-none" style={{ fontSize: 50, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+      <div className="h-[87px] flex flex-col justify-center px-[11px] shrink-0">
+        <span className="text-[#707070] select-none leading-none" style={{ fontSize: 40, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif", fontWeight: 700 }}>
           MaiCoreStart
         </span>
-        <span className="text-black/40 select-none" style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace" }}>
-          v4.2.0
+        <span className="text-[#707070] select-none mt-[3px]" style={{ fontSize: 20, fontFamily: "'Segoe', sans-serif" }}>
+          v4.2.1-beta
         </span>
       </div>
 
@@ -55,8 +55,8 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto px-3 pb-4">
         {sections.map((section, si) => (
           <div key={section.title}>
-            {si > 0 && <div className="mx-4 my-2 border-t border-black/15" />}
-            <div className="px-4 py-1 text-black/35 select-none" style={{ fontSize: 14, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+            {si > 0 && <div className="mx-0 my-2 border-t border-[#707070]" />}
+            <div className="px-[3px] py-1 text-[#707070] select-none" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", fontWeight: 300 }}>
               {section.title}
             </div>
             {section.items.map((item) => {
@@ -66,20 +66,21 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 <button
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
-                  className="w-full flex items-center gap-3 px-5 my-[2px] transition-all cursor-pointer"
+                  className={`flex items-center gap-3 my-[2px] transition-all cursor-pointer ${active ? 'backdrop-blur-[50px] brightness-105' : 'backdrop-blur-[4px]'}`}
                   style={{
                     width: 316,
                     height: 60,
                     borderRadius: 30,
                     margin: '2px auto',
-                    border: active ? '5px solid rgba(0,0,0,0.8)' : '3px solid rgba(0,0,0,0.45)',
-                    background: active ? 'rgba(255,255,255,0.3)' : 'transparent',
+                    paddingLeft: 16,
+                    border: active ? '5px solid rgba(112,112,112,0.8)' : '3px solid rgba(112,112,112,0.45)',
+                    background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
                   }}
                 >
-                  <Icon className={active ? 'text-black/80' : 'text-black/50'} />
+                  <Icon className={active ? 'text-black' : 'text-[#707070]'} />
                   <span
-                    className={active ? 'text-black/80' : 'text-black/50'}
-                    style={{ fontSize: 20, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
+                    className={active ? 'text-black' : 'text-[#707070]'}
+                    style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", fontWeight: active ? 600 : 400, marginTop: 4 }}
                   >
                     {item.label}
                   </span>

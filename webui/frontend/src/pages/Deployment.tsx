@@ -16,7 +16,7 @@ export default function Deployment() {
   const [botTypes, setBotTypes] = useState<BotType[]>([])
   const [selectedBotType, setSelectedBotType] = useState('')
   const [isLoading, setIsLoading] = useState(true)
-  const [isDeploying, setIsDeploying] = useState(false)
+  const [isDeploying] = useState(false)
 
   useEffect(() => {
     fetchVersions()

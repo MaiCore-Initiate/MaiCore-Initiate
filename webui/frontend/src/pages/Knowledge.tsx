@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrainCircuit, Play, Pause, CheckCircle } from 'lucide-react'
+import { BrainCircuit, Play } from 'lucide-react'
 
 interface Instance {
   serial: string
@@ -17,7 +17,7 @@ interface KnowledgeTask {
 export default function Knowledge() {
   const [instances, setInstances] = useState<Instance[]>([])
   const [selectedInstance, setSelectedInstance] = useState('')
-  const [tasks, setTasks] = useState<KnowledgeTask[]>([])
+  const [_tasks] = useState<KnowledgeTask[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {

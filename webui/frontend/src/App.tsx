@@ -9,9 +9,9 @@ import Settings from './pages/Settings'
 import type { Page, Tab } from './types'
 
 const pageLabels: Record<Page, string> = {
-  home: '首页', instances: '实例管理', config: '配置管理', knowledge: '知识库',
-  'db-migration': '数据库迁移', plugins: '插件管理', deploy: '部署管理',
-  status: '运行状态', logs: '日志查看', misc: '杂项', settings: '设置',
+  home: '首页', instances: '实例启动/多开', config: '配置管理', knowledge: '知识库构建',
+  'db-migration': '数据库迁移', plugins: '插件管理', deploy: '实例部署辅助系统',
+  status: '查看运行状态', logs: '日志查看器', misc: '杂项', settings: '设置',
 }
 
 let tabCounter = 1
@@ -37,7 +37,18 @@ function PageContent({ page }: { page: Page }) {
   }
 }
 
+function useZoom() {
+  const [zoom, setZoom] = useState(window.innerWidth / 1920)
+  useEffect(() => {
+    const onResize = () => setZoom(window.innerWidth / 1920)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return zoom
+}
+
 function App() {
+  const zoom = useZoom()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [tabs, setTabs] = useState<Tab[]>([makeTab('home')])
@@ -104,7 +115,7 @@ function App() {
   }
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden">
+    <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
       {/* 三层背景 */}
       <div className="absolute inset-0 bg-white" />
       <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/bg-temp.png')" }} />
