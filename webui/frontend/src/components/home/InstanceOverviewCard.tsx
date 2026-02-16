@@ -49,12 +49,10 @@ function AddInstancePopover({ anchorRef, instances, onSelect, onClose }: {
         ref={ref}
         className="relative w-[327px] rounded-[30px] bg-white/1 flex flex-col p-[20px] gap-[12px] backdrop-blur-[50px]"
       >
-      {/* 阴影边框层 */}
       <div
         className="absolute inset-0 pointer-events-none z-10"
         style={{ borderRadius: 30, border: '2px solid #0000007c', filter: 'drop-shadow(6px 6px 4px rgba(0,0,0,0.35))' }}
       />
-      {/* 搜索框 */}
       <div className="flex items-center h-[44px] px-[16px] gap-[10px] rounded-[22px] bg-white/60 border-2 border-black/50 shrink-0">
         <svg width="16" height="16" viewBox="0 0 20 20" fill="none" className="shrink-0">
           <circle cx="9" cy="9" r="7.5" stroke="rgba(0,0,0,0.5)" strokeWidth="3" />
@@ -69,7 +67,6 @@ function AddInstancePopover({ anchorRef, instances, onSelect, onClose }: {
           autoFocus
         />
       </div>
-      {/* 实例列表 */}
       <div className="flex-1 max-h-[240px] overflow-y-auto">
         {filtered.length === 0 ? (
           <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed border-[#9e9e9e]">
@@ -98,19 +95,38 @@ function AddInstancePopover({ anchorRef, instances, onSelect, onClose }: {
   )
 }
 
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  if (seconds < 3600) return `${Math.round(seconds / 60)}min`
+  return `${(seconds / 3600).toFixed(1)}h`
+}
+
 export default function InstanceOverviewCard() {
   const [instances, setInstances] = useState<Instance[]>([])
   const [showPopover, setShowPopover] = useState(false)
   const [favorites, setFavorites] = useState<Instance[]>([])
+  const [summary, setSummary] = useState<{ launch_count: number; total_uptime_s: number; error_count: number } | null>(null)
   const addBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    fetch('/api/instances', { credentials: 'include' })
+    // 从 webui/instances 获取实例列表
+    fetch('/api/webui/instances', { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
-        const list = Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []
+        const map = d?.instances ?? {}
+        const list: Instance[] = Object.entries(map).map(([key, cfg]: [string, any]) => ({
+          serial: cfg.serial_number || key,
+          name: cfg.nickname || key,
+          status: 'stopped',
+        }))
         setInstances(list)
       })
+      .catch(() => {})
+
+    // 获取统计摘要
+    fetch('/api/stats/summary', { credentials: 'include' })
+      .then(r => r.json())
+      .then(setSummary)
       .catch(() => {})
   }, [])
 
@@ -121,8 +137,8 @@ export default function InstanceOverviewCard() {
     ['注册实例', `${instances.length} 例`],
     ['已启动实例', `${running} 例`],
     ['未启动实例', `${stopped} 例`],
-    ['启动次数', '- 次'],
-    ['启动时长', '- h'],
+    ['启动次数', summary ? `${summary.launch_count} 次` : '- 次'],
+    ['启动时长', summary ? formatUptime(summary.total_uptime_s) : '- h'],
   ]
 
   const displayList = favorites.length > 0 ? favorites : instances
@@ -203,7 +219,6 @@ export default function InstanceOverviewCard() {
                   </button>
                 </>
               )}
-              {/* 添加实例弹出卡片 */}
               {showPopover && (
                 <AddInstancePopover
                   anchorRef={addBtnRef}
