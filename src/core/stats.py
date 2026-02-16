@@ -112,6 +112,11 @@ class StatsDB:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_instance_ids(self) -> List[str]:
+        conn = self._get_conn()
+        rows = conn.execute("SELECT DISTINCT instance_id FROM instance_events ORDER BY instance_id").fetchall()
+        return [r["instance_id"] for r in rows]
+
     def get_recent_events(self, limit: int = 50, instance_id: Optional[str] = None) -> List[Dict[str, Any]]:
         conn = self._get_conn()
         if instance_id:

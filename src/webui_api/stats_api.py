@@ -24,3 +24,8 @@ def get_timeline(granularity: str = "day", instance_id: Optional[str] = None, li
 @router.get("/events")
 def get_recent_events(instance_id: Optional[str] = None, limit: int = 50):
     return stats_db.get_recent_events(limit, instance_id)
+
+
+@router.get("/instances")
+def get_instance_ids():
+    return stats_db.get_instance_ids()
