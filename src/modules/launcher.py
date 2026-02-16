@@ -256,6 +256,17 @@ class _ProcessManager:
                 return False
             
             ui.print_success(f"进程 '{title}' (PID: {pid}) 已成功停止。")
+            try:
+                from ..core.stats import stats_db
+                duration = time.time() - process_info.get("start_time", time.time())
+                stats_db.record_event(
+                    instance_id=process_info.get("_instance_id", "unknown"),
+                    event_type="stop",
+                    component=process_info.get("_component", title),
+                    duration_s=round(duration, 1),
+                )
+            except Exception:
+                pass
 
         except psutil.NoSuchProcess:
             logger.info("进程已不存在", pid=pid, title=title)
@@ -996,7 +1007,21 @@ class MaiLauncher:
         
         for comp_name in launch_order:
             if comp_name in components_to_start:
-                if not self._components[comp_name].start(self._process_manager):
+                success = self._components[comp_name].start(self._process_manager)
+                try:
+                    from ..core.stats import stats_db
+                    inst_id = self._config.get("serial_number", "unknown")
+                    if success:
+                        stats_db.record_event(inst_id, "start", comp_name)
+                        for p in self._process_manager.running_processes:
+                            if "_instance_id" not in p:
+                                p["_instance_id"] = inst_id
+                                p["_component"] = comp_name
+                    else:
+                        stats_db.record_event(inst_id, "error", comp_name, detail="启动失败")
+                except Exception:
+                    pass
+                if not success:
                     # 麦麦本体是核心，如果它失败了，整个启动就算失败
                     if comp_name == "mai":
                         final_success = False

@@ -273,7 +273,6 @@ class ConnectionManager:
     
     async def connect(self, websocket: WebSocket, channel: str):
         """WebSocket连接"""
-        await websocket.accept()
         if channel not in self.active_connections:
             self.active_connections[channel] = set()
         self.active_connections[channel].add(websocket)
@@ -341,6 +340,10 @@ app.include_router(port_router, prefix="/api/port", tags=["端口管理"])
 
 # 进程管理API
 app.include_router(process_router, prefix="/api/process", tags=["进程管理"])
+
+# 统计API
+from src.webui_api import stats_router
+app.include_router(stats_router, prefix="/api/stats", tags=["统计"])
 
 
 # --- 登录相关API ---
@@ -730,6 +733,7 @@ async def websocket_endpoint(websocket: WebSocket):
     channel = None
     
     try:
+        await websocket.accept()
         # 接收订阅消息
         initial_message = await websocket.receive_json()
         

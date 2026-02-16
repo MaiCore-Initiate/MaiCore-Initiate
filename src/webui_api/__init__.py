@@ -9,12 +9,14 @@ from .multi_instance_api import router as multi_instance_router
 from .knowledge_api import router as knowledge_router
 from .port_api import router as port_router
 from .process_api import router as process_router
+from .stats_api import router as stats_router
 
 __all__ = [
     "deploy_router",
-    "launcher_router", 
+    "launcher_router",
     "multi_instance_router",
     "knowledge_router",
     "port_router",
-    "process_router"
+    "process_router",
+    "stats_router"
 ]
