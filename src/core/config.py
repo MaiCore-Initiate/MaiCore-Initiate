@@ -35,8 +35,9 @@ class Config:
     
     def __init__(self):
         self.config: Dict[str, Any] = {}
+        self._mtime: float = 0
         self.load()
-    
+
     def load(self) -> Dict[str, Any]:
         """加载配置文件"""
         try:
@@ -45,7 +46,8 @@ class Config:
                 self.config = self.CONFIG_TEMPLATE.copy()
                 self.save()
                 return self.config
-            
+
+            self._mtime = os.path.getmtime(self.CONFIG_FILE)
             with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
                 self.config = toml.load(f)
                 logger.info("成功加载配置文件", current_config=self.config.get('current_config'))
@@ -75,12 +77,23 @@ class Config:
         try:
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
                 toml.dump(self.config, f)
+            self._mtime = os.path.getmtime(self.CONFIG_FILE)
             logger.info("配置文件保存成功")
             return True
         except Exception as e:
             logger.error("保存配置文件失败", error=str(e))
             return False
-    
+
+    def reload_if_changed(self) -> bool:
+        """如果文件被外部修改则重新加载，返回是否重载"""
+        try:
+            if os.path.exists(self.CONFIG_FILE) and os.path.getmtime(self.CONFIG_FILE) > self._mtime:
+                self.load()
+                return True
+        except Exception:
+            pass
+        return False
+
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置值"""
         return self.config.get(key, default)
