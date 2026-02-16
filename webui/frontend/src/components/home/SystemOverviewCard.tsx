@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useSystemResources } from '../../hooks/useSystemResources'
 import type { SystemInfo } from '../../types'
+import GlassCard from '../ui/GlassCard'
 
-const cardStyle = "bg-white border-2 border-[#797979] rounded-[30px] backdrop-blur-[50px] p-6 flex flex-col"
-const cardShadow = { boxShadow: '8px 8px 12px rgba(0,0,0,0.57)' }
-const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif", filter: 'drop-shadow(1px 1px 1px rgba(0,0,0,0.3))' }
-const labelStyle = { fontSize: 20, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }
-const valueStyle = { fontSize: 20, fontFamily: "'Cascadia Code', monospace", color: '#585858' }
+const labelFont = { fontSize: 20, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
+const valueFont = { fontSize: 20, fontFamily: "'Cascadia Code', monospace", color: '#585858' }
+const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
 
 function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
   return (
-    <div className="w-full h-[17px] rounded-[8.5px] bg-black/30 overflow-hidden" style={{ maxWidth: 358 }}>
-      <div className="h-full rounded-[8.5px] transition-all duration-500" style={{ width: `${pct}%`, background: color }} />
+    <div className="h-[17px] rounded-[8.5px] bg-black/30 relative" style={{ width: 358, border: '1px solid #000' }}>
+      <div className="h-full rounded-[8.5px] transition-all duration-500" style={{ width: `${pct}%`, background: color, border: pct > 0 ? '1px solid #000' : 'none' }} />
     </div>
   )
 }
@@ -31,41 +30,45 @@ export default function SystemOverviewCard() {
   const memUsed = resources?.memory_used_mb ?? 0
   const memTotal = resources?.memory_total_mb ?? info?.total_memory_mb ?? 1
   const cpuPct = resources?.cpu_percent ?? 0
+  const cpuCount = resources?.cpu_count ?? info?.cpu_count ?? 0
 
   return (
-    <div className={cardStyle} style={cardShadow}>
-      <h2 className="text-black/80 mb-4" style={titleStyle}>系统概览</h2>
+    <GlassCard>
+      <div className="p-[33px] flex flex-col h-full">
+        <h2 className="text-black pb-[16px]" style={titleStyle}>系统概览</h2>
 
-      <div className="space-y-3 mb-4">
-        <div>
-          <div className="flex justify-between mb-1">
-            <span className="text-black/60" style={labelStyle}>内存</span>
-            <span style={valueStyle}>{memUsed} / {memTotal} MB</span>
+        <div className="space-y-[10px]">
+          <div className="flex items-center gap-[12px]">
+            <span className="text-black shrink-0 w-[80px]" style={labelFont}>内存用量</span>
+            <ProgressBar value={memUsed} max={memTotal} color="#faa3cc" />
+            <span className="shrink-0" style={valueFont}>{memUsed}MB/{memTotal}MB</span>
           </div>
-          <ProgressBar value={memUsed} max={memTotal} color="#faa3cc" />
+          <div className="flex items-center gap-[12px]">
+            <span className="shrink-0 w-[80px]">
+              <span style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 20 }}>CPU</span>
+              <span style={labelFont}>用量</span>
+            </span>
+            <ProgressBar value={cpuPct} max={100} color="#fff8a6" />
+            <span className="shrink-0" style={valueFont}>CPU用量 | {cpuPct.toFixed(0)}% | {cpuCount}核</span>
+          </div>
         </div>
-        <div>
-          <div className="flex justify-between mb-1">
-            <span className="text-black/60" style={labelStyle}>CPU</span>
-            <span style={valueStyle}>{cpuPct.toFixed(1)}%</span>
-          </div>
-          <ProgressBar value={cpuPct} max={100} color="#fff8a6" />
+
+        <div className="my-[12px] border-t border-[#707070]" />
+
+        <div className="space-y-[5px]">
+          {([
+            ['设备名称', info?.hostname],
+            ['处理器', info?.processor],
+            ['GPU', info?.gpu],
+            ['操作系统', info?.os],
+          ] as const).map(([label, val]) => (
+            <div key={label} className="flex items-baseline gap-[20px]">
+              <span className="text-black shrink-0 w-[80px]" style={labelFont}>{label}</span>
+              <span className="truncate" style={valueFont}>{val ?? '...'}</span>
+            </div>
+          ))}
         </div>
       </div>
-
-      <div className="grid grid-cols-2 gap-2 mt-auto">
-        {[
-          ['设备名称', info?.hostname],
-          ['处理器', info?.processor],
-          ['GPU', info?.gpu],
-          ['操作系统', info?.os],
-        ].map(([label, val]) => (
-          <div key={label as string}>
-            <span className="text-black/50" style={labelStyle}>{label}</span>
-            <p className="truncate" style={valueStyle}>{val ?? '...'}</p>
-          </div>
-        ))}
-      </div>
-    </div>
+    </GlassCard>
   )
 }
