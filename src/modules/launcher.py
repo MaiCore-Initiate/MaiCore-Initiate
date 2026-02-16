@@ -315,6 +315,7 @@ class _LaunchComponent:
         self.name = name
         self.config = config
         self.is_enabled = False
+        self._skip_browser = False
 
     def check_enabled(self):
         """检查该组件是否根据配置启用。"""
@@ -643,7 +644,7 @@ class _WebUIComponent(_LaunchComponent):
             ui.print_info("请在浏览器中访问: http://localhost:8001")
             
             # 询问是否自动打开浏览器
-            if ui.confirm("是否自动打开浏览器访问控制面板？"):
+            if not self._skip_browser and ui.confirm("是否自动打开浏览器访问控制面板？"):
                 try:
                     webbrowser.open("http://localhost:8001")
                     ui.print_success("已打开浏览器访问控制面板")
@@ -674,12 +675,13 @@ class _WebUIComponent(_LaunchComponent):
         if not process:
             return False
 
-        url = "http://localhost:7999"
-        ui.print_info(f"正在打开浏览器访问 {url} ...")
-        try:
-            webbrowser.open(url)
-        except Exception as exc:
-            ui.print_warning(f"自动打开浏览器失败，请手动访问 {url} ({exc})")
+        if not self._skip_browser:
+            url = "http://localhost:7999"
+            ui.print_info(f"正在打开浏览器访问 {url} ...")
+            try:
+                webbrowser.open(url)
+            except Exception as exc:
+                ui.print_warning(f"自动打开浏览器失败，请手动访问 {url} ({exc})")
 
         return True
 
@@ -727,7 +729,7 @@ class _MaiComponent(_LaunchComponent):
         # 如果是MoFox_bot且安装了WebUI，启动后自动打开浏览器
         if success and self.config.get("bot_type") == "MoFox_bot":
             has_webui = self.config.get("install_options", {}).get("install_mofox_webui", False)
-            if has_webui:
+            if has_webui and not self._skip_browser:
                 ui.print_info("检测到MoFox WebUI已安装，WebUI将随主程序自动启动")
                 ui.print_info("正在打开浏览器访问 http://localhost:12138 ...")
                 try:
@@ -986,7 +988,7 @@ class MaiLauncher:
             elif valid_choices and not components_to_start:
                 ui.print_warning("未选择任何有效组件。")
 
-    def launch(self, components_to_start: List[str]) -> bool:
+    def launch(self, components_to_start: List[str], from_webui: bool = False) -> bool:
         """根据给定的组件列表启动。"""
         if not self._config:
             ui.print_error("配置未加载，无法启动。")
@@ -996,7 +998,7 @@ class MaiLauncher:
         if self._components['mongodb'].is_enabled:
             if not self._components['mongodb'].start(self._process_manager):
                 ui.print_warning("MongoDB启动失败，但将继续尝试启动其他组件。")
-        
+
         # 处理全栈启动
         if "full_stack" in components_to_start:
             components_to_start = [name for name, comp in self._components.items() if comp.is_enabled and name != "mongodb"]
@@ -1004,10 +1006,13 @@ class MaiLauncher:
         # 按顺序启动组件
         launch_order = ["napcat", "webui", "adapter", "mai"]
         final_success = True
-        
+
         for comp_name in launch_order:
             if comp_name in components_to_start:
-                success = self._components[comp_name].start(self._process_manager)
+                comp = self._components[comp_name]
+                if from_webui:
+                    comp._skip_browser = True
+                success = comp.start(self._process_manager)
                 try:
                     from ..core.stats import stats_db
                     inst_id = self._config.get("serial_number", "unknown")

@@ -789,6 +789,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             "timestamp": datetime.now().isoformat()
                         })
                     
+                except WebSocketDisconnect:
+                    break
                 except Exception as e:
                     logging.error(f"WebSocket消息处理错误: {e}")
                     break

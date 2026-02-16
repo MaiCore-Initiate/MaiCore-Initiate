@@ -35,6 +35,8 @@ class RestartProcessRequest(BaseModel):
 
 # --- 辅助函数 ---
 
+_instance_launchers: Dict[str, Any] = {}
+
 def get_instance_config(serial_number: str) -> Optional[Dict[str, Any]]:
     """根据序列号获取实例配置"""
     configs = config_manager.get_all_configurations()
@@ -45,23 +47,26 @@ def get_instance_config(serial_number: str) -> Optional[Dict[str, Any]]:
 
 
 def get_instance_launcher(serial_number: str):
-    """获取实例对应的启动器"""
+    """获取实例对应的启动器（缓存+共享全局process_manager）"""
+    if serial_number in _instance_launchers:
+        return _instance_launchers[serial_number]
+
     config = get_instance_config(serial_number)
     if not config:
         return None
-    
-    # 为每个实例创建独立的启动器实例
+
     instance_launcher = launcher.__class__()
-    instance_launcher._process_manager = launcher._ProcessManager()
+    instance_launcher._process_manager = launcher._process_manager
     instance_launcher._register_components(config)
     instance_launcher._config = config
-    
+
+    _instance_launchers[serial_number] = instance_launcher
     return instance_launcher
 
 
 # --- API端点 ---
 
-@router.get("/launcher/instances/{serial_number}/status", summary="获取实例运行状态")
+@router.get("/instances/{serial_number}/status", summary="获取实例运行状态")
 async def get_instance_status(serial_number: str):
     """
     获取指定实例的运行状态
@@ -78,10 +83,9 @@ async def get_instance_status(serial_number: str):
         
         # 过滤出属于该实例的进程
         instance_processes = []
-        instance_path = config.get("mai_path") or config.get("mofox_path", "")
-        
+
         for proc in running_processes:
-            if instance_path and instance_path in proc.get("cwd", ""):
+            if proc.get("_instance_id") == serial_number:
                 instance_processes.append({
                     "pid": proc.get("pid"),
                     "title": proc.get("title"),
@@ -121,7 +125,7 @@ async def get_instance_status(serial_number: str):
         raise HTTPException(status_code=500, detail=f"获取实例状态失败: {str(e)}")
 
 
-@router.post("/launcher/instances/{serial_number}/start", summary="启动实例")
+@router.post("/instances/{serial_number}/start", summary="启动实例")
 async def start_instance(serial_number: str, request: StartInstanceRequest):
     """
     启动指定实例的组件
@@ -160,7 +164,7 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
             }
         
         # 启动组件
-        success = instance_launcher.launch(request.components)
+        success = instance_launcher.launch(request.components, from_webui=True)
         
         if success:
             return {
@@ -180,7 +184,7 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
         raise HTTPException(status_code=500, detail=f"启动实例失败: {str(e)}")
 
 
-@router.post("/launcher/instances/{serial_number}/stop", summary="停止实例")
+@router.post("/instances/{serial_number}/stop", summary="停止实例")
 async def stop_instance(serial_number: str):
     """
     停止指定实例的所有进程
@@ -194,12 +198,11 @@ async def stop_instance(serial_number: str):
         
         # 获取实例相关的进程
         running_processes = launcher._process_manager.get_running_processes_info()
-        instance_path = config.get("mai_path") or config.get("mofox_path", "")
-        
-        # 停止属于该实例的进程
+
+        # 通过 _instance_id 匹配属于该实例的进程
         stopped_pids = []
         for proc in running_processes:
-            if instance_path and instance_path in proc.get("cwd", ""):
+            if proc.get("_instance_id") == serial_number:
                 pid = proc.get("pid")
                 if pid:
                     success = launcher._process_manager.stop_process(pid)
@@ -217,7 +220,7 @@ async def stop_instance(serial_number: str):
         raise HTTPException(status_code=500, detail=f"停止实例失败: {str(e)}")
 
 
-@router.get("/launcher/processes", summary="获取所有运行中的进程")
+@router.get("/processes", summary="获取所有运行中的进程")
 async def get_all_processes():
     """获取所有由启动器管理的运行中的进程"""
     try:
@@ -244,7 +247,7 @@ async def get_all_processes():
         raise HTTPException(status_code=500, detail=f"获取进程列表失败: {str(e)}")
 
 
-@router.get("/launcher/processes/{pid}", summary="获取进程详情")
+@router.get("/processes/{pid}", summary="获取进程详情")
 async def get_process_detail(pid: int):
     """获取指定进程的详细信息"""
     try:
@@ -272,7 +275,7 @@ async def get_process_detail(pid: int):
         raise HTTPException(status_code=500, detail=f"获取进程详情失败: {str(e)}")
 
 
-@router.post("/launcher/processes/{pid}/stop", summary="停止指定进程")
+@router.post("/processes/{pid}/stop", summary="停止指定进程")
 async def stop_process(pid: int):
     """
     停止指定PID的进程
@@ -296,7 +299,7 @@ async def stop_process(pid: int):
         raise HTTPException(status_code=500, detail=f"停止进程失败: {str(e)}")
 
 
-@router.post("/launcher/processes/{pid}/restart", summary="重启指定进程")
+@router.post("/processes/{pid}/restart", summary="重启指定进程")
 async def restart_process(pid: int):
     """
     重启指定PID的进程
@@ -320,7 +323,7 @@ async def restart_process(pid: int):
         raise HTTPException(status_code=500, detail=f"重启进程失败: {str(e)}")
 
 
-@router.get("/launcher/components/{serial_number}", summary="获取实例可用组件")
+@router.get("/components/{serial_number}", summary="获取实例可用组件")
 async def get_instance_components(serial_number: str):
     """
     获取指定实例可用的组件列表
@@ -372,7 +375,7 @@ def _get_component_description(component_id: str) -> str:
     return descriptions.get(component_id, "未知组件")
 
 
-@router.get("/launcher/validate/{serial_number}", summary="验证实例配置")
+@router.get("/validate/{serial_number}", summary="验证实例配置")
 async def validate_instance_config(serial_number: str):
     """
     验证实例配置是否有效
