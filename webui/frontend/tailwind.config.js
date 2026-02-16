@@ -60,10 +60,40 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "fade-slide-up": {
+          from: { opacity: "0", transform: "translateY(16px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "scale-fade-in": {
+          from: { opacity: "0", transform: "scale(0.95)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+        "tab-enter": {
+          from: { opacity: "0", maxWidth: "0px" },
+          to: { opacity: "1", maxWidth: "300px" },
+        },
+        "login-fade-out": {
+          from: { opacity: "1" },
+          to: { opacity: "0" },
+        },
+        "login-fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in": "fade-in 0.25s ease-out",
+        "fade-slide-up": "fade-slide-up 0.35s ease-out both",
+        "scale-fade-in": "scale-fade-in 0.2s ease-out",
+        "tab-enter": "tab-enter 0.25s ease-out both",
+        "login-fade-out": "login-fade-out 1s ease-in forwards",
+        "login-fade-in": "login-fade-in 1s ease-out forwards",
       },
     },
   },

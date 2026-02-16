@@ -67,3 +67,8 @@
     font-family: 'HYWenHei', 'Microsoft YaHei', sans-serif;
   }
 }
+
+@layer utilities {
+  .glass-hover { transition: box-shadow 0.25s ease, margin-top 0.25s ease; }
+  .glass-hover:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: -2px; margin-bottom: 2px; }
+}

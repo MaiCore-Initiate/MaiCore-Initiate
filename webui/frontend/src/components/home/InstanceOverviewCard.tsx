@@ -44,7 +44,7 @@ function AddInstancePopover({ anchorRef, instances, onSelect, onClose }: {
   if (!pos) return null
 
   return createPortal(
-    <div className="fixed" style={{ zIndex: 9999, top: pos.top, left: pos.left }}>
+    <div className="fixed animate-scale-fade-in" style={{ zIndex: 9999, top: pos.top, left: pos.left }}>
       <div
         ref={ref}
         className="relative w-[327px] rounded-[30px] bg-white/1 flex flex-col p-[20px] gap-[12px] backdrop-blur-[50px]"
@@ -142,6 +142,7 @@ export default function InstanceOverviewCard() {
   ]
 
   const displayList = favorites.length > 0 ? favorites : instances
+  const isFavMode = favorites.length > 0
 
   return (
     <GlassCard>
@@ -194,6 +195,7 @@ export default function InstanceOverviewCard() {
                         <span className="truncate max-w-[90px]" style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace" }}>
                           {inst.name}
                         </span>
+                        {isFavMode && (
                         <button
                           onClick={() => setFavorites(f => f.filter(x => x.serial !== inst.serial))}
                           className="text-black/40 hover:text-black/70 transition-colors cursor-pointer"
@@ -203,6 +205,7 @@ export default function InstanceOverviewCard() {
                             <line x2="14.142" transform="translate(0 10) rotate(-45)" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                           </svg>
                         </button>
+                        )}
                       </div>
                     ))}
                   </div>

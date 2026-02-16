@@ -51,6 +51,7 @@ function App() {
   const zoom = useZoom()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
   const [tabs, setTabs] = useState<Tab[]>([makeTab('home')])
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
 
@@ -110,46 +111,69 @@ function App() {
     )
   }
 
-  if (!isAuthenticated) {
-    return <LoginPage onLogin={() => setIsAuthenticated(true)} />
-  }
+  const showLogin = !isAuthenticated
+  const showMain = isAuthenticated
 
   return (
     <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
-      {/* 三层背景 */}
+      {/* 三层背景 — 始终存在 */}
       <div className="absolute inset-0 bg-white" />
       <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/bg-temp.png')" }} />
       <div className="absolute inset-0 bg-white/50 backdrop-blur-[0px]" />
 
-      {/* 内容 */}
-      <div className="relative z-10 flex h-full">
-        <Sidebar currentPage={activeTab.page} onNavigate={handleNavigate} />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSelectTab={setActiveTabId}
-            onCloseTab={handleCloseTab}
-            onAddTab={handleAddTab}
-            onLogout={handleLogout}
+      {/* 登录卡片层 */}
+      {showLogin && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center">
+          <LoginCard
+            onLogin={() => {
+              setLoginTransition('cover-in')
+              setTimeout(() => {
+                setIsAuthenticated(true)
+                setLoginTransition('cover-out')
+                setTimeout(() => setLoginTransition('none'), 1000)
+              }, 1000)
+            }}
           />
-          <main className="flex-1 overflow-auto">
-            <PageContent page={activeTab.page} />
-          </main>
         </div>
-      </div>
+      )}
+
+      {/* 主页内容层 */}
+      {showMain && (
+        <div className="relative z-10 flex h-full">
+          <Sidebar currentPage={activeTab.page} onNavigate={handleNavigate} />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelectTab={setActiveTabId}
+              onCloseTab={handleCloseTab}
+              onAddTab={handleAddTab}
+              onLogout={handleLogout}
+            />
+            <main className="flex-1 overflow-auto">
+              <div key={activeTabId} className="animate-fade-in h-full">
+                <PageContent page={activeTab.page} />
+              </div>
+            </main>
+          </div>
+        </div>
+      )}
+
+      {/* 过渡遮罩层 — 最顶层 */}
+      {loginTransition !== 'none' && (
+        <div className={`absolute inset-0 z-30 pointer-events-none ${loginTransition === 'cover-in' ? 'animate-login-fade-in' : 'animate-login-fade-out'}`}>
+          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/bg-temp.png')" }} />
+          <div className="absolute inset-0 bg-white/50 backdrop-blur-[0px]" />
+        </div>
+      )}
     </div>
   )
 }
 
 /**
- * 登录页 - 严格按照 UI设计-登录页.svg 实现
- *
- * 三层背景结构：背景衬底(白) → 背景图片(用户上传) → 背景盖层(白色半透明，控制糊化)
- * 居中白色卡片 764x833 圆角30px 带阴影
- * 字体：汉仪文黑 + Cascadia Code
+ * 登录卡片 - 只渲染卡片本身，背景由 App 统一管理
  */
-function LoginPage({ onLogin }: { onLogin: () => void }) {
+function LoginCard({ onLogin }: { onLogin: () => void }) {
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -163,7 +187,6 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // 倒计时
   const startCountdown = useCallback((seconds: number) => {
     if (timerRef.current) clearInterval(timerRef.current)
     setLockSeconds(seconds)
@@ -231,161 +254,127 @@ function LoginPage({ onLogin }: { onLogin: () => void }) {
   }
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden">
-      {/* 第一层：背景衬底 - 纯白 */}
-      <div className="absolute inset-0 bg-white" />
+    <div
+      className="bg-white/1 border-2 border-black/30 flex flex-col items-center origin-center backdrop-blur-[50px] shadow-login-card animate-scale-fade-in"
+      style={{
+        width: 764,
+        height: 833,
+        borderRadius: 30,
+        padding: '0 54px',
+        transform: `scale(${cardScale})`,
+      }}
+    >
+      <h1
+        className="mt-[60px] text-black/80 text-center select-none whitespace-nowrap"
+        style={{ fontSize: 60, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
+      >
+        欢迎使用MCStart
+      </h1>
 
-      {/* 第二层：背景图片 - 临时测试背景 */}
+      <p
+        className="mt-[16px] text-black/50 text-center select-none whitespace-nowrap"
+        style={{ fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
+      >
+        输入账户令牌继续使用系统
+      </p>
+
       <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/bg-temp.png')" }}
-      />
-
-      {/* 第三层：背景盖层 - 白色半透明 + 模糊，控制背景图的可见度 */}
-      <div className="absolute inset-0 bg-white/50 backdrop-blur-[0px]" />
-
-      {/* 内容层 */}
-      <div className="relative z-10 flex items-center justify-center w-full h-full ">
-        {/* 登录卡片 - 764x833 圆角30px 带阴影，通过 transform scale 缩放适配屏幕 */}
-        <div
-          className="bg-white/1 border-2 border-black/30 flex flex-col items-center origin-center backdrop-blur-[50px] shadow-login-card"
+        className="mt-[32px] border-[3px] border-black/50 flex flex-col items-center justify-center gap-[18px] py-[26px] shadow-shadow-light rounded-[30px]"
+        style={{ borderRadius: 30, width: 658 }}
+      >
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => { setToken(e.target.value); if (!isLocked) setError('') }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(e) }}
+          placeholder="Account Token"
+          disabled={isLoading || isLocked}
+          className="bg-white/10 border-[3px] border-black/50 text-black/80 placeholder-black/30 focus:outline-none focus:border-black/70 transition-colors disabled:opacity-50"
           style={{
-            width: 764,
-            height: 833,
-            borderRadius: 30,
-            padding: '0 54px',
-            transform: `scale(${cardScale})`,
+            width: 583, height: 80, borderRadius: 40,
+            paddingLeft: 32, paddingRight: 32,
+            fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif",
+            boxShadow: '5px 5px 9px rgba(0, 0, 0, 0.16)',
+          }}
+        />
+
+        <button
+          onClick={handleSubmit}
+          disabled={isLoading || isLocked}
+          className="bg-white/50 border-[3px] border-black/50 text-black/70 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none"
+          style={{
+            width: 583, height: 80, borderRadius: 40,
+            fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif",
+            boxShadow: '5px 5px 9px rgba(0, 0, 0, 0.16)',
           }}
         >
-          {/* 标题：欢迎使用MCStart */}
-          <h1
-            className="mt-[60px] text-black/80 text-center select-none whitespace-nowrap"
-            style={{ fontSize: 60, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
-          >
-            欢迎使用MCStart
-          </h1>
+          {isLocked ? `已锁定 ${lockDisplay}` : isLoading ? '验证中...' : '登录'}
+        </button>
+      </div>
 
-          {/* 副标题 */}
-          <p
-            className="mt-[16px] text-black/50 text-center select-none whitespace-nowrap"
-            style={{ fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
-          >
-            输入账户令牌继续使用系统
-          </p>
+      <p
+        className="mt-3 text-red-500 text-center"
+        style={{ fontSize: 20, minHeight: 28, visibility: (error || isLocked) ? 'visible' : 'hidden' }}
+      >
+        {isLocked ? `尝试次数过多，请等待 ${lockDisplay}` : error || ' '}
+      </p>
 
-          {/* Token输入栏及登录键 - 外框 */}
+      <div
+        className="mt-2 border-[3px] border-black/50 px-[28px] py-[20px] shadow-shadow-light"
+        style={{ borderRadius: 30, width: 658 }}
+      >
+        <div className="flex items-center gap-[8px] mb-[10px]">
           <div
-            className="mt-[32px] border-[3px] border-black/50 flex flex-col items-center justify-center gap-[18px] py-[26px] shadow-shadow-light rounded-[30px]"
-            style={{ borderRadius: 30, width: 658 }}
+            className="flex items-center justify-center border-[3px] border-black/70 rounded-full shrink-0"
+            style={{ width: 28, height: 28 }}
           >
-            {/* Token 输入框 - 胶囊形 */}
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => { setToken(e.target.value); if (!isLocked) setError('') }}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(e) }}
-              placeholder="Account Token"
-              disabled={isLoading || isLocked}
-              className="bg-white/10 border-[3px] border-black/50 text-black/80 placeholder-black/30 focus:outline-none focus:border-black/70 transition-colors disabled:opacity-50"
-              style={{
-                width: 583,
-                height: 80,
-                borderRadius: 40,
-                paddingLeft: 32,
-                paddingRight: 32,
-                fontSize: 30,
-                fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif",
-                boxShadow: '5px 5px 9px rgba(0, 0, 0, 0.16)',
-              }}
-            />
-
-            {/* 登录按钮 - 胶囊形 */}
-            <button
-              onClick={handleSubmit}
-              disabled={isLoading || isLocked}
-              className="bg-white/50 border-[3px] border-black/50 text-black/70 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none"
-              style={{
-                width: 583,
-                height: 80,
-                borderRadius: 40,
-                fontSize: 30,
-                fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif",
-                boxShadow: '5px 5px 9px rgba(0, 0, 0, 0.16)',
-              }}
+            <span
+              className="text-black/70 leading-none"
+              style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace", marginTop: 1 }}
             >
-              {isLocked ? `已锁定 ${lockDisplay}` : isLoading ? '验证中...' : '登录'}
-            </button>
+              i
+            </span>
           </div>
-
-          {/* 错误提示 */}
-          <p
-            className="mt-3 text-red-500 text-center"
-            style={{ fontSize: 20, minHeight: 28, visibility: (error || isLocked) ? 'visible' : 'hidden' }}
+          <span
+            className="text-black/70"
+            style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
           >
-            {isLocked ? `尝试次数过多，请等待 ${lockDisplay}` : error || ' '}
+            我该去哪里找Token？
+          </span>
+        </div>
+
+        <div className="space-y-[4px] ml-[36px]">
+          <p style={{ fontSize: 20, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+            <span className="text-black/70">1.</span>
+            <span className="text-black/50"> 在主程序终端中，输入 </span>
+            <span className="text-black/70">H</span>
+            <span className="text-black/50"> 进入杂项，再输入 </span>
+            <span className="text-black/70">E</span>
+            <span className="text-black/50"> 查看Token</span>
           </p>
-
-          {/* 提示框 */}
-          <div
-            className="mt-2 border-[3px] border-black/50 px-[28px] py-[20px] shadow-shadow-light"
-            style={{ borderRadius: 30, width: 658 }}
-          >
-            {/* 提示框标题行 */}
-            <div className="flex items-center gap-[8px] mb-[10px]">
-              <div
-                className="flex items-center justify-center border-[3px] border-black/70 rounded-full shrink-0"
-                style={{ width: 28, height: 28 }}
-              >
-                <span
-                  className="text-black/70 leading-none"
-                  style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace", marginTop: 1 }}
-                >
-                  i
-                </span>
-              </div>
-              <span
-                className="text-black/70"
-                style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
-              >
-                我该去哪里找Token？
-              </span>
-            </div>
-
-            <div className="space-y-[4px] ml-[36px]">
-              <p style={{ fontSize: 20, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
-                <span className="text-black/70">1.</span>
-                <span className="text-black/50"> 在主程序终端中，输入 </span>
-                <span className="text-black/70">H</span>
-                <span className="text-black/50"> 进入杂项，再输入 </span>
-                <span className="text-black/70">E</span>
-                <span className="text-black/50"> 查看Token</span>
-              </p>
-              <div style={{ fontSize: 20, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
-                <p>
-                  <span className="text-black/70">2.</span>
-                  <span className="text-black/50"> 进入</span>
-                  <span className="text-black/70">&lt;程序根目录&gt;\config</span>
-                  <span className="text-black/50">文件夹，打开</span>
-                  <span className="text-black/70">P-config.toml</span>
-                  <span className="text-black/50">文件，</span>
-                </p>
-                <p className="">
-                  <span className="text-black/70">webui_token</span>
-                  <span className="text-black/50">一栏的值即为Token</span>
-                </p>
-              </div>
-            </div>
+          <div style={{ fontSize: 20, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+            <p>
+              <span className="text-black/70">2.</span>
+              <span className="text-black/50"> 进入</span>
+              <span className="text-black/70">&lt;程序根目录&gt;\config</span>
+              <span className="text-black/50">文件夹，打开</span>
+              <span className="text-black/70">P-config.toml</span>
+              <span className="text-black/50">文件，</span>
+            </p>
+            <p className="">
+              <span className="text-black/70">webui_token</span>
+              <span className="text-black/50">一栏的值即为Token</span>
+            </p>
           </div>
-
-          {/* 版权信息 */}
-          <p
-            className="mt-auto mb-[24px] pt-[12px] text-black/50 select-none"
-            style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace" }}
-          >
-            © 2026 xiaoCZX
-          </p>
         </div>
       </div>
+
+      <p
+        className="mt-auto mb-[24px] pt-[12px] text-black/50 select-none"
+        style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace" }}
+      >
+        © 2026 xiaoCZX
+      </p>
     </div>
   )
 }

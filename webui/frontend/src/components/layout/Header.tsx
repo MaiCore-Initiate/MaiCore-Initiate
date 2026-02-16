@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react'
 import type { Tab } from '../../types'
 import {
   HomeIcon, InstancesIcon, ConfigIcon, KnowledgeIcon, DbMigrationIcon,
@@ -30,6 +31,16 @@ function CloseIcon({ className }: { className?: string }) {
 }
 
 export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onAddTab, onLogout }: HeaderProps) {
+  const [closingId, setClosingId] = useState<string | null>(null)
+
+  const handleClose = useCallback((id: string) => {
+    setClosingId(id)
+    setTimeout(() => {
+      setClosingId(null)
+      onCloseTab(id)
+    }, 200)
+  }, [onCloseTab])
+
   return (
     <header className="h-[87px] flex items-center px-[8px] border-b border-[#707070] shrink-0">
       {/* 签页背景衬底 */}
@@ -43,6 +54,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onA
       >
         {tabs.map((tab, i) => {
           const active = tab.id === activeTabId
+          const closing = tab.id === closingId
           const Icon = pageIcons[tab.page]
           return (
             <div key={tab.id} className="flex items-center">
@@ -51,11 +63,13 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onA
               )}
               <div
                 onClick={() => onSelectTab(tab.id)}
-                className="flex items-center gap-[8px] h-[61px] px-[16px] cursor-pointer select-none shrink-0 transition-all backdrop-blur-[4px]"
+                className={`flex items-center gap-[8px] h-[61px] px-[16px] cursor-pointer select-none shrink-0 transition-all backdrop-blur-[4px] ${closing ? '' : 'animate-tab-enter'}`}
                 style={{
                   borderRadius: 30.5,
                   border: active ? '5px solid rgba(0,0,0,0.5)' : '1px solid #000',
                   background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
+                  overflow: 'hidden',
+                  ...(closing ? { opacity: 0, maxWidth: '0px', transition: 'opacity 0.2s ease, max-width 0.2s ease', padding: 0 } : {}),
                 }}
               >
                 <Icon className="text-black" style={{ width: 28, height: 28 }} />
@@ -66,7 +80,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onA
                   {tab.label}
                 </span>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id) }}
+                  onClick={(e) => { e.stopPropagation(); handleClose(tab.id) }}
                   className="ml-[4px] text-black/40 hover:text-black/70 transition-colors cursor-pointer"
                 >
                   <CloseIcon />

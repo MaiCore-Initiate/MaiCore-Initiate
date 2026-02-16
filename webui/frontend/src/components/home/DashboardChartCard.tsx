@@ -374,7 +374,7 @@ function InstancePickerPopover({ anchorEl, pickerRef, search, onSearchChange, in
   })
 
   return (
-    <div className="fixed" style={{ zIndex: 9999, top: Math.min(rect.top, window.innerHeight - 300), left: rect.right + 8 }}>
+    <div className="fixed animate-scale-fade-in" style={{ zIndex: 9999, top: Math.min(rect.top, window.innerHeight - 300), left: rect.right + 8 }}>
       <div
         ref={pickerRef}
         className="relative w-[218px] rounded-[30px] flex flex-col p-[16px] gap-[10px] backdrop-blur-[50px]"

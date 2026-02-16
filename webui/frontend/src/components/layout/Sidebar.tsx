@@ -75,6 +75,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                     paddingLeft: 16,
                     border: active ? '5px solid rgba(112,112,112,0.8)' : '3px solid rgba(112,112,112,0.45)',
                     background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    transition: 'border 0.25s ease, background 0.25s ease',
                   }}
                 >
                   <Icon className={active ? 'text-black' : 'text-[#707070]'} />
