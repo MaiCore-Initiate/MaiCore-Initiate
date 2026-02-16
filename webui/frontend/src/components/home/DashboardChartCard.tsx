@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import GlassCard from '../ui/GlassCard'
 
 const titleStyle = { fontSize: 36, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", filter: 'drop-shadow(5px 3px 5px rgba(0,0,0,0.35))' }
@@ -30,13 +31,25 @@ function getTimeLabels(g: Granularity): string[] {
 
 function getXLabelInterval(g: Granularity) { return g === '日' ? 2 : g === '周' ? 2 : 3 }
 
-function catmullRomPath(points: { x: number; y: number }[], tension = 0.3): string {
+function catmullRomPath(points: { x: number; y: number }[], tension = 0.3, yMax?: number): string {
   if (points.length < 2) return ''
   if (points.length === 2) return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`
+  // 指数衰减约束：越接近 yMax，控制点 y 偏移越被削减
+  const clampY = (cy: number, anchorY: number) => {
+    if (yMax === undefined) return cy
+    if (cy <= yMax) return cy
+    // 超出部分用指数衰减拉回
+    const overshoot = cy - yMax
+    const distFromMax = yMax - anchorY
+    const k = distFromMax > 0 ? 5 / distFromMax : Infinity
+    return yMax + overshoot * Math.exp(-k * overshoot)
+  }
   let d = `M${points[0].x},${points[0].y}`
   for (let i = 0; i < points.length - 1; i++) {
     const p0 = points[Math.max(i - 1, 0)], p1 = points[i], p2 = points[i + 1], p3 = points[Math.min(i + 2, points.length - 1)]
-    d += ` C${p1.x + (p2.x - p0.x) * tension},${p1.y + (p2.y - p0.y) * tension} ${p2.x - (p3.x - p1.x) * tension},${p2.y - (p3.y - p1.y) * tension} ${p2.x},${p2.y}`
+    const cp1y = clampY(p1.y + (p2.y - p0.y) * tension, p1.y)
+    const cp2y = clampY(p2.y - (p3.y - p1.y) * tension, p2.y)
+    d += ` C${p1.x + (p2.x - p0.x) * tension},${cp1y} ${p2.x - (p3.x - p1.x) * tension},${cp2y} ${p2.x},${p2.y}`
   }
   return d
 }
@@ -64,24 +77,42 @@ function niceMax(val: number): number {
 export default function DashboardChartCard() {
   const [granularity, setGranularity] = useState<Granularity>('日')
   const [splitByInstance, setSplitByInstance] = useState(false)
+  const [selectedInstance, setSelectedInstance] = useState<string>('')  // '' = 全部
+  const [showInstancePicker, setShowInstancePicker] = useState(false)
+  const [instanceSearch, setInstanceSearch] = useState('')
+  const pickerBtnRef = useRef<HTMLButtonElement>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
   const [instanceIds, setInstanceIds] = useState<string[]>([])
+  const [instanceInfo, setInstanceInfo] = useState<Record<string, { nickname: string; serial: string; abs: number }>>({})
   const [instanceTimelines, setInstanceTimelines] = useState<Record<string, TimelineItem[]>>({})
 
   const apiGranularity = granularity === '日' ? 'hour' : 'day'
   const apiLimit = granularity === '月' ? 30 : granularity === '周' ? 7 : 24
 
+  // 获取实例列表（stats + webui/instances 合并）
   useEffect(() => {
-    fetch(`/api/stats/timeline?granularity=${apiGranularity}&limit=${apiLimit}`, { credentials: 'include' })
-      .then(r => r.json()).then((d: TimelineItem[]) => setTimeline(Array.isArray(d) ? d : [])).catch(() => setTimeline([]))
-  }, [apiGranularity, apiLimit])
-
-  useEffect(() => {
-    if (!splitByInstance) return
     fetch('/api/stats/instances', { credentials: 'include' })
       .then(r => r.json()).then((ids: string[]) => setInstanceIds(Array.isArray(ids) ? ids : [])).catch(() => setInstanceIds([]))
-  }, [splitByInstance])
+    fetch('/api/webui/instances', { credentials: 'include' })
+      .then(r => r.json()).then((d: any) => {
+        const map: Record<string, { nickname: string; serial: string; abs: number }> = {}
+        for (const [, cfg] of Object.entries(d?.instances ?? {}) as [string, any][]) {
+          map[cfg.serial_number] = { nickname: cfg.nickname || cfg.serial_number, serial: cfg.serial_number, abs: cfg.absolute_serial ?? 0 }
+        }
+        setInstanceInfo(map)
+      }).catch(() => {})
+  }, [])
 
+  // 获取汇总/单实例 timeline
+  useEffect(() => {
+    const params = new URLSearchParams({ granularity: apiGranularity, limit: String(apiLimit) })
+    if (selectedInstance) params.set('instance_id', selectedInstance)
+    fetch(`/api/stats/timeline?${params}`, { credentials: 'include' })
+      .then(r => r.json()).then((d: TimelineItem[]) => setTimeline(Array.isArray(d) ? d : [])).catch(() => setTimeline([]))
+  }, [apiGranularity, apiLimit, selectedInstance])
+
+  // 获取每个实例的 timeline（区分实例模式）
   useEffect(() => {
     if (!splitByInstance || instanceIds.length === 0) return
     Promise.all(instanceIds.map(id =>
@@ -137,7 +168,7 @@ export default function DashboardChartCard() {
       const lineY = maxUptime > 0 ? padT + plotH - (d.uptime_m / maxUptime) * plotH : padT + plotH
       return { x, barH, barY: padT + plotH - barH, lineY }
     })
-    return { ...s, positions, curvePath: catmullRomPath(positions.map(p => ({ x: p.x, y: p.lineY }))), color: INSTANCE_COLORS[s.colorIdx] }
+    return { ...s, positions, curvePath: catmullRomPath(positions.map(p => ({ x: p.x, y: p.lineY })), 0.3, padT + plotH), color: INSTANCE_COLORS[s.colorIdx] }
   })
 
   const hasData = series.some(s => s.slots.some(d => d.starts > 0 || d.uptime_m > 0))
@@ -145,7 +176,7 @@ export default function DashboardChartCard() {
   // 胶囊按钮样式
   const pillBtn = (active: boolean) => ({
     width: 44, height: 32, ...labelFont, fontSize: 18, fontWeight: 600 as const,
-    background: active ? '#fff' : 'transparent', color: 'rgba(0,0,0,0.7)',
+    background: active ? '#ffffff89' : 'transparent', color: 'rgba(0,0,0,0.7)',
     boxShadow: active ? '0 0 4px rgba(0,0,0,0.2)' : 'none',
     border: active ? '1px solid rgba(0,0,0,0.5)' : '1px solid transparent',
     borderRadius: 16,
@@ -180,6 +211,22 @@ export default function DashboardChartCard() {
                 >{opt}</button>
               ))}
             </div>
+          </div>
+
+          {/* 筛选实例 */}
+          <div className="flex flex-col gap-[4px] mt-[16px] backdrop-blur-[50px ">
+            <span className="text-[#707070]" style={{ ...labelFont, fontSize: 17 }}>筛选实例</span>
+            <button
+              ref={pickerBtnRef}
+              onClick={() => { setShowInstancePicker(v => !v); setInstanceSearch('') }}
+              className="cursor-pointer text-center truncate"
+              style={{
+                ...labelFont, fontSize: 16, color: 'rgba(0,0,0,0.7)',
+                border: '2px solid #707070', borderRadius: 30,
+                padding: '5px 14px', background: '#ffffff36', width: 145,
+                filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))',
+              }}
+            >{selectedInstance || '全部'}</button>
           </div>
 
           {/* 图例放左侧底部 */}
@@ -243,24 +290,29 @@ export default function DashboardChartCard() {
               })}
 
               {/* 柱状图 */}
-              {seriesData.map((s, si) =>
-                s.positions.map((p, i) => (
+              {seriesData.map((s, si) => {
+                const dimmed = splitByInstance && selectedInstance && s.id !== selectedInstance
+                return s.positions.map((p, i) => (
                   <rect key={`b${si}-${i}`} x={p.x - singleBarWidth / 2} y={p.barY} width={singleBarWidth} height={p.barH}
-                    fill={`url(#barGrad${si})`} rx={2} style={{ transition: 'all 0.4s ease' }} />
+                    fill={`url(#barGrad${si})`} rx={2} opacity={dimmed ? 0.2 : 1} style={{ transition: 'all 0.4s ease' }} />
                 ))
-              )}
+              })}
 
               {/* 平滑曲线 */}
-              {seriesData.map((s, si) => s.curvePath && (
-                <g key={`c${si}`}>
-                  <path d={s.curvePath} fill="none" stroke={s.color.line} strokeWidth={2}
-                    strokeLinecap="round" style={{ transition: 'all 0.4s ease' }} />
-                  {s.positions.map((p, i) => (
-                    <circle key={`d${si}-${i}`} cx={p.x} cy={p.lineY} r={2.5}
-                      fill="#fff" stroke={s.color.line} strokeWidth={1.5} style={{ transition: 'all 0.4s ease' }} />
-                  ))}
-                </g>
-              ))}
+              {seriesData.map((s, si) => {
+                if (!s.curvePath) return null
+                const dimmed = splitByInstance && selectedInstance && s.id !== selectedInstance
+                return (
+                  <g key={`c${si}`} opacity={dimmed ? 0.2 : 1} style={{ transition: 'opacity 0.4s ease' }}>
+                    <path d={s.curvePath} fill="none" stroke={s.color.line} strokeWidth={2}
+                      strokeLinecap="round" style={{ transition: 'all 0.4s ease' }} />
+                    {s.positions.map((p, i) => (
+                      <circle key={`d${si}-${i}`} cx={p.x} cy={p.lineY} r={2.5}
+                        fill="#fff" stroke={s.color.line} strokeWidth={1.5} style={{ transition: 'all 0.4s ease' }} />
+                    ))}
+                  </g>
+                )
+              })}
 
               {!hasData && (
                 <text x={padL + plotW / 2} y={padT + plotH / 2} textAnchor="middle"
@@ -270,6 +322,103 @@ export default function DashboardChartCard() {
           </div>
         </div>
       </div>
+      {showInstancePicker && pickerBtnRef.current && createPortal(
+        <InstancePickerPopover
+          anchorEl={pickerBtnRef.current}
+          pickerRef={pickerRef}
+          search={instanceSearch}
+          onSearchChange={setInstanceSearch}
+          instanceIds={instanceIds}
+          instanceInfo={instanceInfo}
+          selectedInstance={selectedInstance}
+          onSelect={id => { setSelectedInstance(id); setShowInstancePicker(false) }}
+          onClose={() => setShowInstancePicker(false)}
+        />,
+        document.body
+      )}
     </GlassCard>
+  )
+}
+
+function InstancePickerPopover({ anchorEl, pickerRef, search, onSearchChange, instanceIds, instanceInfo, selectedInstance, onSelect, onClose }: {
+  anchorEl: HTMLElement
+  pickerRef: React.RefObject<HTMLDivElement | null>
+  search: string
+  onSearchChange: (v: string) => void
+  instanceIds: string[]
+  instanceInfo: Record<string, { nickname: string; serial: string; abs: number }>
+  selectedInstance: string
+  onSelect: (id: string) => void
+  onClose: () => void
+}) {
+  const rect = anchorEl.getBoundingClientRect()
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose, pickerRef])
+
+  const getLabel = (id: string) => {
+    const info = instanceInfo[id]
+    return info ? `${info.nickname}|${info.serial}|${info.abs}` : id
+  }
+
+  const filtered = instanceIds.filter(id => {
+    if (!search) return true
+    const s = search.toLowerCase()
+    const info = instanceInfo[id]
+    return id.toLowerCase().includes(s) || (info && (info.nickname.toLowerCase().includes(s) || info.serial.toLowerCase().includes(s)))
+  })
+
+  return (
+    <div className="fixed" style={{ zIndex: 9999, top: Math.min(rect.top, window.innerHeight - 300), left: rect.right + 8 }}>
+      <div
+        ref={pickerRef}
+        className="relative w-[218px] rounded-[30px] flex flex-col p-[16px] gap-[10px] backdrop-blur-[50px]"
+        style={{ background: 'rgba(255, 255, 255, 0)', border: '2px solid rgba(0,0,0,0.48)', filter: 'drop-shadow(6px 6px 4px rgba(0,0,0,0.35))' }}
+      >
+        {/* 搜索框 */}
+        <div className="flex items-center h-[44px] px-[14px] gap-[8px] rounded-[22px] bg-white/60 border-2 border-black/50 shrink-0">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0">
+            <circle cx="9.5" cy="9.5" r="7.5" stroke="rgba(0,0,0,0.5)" strokeWidth="3" />
+            <line x1="15" y1="15.5" x2="22" y2="23" stroke="rgba(0,0,0,0.5)" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+          <input
+            value={search} onChange={e => onSearchChange(e.target.value)}
+            placeholder="Search instance"
+            className="flex-1 bg-transparent outline-none text-black placeholder:text-black/20"
+            style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 13 }}
+            autoFocus
+          />
+        </div>
+        {/* 列表 */}
+        <div className="max-h-[200px] overflow-y-auto">
+          <button
+            onClick={() => onSelect('')}
+            className="w-full text-left py-[4px] hover:bg-black/5 rounded-[4px] cursor-pointer transition-colors"
+            style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 16, fontWeight: selectedInstance === '' ? 700 : 400 }}
+          >全部</button>
+          <hr className="border-[#707070]" />
+          {filtered.map((id, i) => (
+            <div key={id}>
+              <button
+                onClick={() => onSelect(id)}
+                className="w-full text-left py-[4px] hover:bg-black/5 rounded-[4px] cursor-pointer transition-colors truncate"
+                style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 16, fontWeight: selectedInstance === id ? 700 : 400 }}
+              >{getLabel(id)}</button>
+              {i < filtered.length - 1 && <hr className="border-[#707070]" />}
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div className="py-[10px] text-center text-black/20" style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 14 }}>
+              no instance
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
