@@ -258,7 +258,7 @@ class _ProcessManager:
             ui.print_success(f"进程 '{title}' (PID: {pid}) 已成功停止。")
             try:
                 from ..core.stats import stats_db
-                duration = time.time() - process_info.get("start_time", time.time())
+                duration = max(0, time.time() - process_info.get("start_time", time.time()))
                 stats_db.record_event(
                     instance_id=process_info.get("_instance_id", "unknown"),
                     event_type="stop",
