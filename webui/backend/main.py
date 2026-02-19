@@ -350,6 +350,10 @@ app.include_router(stats_router, prefix="/api/stats", tags=["统计"])
 from src.webui_api import webui_config_router
 app.include_router(webui_config_router, prefix="/api/webui", tags=["WebUI配置"])
 
+# 用户偏好API
+from src.webui_api import preferences_router
+app.include_router(preferences_router, prefix="/api/preferences", tags=["用户偏好"])
+
 
 # --- 登录相关API ---
 

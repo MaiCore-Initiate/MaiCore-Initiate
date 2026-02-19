@@ -28,14 +28,22 @@ export default function QuickAccessCard() {
   const [editing, setEditing] = useState(false)
 
   useEffect(() => {
-    const saved = localStorage.getItem('quickAccessItems')
-    if (saved) try { setItems(JSON.parse(saved)) } catch { /* ignore */ }
+    fetch('/api/preferences/quickAccessItems', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) setItems(d.value) })
+      .catch(() => {})
   }, [])
 
-  const removeItem = (id: string) => {
-    const next = items.filter(i => i.id !== id)
+  const saveItems = (next: QuickItem[]) => {
     setItems(next)
-    localStorage.setItem('quickAccessItems', JSON.stringify(next))
+    fetch('/api/preferences/quickAccessItems', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ value: next }),
+    }).catch(() => {})
+  }
+
+  const removeItem = (id: string) => {
+    saveItems(items.filter(i => i.id !== id))
   }
 
   return (

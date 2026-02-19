@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useEffect, useRef } from 'react'
 import GlassCard from '../components/ui/GlassCard'
+import Modal from '../components/ui/Modal'
+import { useNotification } from '../components/ui/Notification'
 
 interface Instance {
   serial: string
@@ -17,56 +18,17 @@ const valueFont = { fontSize: 25, ...monoFont, color: '#707070' }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
 
-interface Toast { id: number; message: string; type: 'success' | 'error' }
-let toastId = 0
-
-function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: number) => void }) {
-  if (toasts.length === 0) return null
-  return createPortal(
-    <div className="fixed bottom-[24px] right-[24px] flex flex-col gap-[10px] z-50">
-      {toasts.map(t => (
-        <div
-          key={t.id}
-          className="animate-scale-fade-in px-[24px] py-[14px] rounded-[16px] backdrop-blur-[30px] border-2 cursor-pointer"
-          style={{
-            background: t.type === 'success' ? 'rgba(180,255,180,0.7)' : 'rgba(255,180,180,0.7)',
-            borderColor: t.type === 'success' ? 'rgba(0,160,0,0.4)' : 'rgba(200,0,0,0.4)',
-            filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.2))',
-          }}
-          onClick={() => onRemove(t.id)}
-        >
-          <span style={{ fontSize: 20, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }}>{t.message}</span>
-        </div>
-      ))}
-    </div>,
-    document.body
-  )
-}
-
-function useToast() {
-  const [toasts, setToasts] = useState<Toast[]>([])
-  const remove = useCallback((id: number) => setToasts(prev => prev.filter(t => t.id !== id)), [])
-  const push = useCallback((message: string, type: 'success' | 'error') => {
-    const id = ++toastId
-    setToasts(prev => [...prev, { id, message, type }])
-    setTimeout(() => remove(id), 3000)
-  }, [remove])
-  return { toasts, push, remove }
-}
-
 const PRESETS: Record<string, { label: string; components: string[] }[]> = {
   MoFox_bot: [
-    { label: '主程序+WebUI', components: ['mai', 'webui'] },
-    { label: '主程序+NapCatQQ+WebUI', components: ['mai', 'napcat', 'webui'] },
+    { label: '主程序（内置适配器）+WebUI', components: ['mai', 'webui'] },
+    { label: '主程序（内置适配器）+NapCatQQ+WebUI', components: ['mai', 'napcat', 'webui'] },
     { label: '主程序+适配器+WebUI', components: ['mai', 'adapter', 'webui'] },
     { label: '主程序+适配器+NapCatQQ+WebUI', components: ['mai', 'adapter', 'napcat', 'webui'] },
   ],
   MaiBot: [
-    { label: '主程序+WebUI', components: ['mai', 'webui'] },
-    { label: '主程序+NapCatQQ+WebUI', components: ['mai', 'napcat', 'webui'] },
-    { label: '主程序+适配器+WebUI', components: ['mai', 'adapter', 'webui'] },
-    { label: '主程序+适配器+NapCatQQ+WebUI', components: ['mai', 'adapter', 'napcat', 'webui'] },
-  ],
+    { label: '主程序+适配器+控制面板', components: ['mai','adapter', 'webui'] },
+    { label: '主程序+适配器+NapCat+控制面板', components: ['mai', 'adapter', 'napcat', 'webui'] },
+    ],
 }
 
 const ADVANCED_ITEMS: Record<string, { label: string; components: string[] }[]> = {
@@ -104,13 +66,16 @@ function PillButton({ label, selected, onClick }: { label: string; selected: boo
   )
 }
 
-function LaunchPanel({ instance, toast }: { instance: Instance; toast: (msg: string, type: 'success' | 'error') => void }) {
+function LaunchPanel({ instance }: { instance: Instance }) {
+  const { notify } = useNotification()
   const [mode, setMode] = useState<'none' | 'preset' | 'advanced'>('none')
   const [presetIdx, setPresetIdx] = useState<number | null>(null)
   const [advancedSelected, setAdvancedSelected] = useState<Set<number>>(new Set())
   const [summary, setSummary] = useState<{ launch_count: number; total_uptime_s: number } | null>(null)
   const [loading, setLoading] = useState(false)
   const [running, setRunning] = useState(false)
+  const [showNapcatModal, setShowNapcatModal] = useState(false)
+  const [pendingComponents, setPendingComponents] = useState<string[]>([])
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const presets = PRESETS[instance.botType] ?? PRESETS.MaiBot
@@ -133,30 +98,55 @@ function LaunchPanel({ instance, toast }: { instance: Instance; toast: (msg: str
 
   const nothingSelected = mode === 'none' || (mode === 'preset' && presetIdx === null) || (mode === 'advanced' && advancedSelected.size === 0)
 
-  const handleStart = async () => {
-    if (nothingSelected) return
-    const components = mode === 'preset'
-      ? presets[presetIdx!].components
-      : Array.from(advancedSelected).flatMap(i => advancedItems[i].components)
+  const doStart = async (components: string[], useNapcatShell?: boolean) => {
     setLoading(true)
     try {
       const res = await fetch(`/api/launcher/instances/${instance.serial}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ serial_number: instance.serial, components }),
+        body: JSON.stringify({
+          serial_number: instance.serial,
+          components,
+          use_napcat_shell: useNapcatShell ?? false,
+        }),
       })
       const data = await res.json()
       if (data.success !== false) {
-        toast('实例启动成功', 'success')
+        notify('实例启动成功', 'success')
         setRunning(true)
+        // 保存本次启动选项到后端，供快捷启动使用
+        fetch(`/api/preferences/launch_opts_${instance.serial}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ value: { components, useNapcatShell: useNapcatShell ?? false } }),
+        }).catch(() => {})
       } else {
-        toast(data.detail || data.message || '启动失败', 'error')
+        notify(data.detail || data.message || '启动失败', 'error')
       }
     } catch {
-      toast('启动请求失败，请检查服务器', 'error')
+      notify('启动请求失败，请检查服务器', 'error')
     }
     setLoading(false)
+  }
+
+  const handleStart = () => {
+    if (nothingSelected) return
+    const components = mode === 'preset'
+      ? presets[presetIdx!].components
+      : Array.from(advancedSelected).flatMap(i => advancedItems[i].components)
+
+    // 如果包含 napcat 组件，弹窗询问是否使用 NapCat.Shell 快捷登录
+    if (components.includes('napcat')) {
+      setPendingComponents(components)
+      setShowNapcatModal(true)
+    } else {
+      doStart(components)
+    }
+  }
+
+  const handleNapcatChoice = (useShell: boolean) => {
+    setShowNapcatModal(false)
+    doStart(pendingComponents, useShell)
   }
 
   const handleStop = async () => {
@@ -167,13 +157,13 @@ function LaunchPanel({ instance, toast }: { instance: Instance; toast: (msg: str
       })
       const data = await res.json()
       if (data.success) {
-        toast(`已停止 ${data.stopped_pids?.length ?? 0} 个进程`, 'success')
+        notify(`已停止 ${data.stopped_pids?.length ?? 0} 个进程`, 'success')
         setRunning(false)
       } else {
-        toast(data.detail || '停止失败', 'error')
+        notify(data.detail || '停止失败', 'error')
       }
     } catch {
-      toast('停止请求失败，请检查服务器', 'error')
+      notify('停止请求失败，请检查服务器', 'error')
     }
     setLoading(false)
   }
@@ -216,84 +206,121 @@ function LaunchPanel({ instance, toast }: { instance: Instance; toast: (msg: str
     ['当前版本', instance.version || '-'],
   ]
 
+  const modalTitleFont = { fontSize: 32, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
+  const modalBodyFont = { fontSize: 22, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
+
+  const d = (i: number) => ({ animationDelay: `${i * 60}ms` })
+
   return (
-    <GlassCard>
-      <div className="p-[28px] flex flex-col h-full">
-        {/* 实例概览 */}
-        <h2 className="text-black" style={sectionTitle}>实例概览</h2>
-        <div className="flex gap-0 mt-[8px]">
-          <div className="space-y-[2px]">
-            {leftData.map(([label, val]) => (
-              <div key={label} className="flex items-baseline gap-[16px]">
-                <span className="text-black shrink-0" style={labelFont}>{label}</span>
-                <span style={valueFont}>{val}</span>
-              </div>
-            ))}
-          </div>
-          <div className="w-[3px] self-stretch bg-black/50 rounded-full shrink-0 mx-[100px]" />
-          <div className="space-y-[2px]">
-            {rightData.map(([label, val]) => (
-              <div key={label} className="flex items-baseline gap-[16px]">
-                <span className="text-black shrink-0" style={labelFont}>{label}</span>
-                <span style={valueFont}>{val}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 启动选项 */}
-        <h2 className="text-black mt-[16px]" style={sectionTitle}>启动选项</h2>
-        <div className="flex flex-wrap gap-[10px] mt-[6px]">
-          {presets.map((p, i) => (
-            <PillButton key={i} label={p.label} selected={mode === 'preset' && presetIdx === i} onClick={() => selectPreset(i)} />
-          ))}
-        </div>
-
-        {/* 高级启动项 + 启动实例 并排 */}
-        <div className="flex mt-[16px] flex-1 min-h-0">
-          {/* 高级启动项 */}
-          <div className="flex-1 min-w-0">
-            <h2 className="text-black" style={sectionTitle}>高级启动项</h2>
-            <div className="flex flex-wrap gap-[10px] mt-[6px]">
-              {advancedItems.map((item, i) => (
-                <PillButton key={i} label={item.label} selected={mode === 'advanced' && advancedSelected.has(i)} onClick={() => toggleAdvanced(i)} />
+    <>
+      <GlassCard key={instance.serial}>
+        <div className="p-[28px] flex flex-col h-full">
+          {/* 实例概览 */}
+          <h2 className="text-black animate-fade-slide-up" style={{ ...sectionTitle, ...d(0) }}>实例概览</h2>
+          <div className="flex gap-0 mt-[8px] animate-fade-slide-up" style={d(1)}>
+            <div className="space-y-[2px]">
+              {leftData.map(([label, val], i) => (
+                <div key={label} className="flex items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
+                  <span className="text-black shrink-0" style={labelFont}>{label}</span>
+                  <span style={valueFont}>{val}</span>
+                </div>
+              ))}
+            </div>
+            <div className="w-[3px] self-stretch bg-black/50 rounded-full shrink-0 mx-[100px]" />
+            <div className="space-y-[2px]">
+              {rightData.map(([label, val], i) => (
+                <div key={label} className="flex items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
+                  <span className="text-black shrink-0" style={labelFont}>{label}</span>
+                  <span style={valueFont}>{val}</span>
+                </div>
               ))}
             </div>
           </div>
 
-          {/* 分隔线 + 启动实例 */}
-          <div className="w-[3px] self-stretch bg-black/50 rounded-full shrink-0 mx-[30px]" />
-          <div className="flex flex-col items-center shrink-0 mr-[100px]">
-            <h2 className="text-black mr-[40px]" style={sectionTitle}>{running ? '停止实例' : '启动实例'}</h2>
+          {/* 启动选项 */}
+          <h2 className="text-black mt-[16px] animate-fade-slide-up" style={{ ...sectionTitle, ...d(6) }}>启动选项</h2>
+          <div className="flex flex-wrap gap-[10px] mt-[6px]">
+            {presets.map((p, i) => (
+              <div key={i} className="animate-fade-slide-up" style={d(7 + i)}>
+                <PillButton label={p.label} selected={mode === 'preset' && presetIdx === i} onClick={() => selectPreset(i)} />
+              </div>
+            ))}
+          </div>
+
+          {/* 高级启动项 + 启动实例 并排 */}
+          <div className="flex mt-[16px] flex-1 min-h-0">
+            {/* 高级启动项 */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-black animate-fade-slide-up" style={{ ...sectionTitle, ...d(11) }}>高级启动项</h2>
+              <div className="flex flex-wrap gap-[10px] mt-[6px]">
+                {advancedItems.map((item, i) => (
+                  <div key={i} className="animate-fade-slide-up" style={d(12 + i)}>
+                    <PillButton label={item.label} selected={mode === 'advanced' && advancedSelected.has(i)} onClick={() => toggleAdvanced(i)} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 分隔线 + 启动实例 */}
+            <div className="w-[3px] self-stretch bg-black/50 rounded-full shrink-0 mx-[30px]" />
+            <div className="flex flex-col items-center shrink-0 mr-[100px] animate-fade-slide-up" style={d(15)}>
+              <h2 className="text-black mr-[40px]" style={sectionTitle}>{running ? '停止实例' : '启动实例'}</h2>
+              <button
+                onClick={running ? handleStop : handleStart}
+                disabled={loading || (!running && nothingSelected)}
+                className="w-[100px] h-[100px] rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 disabled:cursor-not-allowed mt-[40px] mr-[80px]"
+                style={{
+                  background: running ? '#ffaeae' : '#b3ffae',
+                  border: running ? '10px solid #ff9f9f' : '10px solid #a4ff9f',
+                  opacity: loading ? 0.4 : (!running && nothingSelected) ? 0.5 : 1,
+                }}
+              >
+                {loading ? (
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2" style={{ borderColor: running ? '#c00' : '#060' }} />
+                ) : running ? (
+                  <svg width="40" height="40" viewBox="0 0 40 40">
+                    <rect x="4" y="4" width="32" height="32" rx="4" fill={running ? '#ff6b6b' : '#52ff48'} />
+                  </svg>
+                ) : (
+                  <svg width="81" height="93" viewBox="0 0 150 150" overflow="visible">
+                    <g transform="translate(129 29) rotate(90)" fill="#b3ffae">
+                      <path d="M82.14 74.71 L47.08 70.63 L46.5 70.57 L45.92 70.63 L10.86 74.71 L31.92 46.17 L32.26 45.71 L32.49 45.18 L46.5 12.64 L60.51 45.18 L60.74 45.71 L61.08 46.17 Z" stroke="none"/>
+                      <path d="M46.5 25.29 L36.63 48.21 L21.72 68.41 L46.5 65.53 L71.28 68.41 L56.37 48.21 Z M46.5 0 L65.1 43.2 L93 81 L46.5 75.6 L0 81 L27.9 43.2 Z" stroke="none" fill="#52ff48"/>
+                    </g>
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* NapCat.Shell 快捷登录弹窗 */}
+      <Modal open={showNapcatModal} onClose={() => setShowNapcatModal(false)} width={480}>
+        <div className="p-[32px] flex flex-col items-center gap-[20px]">
+          <h3 className="text-black text-center" style={modalTitleFont}>NapCat.Shell 快捷登录</h3>
+          <p className="text-black/60 text-center" style={modalBodyFont}>
+            检测到启动组件包含 NapCatQQ，是否使用 NapCat.Shell 快捷登录？
+          </p>
+          <div className="flex gap-[16px] mt-[8px]">
             <button
-              onClick={running ? handleStop : handleStart}
-              disabled={loading || (!running && nothingSelected)}
-              className="w-[100px] h-[100px] rounded-full flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 disabled:cursor-not-allowed mt-[40px] mr-[80px]"
-              style={{
-                background: running ? '#ffaeae' : '#b3ffae',
-                border: running ? '10px solid #ff9f9f' : '10px solid #a4ff9f',
-                opacity: loading ? 0.4 : (!running && nothingSelected) ? 0.5 : 1,
-              }}
+              onClick={() => handleNapcatChoice(true)}
+              className="h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95"
+              style={{ background: 'rgba(74,222,128,0.3)', border: '2px solid rgba(0,0,0,0.5)' }}
             >
-              {loading ? (
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2" style={{ borderColor: running ? '#c00' : '#060' }} />
-              ) : running ? (
-                <svg width="40" height="40" viewBox="0 0 40 40">
-                  <rect x="4" y="4" width="32" height="32" rx="4" fill={running ? '#ff6b6b' : '#52ff48'} />
-                </svg>
-              ) : (
-                <svg width="81" height="93" viewBox="0 0 150 150" overflow="visible">
-                  <g transform="translate(129 29) rotate(90)" fill="#b3ffae">
-                    <path d="M82.14 74.71 L47.08 70.63 L46.5 70.57 L45.92 70.63 L10.86 74.71 L31.92 46.17 L32.26 45.71 L32.49 45.18 L46.5 12.64 L60.51 45.18 L60.74 45.71 L61.08 46.17 Z" stroke="none"/>
-                    <path d="M46.5 25.29 L36.63 48.21 L21.72 68.41 L46.5 65.53 L71.28 68.41 L56.37 48.21 Z M46.5 0 L65.1 43.2 L93 81 L46.5 75.6 L0 81 L27.9 43.2 Z" stroke="none" fill="#52ff48"/>
-                  </g>
-                </svg>
-              )}
+              <span style={modalBodyFont}>使用快捷登录</span>
+            </button>
+            <button
+              onClick={() => handleNapcatChoice(false)}
+              className="h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95"
+              style={{ background: 'rgba(255,255,255,0.3)', border: '2px solid rgba(0,0,0,0.5)' }}
+            >
+              <span style={modalBodyFont}>跳过</span>
             </button>
           </div>
         </div>
-      </div>
-    </GlassCard>
+      </Modal>
+    </>
   )
 }
 
@@ -301,7 +328,6 @@ export default function Instances() {
   const [instances, setInstances] = useState<Instance[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const { toasts, push, remove } = useToast()
 
   useEffect(() => {
     fetch('/api/webui/instances', { credentials: 'include' })
@@ -330,15 +356,14 @@ export default function Instances() {
   const selectedInstance = instances.find(i => i.serial === selected)
 
   return (
-    <>
     <div className="flex flex-col p-6 h-full">
       {/* 页面标题 */}
-      <h1 className="text-black shrink-0 mb-[16px]" style={pageTitleStyle}>实例启动/多开</h1>
+      <h1 className="text-black shrink-0 mb-[16px] animate-card-enter" style={pageTitleStyle}>实例启动/多开</h1>
 
       {/* 卡片区域 */}
       <div className="flex gap-6 flex-1 min-h-0">
         {/* 左侧：实例选择卡片 */}
-        <div className="w-[425px] shrink-0">
+        <div className="w-[425px] shrink-0 animate-card-enter">
           <GlassCard>
             <div className="p-[24px] flex flex-col h-full">
               <h2 className="text-black pb-[12px]" style={sectionTitle}>选择实例</h2>
@@ -396,9 +421,9 @@ export default function Instances() {
         </div>
 
         {/* 右侧：操作面板 */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
           {selectedInstance ? (
-            <LaunchPanel instance={selectedInstance} toast={push} />
+            <LaunchPanel instance={selectedInstance} />
           ) : (
             <div className="flex items-center justify-center h-full">
               <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
@@ -409,7 +434,5 @@ export default function Instances() {
         </div>
       </div>
     </div>
-    <ToastContainer toasts={toasts} onRemove={remove} />
-    </>
   )
 }

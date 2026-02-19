@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import GlassCard from '../ui/GlassCard'
+import { useNotification } from '../ui/Notification'
 
 const labelFont = { fontSize: 20, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
 const valueFont = { fontSize: 20, fontFamily: "'Cascadia Code', monospace", color: '#585858' }
@@ -102,11 +103,49 @@ function formatUptime(seconds: number): string {
 }
 
 export default function InstanceOverviewCard() {
+  const { notify } = useNotification()
   const [instances, setInstances] = useState<Instance[]>([])
   const [showPopover, setShowPopover] = useState(false)
   const [favorites, setFavorites] = useState<Instance[]>([])
   const [summary, setSummary] = useState<{ launch_count: number; total_uptime_s: number; error_count: number } | null>(null)
+  const [launching, setLaunching] = useState<string | null>(null)
   const addBtnRef = useRef<HTMLButtonElement>(null)
+
+  // 从后端加载收藏实例
+  useEffect(() => {
+    fetch('/api/preferences/favorite_instances', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) setFavorites(d.value) })
+      .catch(() => {})
+  }, [])
+
+  const saveFavorites = (next: Instance[]) => {
+    setFavorites(next)
+    fetch('/api/preferences/favorite_instances', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ value: next }),
+    }).catch(() => {})
+  }
+
+  const quickLaunch = async (serial: string) => {
+    let opts: { components: string[]; useNapcatShell: boolean } | null = null
+    try {
+      const r = await fetch(`/api/preferences/launch_opts_${serial}`, { credentials: 'include' })
+      if (r.ok) { const d = await r.json(); opts = d.value }
+    } catch {}
+    if (!opts) { notify('该实例没有上次启动记录，请先在实例页面启动一次', 'warning'); return }
+    setLaunching(serial)
+    try {
+      const res = await fetch(`/api/launcher/instances/${serial}/start`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ serial_number: serial, components: opts.components, use_napcat_shell: opts.useNapcatShell }),
+      })
+      const data = await res.json()
+      if (data.success !== false) { notify('快捷启动成功', 'success') }
+      else { notify(data.detail || data.message || '启动失败', 'error') }
+    } catch { notify('启动请求失败', 'error') }
+    setLaunching(null)
+  }
 
   useEffect(() => {
     // 从 webui/instances 获取实例列表
@@ -189,15 +228,17 @@ export default function InstanceOverviewCard() {
                     {displayList.slice(0, 6).map(inst => (
                       <div
                         key={inst.serial}
-                        className="flex items-center gap-[8px] px-[16px] h-[40px] rounded-[20px] border-2 border-[#707070]"
-                        style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))' }}
+                        onClick={() => quickLaunch(inst.serial)}
+                        className="flex items-center gap-[8px] px-[16px] h-[40px] rounded-[20px] border-2 border-[#707070] cursor-pointer hover:bg-white/30 transition-all"
+                        style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))', opacity: launching === inst.serial ? 0.5 : 1 }}
                       >
+                        {launching === inst.serial && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black/50 shrink-0" />}
                         <span className="truncate max-w-[90px]" style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace" }}>
                           {inst.name}
                         </span>
                         {isFavMode && (
                         <button
-                          onClick={() => setFavorites(f => f.filter(x => x.serial !== inst.serial))}
+                          onClick={() => saveFavorites(favorites.filter(x => x.serial !== inst.serial))}
                           className="text-black/40 hover:text-black/70 transition-colors cursor-pointer"
                         >
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -228,7 +269,7 @@ export default function InstanceOverviewCard() {
                   instances={instances}
                   onSelect={inst => {
                     if (!favorites.find(f => f.serial === inst.serial)) {
-                      setFavorites(f => [...f, inst])
+                      saveFavorites([...favorites, inst])
                     }
                     setShowPopover(false)
                   }}
