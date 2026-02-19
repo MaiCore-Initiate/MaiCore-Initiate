@@ -6,6 +6,7 @@ import Instances from './pages/Instances'
 import Deployment from './pages/Deployment'
 import Knowledge from './pages/Knowledge'
 import Settings from './pages/Settings'
+import { NotificationProvider, useNotification } from './components/ui/Notification'
 import type { Page, Tab } from './types'
 
 const pageLabels: Record<Page, string> = {
@@ -17,6 +18,51 @@ const pageLabels: Record<Page, string> = {
 let tabCounter = 1
 function makeTab(page: Page): Tab {
   return { id: `tab-${tabCounter++}`, page, label: pageLabels[page] }
+}
+
+function PageTransition({ tabId, children }: { tabId: string; children: React.ReactNode }) {
+  const [layers, setLayers] = useState<{ id: string; content: React.ReactNode; phase: 'in' | 'out' }[]>(
+    [{ id: tabId, content: children, phase: 'in' }]
+  )
+  const prevTabId = useRef(tabId)
+  const latestChildren = useRef(children)
+  const pendingRef = useRef<{ id: string; content: React.ReactNode } | null>(null)
+  latestChildren.current = children
+
+  useEffect(() => {
+    if (tabId === prevTabId.current) {
+      setLayers(prev => prev.map(l => l.id === tabId ? { ...l, content: latestChildren.current } : l))
+      return
+    }
+    prevTabId.current = tabId
+    pendingRef.current = { id: tabId, content: latestChildren.current }
+    // 先标记旧层退场
+    setLayers(prev => prev.map(l => ({ ...l, phase: 'out' as const })))
+    // 退场结束后，移除旧层，添加新层入场
+    const t = setTimeout(() => {
+      const pending = pendingRef.current!
+      setLayers([{ id: pending.id, content: pending.content, phase: 'in' }])
+      pendingRef.current = null
+    }, 200)
+    return () => clearTimeout(t)
+  }, [tabId])
+
+  return (
+    <>
+      {layers.map(l => (
+        <div
+          key={l.id}
+          className="absolute inset-0 overflow-auto"
+          style={l.phase === 'in'
+            ? { animation: 'page-enter 0.35s cubic-bezier(0.16,1,0.3,1) both' }
+            : { animation: 'page-exit 0.2s ease-in forwards', pointerEvents: 'none' }
+          }
+        >
+          {l.content}
+        </div>
+      ))}
+    </>
+  )
 }
 
 function PageContent({ page }: { page: Page }) {
@@ -115,11 +161,15 @@ function App() {
   const showMain = isAuthenticated
 
   return (
+    <NotificationProvider>
     <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
       {/* 三层背景 — 始终存在 */}
       <div className="absolute inset-0 bg-white" />
       <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/bg-temp.png')" }} />
-      <div className="absolute inset-0 bg-white/50 backdrop-blur-[0px]" />
+      <div className="absolute inset-0 bg-white/50" />
+
+      {/* 通知挂载点 — 在背景图上方，z-index 最高 */}
+      <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
 
       {/* 登录卡片层 */}
       {showLogin && (
@@ -150,10 +200,10 @@ function App() {
               onAddTab={handleAddTab}
               onLogout={handleLogout}
             />
-            <main className="flex-1 overflow-auto">
-              <div key={activeTabId} className="animate-fade-in h-full">
+            <main className="flex-1 overflow-auto relative">
+              <PageTransition tabId={activeTabId}>
                 <PageContent page={activeTab.page} />
-              </div>
+              </PageTransition>
             </main>
           </div>
         </div>
@@ -163,10 +213,11 @@ function App() {
       {loginTransition !== 'none' && (
         <div className={`absolute inset-0 z-30 pointer-events-none ${loginTransition === 'cover-in' ? 'animate-login-fade-in' : 'animate-login-fade-out'}`}>
           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/bg-temp.png')" }} />
-          <div className="absolute inset-0 bg-white/50 backdrop-blur-[0px]" />
+          <div className="absolute inset-0 bg-white/50" />
         </div>
       )}
     </div>
+    </NotificationProvider>
   )
 }
 
@@ -174,6 +225,7 @@ function App() {
  * 登录卡片 - 只渲染卡片本身，背景由 App 统一管理
  */
 function LoginCard({ onLogin }: { onLogin: () => void }) {
+  const { notify } = useNotification()
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -243,11 +295,14 @@ function LoginCard({ onLogin }: { onLogin: () => void }) {
           setError(`尝试次数过多，请等待 ${lockDisplay || '...'}`)
           startCountdown(data.lock_seconds)
         } else {
-          setError(data.message || 'Token验证失败，请检查后重试')
+          const msg = data.message || 'Token验证失败，请检查后重试'
+          setError(msg)
+          notify(msg, 'warning')
         }
       }
     } catch {
       setError('连接失败，请确保服务器正在运行')
+      notify('连接失败，请确保服务器正在运行', 'error')
     } finally {
       setIsLoading(false)
     }

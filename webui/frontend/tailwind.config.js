@@ -84,6 +84,26 @@ export default {
           from: { opacity: "0" },
           to: { opacity: "1" },
         },
+        "notification-in": {
+          from: { opacity: "0", transform: "translateX(80px)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        "notification-out": {
+          from: { opacity: "1", transform: "none" },
+          to: { opacity: "0", transform: "translateX(80px)" },
+        },
+        "card-enter": {
+          from: { opacity: "0", transform: "translateY(24px) scale(0.97)" },
+          to: { opacity: "1", transform: "none" },
+        },
+        "page-exit": {
+          from: { filter: "opacity(1)", transform: "none" },
+          to: { filter: "opacity(0)", transform: "translateY(-12px) scale(0.98)" },
+        },
+        "page-enter": {
+          from: { opacity: "0", transform: "translateY(16px) scale(0.98)" },
+          to: { opacity: "1", transform: "none" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -94,6 +114,11 @@ export default {
         "tab-enter": "tab-enter 0.25s ease-out both",
         "login-fade-out": "login-fade-out 1s ease-in forwards",
         "login-fade-in": "login-fade-in 1s ease-out forwards",
+        "notification-in": "notification-in 0.35s cubic-bezier(0.16,1,0.3,1) both",
+        "notification-out": "notification-out 0.3s ease-in forwards",
+        "card-enter": "card-enter 0.5s cubic-bezier(0.16,1,0.3,1) both",
+        "page-exit": "page-exit 0.2s ease-in both",
+        "page-enter": "page-enter 0.35s cubic-bezier(0.16,1,0.3,1) both",
       },
     },
   },
