@@ -20,16 +20,46 @@ const INSTANCE_COLORS = [
 interface TimelineItem { period: string; starts: number; stops: number; errors: number; uptime_s: number }
 interface SlotItem { starts: number; uptime_m: number }
 
-function getSlotCount(g: Granularity) { return g === '日' ? 12 : g === '周' ? 14 : 15 }
+function pad2(n: number) { return String(n).padStart(2, '0') }
 
-function getTimeLabels(g: Granularity): string[] {
-  if (g === '日') return ['0:00', '2:00', '4:00', '6:00', '8:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00']
-  if (g === '周') return ['Mon.', '', 'Tue.', '', 'Wed.', '', 'Thu.', '', 'Fri.', '', 'Sat.', '', 'Sun.', '']
-  return Array.from({ length: 15 }, (_, i) => ((i * 2 + 1) % 4 === 1) ? `${i * 2 + 1}Day
-  ` : '')
+/** 根据粒度生成槽位的 period key 和显示标签 */
+function buildSlots(g: Granularity): { keys: string[]; labels: string[] } {
+  const now = new Date()
+  if (g === '日') {
+    // 今天 0:00 ~ 23:00，24个槽位，每槽1小时
+    const y = now.getFullYear(), m = pad2(now.getMonth() + 1), d = pad2(now.getDate())
+    const keys = Array.from({ length: 24 }, (_, i) => `${y}-${m}-${d}T${pad2(i)}:00:00`)
+    const labels = Array.from({ length: 24 }, (_, i) => `${i}:00`)
+    return { keys, labels }
+  }
+  if (g === '周') {
+    // 往前7天，每天2槽（AM 0-11 / PM 12-23），共14槽
+    // 每槽对应12个小时的 hour period keys
+    const keys: string[] = []
+    const labels: string[] = []
+    for (let i = 6; i >= 0; i--) {
+      const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+      const prefix = `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`
+      keys.push(`${prefix}T_AM`) // AM: hours 0-11
+      keys.push(`${prefix}T_PM`) // PM: hours 12-23
+      const dl = `${dt.getMonth() + 1}/${dt.getDate()}`
+      labels.push(`${dl} AM`)
+      labels.push(`${dl} PM`)
+    }
+    return { keys, labels }
+  }
+  // 月：往前30天，每天1槽
+  const keys: string[] = []
+  const labels: string[] = []
+  for (let i = 29; i >= 0; i--) {
+    const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
+    keys.push(`${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`)
+    labels.push(`${dt.getMonth() + 1}/${dt.getDate()}`)
+  }
+  return { keys, labels }
 }
 
-function getXLabelInterval(g: Granularity) { return g === '日' ? 2 : g === '周' ? 2 : 3 }
+function getXLabelInterval(g: Granularity) { return g === '日' ? 3 : g === '周' ? 2 : 5 }
 
 function catmullRomPath(points: { x: number; y: number }[], tension = 0.3, yMax?: number): string {
   if (points.length < 2) return ''
@@ -54,13 +84,38 @@ function catmullRomPath(points: { x: number; y: number }[], tension = 0.3, yMax?
   return d
 }
 
-function timelineToSlots(timeline: TimelineItem[], slotCount: number): SlotItem[] {
-  const slots = Array.from({ length: slotCount }, () => ({ starts: 0, uptime_m: 0 }))
-  const sorted = [...timeline].reverse()
-  sorted.forEach((item, i) => {
-    const idx = Math.floor(i / 2)
-    if (idx < slotCount) { slots[idx].starts += item.starts; slots[idx].uptime_m += item.uptime_s / 60 }
-  })
+/** 将 UTC period 字符串转为本地时间的 period key */
+function periodToLocal(period: string, granularity: Granularity): string {
+  if (granularity === '月') {
+    // day period "2026-02-19" → 解析为 UTC 日期，转本地
+    const d = new Date(period + 'T12:00:00Z') // 用中午避免跨日
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+  }
+  // hour period "2026-02-19T09:00:00" → 解析为 UTC，取本地小时
+  const d = new Date(period + 'Z')
+  const y = d.getFullYear(), m = pad2(d.getMonth() + 1), day = pad2(d.getDate()), h = pad2(d.getHours())
+  if (granularity === '周') {
+    return `${y}-${m}-${day}T${d.getHours() < 12 ? '_AM' : '_PM'}`
+  }
+  return `${y}-${m}-${day}T${h}:00:00`
+}
+
+/** 将 API 返回的 timeline 数据映射到对应的槽位 */
+function timelineToSlots(timeline: TimelineItem[], keys: string[], granularity: Granularity): SlotItem[] {
+  const slots = Array.from({ length: keys.length }, () => ({ starts: 0, uptime_m: 0 }))
+  const keyIndex = new Map<string, number>()
+  keys.forEach((k, i) => keyIndex.set(k, i))
+
+  for (const item of timeline) {
+    const localKey = periodToLocal(item.period, granularity)
+    if (granularity === '周') {
+      const idx = keyIndex.get(localKey)
+      if (idx !== undefined) { slots[idx].starts += item.starts; slots[idx].uptime_m += item.uptime_s / 60 }
+    } else {
+      const idx = keyIndex.get(localKey)
+      if (idx !== undefined) { slots[idx].starts += item.starts; slots[idx].uptime_m += item.uptime_s / 60 }
+    }
+  }
   return slots
 }
 
@@ -87,8 +142,9 @@ export default function DashboardChartCard() {
   const [instanceInfo, setInstanceInfo] = useState<Record<string, { nickname: string; serial: string; abs: number }>>({})
   const [instanceTimelines, setInstanceTimelines] = useState<Record<string, TimelineItem[]>>({})
 
-  const apiGranularity = granularity === '日' ? 'hour' : 'day'
-  const apiLimit = granularity === '月' ? 30 : granularity === '周' ? 7 : 24
+  // 周模式也用 hour 粒度（需要区分 AM/PM），日和周都请求 hour，月请求 day
+  const apiGranularity = granularity === '月' ? 'day' : 'hour'
+  const apiLimit = granularity === '月' ? 30 : granularity === '周' ? 168 : 24
 
   // 获取实例列表（stats + webui/instances 合并）
   useEffect(() => {
@@ -126,14 +182,14 @@ export default function DashboardChartCard() {
     })
   }, [splitByInstance, instanceIds, apiGranularity, apiLimit])
 
-  const slotCount = getSlotCount(granularity)
-  const timeLabels = getTimeLabels(granularity)
+  const { keys: slotKeys, labels: timeLabels } = useMemo(() => buildSlots(granularity), [granularity])
+  const slotCount = slotKeys.length
   const labelInterval = getXLabelInterval(granularity)
 
   const series = useMemo(() => {
-    if (!splitByInstance) return [{ id: '_all', slots: timelineToSlots(timeline, slotCount), colorIdx: 0 }]
-    return instanceIds.map((id, idx) => ({ id, slots: timelineToSlots(instanceTimelines[id] ?? [], slotCount), colorIdx: idx % INSTANCE_COLORS.length }))
-  }, [splitByInstance, timeline, instanceIds, instanceTimelines, slotCount])
+    if (!splitByInstance) return [{ id: '_all', slots: timelineToSlots(timeline, slotKeys, granularity), colorIdx: 0 }]
+    return instanceIds.map((id, idx) => ({ id, slots: timelineToSlots(instanceTimelines[id] ?? [], slotKeys, granularity), colorIdx: idx % INSTANCE_COLORS.length }))
+  }, [splitByInstance, timeline, instanceIds, instanceTimelines, slotKeys, granularity])
 
   const rawMaxStarts = Math.max(1, ...series.flatMap(s => s.slots.map(d => d.starts)))
   const rawMaxUptime = Math.max(1, ...series.flatMap(s => s.slots.map(d => d.uptime_m)))
