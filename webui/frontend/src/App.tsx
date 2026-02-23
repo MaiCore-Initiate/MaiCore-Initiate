@@ -125,6 +125,7 @@ function App() {
     if (existing) {
       setActiveTabId(existing.id)
     } else {
+      if (tabs.length >= 12) return
       const tab = makeTab(page)
       setTabs(prev => [...prev, tab])
       setActiveTabId(tab.id)
@@ -139,6 +140,29 @@ function App() {
         const idx = prev.findIndex(t => t.id === id)
         setActiveTabId(next[Math.min(idx, next.length - 1)].id)
       }
+      return next
+    })
+  }
+
+  const handleCloseOtherTabs = (id: string) => {
+    setTabs(prev => prev.filter(t => t.id === id))
+    setActiveTabId(id)
+  }
+
+  const handleCloseRightTabs = (id: string) => {
+    setTabs(prev => {
+      const idx = prev.findIndex(t => t.id === id)
+      const next = prev.slice(0, idx + 1)
+      if (!next.find(t => t.id === activeTabId)) setActiveTabId(id)
+      return next
+    })
+  }
+
+  const handleReorderTabs = (from: number, to: number) => {
+    setTabs(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
       return next
     })
   }
@@ -197,6 +221,9 @@ function App() {
               activeTabId={activeTabId}
               onSelectTab={setActiveTabId}
               onCloseTab={handleCloseTab}
+              onCloseOtherTabs={handleCloseOtherTabs}
+              onCloseRightTabs={handleCloseRightTabs}
+              onReorderTabs={handleReorderTabs}
               onAddTab={handleAddTab}
               onLogout={handleLogout}
             />
