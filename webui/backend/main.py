@@ -333,8 +333,8 @@ app.include_router(launcher_router, prefix="/api/launcher", tags=["启动器"])
 # 多开管理API
 app.include_router(multi_instance_router, prefix="/api/multi-instance", tags=["多开管理"])
 
-# 知识库API
-app.include_router(knowledge_router, prefix="/api/knowledge", tags=["知识库"])
+# 知识库API（路由内部已含 /knowledge/ 前缀）
+app.include_router(knowledge_router, prefix="/api", tags=["知识库"])
 
 # 端口管理API
 app.include_router(port_router, prefix="/api/port", tags=["端口管理"])

@@ -405,6 +405,7 @@ class _NapCatComponent(_LaunchComponent):
     """NapCat组件，通过自动检测支持OneKey和Shell版本。"""
     def __init__(self, config: Dict[str, Any]):
         super().__init__("NapCat", config)
+        self._webui_napcat_shell: Optional[bool] = None  # WebUI传入的快捷登录选择
         self.check_enabled()
 
     def check_enabled(self):
@@ -472,6 +473,11 @@ class _NapCatComponent(_LaunchComponent):
 
         time.sleep(3)
 
+        # WebUI模式下跳过终端确认，直接视为启动成功
+        if self._webui_napcat_shell is not None:
+            logger.info("[WebUI] 跳过NapCat启动确认，视为成功")
+            return True
+
         ui.print_warning("NapCat可能启动失败，这应该不是您或我们的问题，我们可以换一种方式启动...")
         if ui.confirm("您的NapCat启动成功了吗？"):
             return True
@@ -516,7 +522,15 @@ class _NapCatComponent(_LaunchComponent):
         )
 
         qq_for_login = None
-        if ui.confirm("是否为 NapCat.Shell 启用快速登录？"):
+        if self._webui_napcat_shell is not None:
+            # WebUI模式：使用前端传来的选择，不阻塞终端
+            if self._webui_napcat_shell:
+                qq_for_login = self.config.get("qq_account")
+                if qq_for_login:
+                    ui.print_info(f"[WebUI] 将使用QQ号 {qq_for_login} 进行快速登录。")
+                else:
+                    ui.print_warning("[WebUI] 配置中未找到有效的QQ号 (qq_account)，将不使用快速登录。")
+        elif ui.confirm("是否为 NapCat.Shell 启用快速登录？"):
             qq_for_login = self.config.get("qq_account")
             if qq_for_login:
                 ui.print_info(f"将使用QQ号 {qq_for_login} 进行快速登录。")
@@ -988,7 +1002,7 @@ class MaiLauncher:
             elif valid_choices and not components_to_start:
                 ui.print_warning("未选择任何有效组件。")
 
-    def launch(self, components_to_start: List[str], from_webui: bool = False) -> bool:
+    def launch(self, components_to_start: List[str], from_webui: bool = False, use_napcat_shell: bool = False) -> bool:
         """根据给定的组件列表启动。"""
         if not self._config:
             ui.print_error("配置未加载，无法启动。")
@@ -1012,6 +1026,9 @@ class MaiLauncher:
                 comp = self._components[comp_name]
                 if from_webui:
                     comp._skip_browser = True
+                    # 将WebUI的NapCat.Shell选择传递给NapCat组件
+                    if comp_name == "napcat" and isinstance(comp, _NapCatComponent):
+                        comp._webui_napcat_shell = use_napcat_shell
                 success = comp.start(self._process_manager)
                 try:
                     from ..core.stats import stats_db

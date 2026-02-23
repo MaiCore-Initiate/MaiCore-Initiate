@@ -91,6 +91,18 @@ class KnowledgeBuilder:
             logger.error("版本号解析失败", version=version, error=str(e))
             return False
     
+    def _is_version_0100_or_higher(self, version: str) -> bool:
+        """检查版本是否为0.10.0或更高"""
+        try:
+            if version.lower() in ('main', 'dev', 'master'):
+                return True
+            parts = version.split('-')[0].split('.')
+            major, minor = int(parts[0]), int(parts[1])
+            return major > 0 or (major == 0 and minor >= 10)
+        except (ValueError, IndexError):
+            logger.warning("版本号解析失败", version=version)
+            return False
+
     def _is_version_080_or_higher(self, version: str) -> bool:
         """
         检查版本是否为0.8.0或更高
