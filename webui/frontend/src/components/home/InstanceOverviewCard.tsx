@@ -4,7 +4,7 @@ import GlassCard from '../ui/GlassCard'
 import { useNotification } from '../ui/Notification'
 
 const labelFont = { fontSize: 20, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
-const valueFont = { fontSize: 20, fontFamily: "'Cascadia Code', monospace", color: '#585858' }
+const valueFont = { fontSize: 20, fontFamily: "'Ubuntu','问藏书房', monospace", color: '#585858' }
 const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
 
 interface Instance {
@@ -64,7 +64,7 @@ function AddInstancePopover({ anchorRef, instances, onSelect, onClose }: {
           onChange={e => setSearch(e.target.value)}
           placeholder="Search instance"
           className="flex-1 bg-transparent outline-none text-black placeholder:text-black/20 text-sm"
-          style={{ fontFamily: "'Cascadia Code', monospace" }}
+          style={{ fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }}
           autoFocus
         />
       </div>
@@ -80,7 +80,7 @@ function AddInstancePopover({ anchorRef, instances, onSelect, onClose }: {
                 <button
                   onClick={() => onSelect(inst)}
                   className="w-full text-left py-[6px] hover:bg-black/5 rounded-[6px] px-[4px] cursor-pointer transition-colors text-sm"
-                  style={{ fontFamily: "'Cascadia Code', monospace" }}
+                  style={{ fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }}
                 >
                   {inst.name}|{inst.serial}
                 </button>
@@ -210,7 +210,7 @@ export default function InstanceOverviewCard() {
             <div className="flex-1 relative">
               {displayList.length === 0 ? (
                 <div className="flex items-center justify-center h-full rounded-[20px] border-2 border-dashed border-black/15 relative">
-                  <span className="text-black/20" style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace" }}>No instances</span>
+                  <span className="text-black/20" style={{ fontSize: 20, fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }}>No instances</span>
                   <button
                     ref={addBtnRef}
                     onClick={() => setShowPopover(v => !v)}
@@ -233,7 +233,7 @@ export default function InstanceOverviewCard() {
                         style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))', opacity: launching === inst.serial ? 0.5 : 1 }}
                       >
                         {launching === inst.serial && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black/50 shrink-0" />}
-                        <span className="truncate max-w-[90px]" style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace" }}>
+                        <span className="truncate max-w-[90px]" style={{ fontSize: 20, fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }}>
                           {inst.name}
                         </span>
                         {isFavMode && (

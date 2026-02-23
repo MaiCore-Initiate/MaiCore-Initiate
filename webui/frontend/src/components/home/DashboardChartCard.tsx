@@ -333,7 +333,7 @@ export default function DashboardChartCard() {
               {/* Y轴标签 */}
               {yLabels.map((label, i) => (
                 <text key={`yl${i}`} x={padL - 6} y={padT + (i / (yTicks - 1)) * plotH + 4} textAnchor="end"
-                  fontSize={10} fontFamily="'Cascadia Code', monospace" fill="rgba(0,0,0,0.45)">{label}</text>
+                  fontSize={10} fontFamily="'Ubuntu','Cascadia Code', monospace" fill="rgba(0,0,0,0.45)">{label}</text>
               ))}
 
               {/* X轴标签 */}
@@ -341,7 +341,7 @@ export default function DashboardChartCard() {
                 if (!label || i % labelInterval !== 0) return null
                 return (
                   <text key={`xl${i}`} x={padL + (i + 0.5) * (plotW / slotCount)} y={padT + plotH + 18} textAnchor="middle"
-                    fontSize={10} fontFamily="'Cascadia Code', monospace" fill="rgba(0,0,0,0.45)">{label}</text>
+                    fontSize={10} fontFamily="'Ubuntu','Cascadia Code', monospace" fill="rgba(0,0,0,0.45)">{label}</text>
                 )
               })}
 
@@ -446,7 +446,7 @@ function InstancePickerPopover({ anchorEl, pickerRef, search, onSearchChange, in
             value={search} onChange={e => onSearchChange(e.target.value)}
             placeholder="Search instance"
             className="flex-1 bg-transparent outline-none text-black placeholder:text-black/20"
-            style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 13 }}
+            style={{ fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace", fontSize: 13 }}
             autoFocus
           />
         </div>
@@ -455,7 +455,7 @@ function InstancePickerPopover({ anchorEl, pickerRef, search, onSearchChange, in
           <button
             onClick={() => onSelect('')}
             className="w-full text-left py-[4px] hover:bg-black/5 rounded-[4px] cursor-pointer transition-colors"
-            style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 16, fontWeight: selectedInstance === '' ? 700 : 400 }}
+            style={{ fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace", fontSize: 16, fontWeight: selectedInstance === '' ? 700 : 400 }}
           >全部</button>
           <hr className="border-[#707070]" />
           {filtered.map((id, i) => (
@@ -463,13 +463,13 @@ function InstancePickerPopover({ anchorEl, pickerRef, search, onSearchChange, in
               <button
                 onClick={() => onSelect(id)}
                 className="w-full text-left py-[4px] hover:bg-black/5 rounded-[4px] cursor-pointer transition-colors truncate"
-                style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 16, fontWeight: selectedInstance === id ? 700 : 400 }}
+                style={{ fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace", fontSize: 16, fontWeight: selectedInstance === id ? 700 : 400 }}
               >{getLabel(id)}</button>
               {i < filtered.length - 1 && <hr className="border-[#707070]" />}
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="py-[10px] text-center text-black/20" style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 14 }}>
+            <div className="py-[10px] text-center text-black/20" style={{ fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace", fontSize: 14 }}>
               no instance
             </div>
           )}

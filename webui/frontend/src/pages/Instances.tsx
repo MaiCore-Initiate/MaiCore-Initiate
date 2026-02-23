@@ -12,7 +12,7 @@ interface Instance {
   qqAccount: string
 }
 
-const monoFont = { fontFamily: "'Cascadia Code', monospace" }
+const monoFont = { fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
 const valueFont = { fontSize: 25, ...monoFont, color: '#707070' }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }

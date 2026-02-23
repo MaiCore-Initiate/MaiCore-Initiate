@@ -4,7 +4,7 @@ import type { SystemInfo } from '../../types'
 import GlassCard from '../ui/GlassCard'
 
 const labelFont = { fontSize: 20, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
-const valueFont = { fontSize: 20, fontFamily: "'Cascadia Code', monospace", color: '#585858' }
+const valueFont = { fontSize: 20, fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace", color: '#585858' }
 const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
 
 function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
@@ -45,7 +45,7 @@ export default function SystemOverviewCard() {
           </div>
           <div className="flex items-center gap-[12px]">
             <span className="shrink-0 w-[80px]">
-              <span style={{ fontFamily: "'Cascadia Code', monospace", fontSize: 20 }}>CPU</span>
+              <span style={{ fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace", fontSize: 20 }}>CPU</span>
               <span style={labelFont}>用量</span>
             </span>
             <ProgressBar value={cpuPct} max={100} color="#fff8a6" />
