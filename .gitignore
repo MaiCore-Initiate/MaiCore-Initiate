@@ -1,4 +1,4 @@
-git check-ignore -v path/to/file.pyc# --- System & Virtual Environments ---
+# --- System & Virtual Environments ---
 # Python virtual environment
 /venv/
 /env/
@@ -43,3 +43,12 @@ Temporary/
 .vscode/
 
 .trae/
+
+*.db
+
+# --- 构建产物 ---
+webui/frontend/dist/
+*.tsbuildinfo
+
+# --- 开发计划 ---
+plans/
