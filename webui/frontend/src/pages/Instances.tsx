@@ -262,7 +262,7 @@ function LaunchPanel({ instance }: { instance: Instance }) {
             </div>
 
             {/* 分隔线 + 启动实例 */}
-            <div className="w-[3px] self-stretch bg-black/50 rounded-full shrink-0 mx-[30px]" />
+            <div className="w-[3px] self-stretch bg-black/50 rounded-full shrink-0 mx-[30px] animate-fade-slide-up" style={d(15)} />
             <div className="flex flex-col items-center shrink-0 mr-[100px] animate-fade-slide-up" style={d(15)}>
               <h2 className="text-black mr-[40px]" style={sectionTitle}>{running ? '停止实例' : '启动实例'}</h2>
               <button
