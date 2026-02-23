@@ -21,6 +21,7 @@ class StartInstanceRequest(BaseModel):
     """启动实例请求"""
     serial_number: str
     components: List[str]  # 要启动的组件列表，如 ["mai", "adapter", "napcat", "webui"]
+    use_napcat_shell: bool = False  # 是否使用 NapCat.Shell 快捷登录
 
 
 class StopInstanceRequest(BaseModel):
@@ -164,7 +165,7 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
             }
         
         # 启动组件
-        success = instance_launcher.launch(request.components, from_webui=True)
+        success = instance_launcher.launch(request.components, from_webui=True, use_napcat_shell=request.use_napcat_shell)
         
         if success:
             return {
@@ -208,6 +209,29 @@ async def stop_instance(serial_number: str):
                     success = launcher._process_manager.stop_process(pid)
                     if success:
                         stopped_pids.append(pid)
+        
+        # 额外处理：NapCat进程可能通过.bat脚本启动，cmd进程已退出但NapCat子进程仍在运行
+        # 通过进程名查找并终止残留的NapCat进程（仅限该实例路径下的）
+        try:
+            import psutil
+            napcat_names = {"napcat.exe", "napcatwinbootmain.exe"}
+            instance_napcat_path = config.get("napcat_path", "")
+            for proc in psutil.process_iter(["pid", "name", "exe"]):
+                try:
+                    if proc.info["name"] and proc.info["name"].lower() in napcat_names:
+                        # 仅终止属于该实例 napcat_path 下的进程
+                        proc_exe = proc.info.get("exe") or ""
+                        if instance_napcat_path and proc_exe and os.path.realpath(proc_exe).startswith(os.path.realpath(instance_napcat_path)):
+                            proc.terminate()
+                            try:
+                                proc.wait(timeout=3)
+                            except psutil.TimeoutExpired:
+                                proc.kill()
+                            stopped_pids.append(proc.info["pid"])
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except Exception:
+            pass
         
         return {
             "success": True,
