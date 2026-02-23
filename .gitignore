@@ -52,3 +52,13 @@ webui/frontend/dist/
 
 # --- 开发计划 ---
 plans/
+
+# --- 根目录临时图片与设计稿 ---
+/临时背景.png
+/登录页.png
+/实际登录页-1.png
+/UI设计.svg
+/UI设计-登录页.svg
+
+# --- Claude 本地配置 ---
+.claude/
