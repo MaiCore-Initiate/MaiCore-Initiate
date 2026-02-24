@@ -27,21 +27,21 @@ interface FileEntry {
   progress: number // 0~1，仅用于上传中的视觉效果
 }
 
-const monoFont = { fontFamily: "'Ubuntu', monospace" }
-const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
+const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
+const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const valueFont = { fontSize: 25, ...monoFont, color: '#707070' }
-const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
-const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
-const btnFont = { fontSize: 30, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", position: 'relative' as const, top: 2 }
-const fileFont = { fontSize: 30, fontFamily: "'JetBrainsMono', '问藏书房', monospace", position: 'relative' as const, top: 2 }
+const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
+const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
+const btnFont = { fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative' as const, top: 2 }
+const fileFont = { fontSize: 30, fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace", position: 'relative' as const, top: 2 }
 
 /* 边框阴影容器：绝对定位的边框层带阴影，不影响子元素 */
 const pillShadow = "absolute inset-0 rounded-[27px] pointer-events-none"
 const pillShadowStyle = { border: '2px solid rgba(0,0,0,0.5)', boxShadow: '2px 3px 6px rgba(0,0,0,0.15)' }
 
 /* 设置弹窗样式 */
-const settingLabel = { fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
-const settingDesc = { fontSize: 20, fontFamily: "'Yu Gothic UI', sans-serif", opacity: 0.5 }
+const settingLabel = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
+const settingDesc = { fontSize: 20, fontFamily: "'HarmonyOS Sans SC', sans-serif", opacity: 0.5 }
 const settingInput = { fontSize: 25, fontFamily: "'CascadiaCode', 'Cascadia Code', monospace" }
 
 interface LpmmSettings {
@@ -116,7 +116,7 @@ function ModeSelector({ value, onChange }: { value: string; onChange: (v: string
       />
       <button
         className="h-full flex items-center justify-center cursor-pointer relative z-10"
-        style={{ width: 103, fontSize: 20, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }}
+        style={{ width: 103, fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
         onClick={() => onChange('agent')}
         title="agent"
       >
@@ -124,7 +124,7 @@ function ModeSelector({ value, onChange }: { value: string; onChange: (v: string
       </button>
       <button
         className="h-full flex items-center justify-center cursor-pointer relative z-10"
-        style={{ width: 118, fontSize: 20, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }}
+        style={{ width: 118, fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
         onClick={() => onChange('classic')}
         title="classical"
       >
@@ -195,7 +195,7 @@ function KnowledgeSettingsModal({ serial, open, onClose }: { serial: string; ope
   return (
     <Modal open={open} onClose={onClose} width={1083}>
       <div className="p-[40px] max-h-[85vh] overflow-y-auto custom-scrollbar">
-        <h2 className="text-black mb-[20px]" style={{ fontSize: 50, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }}>知识库设置</h2>
+        <h2 className="text-black mb-[20px]" style={{ fontSize: 50, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>知识库设置</h2>
 
         <div className="flex gap-[60px]">
           {/* 左列 */}
@@ -453,7 +453,7 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
             <rect x="2.5" y="2.5" width="113" height="67" rx="17.5" stroke="rgba(0,0,0,0.2)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="210 190" fill="none" />
             <path d="M59 15 L39 42 M59 15 L78 42" stroke="rgba(0,0,0,0.2)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
           </svg>
-          <span className="text-black/20" style={{ fontSize: 25, fontFamily: "'问藏书房','Yu Gothic UI', sans-serif" }}>
+          <span className="text-black/20" style={{ fontSize: 25, fontFamily: "'问藏书房','HarmonyOS Sans SC', sans-serif" }}>
             点击或拖拽上传{'  '}
             <span style={{ ...monoFont, fontStyle: 'italic' }}>|  *.txt</span>
             、
@@ -711,7 +711,7 @@ export default function Knowledge() {
           {selectedInstance ? (
             selectedInstance.botType === 'MoFox_bot' ? (
               <div className="flex items-center justify-center h-full">
-                <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+                <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
                   MoFox_bot 暂不支持 LPMM 知识库功能
                 </span>
               </div>
@@ -720,7 +720,7 @@ export default function Knowledge() {
             )
           ) : (
             <div className="flex items-center justify-center h-full">
-              <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+              <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
                 请选择一个实例
               </span>
             </div>

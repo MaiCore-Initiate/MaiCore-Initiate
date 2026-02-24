@@ -12,11 +12,11 @@ interface Instance {
   qqAccount: string
 }
 
-const monoFont = { fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }
-const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
+const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }
+const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const valueFont = { fontSize: 25, ...monoFont, color: '#707070' }
-const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
-const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
+const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
+const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
 
 const PRESETS: Record<string, { label: string; components: string[] }[]> = {
   MoFox_bot: [
@@ -61,7 +61,7 @@ function PillButton({ label, selected, onClick }: { label: string; selected: boo
         border: '2px solid rgba(0,0,0,0.5)',
       }}
     >
-      <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", position: 'relative', top: 2 }}>{label}</span>
+      <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative', top: 2 }}>{label}</span>
     </button>
   )
 }
@@ -206,8 +206,8 @@ function LaunchPanel({ instance }: { instance: Instance }) {
     ['当前版本', instance.version || '-'],
   ]
 
-  const modalTitleFont = { fontSize: 32, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
-  const modalBodyFont = { fontSize: 22, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
+  const modalTitleFont = { fontSize: 32, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
+  const modalBodyFont = { fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 
   const d = (i: number) => ({ animationDelay: `${i * 60}ms` })
 
@@ -426,7 +426,7 @@ export default function Instances() {
             <LaunchPanel instance={selectedInstance} />
           ) : (
             <div className="flex items-center justify-center h-full">
-              <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+              <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
                 请选择一个实例
               </span>
             </div>

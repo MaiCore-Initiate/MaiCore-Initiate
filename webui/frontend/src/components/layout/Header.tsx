@@ -202,7 +202,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
                     <Icon className="text-black shrink-0" style={{ width: 28, height: 28 }} />
                     <span
                       className="text-black whitespace-nowrap overflow-hidden text-ellipsis"
-                      style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", fontWeight: 600, marginTop: 4 }}
+                      style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 600, marginTop: 4 }}
                     >
                       {tab.label}
                     </span>
@@ -253,7 +253,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
         onClick={onLogout}
         className="ml-auto shrink-0 cursor-pointer text-black/50 hover:text-black/80 hover:bg-black/5 transition-all select-none"
         style={{
-          fontSize: 20, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif",
+          fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
           border: '2px solid #000', borderRadius: 30, padding: '8px 20px',
           boxShadow: '5px 5px 4px rgba(0,0,0,0.161)',
         }}
@@ -277,7 +277,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
               key={item.label}
               onClick={item.disabled ? undefined : item.action}
               className={`block w-full text-left px-[16px] py-[8px] whitespace-nowrap transition-colors ${item.disabled ? 'text-black/30 cursor-not-allowed' : 'text-black/80 hover:bg-black/10 cursor-pointer'}`}
-              style={{ fontSize: 16, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }}
+              style={{ fontSize: 16, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
             >
               {item.label}
             </button>

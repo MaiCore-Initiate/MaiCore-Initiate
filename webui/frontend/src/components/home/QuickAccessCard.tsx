@@ -6,7 +6,7 @@ import {
 } from '../icons/SidebarIcons'
 import type { Page } from '../../types'
 
-const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
+const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
 
 const iconMap: Record<string, React.FC<React.SVGProps<SVGSVGElement>>> = {
   home: HomeIcon, instances: InstancesIcon, config: ConfigIcon,
@@ -69,7 +69,7 @@ export default function QuickAccessCard() {
         <div className="flex flex-col items-center gap-[7px]">
           {items.length === 0 ? (
             <div className="flex items-center justify-center rounded-[30px] border-3 border-dashed border-[#9e9e9e]" style={{ width: 316, height: 60 }}>
-              <span className="text-[#9e9e9e] font-semibold text-base" style={{ fontFamily: "'Segoe UI', sans-serif" }}>no items</span>
+              <span className="text-[#9e9e9e] font-semibold text-base" style={{ fontFamily: "'Segoe UI', 'HarmonyOS Sans SC', sans-serif" }}>no items</span>
             </div>
           ) : items.map(item => {
             const Icon = iconMap[item.page]
@@ -85,7 +85,7 @@ export default function QuickAccessCard() {
                   {Icon && <Icon className="text-[#707070]" />}
                   <span
                     className="text-[#707070]"
-                    style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", fontWeight: 400, marginTop: 4 }}
+                    style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 400, marginTop: 4 }}
                   >
                     {item.label}
                   </span>

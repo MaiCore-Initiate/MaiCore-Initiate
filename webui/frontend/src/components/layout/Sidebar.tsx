@@ -43,10 +43,10 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     <aside className="w-[340px] h-full flex flex-col shrink-0 border-r border-black/10">
       {/* 品牌区 */}
       <div className="h-[87px] flex flex-col justify-center px-[11px] shrink-0">
-        <span className="text-[#707070] select-none leading-none" style={{ fontSize: 40, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif", fontWeight: 700 }}>
+        <span className="text-[#707070] select-none leading-none" style={{ fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 700 }}>
           MaiCoreStart
         </span>
-        <span className="text-[#707070] select-none mt-[3px]" style={{ fontSize: 20, fontFamily: "'Segoe', sans-serif" }}>
+        <span className="text-[#707070] select-none mt-[3px]" style={{ fontSize: 20, fontFamily: "'Segoe', 'HarmonyOS Sans SC', sans-serif" }}>
           v4.2.1-beta
         </span>
       </div>
@@ -56,7 +56,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         {sections.map((section, si) => (
           <div key={section.title}>
             {si > 0 && <div className="mx-0 my-2 border-t border-[#707070]" />}
-            <div className="px-[3px] py-1 text-[#707070] select-none" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", fontWeight: 300 }}>
+            <div className="px-[3px] py-1 text-[#707070] select-none" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 300 }}>
               {section.title}
             </div>
             {section.items.map((item) => {
@@ -81,7 +81,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   <Icon className={active ? 'text-black' : 'text-[#707070]'} />
                   <span
                     className={active ? 'text-black' : 'text-[#707070]'}
-                    style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", fontWeight: active ? 600 : 400, marginTop: 4 }}
+                    style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: active ? 600 : 400, marginTop: 4 }}
                   >
                     {item.label}
                   </span>

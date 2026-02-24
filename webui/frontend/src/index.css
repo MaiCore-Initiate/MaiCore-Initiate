@@ -11,6 +11,15 @@
   font-display: swap;
 }
 
+/* HarmonyOS Sans SC - 非汉仪文黑场景的中文回退字体 */
+@font-face {
+  font-family: 'HarmonyOS Sans SC';
+  src: url('/fonts/HarmonyOS_Sans_SC_Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -64,7 +73,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'HYWenHei', 'Microsoft YaHei', sans-serif;
+    font-family: 'HYWenHei', 'HarmonyOS Sans SC', sans-serif;
   }
 }
 
@@ -73,19 +82,30 @@
   .glass-hover:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-top: -2px; margin-bottom: 2px; }
 }
 
-/* 自定义滚动条 */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
+/* 全局滚动条美化 */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-.custom-scrollbar::-webkit-scrollbar-track {
+*::-webkit-scrollbar-track {
   background: transparent;
 }
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0);
-  border-radius: 3px;
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  transition: background 0.2s;
 }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox 滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
 }
 
 /* 隐藏滚动条 */

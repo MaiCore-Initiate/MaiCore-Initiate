@@ -92,7 +92,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
 
       {/* 文字内容层 */}
       <div className="relative" style={{ zIndex: 1, padding: '24px 32px' }}>
-        <span style={{ fontSize: 22, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }}>
+        <span style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
           {toast.message}
         </span>
       </div>

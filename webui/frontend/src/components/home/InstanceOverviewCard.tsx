@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom'
 import GlassCard from '../ui/GlassCard'
 import { useNotification } from '../ui/Notification'
 
-const labelFont = { fontSize: 20, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }
-const valueFont = { fontSize: 20, fontFamily: "'Ubuntu','问藏书房', monospace", color: '#585858' }
-const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
+const labelFont = { fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
+const valueFont = { fontSize: 20, fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace", color: '#585858' }
+const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
 
 interface Instance {
   serial: string
@@ -64,14 +64,14 @@ function AddInstancePopover({ anchorRef, instances, onSelect, onClose }: {
           onChange={e => setSearch(e.target.value)}
           placeholder="Search instance"
           className="flex-1 bg-transparent outline-none text-black placeholder:text-black/20 text-sm"
-          style={{ fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }}
+          style={{ fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }}
           autoFocus
         />
       </div>
       <div className="flex-1 max-h-[240px] overflow-y-auto">
         {filtered.length === 0 ? (
           <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed border-[#9e9e9e]">
-            <span className="text-[#9e9e9e] font-semibold text-base" style={{ fontFamily: "'Segoe UI', sans-serif" }}>no instance</span>
+            <span className="text-[#9e9e9e] font-semibold text-base" style={{ fontFamily: "'Segoe UI', 'HarmonyOS Sans SC', sans-serif" }}>no instance</span>
           </div>
         ) : (
           <div className="px-[6px]">
@@ -80,7 +80,7 @@ function AddInstancePopover({ anchorRef, instances, onSelect, onClose }: {
                 <button
                   onClick={() => onSelect(inst)}
                   className="w-full text-left py-[6px] hover:bg-black/5 rounded-[6px] px-[4px] cursor-pointer transition-colors text-sm"
-                  style={{ fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }}
+                  style={{ fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }}
                 >
                   {inst.name}|{inst.serial}
                 </button>
@@ -204,13 +204,13 @@ export default function InstanceOverviewCard() {
 
           {/* 右侧常用实例 */}
           <div className="flex-1 pl-[24px] flex flex-col relative">
-            <span className="text-black mb-[12px]" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Yu Gothic UI', sans-serif" }}>
+            <span className="text-black mb-[12px]" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
               常用实例/快捷启动
             </span>
             <div className="flex-1 relative">
               {displayList.length === 0 ? (
                 <div className="flex items-center justify-center h-full rounded-[20px] border-2 border-dashed border-black/15 relative">
-                  <span className="text-black/20" style={{ fontSize: 20, fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }}>No instances</span>
+                  <span className="text-black/20" style={{ fontSize: 20, fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }}>No instances</span>
                   <button
                     ref={addBtnRef}
                     onClick={() => setShowPopover(v => !v)}
@@ -233,7 +233,7 @@ export default function InstanceOverviewCard() {
                         style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))', opacity: launching === inst.serial ? 0.5 : 1 }}
                       >
                         {launching === inst.serial && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black/50 shrink-0" />}
-                        <span className="truncate max-w-[90px]" style={{ fontSize: 20, fontFamily: "'Ubuntu','问藏书房', 'Cascadia Code', monospace" }}>
+                        <span className="truncate max-w-[90px]" style={{ fontSize: 20, fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }}>
                           {inst.name}
                         </span>
                         {isFavMode && (
