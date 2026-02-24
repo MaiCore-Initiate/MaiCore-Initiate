@@ -3,6 +3,7 @@ import Sidebar from './components/layout/Sidebar'
 import Header from './components/layout/Header'
 import HomePage from './pages/HomePage'
 import Instances from './pages/Instances'
+import Config from './pages/Config'
 import Deployment from './pages/Deployment'
 import Knowledge from './pages/Knowledge'
 import Settings from './pages/Settings'
@@ -69,13 +70,14 @@ function PageContent({ page }: { page: Page }) {
   switch (page) {
     case 'home': return <HomePage />
     case 'instances': return <Instances />
+    case 'config': return <Config />
     case 'deploy': return <Deployment />
     case 'knowledge': return <Knowledge />
     case 'settings': return <Settings />
     default:
       return (
         <div className="flex items-center justify-center h-full">
-          <span className="text-black/30" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+          <span className="text-black/30" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
             {pageLabels[page]} — 页面开发中
           </span>
         </div>
@@ -348,14 +350,14 @@ function LoginCard({ onLogin }: { onLogin: () => void }) {
     >
       <h1
         className="mt-[60px] text-black/80 text-center select-none whitespace-nowrap"
-        style={{ fontSize: 60, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
+        style={{ fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
       >
         欢迎使用MCStart
       </h1>
 
       <p
         className="mt-[16px] text-black/50 text-center select-none whitespace-nowrap"
-        style={{ fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
+        style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
       >
         输入账户令牌继续使用系统
       </p>
@@ -375,7 +377,7 @@ function LoginCard({ onLogin }: { onLogin: () => void }) {
           style={{
             width: 583, height: 80, borderRadius: 40,
             paddingLeft: 32, paddingRight: 32,
-            fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif",
+            fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
             boxShadow: '5px 5px 9px rgba(0, 0, 0, 0.16)',
           }}
         />
@@ -386,7 +388,7 @@ function LoginCard({ onLogin }: { onLogin: () => void }) {
           className="bg-white/50 border-[3px] border-black/50 text-black/70 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none"
           style={{
             width: 583, height: 80, borderRadius: 40,
-            fontSize: 30, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif",
+            fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
             boxShadow: '5px 5px 9px rgba(0, 0, 0, 0.16)',
           }}
         >
@@ -419,14 +421,14 @@ function LoginCard({ onLogin }: { onLogin: () => void }) {
           </div>
           <span
             className="text-black/70"
-            style={{ fontSize: 25, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}
+            style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
           >
             我该去哪里找Token？
           </span>
         </div>
 
         <div className="space-y-[4px] ml-[36px]">
-          <p style={{ fontSize: 20, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+          <p style={{ fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
             <span className="text-black/70">1.</span>
             <span className="text-black/50"> 在主程序终端中，输入 </span>
             <span className="text-black/70">H</span>
@@ -434,7 +436,7 @@ function LoginCard({ onLogin }: { onLogin: () => void }) {
             <span className="text-black/70">E</span>
             <span className="text-black/50"> 查看Token</span>
           </p>
-          <div style={{ fontSize: 20, fontFamily: "'HYWenHei', 'Microsoft YaHei', sans-serif" }}>
+          <div style={{ fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
             <p>
               <span className="text-black/70">2.</span>
               <span className="text-black/50"> 进入</span>
