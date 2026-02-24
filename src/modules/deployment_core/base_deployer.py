@@ -720,24 +720,19 @@ class BaseDeployer:
                 
                 if self.download_file(fallback_url, archive_path):
                     if self.extract_archive(archive_path, temp_dir):
-                        # 检测并处理多余的根目录层级
-                        # GitHub的分支压缩包会创建 {repo}-{branch} 格式的根目录
-                        extracted_dirs = [d for d in os.listdir(temp_dir) 
+                        # 检测并处理GitHub归档的嵌套根目录层级
+                        # GitHub的归档zip总是只包含一个根目录（格式：{repo_name}-{branch}）
+                        extracted_items = os.listdir(temp_dir)
+                        extracted_dirs = [d for d in extracted_items
                                          if os.path.isdir(os.path.join(temp_dir, d))]
+                        extracted_files = [f for f in extracted_items
+                                          if os.path.isfile(os.path.join(temp_dir, f)) and not f.endswith('.zip')]
                         
-                        # 预期的根目录名称（分支压缩包格式）
-                        expected_prefix = f"{repo.replace('/', '-')}"
-                        
-                        # 查找是否有匹配的根目录
-                        source_dir = None
-                        for d in extracted_dirs:
-                            if d.startswith(expected_prefix):
-                                source_dir = os.path.join(temp_dir, d)
-                                ui.print_info(f"检测到多余目录层级: {d}")
-                                break
-                        
-                        if source_dir and os.path.exists(source_dir):
-                            # 移动内容到目标目录
+                        # 只有一个目录且没有其他非zip文件 → GitHub归档嵌套层，需要展开
+                        if len(extracted_dirs) == 1 and len(extracted_files) == 0:
+                            source_dir = os.path.join(temp_dir, extracted_dirs[0])
+                            ui.print_info(f"检测到GitHub归档嵌套目录: {extracted_dirs[0]}")
+                            os.makedirs(target_dir, exist_ok=True)
                             for item in os.listdir(source_dir):
                                 src_path = os.path.join(source_dir, item)
                                 dst_path = os.path.join(target_dir, item)
@@ -747,12 +742,10 @@ class BaseDeployer:
                                     else:
                                         os.remove(dst_path)
                                 shutil.move(src_path, dst_path)
-                            ui.print_success(f"已从 {source_dir} 移动内容到 {target_dir}")
+                            ui.print_success(f"已展开嵌套目录到 {target_dir}")
                         else:
-                            # 如果没有找到多余的根目录，直接解压到目标目录
-                            if self.extract_archive(archive_path, target_dir):
-                                ui.print_success("解压完成")
-                            else:
+                            # 没有嵌套层，直接解压到目标目录
+                            if not self.extract_archive(archive_path, target_dir):
                                 ui.print_error("解压失败")
                                 return False
                         
