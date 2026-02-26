@@ -251,10 +251,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# 配置CORS
+# 配置CORS — 仅允许本地来源
+_cors_origins = [
+    "http://localhost:10086", "http://127.0.0.1:10086",
+    "http://localhost:3000", "http://127.0.0.1:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -324,35 +328,41 @@ def verify_session(request: Request):
 
 # --- API路由注册 ---
 
+auth_dep = [Depends(verify_session)]
+
 # 部署管理API
-app.include_router(deploy_router, prefix="/api/deploy", tags=["部署管理"])
+app.include_router(deploy_router, prefix="/api/deploy", tags=["部署管理"], dependencies=auth_dep)
 
 # 启动器管理API
-app.include_router(launcher_router, prefix="/api/launcher", tags=["启动器"])
+app.include_router(launcher_router, prefix="/api/launcher", tags=["启动器"], dependencies=auth_dep)
 
 # 多开管理API
-app.include_router(multi_instance_router, prefix="/api/multi-instance", tags=["多开管理"])
+app.include_router(multi_instance_router, prefix="/api/multi-instance", tags=["多开管理"], dependencies=auth_dep)
 
 # 知识库API（路由内部已含 /knowledge/ 前缀）
-app.include_router(knowledge_router, prefix="/api", tags=["知识库"])
+app.include_router(knowledge_router, prefix="/api", tags=["知识库"], dependencies=auth_dep)
 
 # 端口管理API
-app.include_router(port_router, prefix="/api/port", tags=["端口管理"])
+app.include_router(port_router, prefix="/api/port", tags=["端口管理"], dependencies=auth_dep)
 
 # 进程管理API
-app.include_router(process_router, prefix="/api/process", tags=["进程管理"])
+app.include_router(process_router, prefix="/api/process", tags=["进程管理"], dependencies=auth_dep)
 
 # 统计API
 from src.webui_api import stats_router
-app.include_router(stats_router, prefix="/api/stats", tags=["统计"])
+app.include_router(stats_router, prefix="/api/stats", tags=["统计"], dependencies=auth_dep)
 
 # WebUI配置API
 from src.webui_api import webui_config_router
-app.include_router(webui_config_router, prefix="/api/webui", tags=["WebUI配置"])
+app.include_router(webui_config_router, prefix="/api/webui", tags=["WebUI配置"], dependencies=auth_dep)
 
 # 用户偏好API
 from src.webui_api import preferences_router
-app.include_router(preferences_router, prefix="/api/preferences", tags=["用户偏好"])
+app.include_router(preferences_router, prefix="/api/preferences", tags=["用户偏好"], dependencies=auth_dep)
+
+# 插件管理API
+from src.webui_api import plugin_router
+app.include_router(plugin_router, prefix="/api/plugins", tags=["插件管理"], dependencies=auth_dep)
 
 
 # --- 登录相关API ---
@@ -739,8 +749,14 @@ async def health_check():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket实时通信端点"""
+    # 验证 session
+    session_id = websocket.cookies.get("webui_session", "")
+    if not session_id or not session_manager.is_logged_in(session_id):
+        await websocket.close(code=4001)
+        return
+
     channel = None
-    
+
     try:
         await websocket.accept()
         # 接收订阅消息
