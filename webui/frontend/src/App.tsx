@@ -6,6 +6,7 @@ import Instances from './pages/Instances'
 import Config from './pages/Config'
 import Deployment from './pages/Deployment'
 import Knowledge from './pages/Knowledge'
+import Plugins from './pages/Plugins'
 import Settings from './pages/Settings'
 import { NotificationProvider, useNotification } from './components/ui/Notification'
 import type { Page, Tab } from './types'
@@ -73,6 +74,7 @@ function PageContent({ page }: { page: Page }) {
     case 'config': return <Config />
     case 'deploy': return <Deployment />
     case 'knowledge': return <Knowledge />
+    case 'plugins': return <Plugins />
     case 'settings': return <Settings />
     default:
       return (

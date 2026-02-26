@@ -12,6 +12,7 @@ from .process_api import router as process_router
 from .stats_api import router as stats_router
 from .webui_config_api import router as webui_config_router
 from .preferences_api import router as preferences_router
+from .plugin_api import router as plugin_router
 
 __all__ = [
     "deploy_router",
@@ -22,5 +23,6 @@ __all__ = [
     "process_router",
     "stats_router",
     "webui_config_router",
-    "preferences_router"
+    "preferences_router",
+    "plugin_router"
 ]
