@@ -236,9 +236,17 @@ async def update_instance(serial_number: str, updates: Dict[str, Any]):
         if not config_key:
             raise HTTPException(status_code=404, detail=f"未找到序列号为 {serial_number} 的实例")
         
-        # 更新配置
+        # 更新配置（仅允许白名单字段）
+        _UPDATABLE_FIELDS = {
+            "serial_number", "nickname_path", "version_path", "bot_type",
+            "qq_account", "mai_path", "mofox_path", "adapter_path",
+            "napcat_path", "venv_path", "webui_path",
+        }
         current_config = configs[config_key]
-        current_config.update(updates)
+        filtered = {k: v for k, v in updates.items() if k in _UPDATABLE_FIELDS}
+        if not filtered:
+            raise HTTPException(status_code=400, detail="没有可更新的有效字段")
+        current_config.update(filtered)
         
         # 保存配置
         config_manager.add_configuration(config_key, current_config)
