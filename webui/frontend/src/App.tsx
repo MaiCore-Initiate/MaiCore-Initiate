@@ -7,8 +7,11 @@ import Config from './pages/Config'
 import Deployment from './pages/Deployment'
 import Knowledge from './pages/Knowledge'
 import Plugins from './pages/Plugins'
+import Status from './pages/Status'
+import Logs from './pages/Logs'
 import Settings from './pages/Settings'
 import { NotificationProvider, useNotification } from './components/ui/Notification'
+import DynamicBackground, { BgProvider, useBgContext } from './components/background/DynamicBackground'
 import type { Page, Tab } from './types'
 
 const pageLabels: Record<Page, string> = {
@@ -75,6 +78,8 @@ function PageContent({ page }: { page: Page }) {
     case 'deploy': return <Deployment />
     case 'knowledge': return <Knowledge />
     case 'plugins': return <Plugins />
+    case 'status': return <Status />
+    case 'logs': return <Logs />
     case 'settings': return <Settings />
     default:
       return (
@@ -189,12 +194,11 @@ function App() {
   const showMain = isAuthenticated
 
   return (
+    <BgProvider key={isAuthenticated ? 'auth' : 'guest'}>
     <NotificationProvider>
     <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
-      {/* 三层背景 — 始终存在 */}
-      <div className="absolute inset-0 bg-white" />
-      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/bg-temp.png')" }} />
-      <div className="absolute inset-0 bg-white/50" />
+      {/* 动态背景 */}
+      <DynamicBackground />
 
       {/* 通知挂载点 — 在背景图上方，z-index 最高 */}
       <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
@@ -242,13 +246,24 @@ function App() {
 
       {/* 过渡遮罩层 — 最顶层 */}
       {loginTransition !== 'none' && (
-        <div className={`absolute inset-0 z-30 pointer-events-none ${loginTransition === 'cover-in' ? 'animate-login-fade-in' : 'animate-login-fade-out'}`}>
-          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: "url('/bg-temp.png')" }} />
-          <div className="absolute inset-0 bg-white/50" />
-        </div>
+        <LoginTransitionOverlay loginTransition={loginTransition} />
       )}
     </div>
     </NotificationProvider>
+    </BgProvider>
+  )
+}
+
+/**
+ * 登录过渡遮罩 - 使用动态背景
+ */
+function LoginTransitionOverlay({ loginTransition }: { loginTransition: 'cover-in' | 'cover-out' }) {
+  const { currentBgUrl, settings } = useBgContext()
+  return (
+    <div className={`absolute inset-0 z-30 pointer-events-none ${loginTransition === 'cover-in' ? 'animate-login-fade-in' : 'animate-login-fade-out'}`}>
+      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${currentBgUrl}')` }} />
+      <div className="absolute inset-0" style={{ background: `rgba(${settings.overlay_color},${settings.overlay_opacity})` }} />
+    </div>
   )
 }
 

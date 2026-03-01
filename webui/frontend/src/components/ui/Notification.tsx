@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useBgContext } from '../background/DynamicBackground'
 
 type ToastLevel = 'success' | 'error' | 'info' | 'warning'
 
@@ -31,6 +32,25 @@ const LEVEL_COLORS: Record<ToastLevel, string> = {
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x: 0, y: 0 })
+  const { currentBgUrl } = useBgContext()
+  const [bgA, setBgA] = useState(currentBgUrl)
+  const [bgB, setBgB] = useState('')
+  const [showA, setShowA] = useState(true)
+  const prevUrlRef = useRef(currentBgUrl)
+
+  // Handle background transition
+  useEffect(() => {
+    if (currentBgUrl !== prevUrlRef.current) {
+      prevUrlRef.current = currentBgUrl
+      if (showA) {
+        setBgB(currentBgUrl)
+        setShowA(false)
+      } else {
+        setBgA(currentBgUrl)
+        setShowA(true)
+      }
+    }
+  }, [currentBgUrl, showA])
 
   // 获取 toast 在视口中的位置，用于偏移内部背景图
   useEffect(() => {
@@ -49,6 +69,25 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
 
   const color = LEVEL_COLORS[toast.level]
 
+  const renderBgLayer = (url: string, visible: boolean, key: string) => (
+    <div
+      key={key}
+      style={{
+        position: 'absolute',
+        left: -pos.x,
+        top: -pos.y,
+        width: '100vw',
+        height: '100vh',
+        backgroundImage: `url('${url}')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        filter: 'blur(50px)',
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 3s ease-in-out',
+      }}
+    />
+  )
+
   return (
     <div
       ref={ref}
@@ -56,22 +95,10 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
       className={`relative cursor-pointer overflow-hidden rounded-[20px] ${toast.exiting ? 'animate-notification-out' : 'animate-notification-in'}`}
       style={{ minWidth: 300, maxWidth: 422 }}
     >
-      {/* 模糊背景层：克隆页面背景图 + blur */}
+      {/* 模糊背景层：克隆页面背景图 + blur - 使用双层实现渐变过渡 */}
       <div className="absolute inset-0 overflow-hidden rounded-[20px]" style={{ zIndex: 0 }}>
-        {/* 背景图，偏移到与页面背景对齐 */}
-        <div
-          style={{
-            position: 'absolute',
-            left: -pos.x,
-            top: -pos.y,
-            width: '100vw',
-            height: '100vh',
-            backgroundImage: "url('/bg-temp.png')",
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            filter: 'blur(50px)',
-          }}
-        />
+        {renderBgLayer(bgA, showA, 'bg-a')}
+        {renderBgLayer(bgB, !showA, 'bg-b')}
         {/* 白色叠加层 */}
         <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.45)' }} />
       </div>

@@ -1,4 +1,5 @@
 import { type ReactNode, type CSSProperties, useRef, useState, useEffect } from 'react'
+import { useBgContext } from '../background/DynamicBackground'
 
 interface GlassCardProps {
   children: ReactNode
@@ -27,38 +28,71 @@ export default function GlassCard({
 }: GlassCardProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x: 0, y: 0 })
+  const { currentBgUrl } = useBgContext()
+  const [bgA, setBgA] = useState(currentBgUrl)
+  const [bgB, setBgB] = useState('')
+  const [showA, setShowA] = useState(true)
+  const prevUrlRef = useRef(currentBgUrl)
+
+  // Handle background transition
+  useEffect(() => {
+    if (currentBgUrl !== prevUrlRef.current) {
+      prevUrlRef.current = currentBgUrl
+      if (showA) {
+        setBgB(currentBgUrl)
+        setShowA(false)
+      } else {
+        setBgA(currentBgUrl)
+        setShowA(true)
+      }
+    }
+  }, [currentBgUrl, showA])
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
+    let rafId = 0
     const update = () => {
       const rect = el.getBoundingClientRect()
       setPos({ x: rect.left, y: rect.top })
+    }
+    const onScroll = () => {
+      cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(update)
     }
     update()
     const raf = setInterval(update, 16)
     const timer = setTimeout(() => clearInterval(raf), 400)
     window.addEventListener('resize', update)
-    return () => { clearInterval(raf); clearTimeout(timer); window.removeEventListener('resize', update) }
+    window.addEventListener('scroll', onScroll, true)
+    return () => { clearInterval(raf); clearTimeout(timer); cancelAnimationFrame(rafId); window.removeEventListener('resize', update); window.removeEventListener('scroll', onScroll, true) }
   }, [])
+
+  const renderBgLayer = (url: string, visible: boolean, key: string) => (
+    <div
+      key={key}
+      style={{
+        position: 'absolute',
+        left: -pos.x,
+        top: -pos.y,
+        width: '100vw',
+        height: '100vh',
+        backgroundImage: `url('${url}')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        filter: `blur(${blur}px)`,
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 3s ease-in-out',
+      }}
+    />
+  )
 
   return (
     <div ref={ref} className={`relative h-full ${className}`} style={style} onClick={onClick}>
-      {/* 模糊背景层 */}
+      {/* 模糊背景层 - 使用双层实现渐变过渡 */}
       <div className="absolute inset-0 overflow-hidden" style={{ borderRadius: radius, zIndex: 0 }}>
-        <div
-          style={{
-            position: 'absolute',
-            left: -pos.x,
-            top: -pos.y,
-            width: '100vw',
-            height: '100vh',
-            backgroundImage: "url('/bg-temp.png')",
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            filter: `blur(${blur}px)`,
-          }}
-        />
+        {renderBgLayer(bgA, showA, 'bg-a')}
+        {renderBgLayer(bgB, !showA, 'bg-b')}
         <div className="absolute inset-0" style={{ background: `rgba(255,255,255,${bgOpacity})` }} />
       </div>
       {/* 边框层 */}

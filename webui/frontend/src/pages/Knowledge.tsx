@@ -64,6 +64,26 @@ interface LpmmSettings {
   enable_ppr: boolean
 }
 
+const LPMM_KEYS: (keyof LpmmSettings)[] = [
+  'enable',
+  'lpmm_mode',
+  'rag_synonym_search_top_k',
+  'rag_synonym_threshold',
+  'info_extraction_workers',
+  'qa_relation_search_top_k',
+  'qa_relation_threshold',
+  'qa_paragraph_search_top_k',
+  'qa_paragraph_node_weight',
+  'qa_ent_filter_top_k',
+  'qa_ppr_damping',
+  'qa_res_top_k',
+  'embedding_dimension',
+  'max_embedding_workers',
+  'embedding_chunk_size',
+  'max_synonym_entities',
+  'enable_ppr',
+]
+
 /* ─── 开关组件 ─── */
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -151,13 +171,22 @@ function SettingRow({ label, desc, children }: { label: string; desc?: string; c
 function KnowledgeSettingsModal({ serial, open, onClose }: { serial: string; open: boolean; onClose: () => void }) {
   const { notify } = useNotification()
   const [settings, setSettings] = useState<LpmmSettings | null>(null)
+  const [sourceKeys, setSourceKeys] = useState<(keyof LpmmSettings)[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!open) return
     fetch(`/api/knowledge/${serial}/settings`, { credentials: 'include' })
       .then(r => r.json())
-      .then(d => { if (d.success) setSettings(d.settings) })
+      .then(d => {
+        if (!d.success) return
+        setSettings(d.settings)
+        const keySet = new Set<string>(LPMM_KEYS as string[])
+        const keys = Array.isArray(d.source_keys)
+          ? d.source_keys.filter((k: string): k is keyof LpmmSettings => keySet.has(k))
+          : LPMM_KEYS.filter(k => Object.prototype.hasOwnProperty.call(d.settings ?? {}, k))
+        setSourceKeys(keys)
+      })
       .catch(() => notify('读取设置失败', 'error'))
   }, [serial, open])
 
@@ -166,12 +195,18 @@ function KnowledgeSettingsModal({ serial, open, onClose }: { serial: string; ope
 
   const handleSave = async () => {
     if (!settings) return
+    if (sourceKeys.length === 0) {
+      notify('源配置中未找到可更新字段', 'error')
+      return
+    }
     setSaving(true)
     try {
+      const payload: Record<string, unknown> = {}
+      sourceKeys.forEach(k => { payload[k] = settings[k] })
       const res = await fetch(`/api/knowledge/${serial}/settings`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({ settings: payload }),
       })
       const d = await res.json()
       if (d.success) { notify('设置已保存', 'success'); onClose() }

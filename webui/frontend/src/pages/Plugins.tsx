@@ -443,7 +443,7 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
               </button>
               {dropdownOpen && (
                 <div
-                  className="absolute top-[46px] left-0 min-w-full rounded-[14px] bg-white/90 backdrop-blur-md border-2 border-black/20 py-[6px] z-50 max-h-[200px] overflow-y-auto custom-scrollbar"
+                  className="absolute top-[46px] left-0 min-w-full rounded-[14px] bg-white/60 backdrop-blur-md border-2 border-black/20 py-[6px] z-50 max-h-[200px] overflow-y-auto custom-scrollbar"
                   style={{ boxShadow: '2px 4px 12px rgba(0,0,0,0.12)' }}
                 >
                   {folderPaths.map(p => {
@@ -765,25 +765,27 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
       {/* 插件列表 */}
       <div className="flex-1 overflow-y-auto overflow-x-visible custom-scrollbar px-[8px] pb-[8px]">
         {loading ? (
-          <div className="flex items-center justify-center h-[120px]">
+          <div className="flex items-center justify-center h-[120px] gap-[10px] animate-fade-in">
+            <div className="rounded-full animate-spin" style={{ width: 20, height: 20, border: '3px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
             <span className="text-black/20" style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>加载中...</span>
           </div>
         ) : localPlugins.length === 0 ? (
-          <div className="flex items-center justify-center h-[120px]">
+          <div className="flex items-center justify-center h-[120px] animate-fade-in">
             <span className="text-black/20" style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>未找到本地插件</span>
           </div>
         ) : (
           <div className="flex flex-col gap-[10px]">
-            {localPlugins.map(p => {
+            {localPlugins.map((p, idx) => {
               const checked = selectedIds.has(p.id)
               return (
                 <div
                   key={p.folder_name}
-                  className="relative rounded-[14px] px-[14px] py-[10px] pl-[44px] transition-all duration-200 hover:scale-[1.01] cursor-pointer origin-center"
+                  className="relative rounded-[14px] px-[14px] py-[10px] pl-[44px] transition-all duration-200 hover:scale-[1.01] cursor-pointer origin-center animate-fade-slide-up"
                   style={{
                     border: '2px solid rgba(0,0,0,0.2)',
                     boxShadow: '2px 3px 6px rgba(0,0,0,0.08)',
                     background: checked ? 'rgba(0,0,0,0.04)' : 'transparent',
+                    animationDelay: `${idx * 40}ms`, animationFillMode: 'backwards',
                   }}
                   onClick={() => toggleSelect(p.id)}
                 >

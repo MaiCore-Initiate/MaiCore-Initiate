@@ -328,8 +328,10 @@ export default function Instances() {
   const [instances, setInstances] = useState<Instance[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     fetch('/api/webui/instances', { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
@@ -345,6 +347,7 @@ export default function Instances() {
         setInstances(list)
       })
       .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   const filtered = instances.filter(i => {
@@ -383,8 +386,13 @@ export default function Instances() {
               </div>
 
               <div className="flex-1 overflow-y-auto mt-[12px] px-[4px]">
-                {filtered.length === 0 ? (
-                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed border-[#9e9e9e]">
+                {loading ? (
+                  <div className="flex items-center justify-center h-[120px] gap-[10px] animate-fade-in">
+                    <div className="rounded-full animate-spin" style={{ width: 20, height: 20, border: '3px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
+                    <span className="text-black/40" style={monoFont}>正在加载实例列表...</span>
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed border-[#9e9e9e] animate-fade-in">
                     <span className="text-[#9e9e9e] font-semibold text-base" style={monoFont}>no instance</span>
                   </div>
                 ) : (
@@ -392,7 +400,7 @@ export default function Instances() {
                     const isSelected = inst.serial === selected
                     const label = `${inst.nickname}|${inst.serial}|${inst.absoluteSerial}`
                     return (
-                      <div key={inst.serial}>
+                      <div key={inst.serial} className="animate-fade-slide-up" style={{ animationDelay: `${i * 40}ms`, animationFillMode: 'backwards' }}>
                         {isSelected && i > 0 && <div className="h-[6px]" />}
                         <button
                           className="w-full flex items-center cursor-pointer transition-all duration-300 overflow-hidden"
