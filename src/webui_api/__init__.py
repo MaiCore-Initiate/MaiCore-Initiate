@@ -13,6 +13,9 @@ from .stats_api import router as stats_router
 from .webui_config_api import router as webui_config_router
 from .preferences_api import router as preferences_router
 from .plugin_api import router as plugin_router
+from .runtime_status_api import router as runtime_status_router
+from .logs_api import router as logs_router
+from .settings_api import router as settings_router
 
 __all__ = [
     "deploy_router",
@@ -24,5 +27,8 @@ __all__ = [
     "stats_router",
     "webui_config_router",
     "preferences_router",
-    "plugin_router"
+    "plugin_router",
+    "runtime_status_router",
+    "logs_router",
+    "settings_router"
 ]

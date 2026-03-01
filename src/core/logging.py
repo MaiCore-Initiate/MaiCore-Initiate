@@ -171,8 +171,14 @@ def rotate_logs():
                 # 从文件名中提取日期部分 (e.g., "2025-10-07_14-24-31.jsonl")
                 filename = os.path.basename(log_file)
                 timestamp_str = filename.split('.')[0]
-                log_date = datetime.strptime(timestamp_str, "%Y-%m-%d_%H-%M-%S")
-                
+                try:
+                    log_date = datetime.strptime(timestamp_str, "%Y-%m-%d_%H-%M-%S")
+                except ValueError:
+                    if timestamp_str.startswith("webui_"):
+                        log_date = datetime.strptime(timestamp_str[6:], "%Y-%m-%d")
+                    else:
+                        raise
+
                 # 如果日志文件早于截止日期，则删除它
                 if log_date < cutoff_date:
                     os.remove(log_file)

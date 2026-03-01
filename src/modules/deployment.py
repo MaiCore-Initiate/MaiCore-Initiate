@@ -7,9 +7,11 @@
 import logging
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
-from typing import Any, Dict, Optional, Tuple
+import time
+from typing import Any, Callable, Dict, Optional, Tuple
 import structlog
 
 from ..core.config import config_manager
@@ -44,6 +46,32 @@ class DeploymentManager:
         
         # 离线模式标志
         self._offline_mode = False
+
+    def _on_rm_error(self, func, path, exc_info):
+        """删除失败回调：尽量去掉只读属性后重试（Windows兼容）"""
+        try:
+            os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+        except Exception:
+            pass
+        func(path)
+
+    def _safe_rmtree(self, target_path: str, retries: int = 3, base_delay: float = 0.2):
+        """带重试和只读容错的目录删除"""
+        if not target_path or not os.path.exists(target_path):
+            return
+
+        last_error = None
+        for attempt in range(retries):
+            try:
+                shutil.rmtree(target_path, onerror=self._on_rm_error)
+                return
+            except Exception as e:
+                last_error = e
+                # 文件被短暂占用时等待后重试
+                if attempt < retries - 1:
+                    time.sleep(base_delay * (attempt + 1))
+                    continue
+                raise last_error
         
     def deploy_instance(self) -> bool:
         """部署新实例 - 重构版本"""
@@ -366,11 +394,17 @@ class DeploymentManager:
         
         return ui.confirm("\n确认以上配置并开始部署？")
     
-    def _run_deployment_steps(self, deploy_config: Dict) -> Dict[str, str]:
-        """执行所有部署步骤"""
+    def _run_deployment_steps(self, deploy_config: Dict, progress_callback: Optional[Callable] = None) -> Dict[str, str]:
+        """执行所有部署步骤，可选进度回调"""
         bot_type = deploy_config.get("bot_type", "MaiBot")
         bot_path_key = "mai_path" if bot_type == "MaiBot" else "mofox_path"
-        
+        total_steps = 6
+        selected_version = deploy_config.get("selected_version", {})
+
+        def _notify(step: int, name: str, status: str, msg: str = ""):
+            if progress_callback:
+                progress_callback(step=step, total_steps=total_steps, step_name=name, status=status, message=msg)
+
         paths = {
             bot_path_key: "",
             "adapter_path": "",
@@ -381,95 +415,138 @@ class DeploymentManager:
         }
 
         # 步骤1：安装Bot
+        _notify(1, f"安装{bot_type}本体", "running", f"正在准备部署 {bot_type}，实例昵称: {deploy_config.get('nickname', '-')}")
+        _notify(1, f"安装{bot_type}本体", "running", f"目标版本: {selected_version.get('display_name') or selected_version.get('name', '未知')}")
+        _notify(1, f"安装{bot_type}本体", "running", f"安装目录: {deploy_config.get('install_dir', '-')}")
+        _notify(1, f"安装{bot_type}本体", "running", f"正在从仓库克隆 {bot_type}...")
         if bot_type == "MaiBot":
             paths[bot_path_key] = self.maibot_deployer.install_bot(deploy_config)
         else:
             paths[bot_path_key] = self.mofox_deployer.install_bot(deploy_config)
-        
+
         if not paths[bot_path_key]:
+            _notify(1, f"安装{bot_type}本体", "failed", f"{bot_type}安装失败，请检查网络连接或仓库地址")
             raise Exception(f"{bot_type}安装失败")
+        _notify(1, f"安装{bot_type}本体", "completed", f"{bot_type}安装完成，路径: {paths[bot_path_key]}")
 
         # 步骤2：处理适配器路径
         if deploy_config.get("install_adapter"):
+            _notify(2, "安装适配器", "running", f"正在为 {bot_type} 安装适配器...")
+        else:
+            _notify(2, "安装适配器", "running", "跳过适配器安装（未勾选）")
+        if deploy_config.get("install_adapter"):
             if bot_type == "MaiBot":
                 paths["adapter_path"] = self.maibot_deployer.install_adapter(deploy_config, paths[bot_path_key])
+                _notify(2, "安装适配器", "completed", f"适配器安装完成，路径: {paths['adapter_path']}")
             else:
-                # MoFox_bot可能有外置适配器
                 ui.console.print("\n[🔌 第二步：适配器配置]", style=ui.colors["primary"])
                 ui.print_info("MoFox_bot已内置适配器，跳过外置适配器安装")
                 paths["adapter_path"] = "内置适配器"
+                _notify(2, "安装适配器", "running", "MoFox_bot 使用内置适配器，无需额外下载")
         elif bot_type == "MoFox_bot":
             ui.print_info("检测到MoFox_bot，将记录内置适配器路径")
-            # 使用实例名称目录作为适配器路径，与新的目录结构保持一致
             nickname = deploy_config.get("nickname", "MoFox_bot_instance")
             instance_dir = os.path.join(deploy_config["install_dir"], nickname)
             paths["adapter_path"] = os.path.join(instance_dir, "MoFox_bot-Adapter")
+        _notify(2, "安装适配器", "completed", "适配器处理完成")
 
         # 步骤3：安装NapCat
         if deploy_config.get("install_napcat") and deploy_config.get("napcat_version"):
+            napcat_ver = deploy_config["napcat_version"].get("display_name", "未知版本")
+            _notify(3, "安装NapCat", "running", f"正在下载并安装 NapCat {napcat_ver}...")
+            _notify(3, "安装NapCat", "running", f"安装目标目录: {os.path.dirname(paths[bot_path_key])}")
             paths["napcat_path"] = self.napcat_deployer.install_napcat(deploy_config, paths[bot_path_key])
-        # 步骤4：WebUI处理（已移除独立安装，改为内置或组件下载）
+            if paths["napcat_path"]:
+                _notify(3, "安装NapCat", "completed", f"NapCat安装完成，路径: {paths['napcat_path']}")
+            else:
+                _notify(3, "安装NapCat", "completed", "NapCat安装未成功，可稍后手动配置")
+        else:
+            _notify(3, "安装NapCat", "completed", "跳过NapCat安装（未勾选）")
+
+        # 步骤4：WebUI处理
+        _notify(4, "WebUI配置", "running", f"正在处理 {bot_type} 的WebUI配置...")
         if bot_type == "MaiBot":
-            # 检查版本是否内置WebUI
             version_name = deploy_config["selected_version"].get("name", "")
             from ..utils.version_detector import has_builtin_webui
-            
+
             if has_builtin_webui(version_name):
                 ui.console.print("\n[🌐 第四步：WebUI配置]", style=ui.colors["primary"])
                 ui.print_info(f"版本 {version_name} 内置WebUI，启动时将自动代理")
-                # 内置WebUI不需要独立路径
                 paths["webui_path"] = "builtin"
+                _notify(4, "WebUI配置", "completed", f"版本 {version_name} 内置WebUI，无需单独安装")
             else:
                 ui.console.print("\n[🌐 第四步：WebUI配置]", style=ui.colors["primary"])
                 ui.print_info("当前版本未内置WebUI，如需WebUI功能请从组件下载页获取")
                 paths["webui_path"] = ""
+                _notify(4, "WebUI配置", "completed", "当前版本未内置WebUI，跳过")
         elif bot_type == "MoFox_bot" and deploy_config.get("install_mofox_admin_ui"):
             success, paths["webui_path"] = self._install_mofox_admin_ui(deploy_config)
             if not success:
                 ui.print_warning("MoFox_bot后台管理WebUI安装失败，但部署将继续...")
+            _notify(4, "WebUI配置", "completed", f"MoFox后台WebUI: {'安装成功' if success else '安装失败，已跳过'}")
         elif bot_type == "MoFox_bot" and deploy_config.get("install_mofox_webui"):
             success, paths["webui_path"] = self.mofox_deployer.install_webui(deploy_config, paths[bot_path_key])
             if not success:
                 ui.print_warning("MoFox WebUI安装失败，但部署将继续...")
+            _notify(4, "WebUI配置", "completed", f"MoFox WebUI: {'安装成功' if success else '安装失败，已跳过'}")
+        else:
+            _notify(4, "WebUI配置", "completed", "跳过WebUI安装")
 
         # 步骤5：设置Python环境
+        _notify(5, "Python环境", "running", f"正在为 {bot_type} 创建Python虚拟环境...")
         ui.console.print("\n[🐍 第五步：设置Python环境]", style=ui.colors["primary"])
         ui.print_info("正在创建Python虚拟环境...")
-        venv_success, venv_path = self.maibot_deployer.create_virtual_environment(paths[bot_path_key])
-        
+        _notify(5, "Python环境", "running", f"虚拟环境计划创建位置: {os.path.dirname(paths[bot_path_key])}")
+        venv_success, venv_path = self.maibot_deployer.create_virtual_environment(os.path.dirname(paths[bot_path_key]))
+
         if venv_success:
+            _notify(5, "Python环境", "running", f"虚拟环境创建成功: {venv_path}，正在安装Bot本体依赖...")
             requirements_path = os.path.join(paths[bot_path_key], "requirements.txt")
-            
+            _notify(5, "Python环境", "running", f"依赖清单路径: {requirements_path}")
+
             ui.print_info("正在安装Bot本体依赖...")
             deps_success = self.maibot_deployer.install_dependencies_in_venv(venv_path, requirements_path)
-            
-            # 安装适配器依赖（如果适配器存在且有requirements.txt）
+
             adapter_deps_success = True
             adapter_path = paths.get("adapter_path", "")
-            if adapter_path and adapter_path not in ["无需适配器", "内置适配器", "跳过适配器安装"] and not ("失败" in adapter_path):
+            if adapter_path and adapter_path not in ["无需适配器", "内置适配器", "跳过适配器安装", ""] and not ("失败" in adapter_path):
                 adapter_requirements_path = os.path.join(adapter_path, "requirements.txt")
                 if os.path.exists(adapter_requirements_path):
+                    _notify(5, "Python环境", "running", "正在安装适配器依赖...")
+                    _notify(5, "Python环境", "running", f"适配器依赖清单路径: {adapter_requirements_path}")
                     ui.print_info("正在安装napcat适配器依赖...")
                     adapter_deps_success = self.maibot_deployer.install_dependencies_in_venv(venv_path, adapter_requirements_path)
                 else:
                     ui.print_info("适配器无requirements.txt文件，跳过适配器依赖安装")
+                    _notify(5, "Python环境", "running", "适配器未提供 requirements.txt，跳过适配器依赖安装")
 
             if deps_success and adapter_deps_success:
                 ui.print_success("✅ Python环境设置完成")
+                _notify(5, "Python环境", "completed", "Python虚拟环境创建成功，所有依赖安装完成")
             else:
                 ui.print_warning("⚠️ 依赖安装失败，但继续部署过程")
-            
+                _notify(5, "Python环境", "completed", "虚拟环境已创建，但部分依赖安装失败")
+
             paths["venv_path"] = venv_path
         else:
             ui.print_warning("⚠️ 虚拟环境创建失败，将使用系统Python")
             paths["venv_path"] = ""
-        
-        # 为MaiBot的WebUI安装后端依赖
+            _notify(5, "Python环境", "completed", "虚拟环境创建失败，将使用系统Python")
+
         if bot_type == "MaiBot" and paths.get("webui_path") and paths.get("venv_path"):
+            _notify(5, "Python环境", "running", "正在安装WebUI后端依赖...")
             ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
             webui_installer.install_webui_backend_dependencies(paths["webui_path"], paths["venv_path"])
+            _notify(5, "Python环境", "running", f"WebUI后端依赖安装路径: {paths['webui_path']}")
+        _notify(5, "Python环境", "completed", "Python环境设置完成")
 
         # 步骤6：配置文件设置
+        _notify(6, "配置文件", "running", f"正在为 {bot_type} 设置配置文件...")
+        _notify(6, "配置文件", "running", f"Bot路径: {paths[bot_path_key]}")
+        if paths.get("adapter_path"):
+            _notify(6, "配置文件", "running", f"适配器路径: {paths['adapter_path']}")
+        if paths.get("napcat_path"):
+            _notify(6, "配置文件", "running", f"NapCat路径: {paths['napcat_path']}")
         if bot_type == "MaiBot":
             if not self.maibot_deployer.setup_config_files(
                 deploy_config,
@@ -479,6 +556,7 @@ class DeploymentManager:
                 paths.get("mongodb_path", ""),
                 paths.get("webui_path", "")
             ):
+                _notify(6, "配置文件", "running", "⚠️ 配置文件设置失败，但部署将继续")
                 ui.print_warning("配置文件设置失败，但部署将继续...")
         else:
             if not self.mofox_deployer.setup_config_files(
@@ -489,7 +567,9 @@ class DeploymentManager:
                 paths.get("mongodb_path", ""),
                 paths.get("webui_path", "")
             ):
+                _notify(6, "配置文件", "running", "⚠️ 配置文件设置失败，但部署将继续")
                 ui.print_warning("配置文件设置失败，但部署将继续...")
+        _notify(6, "配置文件", "completed", f"{bot_type} 配置文件设置完成")
 
         return paths
 
@@ -987,7 +1067,7 @@ class DeploymentManager:
                     # 如果目标已存在，先删除
                     if os.path.exists(delete_target):
                         ui.print_warning(f"目标目录已存在，将先删除: {delete_target}")
-                        shutil.rmtree(delete_target)
+                        self._safe_rmtree(delete_target)
                     
                     # 创建删除目录
                     os.makedirs(delete_target, exist_ok=True)
@@ -1018,7 +1098,7 @@ class DeploymentManager:
                     
                     # 删除原始昵称目录
                     ui.print_info(f"正在删除原目录: {nickname_dir}")
-                    shutil.rmtree(nickname_dir)
+                    self._safe_rmtree(nickname_dir)
                     ui.print_success(f"✅ 已删除原目录")
                     
                 except Exception as e:
@@ -1028,7 +1108,7 @@ class DeploymentManager:
                         return False
                     # 尝试直接删除
                     try:
-                        shutil.rmtree(nickname_dir)
+                        self._safe_rmtree(nickname_dir)
                         ui.print_success(f"已直接删除目录: {nickname_dir}")
                     except Exception as e2:
                         ui.print_error(f"直接删除也失败: {str(e2)}")
@@ -1037,7 +1117,7 @@ class DeploymentManager:
                 # 不备份，直接删除
                 try:
                     ui.print_warning(f"将直接删除目录（不备份）: {nickname_dir}")
-                    shutil.rmtree(nickname_dir)
+                    self._safe_rmtree(nickname_dir)
                     ui.print_success(f"✅ 已删除目录: {nickname_dir}")
                 except Exception as e:
                     ui.print_error(f"删除失败: {str(e)}")
@@ -1059,6 +1139,132 @@ class DeploymentManager:
             return False
         finally:
             reset_console_log_level()
+
+    def deploy_instance_webui(self, deploy_config: Dict, progress_callback: Optional[Callable] = None) -> bool:
+        """WebUI模式部署实例 — 非交互式，通过progress_callback推送进度"""
+        try:
+            logger.info("WebUI模式开始部署实例", config=deploy_config)
+
+            # 创建安装目录
+            install_dir = deploy_config.get("install_dir", "")
+            if install_dir:
+                os.makedirs(install_dir, exist_ok=True)
+
+            # 执行部署步骤（带进度回调）
+            paths = self._run_deployment_steps(deploy_config, progress_callback=progress_callback)
+
+            # 完成部署配置
+            if not self._finalize_deployment(deploy_config, **paths):
+                if progress_callback:
+                    progress_callback(step=6, total_steps=6, step_name="完成配置", status="failed", message="配置保存失败")
+                return False
+
+            logger.info("WebUI模式部署完成", serial=deploy_config.get("serial_number"))
+            return True
+
+        except Exception as e:
+            logger.error("WebUI模式部署失败", error=str(e))
+            if progress_callback:
+                progress_callback(step=0, total_steps=6, step_name="部署失败", status="failed", message=str(e))
+            return False
+
+    def update_instance_webui(self, serial_number: str, new_version: Dict, progress_callback: Optional[Callable] = None) -> bool:
+        """WebUI模式更新实例 — 非交互式"""
+        try:
+            logger.info("WebUI模式开始更新实例", serial=serial_number)
+            if progress_callback:
+                target_ver = new_version.get("display_name") or new_version.get("name", "-")
+                progress_callback(step=1, total_steps=6, step_name="准备更新", status="running", message=f"更新任务已启动，目标版本: {target_ver}")
+                progress_callback(step=1, total_steps=6, step_name="准备更新", status="running", message=f"实例序列号: {serial_number}")
+
+            result = self.instance_updater.update_instance(
+                serial_number,
+                new_version,
+                from_webui=True,
+                progress_callback=progress_callback
+            )
+
+            if progress_callback:
+                if result:
+                    progress_callback(step=6, total_steps=6, step_name="更新完成", status="completed", message="实例更新成功")
+                else:
+                    progress_callback(step=6, total_steps=6, step_name="更新失败", status="failed", message="实例更新失败")
+            return result
+
+        except Exception as e:
+            logger.error("WebUI模式更新失败", error=str(e))
+            if progress_callback:
+                progress_callback(step=0, total_steps=6, step_name="更新失败", status="failed", message=str(e))
+            return False
+
+    def delete_instance_webui(self, serial_number: str, confirm_nickname: str, backup: bool = True) -> Dict[str, Any]:
+        """WebUI模式删除实例 — 非交互式"""
+        try:
+            configs = config_manager.get_all_configurations()
+            matched_key = None
+            matched_cfg = None
+            for name, cfg in configs.items():
+                if cfg.get("serial_number") == serial_number:
+                    matched_key = name
+                    matched_cfg = cfg
+                    break
+
+            if not matched_cfg:
+                return {"success": False, "message": f"未找到序列号为 {serial_number} 的实例"}
+
+            nickname = matched_cfg.get("nickname_path", "")
+            if nickname != confirm_nickname:
+                return {"success": False, "message": "实例昵称不匹配"}
+
+            bot_type = matched_cfg.get("bot_type", "MaiBot")
+            bot_path = matched_cfg.get("mai_path") if bot_type == "MaiBot" else matched_cfg.get("mofox_path")
+            nickname_dir = os.path.dirname(bot_path) if bot_path else None
+
+            if not nickname_dir or not os.path.exists(nickname_dir):
+                # 仅删除配置
+                if matched_key and config_manager.delete_configuration(matched_key):
+                    config_manager.save()
+                    return {"success": True, "message": "实例目录不存在，已删除配置记录", "backup_path": None}
+                return {"success": False, "message": "实例目录不存在且配置删除失败"}
+
+            backup_path = None
+            if backup:
+                parent_dir = os.path.dirname(nickname_dir)
+                delete_target = os.path.join(parent_dir, f"{os.path.basename(nickname_dir)}-delete")
+                if os.path.exists(delete_target):
+                    self._safe_rmtree(delete_target)
+                os.makedirs(delete_target, exist_ok=True)
+                backup_path = delete_target
+
+                bot_data_dir = os.path.join(bot_path, "data")
+                bot_config_dir = os.path.join(bot_path, "config")
+                if os.path.exists(bot_data_dir):
+                    shutil.copytree(bot_data_dir, os.path.join(delete_target, "data"), dirs_exist_ok=True)
+                if os.path.exists(bot_config_dir):
+                    shutil.copytree(bot_config_dir, os.path.join(delete_target, "config"), dirs_exist_ok=True)
+
+            self._safe_rmtree(nickname_dir)
+
+            if not matched_key:
+                return {"success": False, "message": "未找到对应配置键，无法完成配置删除", "backup_path": backup_path}
+
+            if not config_manager.delete_configuration(matched_key):
+                return {
+                    "success": False,
+                    "message": "实例目录已删除，但配置删除失败，请检查配置文件状态或写入权限",
+                    "backup_path": backup_path,
+                }
+
+            config_manager.save()
+
+            msg = f"实例 {serial_number} 已删除"
+            if backup and backup_path:
+                msg += f"（已备份到: {backup_path}）"
+            return {"success": True, "message": msg, "backup_path": backup_path}
+
+        except Exception as e:
+            logger.error("WebUI模式删除失败", error=str(e))
+            return {"success": False, "message": f"删除失败: {str(e)}"}
 
 
 # 全局部署管理器实例

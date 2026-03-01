@@ -4,6 +4,9 @@
 为WebUI提供部署实例的API接口
 """
 import os
+import asyncio
+import threading
+import uuid
 from typing import Dict, Any, Optional, List
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -18,6 +21,49 @@ from ..modules.deployment_core import (
 from ..core.config import config_manager
 
 router = APIRouter()
+
+# 部署任务状态存储
+_deploy_tasks: Dict[str, Dict[str, Any]] = {}
+_main_event_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _get_broadcast_func():
+    """延迟获取广播函数，避免循环导入"""
+    from webui.backend.main import broadcast_deployment_progress
+    return broadcast_deployment_progress
+
+
+def _remember_main_event_loop() -> None:
+    """记录当前主事件循环，供后台线程安全调度协程使用。"""
+    global _main_event_loop
+    try:
+        _main_event_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+
+
+def _consume_future_exception(future) -> None:
+    """消费 run_coroutine_threadsafe 的异常，避免未处理告警。"""
+    try:
+        future.result()
+    except Exception:
+        pass
+
+
+def _dispatch_progress(serial_number: str, payload: Dict[str, Any]) -> None:
+    """从后台线程将进度广播调度到主事件循环执行。"""
+    loop = _main_event_loop
+    if loop is None or loop.is_closed() or not loop.is_running():
+        return
+    try:
+        broadcast = _get_broadcast_func()
+        future = asyncio.run_coroutine_threadsafe(
+            broadcast(serial_number, payload),
+            loop
+        )
+        future.add_done_callback(_consume_future_exception)
+    except Exception:
+        pass
 
 
 # --- 请求/响应模型 ---
@@ -54,7 +100,7 @@ class DeleteInstanceRequest(BaseModel):
 
 # --- API端点 ---
 
-@router.get("/deploy/versions/{bot_type}", summary="获取可部署版本列表")
+@router.get("/versions/{bot_type}", summary="获取可部署版本列表")
 async def get_available_versions(bot_type: str):
     """
     获取指定Bot类型的可用版本列表
@@ -80,7 +126,7 @@ async def get_available_versions(bot_type: str):
         raise HTTPException(status_code=500, detail=f"获取版本列表失败: {str(e)}")
 
 
-@router.get("/deploy/napcat/versions", summary="获取NapCat版本列表")
+@router.get("/napcat/versions", summary="获取NapCat版本列表")
 async def get_napcat_versions(force_refresh: bool = False):
     """
     获取可用的NapCat版本列表
@@ -99,16 +145,12 @@ async def get_napcat_versions(force_refresh: bool = False):
         raise HTTPException(status_code=500, detail=f"获取NapCat版本列表失败: {str(e)}")
 
 
-@router.post("/deploy/instances", summary="部署新实例")
+@router.post("/instances", summary="部署新实例")
 async def deploy_instance(
     request: DeployInstanceRequest,
     background_tasks: BackgroundTasks
 ):
-    """
-    部署一个新实例
-    
-    此接口会启动一个后台任务来执行部署操作
-    """
+    """部署一个新实例，后台线程执行并通过WebSocket推送进度"""
     try:
         # 验证序列号是否已存在
         configs = config_manager.get_all_configurations()
@@ -118,7 +160,7 @@ async def deploy_instance(
                     status_code=400,
                     detail=f"序列号 '{request.serial_number}' 已存在"
                 )
-        
+
         # 构建部署配置
         deploy_config = {
             "bot_type": request.bot_type,
@@ -134,24 +176,121 @@ async def deploy_instance(
             "nickname": request.nickname,
             "qq_account": request.qq_account,
             "serial_number": request.serial_number,
-            "mongodb_path": ""
+            "mongodb_path": "",
+            "from_webui": True
         }
-        
-        # 注意：这里需要通过UI交互来确认部署
-        # 在WebUI模式下，可能需要返回部署配置让用户确认
+
+        task_id = f"deploy_{uuid.uuid4().hex[:8]}"
+        _deploy_tasks[task_id] = {"status": "running", "step": 0, "total_steps": 6, "logs": []}
+
+        _remember_main_event_loop()
+
+        def _run_deploy():
+
+            def progress_cb(**kwargs):
+                _deploy_tasks[task_id].update(kwargs)
+                msg = kwargs.get("message", "")
+                step_name = kwargs.get("step_name", "")
+                status = kwargs.get("status", "running")
+                if msg:
+                    prefix = f"[{datetime.now().strftime('%H:%M:%S')}]"
+                    if step_name:
+                        prefix += f" [{step_name}]"
+                    if status:
+                        prefix += f" [{status}]"
+                    logs = _deploy_tasks[task_id].setdefault("logs", [])
+                    logs.append(f"{prefix} {msg}")
+                    # 限制内存占用，但尽量保留更多历史日志
+                    if len(logs) > 2000:
+                        _deploy_tasks[task_id]["logs"] = logs[-2000:]
+                _dispatch_progress(request.serial_number, {
+                    "task_id": task_id,
+                    **kwargs,
+                    "logs": _deploy_tasks[task_id].get("logs", [])[-500:]
+                })
+
+            try:
+                result = deployment_manager.deploy_instance_webui(deploy_config, progress_callback=progress_cb)
+                _deploy_tasks[task_id]["status"] = "completed" if result else "failed"
+                progress_cb(step=6, total_steps=6, step_name="部署完成" if result else "部署失败",
+                           status="completed" if result else "failed",
+                           message="部署成功！" if result else "部署过程中出现错误")
+            except Exception as e:
+                _deploy_tasks[task_id]["status"] = "failed"
+                progress_cb(step=0, total_steps=6, step_name="部署失败", status="failed", message=str(e))
+
+        threading.Thread(target=_run_deploy, daemon=True).start()
+
         return {
             "success": True,
-            "message": "部署请求已接收，请确认部署配置",
-            "config": deploy_config
+            "task_id": task_id,
+            "message": "部署任务已启动"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"部署失败: {str(e)}")
 
 
-@router.get("/deploy/instances", summary="获取所有实例")
+@router.post("/execute-update", summary="执行实例更新")
+async def execute_update(request: UpdateInstanceRequest):
+    """后台线程执行实例更新，通过WebSocket推送进度"""
+    try:
+        task_id = f"update_{uuid.uuid4().hex[:8]}"
+        _deploy_tasks[task_id] = {"status": "running", "step": 0, "total_steps": 6, "logs": []}
+
+        _remember_main_event_loop()
+
+        def _run_update():
+
+            def progress_cb(**kwargs):
+                _deploy_tasks[task_id].update(kwargs)
+                msg = kwargs.get("message", "")
+                step_name = kwargs.get("step_name", "")
+                status = kwargs.get("status", "running")
+                if msg:
+                    prefix = f"[{datetime.now().strftime('%H:%M:%S')}]"
+                    if step_name:
+                        prefix += f" [{step_name}]"
+                    if status:
+                        prefix += f" [{status}]"
+                    logs = _deploy_tasks[task_id].setdefault("logs", [])
+                    logs.append(f"{prefix} {msg}")
+                    if len(logs) > 2000:
+                        _deploy_tasks[task_id]["logs"] = logs[-2000:]
+                _dispatch_progress(request.serial_number, {
+                    "task_id": task_id,
+                    **kwargs,
+                    "logs": _deploy_tasks[task_id].get("logs", [])[-500:]
+                })
+
+            try:
+                result = deployment_manager.update_instance_webui(
+                    request.serial_number, request.new_version, progress_callback=progress_cb
+                )
+                _deploy_tasks[task_id]["status"] = "completed" if result else "failed"
+            except Exception as e:
+                _deploy_tasks[task_id]["status"] = "failed"
+                progress_cb(step=0, total_steps=6, step_name="更新失败", status="failed", message=str(e))
+
+        threading.Thread(target=_run_update, daemon=True).start()
+
+        return {"success": True, "task_id": task_id, "message": "更新任务已启动"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
+
+
+@router.get("/progress/{task_id}", summary="查询部署/更新进度")
+async def get_deploy_progress(task_id: str):
+    """轮询部署/更新进度（WebSocket备用）"""
+    task = _deploy_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return {"success": True, **task}
+
+
+@router.get("/instances", summary="获取所有实例")
 async def get_all_instances():
     """获取所有已部署的实例"""
     try:
@@ -185,7 +324,7 @@ async def get_all_instances():
         raise HTTPException(status_code=500, detail=f"获取实例列表失败: {str(e)}")
 
 
-@router.get("/deploy/instances/{serial_number}", summary="获取实例详情")
+@router.get("/instances/{serial_number}", summary="获取实例详情")
 async def get_instance_detail(serial_number: str):
     """获取指定序列号的实例详情"""
     try:
@@ -221,7 +360,7 @@ async def get_instance_detail(serial_number: str):
         raise HTTPException(status_code=500, detail=f"获取实例详情失败: {str(e)}")
 
 
-@router.put("/deploy/instances/{serial_number}", summary="更新实例配置")
+@router.put("/instances/{serial_number}", summary="更新实例配置")
 async def update_instance(serial_number: str, updates: Dict[str, Any]):
     """更新指定实例的配置"""
     try:
@@ -262,7 +401,7 @@ async def update_instance(serial_number: str, updates: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=f"更新实例失败: {str(e)}")
 
 
-@router.delete("/deploy/instances/{serial_number}", summary="删除实例")
+@router.delete("/instances/{serial_number}", summary="删除实例")
 async def delete_instance(serial_number: str):
     """
     删除指定实例
@@ -300,46 +439,28 @@ async def delete_instance(serial_number: str):
         raise HTTPException(status_code=500, detail=f"删除实例失败: {str(e)}")
 
 
-@router.post("/deploy/instances/{serial_number}/confirm-delete", summary="确认删除实例")
+@router.post("/instances/{serial_number}/confirm-delete", summary="确认删除实例")
 async def confirm_delete_instance(serial_number: str, request: DeleteInstanceRequest):
-    """确认删除实例"""
+    """确认删除实例 — 调用非交互式删除"""
     try:
-        # 验证序列号和昵称
         if request.serial_number != serial_number:
             raise HTTPException(status_code=400, detail="序列号不匹配")
-        
-        configs = config_manager.get_all_configurations()
-        
-        config_key = None
-        config = None
-        for name, cfg in configs.items():
-            if cfg.get("serial_number") == serial_number:
-                config_key = name
-                config = cfg
-                break
-        
-        if not config_key:
-            raise HTTPException(status_code=404, detail=f"未找到序列号为 {serial_number} 的实例")
-        
-        # 验证昵称
-        if config.get("nickname_path") != request.confirm_nickname:
-            raise HTTPException(status_code=400, detail="实例昵称不匹配")
-        
-        # 执行删除（需要后台任务处理）
-        # 这里需要调用deployment_manager.delete_instance()
-        # 但由于它是交互式的，需要重构为非交互式
-        
-        return {
-            "success": True,
-            "message": f"实例 {serial_number} 删除任务已启动"
-        }
+
+        result = deployment_manager.delete_instance_webui(
+            serial_number, request.confirm_nickname, request.backup
+        )
+
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result["message"])
+
+        return result
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除实例失败: {str(e)}")
 
 
-@router.get("/deploy/status", summary="获取部署状态")
+@router.get("/status", summary="获取部署状态")
 async def get_deploy_status():
     """获取当前部署系统的状态"""
     return {

@@ -34,7 +34,10 @@ from src.webui_api import (
     multi_instance_router,
     knowledge_router,
     port_router,
-    process_router
+    process_router,
+    runtime_status_router,
+    logs_router,
+    settings_router
 )
 
 # 导入配置管理器
@@ -316,6 +319,15 @@ logger = logging.getLogger(__name__)
 
 def verify_session(request: Request):
     """验证会话是否已登录"""
+    # 登录页背景需要在未登录时也能读取：
+    # 1) 背景偏好（是否启用自定义、固定文件等）
+    # 2) 背景文件列表（用于随机选择）
+    if request.method == "GET" and request.url.path in {
+        "/api/preferences/bg_settings",
+        "/api/settings/backgrounds",
+    }:
+        return "public"
+
     session_id = request.cookies.get("webui_session", "")
     if not session_id:
         raise HTTPException(status_code=401, detail="请先登录")
@@ -348,6 +360,13 @@ app.include_router(port_router, prefix="/api/port", tags=["端口管理"], depen
 # 进程管理API
 app.include_router(process_router, prefix="/api/process", tags=["进程管理"], dependencies=auth_dep)
 
+# 运行状态可视化API
+app.include_router(runtime_status_router, prefix="/api/runtime", tags=["运行状态"], dependencies=auth_dep)
+
+# 日志查看API
+from src.webui_api import logs_router
+app.include_router(logs_router, prefix="/api/logs", tags=["日志查看"], dependencies=auth_dep)
+
 # 统计API
 from src.webui_api import stats_router
 app.include_router(stats_router, prefix="/api/stats", tags=["统计"], dependencies=auth_dep)
@@ -363,6 +382,9 @@ app.include_router(preferences_router, prefix="/api/preferences", tags=["用户�
 # 插件管理API
 from src.webui_api import plugin_router
 app.include_router(plugin_router, prefix="/api/plugins", tags=["插件管理"], dependencies=auth_dep)
+
+# 设置管理API
+app.include_router(settings_router, prefix="/api/settings", tags=["设置管理"], dependencies=auth_dep)
 
 
 # --- 登录相关API ---
@@ -495,7 +517,7 @@ LOGIN_HTML = """
             border-radius: 24px;
             backdrop-filter: blur(50px);
             -webkit-backdrop-filter: blur(50px);
-            filter: brightness(-2%) blur(50px);
+            filter: brightness(98%) blur(50px);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
@@ -538,7 +560,7 @@ LOGIN_HTML = """
             transition: all 0.3s ease;
             backdrop-filter: blur(30px);
             -webkit-backdrop-filter: blur(30px);
-            filter: brightness(10%) blur(30px);
+            filter: brightness(110%) blur(30px);
         }
         
         .form-input::placeholder {
@@ -563,7 +585,7 @@ LOGIN_HTML = """
             transition: all 0.3s ease;
             backdrop-filter: blur(30px);
             -webkit-backdrop-filter: blur(30px);
-            filter: brightness(25%) blur(30px);
+            filter: brightness(125%) blur(30px);
         }
         
         .login-btn:hover {
@@ -898,6 +920,21 @@ async def startup_event():
     logger.info("MaiCore WebUI API 服务启动")
     # 启动后台任务
     asyncio.create_task(periodic_status_update())
+
+
+# 挂载前端静态文件
+frontend_dist = project_root / "webui" / "frontend" / "dist"
+if frontend_dist.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_dist / "assets")), name="static")
+    # 挂载 public 目录中的资源
+    frontend_public = project_root / "webui" / "frontend" / "public"
+    if frontend_public.exists():
+        app.mount("/fonts", StaticFiles(directory=str(frontend_public / "fonts")), name="fonts")
+        app.mount("/backgrounds", StaticFiles(directory=str(frontend_public / "backgrounds")), name="backgrounds")
+        app.mount("/default_backgrounds", StaticFiles(directory=str(frontend_public / "default_backgrounds")), name="default_backgrounds")
+    logger.info(f"已挂载静态文件目录: {frontend_dist}")
+else:
+    logger.warning(f"前端构建目录不存在: {frontend_dist}，静态文件服务未启用")
 
 
 @app.on_event("shutdown")

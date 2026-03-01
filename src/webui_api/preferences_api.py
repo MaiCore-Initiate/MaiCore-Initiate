@@ -12,10 +12,21 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).parent.parent.parent / "data" / "user_preferences.db"
+DEFAULT_USER_ID = "default"
+DEFAULT_BG_SETTINGS = {
+    "interval_minutes": 5,
+    "pinned_file": "",
+    "overlay_opacity": 0.5,
+    "overlay_blur": 0,
+    "overlay_color": "255,255,255",
+    "use_custom_background": False,
+}
+DEFAULT_PREFERENCES = {
+    "bg_settings": DEFAULT_BG_SETTINGS,
+}
 
-def _get_conn() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+
+def _ensure_schema_and_defaults(conn: sqlite3.Connection) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS preferences (
             user_id TEXT NOT NULL DEFAULT 'default',
@@ -24,6 +35,33 @@ def _get_conn() -> sqlite3.Connection:
             PRIMARY KEY (user_id, key)
         )
     """)
+    for key, value in DEFAULT_PREFERENCES.items():
+        conn.execute(
+            "INSERT OR IGNORE INTO preferences (user_id, key, value) VALUES (?, ?, ?)",
+            (DEFAULT_USER_ID, key, json.dumps(value, ensure_ascii=False))
+        )
+
+
+def _initialize_db_on_startup() -> None:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        _ensure_schema_and_defaults(conn)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+try:
+    _initialize_db_on_startup()
+except Exception:
+    logger.exception("初始化用户偏好数据库失败")
+
+def _get_conn() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH))
+    _ensure_schema_and_defaults(conn)
+    conn.commit()
     return conn
 
 class PrefBody(BaseModel):

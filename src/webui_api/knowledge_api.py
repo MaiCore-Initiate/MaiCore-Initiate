@@ -17,6 +17,7 @@ import subprocess
 import logging
 import threading
 import time
+import re
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
@@ -652,6 +653,75 @@ def _toml_val(v: Any) -> str:
     return str(v)
 
 
+_LPMM_HEADER_RE = re.compile(r'^\s*\[\s*lpmm_knowledge\s*\]\s*(?:[#;].*)?$', re.IGNORECASE)
+_TABLE_HEADER_RE = re.compile(r'^\s*\[\[?.+?\]\]?\s*(?:[#;].*)?$')
+_KEY_VALUE_LINE_RE = re.compile(r'^(\s*)([A-Za-z0-9_]+)(\s*=\s*)(.*?)(\r?\n?)$')
+
+
+def _split_toml_value_and_comment(raw_value: str) -> tuple[str, str]:
+    """
+    拆分 toml 行中的 value 与行尾注释。
+    仅处理单行值，且避免把字符串内的 # / ; 误判为注释。
+    """
+    in_double = False
+    in_single = False
+    escaped = False
+    for idx, ch in enumerate(raw_value):
+        if ch == '"' and not in_single and not escaped:
+            in_double = not in_double
+        elif ch == "'" and not in_double:
+            in_single = not in_single
+        elif (ch == '#' or ch == ';') and not in_double and not in_single:
+            return raw_value[:idx].rstrip(), raw_value[idx:]
+        escaped = (ch == '\\' and in_double and not escaped)
+        if ch != '\\':
+            escaped = False
+    return raw_value.rstrip(), ""
+
+
+def _update_lpmm_section_in_place(raw: str, updates: Dict[str, Any]) -> tuple[str, Dict[str, Any], bool]:
+    """
+    仅在 [lpmm_knowledge] 段中原位更新已存在键，不新增键。
+    返回: (新文本, 实际更新键值, 是否找到该段)
+    """
+    lines = raw.splitlines(keepends=True)
+    section_start = None
+    for i, line in enumerate(lines):
+        if _LPMM_HEADER_RE.match(line):
+            section_start = i
+            break
+    if section_start is None:
+        return raw, {}, False
+
+    section_end = len(lines)
+    for i in range(section_start + 1, len(lines)):
+        if _TABLE_HEADER_RE.match(lines[i]) and not _LPMM_HEADER_RE.match(lines[i]):
+            section_end = i
+            break
+
+    applied: Dict[str, Any] = {}
+    for i in range(section_start + 1, section_end):
+        m = _KEY_VALUE_LINE_RE.match(lines[i])
+        if not m:
+            continue
+        indent, key, eq, value_and_comment, newline = m.groups()
+        if key not in _LPMM_DEFAULTS or key not in updates:
+            continue
+
+        _, comment = _split_toml_value_and_comment(value_and_comment)
+        new_line = f"{indent}{key}{eq}{_toml_val(updates[key])}"
+        if comment:
+            if comment[0] not in (" ", "\t"):
+                new_line += " "
+            new_line += comment
+        if newline:
+            new_line += newline
+        lines[i] = new_line
+        applied[key] = updates[key]
+
+    return "".join(lines), applied, True
+
+
 def _get_bot_config_path(config: Dict[str, Any]) -> Optional[str]:
     """获取 bot_config.toml 路径"""
     bot_path = _get_bot_path(config)
@@ -671,7 +741,7 @@ async def get_knowledge_settings(serial_number: str):
 
     cfg_path = _get_bot_config_path(config)
     if not cfg_path:
-        return {"success": True, "settings": dict(_LPMM_DEFAULTS), "from_default": True}
+        return {"success": True, "settings": dict(_LPMM_DEFAULTS), "from_default": True, "source_keys": []}
 
     try:
         data = _read_toml(cfg_path)
@@ -679,8 +749,11 @@ async def get_knowledge_settings(serial_number: str):
         raise HTTPException(500, f"读取配置失败: {e}")
 
     section = data.get("lpmm_knowledge", {})
+    if not isinstance(section, dict):
+        section = {}
     merged = {**_LPMM_DEFAULTS, **section}
-    return {"success": True, "settings": merged, "from_default": False}
+    source_keys = [k for k in _LPMM_DEFAULTS.keys() if k in section]
+    return {"success": True, "settings": merged, "from_default": False, "source_keys": source_keys}
 
 
 class LpmmSettingsRequest(BaseModel):
@@ -700,46 +773,24 @@ async def save_knowledge_settings(serial_number: str, req: LpmmSettingsRequest):
 
     cfg_path = os.path.join(bot_path, "config", "bot_config.toml")
     os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+    if not os.path.isfile(cfg_path):
+        raise HTTPException(400, "未找到 bot_config.toml，无法只更新源字段")
 
-    # 合并设置
     try:
-        old_data = _read_toml(cfg_path) if os.path.isfile(cfg_path) else {}
-    except Exception:
-        old_data = {}
-    section = old_data.get("lpmm_knowledge", {})
-    for k in _LPMM_DEFAULTS:
-        if k in req.settings:
-            section[k] = req.settings[k]
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            raw = f.read()
 
-    # 生成新的 section 文本
-    new_section_lines = ["[lpmm_knowledge]"]
-    for k, v in section.items():
-        new_section_lines.append(f"{k} = {_toml_val(v)}")
-    new_section_text = "\n".join(new_section_lines) + "\n"
+        filtered_updates = {k: v for k, v in req.settings.items() if k in _LPMM_DEFAULTS}
+        new_raw, applied, found_section = _update_lpmm_section_in_place(raw, filtered_updates)
+        if not found_section:
+            raise HTTPException(400, "配置文件缺少 [lpmm_knowledge] 段，无法只更新源字段")
 
-    # 基于行替换，保留文件其他部分（含注释）
-    try:
-        if os.path.isfile(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
-                raw = f.read()
-        else:
-            raw = ""
-
-        import re
-        # 匹配 [lpmm_knowledge] 段：从段头到下一个 [xxx] 段头或文件末尾
-        pattern = re.compile(
-            r'(\[lpmm_knowledge\]\s*\n)(.*?)(?=\n\s*\[(?!lpmm_knowledge\])|\Z)',
-            re.DOTALL,
-        )
-        if pattern.search(raw):
-            raw = pattern.sub(new_section_text, raw)
-        else:
-            # 段不存在，追加到末尾
-            raw = raw.rstrip("\n") + "\n\n" + new_section_text
-
-        with open(cfg_path, "w", encoding="utf-8") as f:
-            f.write(raw)
+        if new_raw != raw:
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                f.write(new_raw)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, f"保存配置失败: {e}")
 
-    return {"success": True, "settings": section}
+    return {"success": True, "settings": applied, "updated_keys": list(applied.keys())}
