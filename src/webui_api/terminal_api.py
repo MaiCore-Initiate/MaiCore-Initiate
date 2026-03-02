@@ -100,47 +100,54 @@ def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
 
 def _start_output_reader(terminal_id: str, proc):
     """启动输出读取线程"""
-    from webui.backend.main import manager
     import time
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
 
     def read_loop():
         system = platform.system().lower()
+
+        # 创建新的事件循环用于这个线程
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
         try:
             if system == "windows":
-                # winpty 使用非阻塞读取
+                # winpty 使用阻塞读取
                 while True:
                     try:
-                        # 尝试读取，设置超时
-                        output = proc.read(1024)  # 每次读取最多 1KB
+                        # 读取输出（阻塞）
+                        output = proc.read(1024)
                         if output:
                             # 更新最后活跃时间
                             with _sessions_lock:
                                 if terminal_id in _terminal_sessions:
                                     _terminal_sessions[terminal_id]["last_active"] = datetime.now().isoformat()
 
-                            # 广播输出
-                            asyncio.run(manager.broadcast(
+                            # 使用线程的事件循环广播输出
+                            from webui.backend.main import manager
+                            loop.run_until_complete(manager.broadcast(
                                 f"terminal_{terminal_id}",
                                 {"type": "terminal_output", "terminal_id": terminal_id, "data": output}
                             ))
-                        else:
-                            # 没有数据，短暂休眠
-                            time.sleep(0.05)
                     except EOFError:
                         # 进程退出
                         exit_code = proc.exitstatus if hasattr(proc, 'exitstatus') else 0
-                        asyncio.run(manager.broadcast(
+                        from webui.backend.main import manager
+                        loop.run_until_complete(manager.broadcast(
                             f"terminal_{terminal_id}",
                             {"type": "terminal_exit", "terminal_id": terminal_id, "exit_code": exit_code}
                         ))
                         logger.info("终端进程退出", terminal_id=terminal_id, exit_code=exit_code)
                         break
                     except Exception as e:
-                        # 其他异常，可能是进程已关闭
-                        if "closed" in str(e).lower() or "invalid" in str(e).lower():
-                            logger.info("终端进程已关闭", terminal_id=terminal_id)
+                        # 检查是否是连接关闭错误
+                        error_msg = str(e).lower()
+                        if "winerror" in error_msg or "closed" in error_msg or "invalid" in error_msg:
+                            logger.info("终端连接已关闭", terminal_id=terminal_id)
                             break
-                        time.sleep(0.05)
+                        logger.error("读取终端输出时出错", terminal_id=terminal_id, error=str(e))
+                        time.sleep(0.1)
             else:
                 # Linux/Mac 使用 select
                 import select
@@ -156,13 +163,15 @@ def _start_output_reader(terminal_id: str, proc):
                                     if terminal_id in _terminal_sessions:
                                         _terminal_sessions[terminal_id]["last_active"] = datetime.now().isoformat()
 
-                                asyncio.run(manager.broadcast(
+                                from webui.backend.main import manager
+                                loop.run_until_complete(manager.broadcast(
                                     f"terminal_{terminal_id}",
                                     {"type": "terminal_output", "terminal_id": terminal_id, "data": output}
                                 ))
                         except OSError:
                             # 进程退出
-                            asyncio.run(manager.broadcast(
+                            from webui.backend.main import manager
+                            loop.run_until_complete(manager.broadcast(
                                 f"terminal_{terminal_id}",
                                 {"type": "terminal_exit", "terminal_id": terminal_id, "exit_code": 0}
                             ))
@@ -175,6 +184,7 @@ def _start_output_reader(terminal_id: str, proc):
             with _sessions_lock:
                 if terminal_id in _terminal_sessions:
                     del _terminal_sessions[terminal_id]
+            loop.close()
 
     thread = threading.Thread(target=read_loop, daemon=True)
     thread.start()

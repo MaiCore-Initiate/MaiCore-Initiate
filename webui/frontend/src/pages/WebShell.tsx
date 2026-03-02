@@ -75,7 +75,10 @@ export default function WebShell() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
       const ws = new WebSocket(`${proto}://${location.host}/ws`)
 
+      let isSubscribed = false
+
       ws.onopen = () => {
+        console.log('WebSocket 已连接')
         // 订阅终端频道
         ws.send(JSON.stringify({
           type: 'subscribe',
@@ -85,7 +88,12 @@ export default function WebShell() {
 
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data)
-        if (msg.type === 'terminal_output') {
+        console.log('收到消息:', msg)
+
+        if (msg.type === 'subscribed') {
+          console.log('已订阅频道:', msg.channel)
+          isSubscribed = true
+        } else if (msg.type === 'terminal_output') {
           xterm.write(msg.data)
         } else if (msg.type === 'terminal_exit') {
           xterm.write('\r\n\x1b[31m[进程已退出]\x1b[0m\r\n')
@@ -102,12 +110,15 @@ export default function WebShell() {
 
       // 监听终端输入
       xterm.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
+        console.log('终端输入:', data.charCodeAt(0), data)
+        if (ws.readyState === WebSocket.OPEN && isSubscribed) {
           ws.send(JSON.stringify({
             type: 'terminal_input',
             terminal_id: terminalId,
             data: data
           }))
+        } else {
+          console.warn('WebSocket 未就绪或未订阅')
         }
       })
 
