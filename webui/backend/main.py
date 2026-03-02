@@ -38,7 +38,8 @@ from src.webui_api import (
     runtime_status_router,
     logs_router,
     settings_router,
-    components_router
+    components_router,
+    terminal_router
 )
 
 # 导入配置管理器
@@ -389,6 +390,9 @@ app.include_router(settings_router, prefix="/api/settings", tags=["设置管理"
 
 # 组件下载API
 app.include_router(components_router, tags=["组件下载"], dependencies=auth_dep)
+
+# 终端管理API
+app.include_router(terminal_router, tags=["终端管理"], dependencies=auth_dep)
 
 
 # --- 登录相关API ---
@@ -834,6 +838,21 @@ async def websocket_endpoint(websocket: WebSocket):
                             "data": data,
                             "timestamp": datetime.now().isoformat()
                         })
+                    elif msg_type == "terminal_input":
+                        # 终端输入
+                        from src.webui_api.terminal_api import handle_terminal_input
+                        terminal_id = message.get("terminal_id")
+                        data = message.get("data", "")
+                        if terminal_id:
+                            handle_terminal_input(terminal_id, data)
+                    elif msg_type == "terminal_resize":
+                        # 终端大小调整
+                        from src.webui_api.terminal_api import handle_terminal_resize
+                        terminal_id = message.get("terminal_id")
+                        rows = message.get("rows", 24)
+                        cols = message.get("cols", 80)
+                        if terminal_id:
+                            handle_terminal_resize(terminal_id, rows, cols)
                     
                 except WebSocketDisconnect:
                     break

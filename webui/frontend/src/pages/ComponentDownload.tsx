@@ -49,7 +49,7 @@ export default function ComponentDownload() {
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState<string | null>(null)
   const [progressMap, setProgressMap] = useState<Record<string, ProgressInfo>>({})
-  const pollingTimers = useRef<Record<string, NodeJS.Timeout>>({})
+  const pollingTimers = useRef<Record<string, number>>({}) // 使用 number 代替 NodeJS.Timeout
 
   useEffect(() => {
     fetchComponents()
@@ -146,11 +146,12 @@ export default function ComponentDownload() {
 
     // SQLiteStudio 需要用户指定安装目录
     if (componentKey === 'sqlitestudio') {
-      installPath = prompt('请输入 SQLiteStudio 安装目录（例如：D:\\Tools\\SQLiteStudio）：')
-      if (!installPath) {
+      const userInput = prompt('请输入 SQLiteStudio 安装目录（例如：D:\\Tools\\SQLiteStudio）：')
+      if (!userInput) {
         notify('已取消下载', 'info')
         return
       }
+      installPath = userInput
     }
 
     setDownloading(componentKey)
@@ -219,23 +220,6 @@ export default function ComponentDownload() {
     } catch (error: any) {
       notify(`取消失败：${error.message || error}`, 'error')
       console.error(error)
-    }
-  }
-
-  const getPhaseLabel = (phase?: string, status?: string) => {
-    if (status === 'failed') return '失败'
-    if (status === 'done') return '完成'
-    switch (phase) {
-      case 'preparing':
-        return '准备中'
-      case 'downloading':
-        return '下载中'
-      case 'installing':
-        return '安装中'
-      case 'done':
-        return '完成'
-      default:
-        return '等待中'
     }
   }
 

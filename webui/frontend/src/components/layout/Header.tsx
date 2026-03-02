@@ -11,6 +11,7 @@ const pageIcons: Record<Page, React.FC<React.SVGProps<SVGSVGElement>>> = {
   home: HomeIcon, instances: InstancesIcon, config: ConfigIcon, knowledge: KnowledgeIcon,
   'db-migration': DbMigrationIcon, plugins: PluginsIcon, deploy: DeployIcon,
   status: StatusIcon, logs: LogsIcon, misc: MiscIcon, settings: SettingsIcon,
+  'component-download': MiscIcon, // 使用 MiscIcon 作为临时图标
 }
 
 interface HeaderProps {

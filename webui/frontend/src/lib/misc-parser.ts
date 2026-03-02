@@ -164,14 +164,6 @@ function parseTechSection(content: string): MiscContent['tech'] {
 }
 
 /**
- * 提取技术项
- */
-function extractTechItems(section: string): TechItem[] {
-  // 已被 extractJsonBlock 取代，保留以兼容可能的调用
-  return extractJsonBlock(section, 'tech-items')
-}
-
-/**
  * 解析开源库部分
  */
 function parseLibsSection(content: string): MiscContent['libs'] {

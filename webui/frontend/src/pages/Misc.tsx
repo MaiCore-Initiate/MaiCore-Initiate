@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import GlassCard from '../components/ui/GlassCard'
 import ComponentDownload from './ComponentDownload'
+import WebShell from './WebShell'
 import { cn } from '../lib/utils'
-import { Package, User, Cpu, BookOpen, FileText, Download } from 'lucide-react'
+import { Package, User, Cpu, BookOpen, FileText, Download, Terminal } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { parseMiscContent, type MiscContent, type Contributor, type TechItem, type Library } from '../lib/misc-parser'
+import { parseMiscContent, type MiscContent, type Contributor, type Library } from '../lib/misc-parser'
 
 const pageTitleStyle = {
   fontSize: 60,
@@ -35,7 +36,7 @@ const monoFont = {
 const d = (i: number) => ({ animationDelay: `${i * 80}ms` })
 
 export default function Misc() {
-  const [activeTab, setActiveTab] = useState<'about' | 'author' | 'tech' | 'libs' | 'license' | 'components'>('about')
+  const [activeTab, setActiveTab] = useState<'about' | 'author' | 'tech' | 'libs' | 'license' | 'components' | 'webshell'>('about')
   const [content, setContent] = useState<MiscContent | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -87,6 +88,7 @@ export default function Misc() {
               { key: 'libs', label: '开源库', icon: BookOpen },
               { key: 'license', label: '开源许可', icon: FileText },
               { key: 'components', label: '组件下载', icon: Download },
+              { key: 'webshell', label: 'WebShell', icon: Terminal },
             ].map(tab => {
               const Icon = tab.icon
               return (
@@ -118,6 +120,7 @@ export default function Misc() {
         {activeTab === 'libs' && <OpenSourceLibs libraries={content.libs.libraries} footer={content.libs.footer} />}
         {activeTab === 'license' && <License content={content.license} />}
         {activeTab === 'components' && <ComponentDownloadTab />}
+        {activeTab === 'webshell' && <WebShellTab />}
       </div>
     </div>
   )
@@ -386,6 +389,15 @@ function ComponentDownloadTab() {
   return (
     <div className="-m-6">
       <ComponentDownload />
+    </div>
+  )
+}
+
+/** WebShell 标签页 */
+function WebShellTab() {
+  return (
+    <div className="-m-6 h-[calc(100vh-200px)]">
+      <WebShell />
     </div>
   )
 }

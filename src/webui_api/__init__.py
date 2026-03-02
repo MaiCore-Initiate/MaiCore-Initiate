@@ -17,6 +17,7 @@ from .runtime_status_api import router as runtime_status_router
 from .logs_api import router as logs_router
 from .settings_api import router as settings_router
 from .components_api import router as components_router
+from .terminal_api import router as terminal_router
 
 __all__ = [
     "deploy_router",
@@ -32,5 +33,6 @@ __all__ = [
     "runtime_status_router",
     "logs_router",
     "settings_router",
-    "components_router"
+    "components_router",
+    "terminal_router"
 ]
