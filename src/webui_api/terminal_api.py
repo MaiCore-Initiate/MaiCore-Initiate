@@ -55,6 +55,7 @@ def _get_default_shell() -> str:
 
 def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
     """创建 PTY 进程"""
+    import os
     system = platform.system().lower()
 
     if system == "windows":
@@ -85,7 +86,6 @@ def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
     else:
         # Linux/Mac 使用 pty
         import pty
-        import os
         import fcntl
 
         pid, fd = pty.fork()
