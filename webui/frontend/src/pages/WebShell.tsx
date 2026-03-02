@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Maximize2, Minimize2 } from 'lucide-react'
 import 'xterm/css/xterm.css'
 
 interface Terminal {
@@ -17,6 +17,7 @@ interface Terminal {
 export default function WebShell() {
   const [terminals, setTerminals] = useState<Terminal[]>([])
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null)
+  const [isImmersive, setIsImmersive] = useState(false)
   const terminalContainerRef = useRef<HTMLDivElement>(null)
 
   // 创建新终端
@@ -220,6 +221,18 @@ export default function WebShell() {
     return () => window.removeEventListener('resize', handleResize)
   }, [terminals, activeTerminalId])
 
+  // 切换沉浸模式
+  const toggleImmersive = () => {
+    setIsImmersive(!isImmersive)
+    // 延迟调整终端大小以适应新布局
+    setTimeout(() => {
+      const terminal = terminals.find(t => t.id === activeTerminalId)
+      if (terminal) {
+        terminal.fitAddon.fit()
+      }
+    }, 300)
+  }
+
   // 清理所有终端
   useEffect(() => {
     return () => {
@@ -232,51 +245,144 @@ export default function WebShell() {
     }
   }, [])
 
-  return (
-    <div className="flex flex-col h-full bg-gradient-to-br from-black/20 to-black/10 rounded-2xl overflow-hidden backdrop-blur-sm border border-white/10 shadow-2xl">
-      {/* 标签栏 */}
-      <div className="flex items-center gap-2 px-4 py-3 bg-black/30 backdrop-blur-md border-b border-white/10">
-        {terminals.map(terminal => (
-          <div
-            key={terminal.id}
-            className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-all
-              ${activeTerminalId === terminal.id
-                ? 'bg-white/20 text-white shadow-lg border border-white/20'
-                : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 border border-transparent'
-              }
-            `}
-            onClick={() => switchTerminal(terminal.id)}
-          >
-            <span className="text-sm font-medium">{terminal.title}</span>
+  // 沉浸模式渲染
+  if (isImmersive) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl animate-fade-in">
+        <div className="absolute inset-6 flex flex-col bg-gradient-to-br from-black/40 to-black/60 rounded-3xl overflow-hidden backdrop-blur-md border border-white/10 shadow-2xl animate-scale-in">
+          {/* 沉浸模式标签栏 */}
+          <div className="flex items-center justify-between px-6 py-4 bg-black/40 backdrop-blur-lg border-b border-white/10">
+            <div className="flex items-center gap-3">
+              {terminals.map(terminal => (
+                <div
+                  key={terminal.id}
+                  className={`
+                    flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer transition-all duration-200
+                    ${activeTerminalId === terminal.id
+                      ? 'bg-white/20 text-white shadow-lg border border-white/30 scale-105'
+                      : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 border border-transparent hover:scale-105'
+                    }
+                  `}
+                  onClick={() => switchTerminal(terminal.id)}
+                >
+                  <span className="text-sm font-medium">{terminal.title}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closeTerminal(terminal.id)
+                    }}
+                    className="hover:text-red-400 transition-colors p-1 hover:bg-red-500/20 rounded"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={createTerminal}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 hover:text-blue-100 transition-all duration-200 border border-blue-400/30 hover:border-blue-400/50 shadow-md hover:scale-105"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="text-sm font-medium">新建</span>
+              </button>
+            </div>
+
+            {/* 退出沉浸模式按钮 */}
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                closeTerminal(terminal.id)
-              }}
-              className="hover:text-red-400 transition-colors p-0.5 hover:bg-red-500/20 rounded"
+              onClick={toggleImmersive}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all duration-200 border border-white/20 hover:border-white/30 shadow-md hover:scale-105"
             >
-              <X className="w-4 h-4" />
+              <Minimize2 className="w-4 h-4" />
+              <span className="text-sm font-medium">退出全屏</span>
             </button>
           </div>
-        ))}
-        <button
-          onClick={createTerminal}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 hover:text-blue-100 transition-all border border-blue-400/30 hover:border-blue-400/50 shadow-md"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="text-sm font-medium">新建终端</span>
-        </button>
+
+          {/* 终端容器 */}
+          <div ref={terminalContainerRef} className="flex-1 relative bg-black/60 backdrop-blur-sm">
+            {terminals.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-white/40">
+                <div className="text-center animate-fade-in">
+                  <Plus className="w-24 h-24 mx-auto mb-6 opacity-20" />
+                  <p className="text-2xl mb-3 font-medium">暂无终端</p>
+                  <p className="text-base opacity-70">点击"新建"开始使用 WebShell</p>
+                </div>
+              </div>
+            ) : (
+              terminals.map(terminal => (
+                <div
+                  key={terminal.id}
+                  id={`terminal-${terminal.id}`}
+                  className={`absolute inset-0 p-6 ${activeTerminalId === terminal.id ? 'block' : 'hidden'}`}
+                  style={{
+                    fontFamily: 'Consolas, "Courier New", monospace'
+                  }}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // 普通模式渲染
+  return (
+    <div className="flex flex-col h-[600px] max-w-[1400px] mx-auto bg-gradient-to-br from-white/10 to-white/5 rounded-2xl overflow-hidden backdrop-blur-md border border-white/20 shadow-2xl">
+      {/* 标签栏 */}
+      <div className="flex items-center justify-between px-4 py-3 bg-black/20 backdrop-blur-lg border-b border-white/10">
+        <div className="flex items-center gap-2">
+          {terminals.map(terminal => (
+            <div
+              key={terminal.id}
+              className={`
+                flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-all duration-200
+                ${activeTerminalId === terminal.id
+                  ? 'bg-white/20 text-white shadow-lg border border-white/20'
+                  : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 border border-transparent'
+                }
+              `}
+              onClick={() => switchTerminal(terminal.id)}
+            >
+              <span className="text-sm font-medium">{terminal.title}</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  closeTerminal(terminal.id)
+                }}
+                className="hover:text-red-400 transition-colors p-0.5 hover:bg-red-500/20 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={createTerminal}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 hover:text-blue-100 transition-all duration-200 border border-blue-400/30 hover:border-blue-400/50 shadow-md"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm font-medium">新建</span>
+          </button>
+        </div>
+
+        {/* 沉浸模式按钮 */}
+        {terminals.length > 0 && (
+          <button
+            onClick={toggleImmersive}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-white/80 hover:text-white transition-all duration-200 border border-white/20 hover:border-white/30"
+          >
+            <Maximize2 className="w-4 h-4" />
+            <span className="text-sm font-medium">全屏</span>
+          </button>
+        )}
       </div>
 
       {/* 终端容器 */}
-      <div ref={terminalContainerRef} className="flex-1 relative bg-[#1e1e1e] overflow-hidden">
+      <div ref={terminalContainerRef} className="flex-1 relative bg-black/40 backdrop-blur-sm overflow-hidden">
         {terminals.length === 0 ? (
           <div className="flex items-center justify-center h-full text-white/40">
             <div className="text-center">
               <Plus className="w-20 h-20 mx-auto mb-4 opacity-20" />
               <p className="text-xl mb-2 font-medium">暂无终端</p>
-              <p className="text-sm opacity-70">点击"新建终端"开始使用 WebShell</p>
+              <p className="text-sm opacity-70">点击"新建"开始使用 WebShell</p>
             </div>
           </div>
         ) : (
