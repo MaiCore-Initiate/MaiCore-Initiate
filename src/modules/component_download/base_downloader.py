@@ -36,8 +36,11 @@ class BaseDownloader:
         if self.temp_dir:
             self.temp_dir.cleanup()
     
-    def download_file(self, url: str, filename: str, max_retries: int = 3) -> bool:
-        """下载文件并显示进度，支持重试"""
+    def download_file(self, url: str, filename: str, max_retries: int = 3, progress_callback=None, is_canceled_callback=None) -> bool:
+        """下载文件并显示进度，支持重试
+        progress_callback: 可选回调，接收 dict，如 {bytes_downloaded, total_bytes, percent, phase, filename, status}
+        is_canceled_callback: 可选回调，返回 True 表示任务已取消，应立即停止下载
+        """
         try:
             # 检查网络连接
             response = requests.head(url, timeout=10, verify=False)
@@ -47,18 +50,34 @@ class BaseDownloader:
         except requests.RequestException as e:
             ui.print_error(f"网络连接失败: {str(e)}")
             return False
-        
+
         # 重试逻辑
         for retry in range(max_retries):
             try:
+                # 检查是否已取消
+                if is_canceled_callback and is_canceled_callback():
+                    ui.print_warning("下载已取消")
+                    logger.info("下载被用户取消", url=url)
+                    return False
+
                 ui.print_info(f"正在下载 {filename}... (尝试 {retry + 1}/{max_retries})")
                 logger.info("开始下载文件", url=url, filename=filename, retry=retry+1)
-                
+
                 response = requests.get(url, stream=True, timeout=30, verify=False)
                 response.raise_for_status()
-                
+
                 total_size = int(response.headers.get('content-length', 0))
-                
+                downloaded = 0
+                if progress_callback:
+                    progress_callback({
+                        "phase": "downloading",
+                        "status": "running",
+                        "bytes_downloaded": downloaded,
+                        "total_bytes": total_size or None,
+                        "percent": 0,
+                        "filename": os.path.basename(filename),
+                    })
+
                 with open(filename, 'wb') as file, tqdm(
                     desc=filename,
                     total=total_size,
@@ -67,10 +86,29 @@ class BaseDownloader:
                     unit_divisor=1024,
                 ) as progress_bar:
                     for chunk in response.iter_content(chunk_size=8192):
+                        # 检查是否已取消
+                        if is_canceled_callback and is_canceled_callback():
+                            ui.print_warning("下载已取消")
+                            logger.info("下载被用户取消", url=url)
+                            return False
+
                         if chunk:
                             file.write(chunk)
                             progress_bar.update(len(chunk))
-                
+                            downloaded += len(chunk)
+                            if progress_callback:
+                                percent = 0
+                                if total_size:
+                                    percent = min(99, int(downloaded / total_size * 100))
+                                progress_callback({
+                                    "phase": "downloading",
+                                    "status": "running",
+                                    "bytes_downloaded": downloaded,
+                                    "total_bytes": total_size or None,
+                                    "percent": percent,
+                                    "filename": os.path.basename(filename),
+                                })
+
                 # 验证文件大小
                 if total_size > 0:
                     actual_size = os.path.getsize(filename)
@@ -82,15 +120,24 @@ class BaseDownloader:
                         else:
                             ui.print_error("达到最大重试次数，文件可能不完整")
                             return False
-                
+
                 ui.print_success(f"{filename} 下载完成")
                 logger.info("文件下载完成", filename=filename)
+                if progress_callback:
+                    progress_callback({
+                        "phase": "downloaded",
+                        "status": "running",
+                        "bytes_downloaded": downloaded,
+                        "total_bytes": total_size or None,
+                        "percent": 100,
+                        "filename": os.path.basename(filename),
+                    })
                 return True
-                
+
             except requests.RequestException as e:
                 ui.print_warning(f"下载失败 (尝试 {retry + 1}/{max_retries}): {str(e)}")
                 logger.warning("文件下载失败", error=str(e), url=url, retry=retry+1)
-                
+
                 if retry < max_retries - 1:
                     ui.print_info("3秒后重试...")
                     import time
@@ -99,7 +146,7 @@ class BaseDownloader:
                 else:
                     ui.print_error("达到最大重试次数，下载失败")
                     return False
-                    
+
         ui.print_error(f"下载失败：达到最大重试次数 {max_retries}")
         logger.error("文件下载失败", url=url)
         return False

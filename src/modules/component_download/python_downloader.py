@@ -39,50 +39,51 @@ class PythonDownloader(BaseDownloader):
         """获取本地安装包路径"""
         # 查找install文件夹中的Python安装包
         install_dir = Path.cwd() / "install"
-        
+
         if not install_dir.exists():
             ui.print_warning("未找到install目录")
             return None
-        
-        # 查找Python安装包
+
+        # 查找Python安装包（优先 3.13.0）
         python_patterns = [
-            "python-3.12.8-amd64.exe",
+            "python-3.13.0-amd64.exe",
+            "python-3.13.*.exe",
             "python-3.12.*.exe",
             "python-3.*.exe",
             "python*.exe"
         ]
-        
+
         for pattern in python_patterns:
             matches = list(install_dir.glob(pattern))
             if matches:
                 # 选择最新的版本
                 matches.sort(key=lambda x: x.stat().st_mtime, reverse=True)
                 return matches[0]
-        
+
         ui.print_error("未找到Python安装包")
         logger.error("Python本地安装包未找到", install_dir=str(install_dir))
         return None
-    
+
     def get_download_url(self) -> str:
         """获取Python下载链接（备用）"""
         # 如果本地没有安装包，使用官方下载链接
-        version = "3.12.8"
-        
+        version = "3.13.0"
+
         if self.system == 'windows':
             return f"https://www.python.org/ftp/python/{version}/python-{version}-{self.arch}.exe"
         elif self.system == 'darwin':  # macOS
             return f"https://www.python.org/ftp/python/{version}/python-{version}-{self.arch}.pkg"
         else:  # Linux
             return f"https://www.python.org/ftp/python/{version}/Python-{version}.tar.xz"
-    
+
     def get_filename(self) -> str:
         """获取下载文件名"""
         if self.system == 'windows':
-            return f"python-3.12.8-{self.arch}.exe"
+            return f"python-3.13.0-{self.arch}.exe"
         elif self.system == 'darwin':
-            return f"python-3.12.8-{self.arch}.pkg"
+            return f"python-3.13.0-{self.arch}.pkg"
         else:
-            return "python-3.12.8.tar.xz"
+            return "python-3.13.0.tar.xz"
     
     def download_and_install(self, temp_dir: Path) -> bool:
         """下载并安装Python"""

@@ -37,7 +37,8 @@ from src.webui_api import (
     process_router,
     runtime_status_router,
     logs_router,
-    settings_router
+    settings_router,
+    components_router
 )
 
 # 导入配置管理器
@@ -385,6 +386,9 @@ app.include_router(plugin_router, prefix="/api/plugins", tags=["插件管理"], 
 
 # 设置管理API
 app.include_router(settings_router, prefix="/api/settings", tags=["设置管理"], dependencies=auth_dep)
+
+# 组件下载API
+app.include_router(components_router, tags=["组件下载"], dependencies=auth_dep)
 
 
 # --- 登录相关API ---

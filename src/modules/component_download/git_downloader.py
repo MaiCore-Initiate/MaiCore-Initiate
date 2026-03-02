@@ -203,58 +203,85 @@ class GitDownloader(BaseDownloader):
         else:
             return "git-2.43.0.tar.gz"
     
-    def download_and_install(self, temp_dir: Path) -> bool:
-        """下载并安装Git"""
+    def download_and_install(self, temp_dir: Path, auto_select_latest: bool = False, task_id: str | None = None, progress_cb=None, non_interactive: bool = False, is_canceled_callback=None) -> bool:
+        """下载并安装Git
+        auto_select_latest/non_interactive=True 时直接选最新版本，避免终端交互
+        is_canceled_callback: 可选回调，返回 True 表示任务已取消
+        """
         try:
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("下载已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
             # 选择版本
-            selected_version = self.select_version()
+            if non_interactive or auto_select_latest:
+                versions = self.get_git_versions()
+                selected_version = versions[0] if versions else None
+                if not selected_version:
+                    ui.print_warning("未找到可用Git版本，使用默认列表")
+                    versions = self._get_default_versions()
+                    selected_version = versions[0] if versions else None
+                if progress_cb:
+                    progress_cb({"phase": "preparing", "status": "running", "percent": 5, "message": "准备中"})
+            else:
+                selected_version = self.select_version()
+
             if not selected_version:
                 ui.print_info("已跳过Git下载")
+                if progress_cb:
+                    progress_cb({"status": "done", "phase": "skipped", "percent": 100, "message": "已跳过"})
                 return True
-            
+
             # 获取下载链接和文件名
             download_url = selected_version["download_url"]
             filename = selected_version.get("asset_name", self.get_filename())
             file_path = temp_dir / filename
-            
+
             ui.print_info(f"正在下载 {self.name} {selected_version['display_name']}...")
-            
+            if progress_cb:
+                progress_cb({"phase": "downloading", "status": "running", "percent": 10, "filename": filename, "message": "下载中"})
+
             # 下载文件
-            if not self.download_file(download_url, str(file_path)):
+            if not self.download_file(download_url, str(file_path), progress_callback=progress_cb, is_canceled_callback=is_canceled_callback):
+                if progress_cb:
+                    progress_cb({"status": "failed", "phase": "failed", "message": "下载失败"})
                 return False
-            
+
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("安装已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
             ui.print_info(f"正在安装 {self.name}...")
-            
+            if progress_cb:
+                progress_cb({"phase": "installing", "status": "running", "percent": 90, "filename": filename, "message": "安装中"})
+
             # 根据系统执行安装
             if self.system == 'windows':
-                # ✅ Windows系统 - 使用专门的方法
                 success = self._install_git_windows(str(file_path))
             elif self.system == 'darwin':
-                # macOS - 提示用户手动安装
                 ui.print_info("Git for macOS 需要手动安装")
                 ui.print_info(f"请打开下载的文件: {file_path}")
-                if ui.confirm("是否打开Git安装包？"):
-                    try:
-                        import os
-                        os.system(f"open '{file_path}'")
-                        ui.print_info("已尝试打开安装包，请按照提示完成安装")
-                        return True
-                    except Exception as e:
-                        ui.print_error(f"打开安装包失败: {str(e)}")
-                        return False
-                return True
+                success = True
             else:
-                # Linux - 提示使用包管理器
                 ui.print_info("Git for Linux 推荐使用包管理器安装")
-                ui.print_info("例如: sudo apt install git (Ubuntu/Debian)")
-                ui.print_info("或者: sudo yum install git (CentOS/RHEL)")
-                return True
-            
+                success = True
+
+            if progress_cb:
+                progress_cb({"status": "done" if success else "failed", "phase": "done" if success else "failed", "percent": 100 if success else 90, "filename": filename, "message": "完成" if success else "失败"})
+
             return success
-            
+
         except Exception as e:
             ui.print_error(f"下载 {self.name} 时发生错误：{str(e)}")
             logger.error("Git下载安装失败", error=str(e))
+            if progress_cb:
+                progress_cb({"status": "failed", "phase": "failed", "message": str(e)})
             return False
     
     def check_installation(self) -> tuple[bool, str]:
