@@ -10,6 +10,8 @@ import Plugins from './pages/Plugins'
 import Status from './pages/Status'
 import Logs from './pages/Logs'
 import Settings from './pages/Settings'
+import Misc from './pages/Misc'
+import ComponentDownload from './pages/ComponentDownload'
 import { NotificationProvider, useNotification } from './components/ui/Notification'
 import DynamicBackground, { BgProvider, useBgContext } from './components/background/DynamicBackground'
 import type { Page, Tab } from './types'
@@ -18,6 +20,7 @@ const pageLabels: Record<Page, string> = {
   home: '首页', instances: '实例启动/多开', config: '配置管理', knowledge: '知识库构建',
   'db-migration': '数据库迁移', plugins: '插件管理', deploy: '实例部署辅助系统',
   status: '查看运行状态', logs: '日志查看器', misc: '杂项', settings: '设置',
+  'component-download': '组件下载'
 }
 
 let tabCounter = 1
@@ -81,6 +84,8 @@ function PageContent({ page }: { page: Page }) {
     case 'status': return <Status />
     case 'logs': return <Logs />
     case 'settings': return <Settings />
+    case 'misc': return <Misc />
+    case 'component-download': return <ComponentDownload />
     default:
       return (
         <div className="flex items-center justify-center h-full">

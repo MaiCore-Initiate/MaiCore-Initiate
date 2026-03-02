@@ -1,4 +1,4 @@
-export type Page = 'home' | 'instances' | 'config' | 'knowledge' | 'db-migration' | 'plugins' | 'deploy' | 'status' | 'logs' | 'misc' | 'settings'
+export type Page = 'home' | 'instances' | 'config' | 'knowledge' | 'db-migration' | 'plugins' | 'deploy' | 'status' | 'logs' | 'misc' | 'settings' | 'component-download'
 
 export interface Tab {
   id: string
