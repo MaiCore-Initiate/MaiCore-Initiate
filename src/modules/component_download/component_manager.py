@@ -81,7 +81,7 @@ class ComponentManager:
             },
             'napcat': {
                 'name': 'NapCat',
-                'description': 'QQ机器人适配器',
+                'description': 'QQ机器人适配器（下载在用户下载目录）',
                 'icon': '🐱'
             },
             'webui': {
