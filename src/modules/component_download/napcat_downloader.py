@@ -201,75 +201,111 @@ class NapCatDownloader(BaseDownloader):
                 logger.error("NapCat版本选择失败", error=str(e))
                 return None
     
-    def download_and_install(self, temp_dir: Path) -> bool:
-        """下载并安装NapCat"""
+    def download_and_install(self, temp_dir: Path, auto_select_latest: bool = False, task_id: str | None = None, progress_cb=None, non_interactive: bool = False, is_canceled_callback=None) -> bool:
+        """下载并安装NapCat
+        auto_select_latest/non_interactive: 非交互模式（WebUI使用），自动选最新版并使用默认路径
+        is_canceled_callback: 可选回调，返回 True 表示任务已取消
+        """
         try:
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("下载已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
             # 选择版本
-            selected_version = self.select_version()
-            if not selected_version:
-                ui.print_info("已跳过NapCat下载")
-                return True
-            
+            if non_interactive or auto_select_latest:
+                versions = self.get_napcat_versions()
+                selected_version = versions[0] if versions else None
+                if not selected_version:
+                    ui.print_error("未找到可用的NapCat版本")
+                    if progress_cb:
+                        progress_cb({"status": "failed", "phase": "failed", "message": "未找到版本"})
+                    return False
+                if progress_cb:
+                    progress_cb({"phase": "preparing", "status": "running", "percent": 5, "message": "准备中"})
+            else:
+                selected_version = self.select_version()
+                if not selected_version:
+                    ui.print_info("已跳过NapCat下载")
+                    if progress_cb:
+                        progress_cb({"status": "done", "phase": "skipped", "percent": 100, "message": "已跳过"})
+                    return True
+
             # 让用户指定下载目标路径
-            # 获取用户下载文件夹路径
             import os
             user_downloads = Path.home() / "Downloads" / "NapCat"
-            
-            ui.print_info("\n请指定NapCat的下载目标路径")
-            ui.print_info("提示：建议使用绝对路径，例如: D:\\NapCat")
-            ui.print_info(f"默认路径: {user_downloads}")
-            
-            while True:
-                target_path_str = ui.get_input(f"请输入目标路径（留空使用默认路径）：").strip()
-                
-                if not target_path_str:
-                    # 使用默认路径（用户下载文件夹）
-                    target_dir = user_downloads
-                    ui.print_info(f"使用默认路径: {target_dir}")
-                else:
-                    target_dir = Path(target_path_str)
-                
-                # 检查路径是否有效
-                try:
-                    # 确保父目录存在
-                    target_dir.parent.mkdir(parents=True, exist_ok=True)
-                    # 创建目标目录
-                    target_dir.mkdir(parents=True, exist_ok=True)
-                    break
-                except Exception as e:
-                    ui.print_error(f"无效的路径或无法创建目录: {str(e)}")
-                    ui.print_info("请重新输入有效的路径")
-            
+
+            if non_interactive:
+                target_dir = user_downloads
+                target_dir.mkdir(parents=True, exist_ok=True)
+            else:
+                ui.print_info("\n请指定NapCat的下载目标路径")
+                ui.print_info("提示：建议使用绝对路径，例如: D:\\NapCat")
+                ui.print_info(f"默认路径: {user_downloads}")
+
+                while True:
+                    target_path_str = ui.get_input(f"请输入目标路径（留空使用默认路径）：").strip()
+
+                    if not target_path_str:
+                        target_dir = user_downloads
+                        ui.print_info(f"使用默认路径: {target_dir}")
+                    else:
+                        target_dir = Path(target_path_str)
+
+                    # 检查路径是否有效
+                    try:
+                        target_dir.parent.mkdir(parents=True, exist_ok=True)
+                        target_dir.mkdir(parents=True, exist_ok=True)
+                        break
+                    except Exception as e:
+                        ui.print_error(f"无效的路径或无法创建目录: {str(e)}")
+                        ui.print_info("请重新输入有效的路径")
+
             # 获取下载链接
             download_url = selected_version["download_url"]
             asset_name = selected_version.get("asset_name", "NapCat.zip")
-            
+
             # 在目标目录下创建NapCat子文件夹，处理同名冲突
             base_folder_name = "NapCat"
             napcat_folder = target_dir / base_folder_name
             counter = 1
-            
+
             # 如果文件夹已存在，添加序号
             while napcat_folder.exists():
                 napcat_folder = target_dir / f"{base_folder_name}({counter})"
                 counter += 1
-            
+
             # 创建NapCat子文件夹
             napcat_folder.mkdir(parents=True, exist_ok=True)
             ui.print_info(f"将解压到: {napcat_folder}")
-            
+
             # 创建临时文件
             with tempfile.TemporaryDirectory() as temp_download_dir:
                 temp_file = Path(temp_download_dir) / asset_name
-                
+
                 ui.print_info(f"开始下载NapCat {selected_version['display_name']}...")
-                
+                if progress_cb:
+                    progress_cb({"phase": "downloading", "status": "running", "percent": 10, "filename": asset_name})
+
                 # 下载文件
-                if not self.download_file(download_url, str(temp_file)):
+                if not self.download_file(download_url, str(temp_file), progress_callback=progress_cb, is_canceled_callback=is_canceled_callback):
+                    if progress_cb:
+                        progress_cb({"status": "failed", "phase": "failed", "message": "下载失败"})
                     return False
-                
+
+                # 检查是否已取消
+                if is_canceled_callback and is_canceled_callback():
+                    ui.print_warning("安装已取消")
+                    if progress_cb:
+                        progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                    return False
+
                 ui.print_info("正在解压NapCat到目标目录...")
-                
+                if progress_cb:
+                    progress_cb({"phase": "installing", "status": "running", "percent": 90, "message": "解压中"})
+
                 if asset_name.endswith('.zip'):
                     import zipfile
                     with zipfile.ZipFile(temp_file, 'r') as zip_ref:
@@ -281,10 +317,10 @@ class NapCatDownloader(BaseDownloader):
                 
                 ui.print_success(f"NapCat下载完成！文件位置: {napcat_folder}")
                 logger.info("NapCat下载成功", version=selected_version['display_name'], path=str(napcat_folder))
-                
+
                 # 查找NapCat安装程序
                 installer_exe = None
-                
+
                 for root, dirs, files in os.walk(napcat_folder):
                     for file in files:
                         # 查找安装程序
@@ -293,31 +329,41 @@ class NapCatDownloader(BaseDownloader):
                             break
                     if installer_exe:
                         break
-                
+
                 # 如果找到安装程序，询问是否自动安装
                 if installer_exe and os.path.exists(installer_exe):
                     ui.print_info(f"\n找到NapCat安装程序: {installer_exe}")
-                    
-                    if ui.confirm("是否自动运行NapCat安装程序？"):
+
+                    if non_interactive or ui.confirm("是否自动运行NapCat安装程序？"):
                         installer_success = self._run_installer(installer_exe, napcat_folder)
                         if installer_success:
                             ui.print_success("NapCat安装程序已成功启动")
+                            if progress_cb:
+                                progress_cb({"status": "done", "phase": "done", "percent": 100, "message": "完成"})
                             return True
                         else:
                             ui.print_error("NapCat安装程序启动失败")
+                            if progress_cb:
+                                progress_cb({"status": "failed", "phase": "failed", "message": "安装程序启动失败"})
                             return False
                     else:
                         ui.print_info("您可以稍后手动运行安装程序")
                         ui.print_info(f"安装程序位置: {installer_exe}")
+                        if progress_cb:
+                            progress_cb({"status": "done", "phase": "done", "percent": 100, "message": "完成"})
                         return True
                 else:
                     ui.print_info("\n文件已解压完成")
                     ui.print_info(f"文件位置: {napcat_folder}")
+                    if progress_cb:
+                        progress_cb({"status": "done", "phase": "done", "percent": 100, "message": "完成"})
                     return True
-                
+
         except Exception as e:
             ui.print_error(f"下载NapCat时发生错误：{str(e)}")
             logger.error("NapCat下载安装失败", error=str(e))
+            if progress_cb:
+                progress_cb({"status": "failed", "phase": "failed", "message": str(e)})
             return False
     
     def _run_installer(self, installer_path: str, extract_dir: Path) -> bool:
