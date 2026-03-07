@@ -69,20 +69,38 @@ def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
             # 创建 pty 进程，设置环境变量确保正确显示
             # PowerShell 添加 -NoLogo 参数减少启动输出，但保留提示符
             if shell == "powershell":
+                logger.info("创建 PowerShell 进程", shell_cmd=shell_cmd)
                 proc = PtyProcess.spawn(
                     [shell_cmd, "-NoLogo"],
                     dimensions=(rows, cols),
                     env={**os.environ, 'TERM': 'xterm-256color'}
                 )
             else:
+                logger.info("创建 CMD 进程", shell_cmd=shell_cmd)
                 proc = PtyProcess.spawn(
                     shell_cmd,
                     dimensions=(rows, cols),
                     env={**os.environ, 'TERM': 'xterm-256color'}
                 )
 
+            logger.info("PTY 进程创建成功", pid=proc.pid if hasattr(proc, 'pid') else 'unknown')
+
             # 等待一小段时间让 shell 初始化
             time.sleep(0.2)
+
+            # 尝试立即读取一次，看看是否有初始输出
+            try:
+                logger.info("尝试读取初始输出")
+                # 设置一个很短的超时来测试
+                import select
+                # winpty 不支持 select，直接尝试读取
+                initial_output = proc.read(256)
+                if initial_output:
+                    logger.info("读取到初始输出", data=repr(initial_output[:100]))
+                else:
+                    logger.warning("初始输出为空")
+            except Exception as e:
+                logger.warning("读取初始输出失败", error=str(e))
 
             return proc
         except ImportError:
