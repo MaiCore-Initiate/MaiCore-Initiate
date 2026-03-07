@@ -955,6 +955,30 @@ if frontend_dist.exists():
         app.mount("/fonts", StaticFiles(directory=str(frontend_public / "fonts")), name="fonts")
         app.mount("/backgrounds", StaticFiles(directory=str(frontend_public / "backgrounds")), name="backgrounds")
         app.mount("/default_backgrounds", StaticFiles(directory=str(frontend_public / "default_backgrounds")), name="default_backgrounds")
+
+    # 添加根路径和 SPA 路由支持
+    from fastapi.responses import FileResponse
+
+    @app.get("/")
+    async def serve_root():
+        """返回前端首页"""
+        return FileResponse(str(frontend_dist / "index.html"))
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """支持 SPA 路由，所有未匹配的路径返回 index.html"""
+        # 如果是 API 或 WebSocket 路径，跳过
+        if full_path.startswith(("api/", "ws", "static/", "fonts/", "backgrounds/", "default_backgrounds/")):
+            return {"detail": "Not Found"}
+
+        # 检查文件是否存在
+        file_path = frontend_dist / full_path
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+
+        # 否则返回 index.html（SPA 路由）
+        return FileResponse(str(frontend_dist / "index.html"))
+
     logger.info(f"已挂载静态文件目录: {frontend_dist}")
 else:
     logger.warning(f"前端构建目录不存在: {frontend_dist}，静态文件服务未启用")

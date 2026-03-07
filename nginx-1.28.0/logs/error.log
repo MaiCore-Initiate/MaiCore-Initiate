@@ -1,0 +1,13 @@
+2026/03/07 18:25:43 [warn] 30112#28904: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 18:25:43 [emerg] 30112#28904: CreateFile() "D:/nginx-1.24.0/logs/maibot_access.log" failed (3: The system cannot find the path specified)
+2026/03/07 18:28:36 [warn] 8280#17360: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 18:28:36 [emerg] 8280#17360: CreateFile() "D:/nginx-1.24.0/logs/maibot_access.log" failed (3: The system cannot find the path specified)
+2026/03/07 18:30:49 [warn] 20348#25704: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 18:31:22 [warn] 26796#11156: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 18:31:22 [notice] 26796#11156: signal process started
+2026/03/07 18:31:22 [error] 26796#11156: invalid PID number "" in "D:\MaiCore-Start\MaiCore-Start\nginx-1.28.0/logs/nginx.pid"
+2026/03/07 18:31:32 [warn] 28172#11584: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 18:31:32 [warn] 28224#20576: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 18:32:39 [warn] 21288#28796: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 18:32:43 [warn] 21852#8852: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 18:32:44 [warn] 14944#16124: conflicting server name "localhost" on 0.0.0.0:80, ignored
