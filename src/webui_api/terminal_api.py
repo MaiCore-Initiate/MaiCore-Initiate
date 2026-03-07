@@ -99,10 +99,18 @@ def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
                 initial_output = proc.read(256)
                 if initial_output:
                     logger.info("读取到初始输出", data=repr(initial_output[:100]))
+                    # 不广播初始的 VT 序列，因为它们是控制序列
                 else:
                     logger.warning("初始输出为空")
             except Exception as e:
                 logger.warning("读取初始输出失败", error=str(e))
+
+            # 发送一个回车来触发提示符显示
+            try:
+                proc.write('\r')
+                logger.info("已发送回车以触发提示符")
+            except Exception as e:
+                logger.warning("发送回车失败", error=str(e))
 
             return proc
         except ImportError:
