@@ -67,11 +67,19 @@ def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
             shell_cmd = "powershell.exe" if shell == "powershell" else "cmd.exe"
 
             # 创建 pty 进程，设置环境变量确保正确显示
-            proc = PtyProcess.spawn(
-                shell_cmd,
-                dimensions=(rows, cols),
-                env={**os.environ, 'TERM': 'xterm-256color'}
-            )
+            # PowerShell 添加 -NoLogo 参数减少启动输出，但保留提示符
+            if shell == "powershell":
+                proc = PtyProcess.spawn(
+                    [shell_cmd, "-NoLogo"],
+                    dimensions=(rows, cols),
+                    env={**os.environ, 'TERM': 'xterm-256color'}
+                )
+            else:
+                proc = PtyProcess.spawn(
+                    shell_cmd,
+                    dimensions=(rows, cols),
+                    env={**os.environ, 'TERM': 'xterm-256color'}
+                )
 
             # 等待一小段时间让 shell 初始化
             time.sleep(0.2)
@@ -121,9 +129,16 @@ def _start_output_reader(terminal_id: str, proc):
                 logger.info("开始读取终端输出", terminal_id=terminal_id)
                 while True:
                     try:
-                        # 读取输出（阻塞）
-                        output = proc.read(1024)
-                        logger.debug("读取到输出", terminal_id=terminal_id, length=len(output) if output else 0)
+                        # 尝试读取输出，使用较小的块大小
+                        # winpty 的 read() 是阻塞的，但会在有数据时立即返回
+                        try:
+                            output = proc.read(256)  # 减小读取块大小
+                        except Exception as read_error:
+                            logger.error("读取失败", terminal_id=terminal_id, error=str(read_error))
+                            time.sleep(0.1)
+                            continue
+
+                        logger.debug("读取到输出", terminal_id=terminal_id, length=len(output) if output else 0, data=repr(output[:50] if output else ""))
                         if output:
                             # 更新最后活跃时间
                             with _sessions_lock:
