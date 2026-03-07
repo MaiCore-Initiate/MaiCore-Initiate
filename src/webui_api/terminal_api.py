@@ -12,6 +12,7 @@ import threading
 import platform
 from datetime import datetime
 import asyncio
+import sys
 
 logger = structlog.get_logger(__name__)
 
@@ -44,7 +45,7 @@ _terminal_sessions: Dict[str, Dict[str, Any]] = {}
 _sessions_lock = threading.Lock()
 
 # 默认 Shell 配置（可修改）
-DEFAULT_WINDOWS_SHELL = "cmd"  # 可选: "cmd", "powershell"
+DEFAULT_WINDOWS_SHELL = "powershell"  # 可选: "cmd", "powershell"
 DEFAULT_LINUX_SHELL = "bash"
 
 
@@ -55,6 +56,53 @@ def _get_default_shell() -> str:
         return DEFAULT_WINDOWS_SHELL
     else:
         return DEFAULT_LINUX_SHELL
+
+
+def _get_connection_manager():
+    """
+    获取当前运行中的 WebSocket ConnectionManager。
+    兼容两种启动方式：
+    1) `python webui/backend/main.py`（模块名是 __main__）
+    2) `uvicorn webui.backend.main:app`（模块名是 webui.backend.main）
+    """
+    # 优先从当前主模块取，避免 __main__ 和 webui.backend.main 双实例导致广播到错误 manager
+    main_module = sys.modules.get("__main__")
+    if main_module and hasattr(main_module, "manager"):
+        return getattr(main_module, "manager")
+
+    try:
+        from webui.backend.main import manager
+        return manager
+    except Exception as e:
+        logger.error("获取 ConnectionManager 失败", error=str(e))
+        return None
+
+
+def _broadcast_terminal_message(terminal_id: str, payload: Dict[str, Any]):
+    """在线程中安全广播终端消息到对应频道。"""
+    manager = _get_connection_manager()
+    if manager is None:
+        logger.warning("ConnectionManager 不可用，跳过终端消息广播", terminal_id=terminal_id)
+        return
+
+    try:
+        # 优先使用线程安全广播（投递到主事件循环）
+        if hasattr(manager, "broadcast_threadsafe"):
+            manager.broadcast_threadsafe(f"terminal_{terminal_id}", payload)
+            return
+
+        # 回退：尝试直接投递到 manager._loop
+        target_loop = getattr(manager, "_loop", None)
+        if target_loop is not None and target_loop.is_running() and not target_loop.is_closed():
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast(f"terminal_{terminal_id}", payload),
+                target_loop
+            )
+            return
+
+        logger.warning("主事件循环未就绪，跳过终端消息广播", terminal_id=terminal_id)
+    except Exception as e:
+        logger.error("终端消息广播失败", terminal_id=terminal_id, error=str(e))
 
 
 def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
@@ -68,26 +116,48 @@ def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
             from winpty import PtyProcess, Backend
             import time
 
-            shell_cmd = "powershell.exe" if shell == "powershell" else "cmd.exe"
+            def _spawn_windows_shell(shell_name: str):
+                shell_cmd = "powershell.exe" if shell_name == "powershell" else "cmd.exe"
+                logger.info("创建 Windows 终端进程（ConPTY backend）", shell=shell_name, shell_cmd=shell_cmd)
+                if shell_name == "powershell":
+                    use_profile = False
+                    try:
+                        from src.core.webui_config import webui_config
+                        webui_config.reload_if_changed()
+                        use_profile = bool(webui_config.get("terminal.webshell_use_profile", False))
+                    except Exception as cfg_error:
+                        logger.warning("读取 WebUI 终端配置失败，使用默认值", error=str(cfg_error))
 
-            # 创建 pty 进程，使用 ConPTY backend（更现代、更可靠）
-            # PowerShell 添加 -NoLogo 参数减少启动输出，但保留提示符
-            if shell == "powershell":
-                logger.info("创建 PowerShell 进程（ConPTY backend）", shell_cmd=shell_cmd)
-                proc = PtyProcess.spawn(
-                    [shell_cmd, "-NoLogo"],
-                    dimensions=(rows, cols),
-                    env={**os.environ, 'TERM': 'xterm-256color'},
-                    backend=Backend.ConPTY  # 使用 ConPTY 而不是 WinPTY
-                )
-            else:
-                logger.info("创建 CMD 进程（ConPTY backend）", shell_cmd=shell_cmd)
-                proc = PtyProcess.spawn(
+                    ps_args = [shell_cmd, "-NoLogo"]
+                    if not use_profile:
+                        ps_args.append("-NoProfile")
+
+                    return PtyProcess.spawn(
+                        ps_args,
+                        dimensions=(rows, cols),
+                        env={**os.environ, "TERM": "xterm-256color"},
+                        backend=Backend.ConPTY
+                    )
+                return PtyProcess.spawn(
                     shell_cmd,
                     dimensions=(rows, cols),
-                    env={**os.environ, 'TERM': 'xterm-256color'},
-                    backend=Backend.ConPTY  # 使用 ConPTY 而不是 WinPTY
+                    env={**os.environ, "TERM": "xterm-256color"},
+                    backend=Backend.ConPTY
                 )
+
+            requested_shell = (shell or DEFAULT_WINDOWS_SHELL).lower()
+            try:
+                proc = _spawn_windows_shell(requested_shell)
+            except Exception as primary_error:
+                if requested_shell != "cmd":
+                    logger.warning(
+                        "首选终端创建失败，回退到 CMD",
+                        requested_shell=requested_shell,
+                        error=str(primary_error)
+                    )
+                    proc = _spawn_windows_shell("cmd")
+                else:
+                    raise
 
             logger.info("PTY 进程创建成功", pid=proc.pid if hasattr(proc, 'pid') else 'unknown')
 
@@ -141,19 +211,12 @@ def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
 def _start_output_reader(terminal_id: str, proc):
     """启动输出读取线程"""
     import time
-    import asyncio
-    from concurrent.futures import ThreadPoolExecutor
-
     logger.info("准备启动输出读取线程", terminal_id=terminal_id)
 
     def read_loop():
         system = platform.system().lower()
 
         logger.info("输出读取线程已启动", terminal_id=terminal_id, system=system)
-
-        # 创建新的事件循环用于这个线程
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
 
         try:
             if system == "windows":
@@ -177,21 +240,19 @@ def _start_output_reader(terminal_id: str, proc):
                                 if terminal_id in _terminal_sessions:
                                     _terminal_sessions[terminal_id]["last_active"] = datetime.now().isoformat()
 
-                            # 使用线程的事件循环广播输出
-                            from webui.backend.main import manager
-                            loop.run_until_complete(manager.broadcast(
-                                f"terminal_{terminal_id}",
+                            # 使用线程事件循环广播输出（兼容 __main__ / module 启动方式）
+                            _broadcast_terminal_message(
+                                terminal_id,
                                 {"type": "terminal_output", "terminal_id": terminal_id, "data": output}
-                            ))
+                            )
                             logger.debug("已广播输出", terminal_id=terminal_id)
                     except EOFError:
                         # 进程退出
                         exit_code = proc.exitstatus if hasattr(proc, 'exitstatus') else 0
-                        from webui.backend.main import manager
-                        loop.run_until_complete(manager.broadcast(
-                            f"terminal_{terminal_id}",
+                        _broadcast_terminal_message(
+                            terminal_id,
                             {"type": "terminal_exit", "terminal_id": terminal_id, "exit_code": exit_code}
-                        ))
+                        )
                         logger.info("终端进程退出", terminal_id=terminal_id, exit_code=exit_code)
                         break
                     except Exception as e:
@@ -217,18 +278,16 @@ def _start_output_reader(terminal_id: str, proc):
                                     if terminal_id in _terminal_sessions:
                                         _terminal_sessions[terminal_id]["last_active"] = datetime.now().isoformat()
 
-                                from webui.backend.main import manager
-                                loop.run_until_complete(manager.broadcast(
-                                    f"terminal_{terminal_id}",
+                                _broadcast_terminal_message(
+                                    terminal_id,
                                     {"type": "terminal_output", "terminal_id": terminal_id, "data": output}
-                                ))
+                                )
                         except OSError:
                             # 进程退出
-                            from webui.backend.main import manager
-                            loop.run_until_complete(manager.broadcast(
-                                f"terminal_{terminal_id}",
+                            _broadcast_terminal_message(
+                                terminal_id,
                                 {"type": "terminal_exit", "terminal_id": terminal_id, "exit_code": 0}
-                            ))
+                            )
                             logger.info("终端进程退出", terminal_id=terminal_id)
                             break
         except Exception as e:
@@ -238,7 +297,6 @@ def _start_output_reader(terminal_id: str, proc):
             with _sessions_lock:
                 if terminal_id in _terminal_sessions:
                     del _terminal_sessions[terminal_id]
-            loop.close()
 
     thread = threading.Thread(target=read_loop, daemon=True)
     thread.start()

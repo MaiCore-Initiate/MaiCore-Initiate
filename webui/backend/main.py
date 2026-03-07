@@ -12,7 +12,7 @@ import secrets
 import platform
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Set
+from typing import Dict, Any, Set, Optional
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent.parent
@@ -21,7 +21,7 @@ os.chdir(project_root)  # 确保相对路径基于项目根目录
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -287,6 +287,12 @@ class ConnectionManager:
             "process_resources": set(),
             "logs": set()
         }
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def bind_loop(self, loop: asyncio.AbstractEventLoop):
+        """绑定主事件循环，供线程安全广播使用。"""
+        self._loop = loop
+        logging.info("ConnectionManager 已绑定主事件循环")
     
     async def connect(self, websocket: WebSocket, channel: str):
         """WebSocket连接"""
@@ -315,6 +321,24 @@ class ConnectionManager:
             # 清理断开的连接
             for conn in disconnected:
                 self.active_connections[channel].discard(conn)
+
+    def broadcast_threadsafe(self, channel: str, message: Dict[str, Any]):
+        """
+        在线程中安全广播消息：
+        将广播协程投递到主事件循环执行，避免在子线程直接操作 WebSocket。
+        """
+        if self._loop is None or self._loop.is_closed():
+            logging.warning(f"主事件循环不可用，跳过广播: {channel}")
+            return None
+
+        try:
+            return asyncio.run_coroutine_threadsafe(
+                self.broadcast(channel, message),
+                self._loop
+            )
+        except Exception as e:
+            logging.error(f"线程安全广播失败: {e}")
+            return None
 
 
 # 全局连接管理器
@@ -715,35 +739,26 @@ LOGIN_HTML = """
 
 # --- 根路由 ---
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def root(request: Request):
-    """根路径 - 检查登录状态"""
-    session_id = request.cookies.get("webui_session", "")
-    if session_id and session_manager.is_logged_in(session_id):
-        # 已登录，返回主页HTML（这里可以返回前端构建的页面）
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>MaiCore WebUI</title>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body>
-            <h1>MaiCore WebUI</h1>
-            <p>已成功登录！</p>
-            <p>API地址: <a href="/api">/api</a></p>
-        </body>
-        </html>
-        """
-    else:
-        # 未登录，返回登录页
-        return HTMLResponse(content=LOGIN_HTML, status_code=200)
+    """
+    根路径统一返回前端 SPA 入口。
+    说明：
+    - 旧版内置登录页保留为 dist 不存在时的兜底
+    - 登录态校验交由前端 + /api/auth/* 接口处理
+    """
+    frontend_index = project_root / "webui" / "frontend" / "dist" / "index.html"
+    if frontend_index.is_file():
+        return FileResponse(str(frontend_index))
+    return HTMLResponse(content=LOGIN_HTML, status_code=200)
 
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
-    """登录页面"""
+    """兼容旧登录路径，统一返回前端 SPA 入口。"""
+    frontend_index = project_root / "webui" / "frontend" / "dist" / "index.html"
+    if frontend_index.is_file():
+        return FileResponse(str(frontend_index))
     return HTMLResponse(content=LOGIN_HTML, status_code=200)
 
 
@@ -948,6 +963,7 @@ async def periodic_status_update():
 async def startup_event():
     """应用启动事件"""
     logger.info("MaiCore WebUI API 服务启动")
+    manager.bind_loop(asyncio.get_running_loop())
     # 启动后台任务
     asyncio.create_task(periodic_status_update())
 
