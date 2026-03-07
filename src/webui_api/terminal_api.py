@@ -48,7 +48,7 @@ def _get_default_shell() -> str:
     """获取默认 shell"""
     system = platform.system().lower()
     if system == "windows":
-        return "cmd"
+        return "powershell"  # Windows 使用 PowerShell
     else:
         return "bash"
 
@@ -64,7 +64,7 @@ def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
             from winpty import PtyProcess
             import time
 
-            shell_cmd = "cmd.exe" if shell == "cmd" else "powershell.exe"
+            shell_cmd = "powershell.exe" if shell == "powershell" else "cmd.exe"
 
             # 创建 pty 进程，设置环境变量确保正确显示
             proc = PtyProcess.spawn(

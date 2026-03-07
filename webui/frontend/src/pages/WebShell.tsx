@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Terminal as XTerm } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { CanvasAddon } from '@xterm/addon-canvas'
 import { Plus, X, Maximize2, Minimize2 } from 'lucide-react'
 import 'xterm/css/xterm.css'
 
@@ -42,10 +43,11 @@ export default function WebShell() {
       const xterm = new XTerm({
         cursorBlink: true,
         fontSize: 14,
-        fontFamily: 'Consolas, "Courier New", monospace',
+        fontFamily: '"JetBrainsMono Nerd Font", "JetBrains Mono", "HarmonyOS Sans SC", Consolas, "Courier New", monospace',
+        allowTransparency: true,
         theme: {
-          background: '#1e1e1e',
-          foreground: '#d4d4d4',
+          background: '#00000000',  // 透明背景
+          foreground: '#cccccc',
           cursor: '#ffffff',
           black: '#000000',
           red: '#cd3131',
@@ -62,15 +64,22 @@ export default function WebShell() {
           brightBlue: '#3b8eea',
           brightMagenta: '#d670d6',
           brightCyan: '#29b8db',
-          brightWhite: '#e5e5e5'
-        }
+          brightWhite: '#e5e5e5',
+          selectionBackground: '#3a3d41'
+        },
+        cursorInactiveStyle: 'outline',
+        drawBoldTextInBrightColors: false,
+        lineHeight: 1.2
       })
 
       // 添加插件
       const fitAddon = new FitAddon()
       const webLinksAddon = new WebLinksAddon()
+      const canvasAddon = new CanvasAddon()
+
       xterm.loadAddon(fitAddon)
       xterm.loadAddon(webLinksAddon)
+      xterm.loadAddon(canvasAddon)  // 使用 Canvas 渲染器提升性能
 
       // 建立 WebSocket 连接
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
@@ -153,8 +162,23 @@ export default function WebShell() {
         const container = document.getElementById(`terminal-${terminalId}`)
         if (container) {
           xterm.open(container)
-          fitAddon.fit()
+
+          // 使用 ResizeObserver 自动调整终端大小
+          const resizeObserver = new ResizeObserver(() => {
+            fitAddon.fit()
+          })
+
+          // 等待字体加载完成后再调整大小
+          document.fonts.ready.then(() => {
+            fitAddon.fit()
+            resizeObserver.observe(container)
+          })
+
           xterm.focus()
+
+          // 清理函数
+          newTerminal.containerRef = container as HTMLDivElement
+          ;(container as any).__resizeObserver = resizeObserver
         }
       }, 100)
 
@@ -169,6 +193,14 @@ export default function WebShell() {
     if (!terminal) return
 
     try {
+      // 清理 ResizeObserver
+      if (terminal.containerRef) {
+        const resizeObserver = (terminal.containerRef as any).__resizeObserver
+        if (resizeObserver) {
+          resizeObserver.disconnect()
+        }
+      }
+
       // 关闭 WebSocket
       if (terminal.ws) {
         terminal.ws.close()
@@ -207,20 +239,6 @@ export default function WebShell() {
     }, 50)
   }
 
-  // 监听窗口大小变化
-  useEffect(() => {
-    const handleResize = () => {
-      terminals.forEach(terminal => {
-        if (terminal.id === activeTerminalId) {
-          terminal.fitAddon.fit()
-        }
-      })
-    }
-
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [terminals, activeTerminalId])
-
   // 切换沉浸模式
   const toggleImmersive = () => {
     setIsImmersive(!isImmersive)
@@ -237,9 +255,20 @@ export default function WebShell() {
   useEffect(() => {
     return () => {
       terminals.forEach(terminal => {
+        // 清理 ResizeObserver
+        if (terminal.containerRef) {
+          const resizeObserver = (terminal.containerRef as any).__resizeObserver
+          if (resizeObserver) {
+            resizeObserver.disconnect()
+          }
+        }
+
+        // 关闭 WebSocket
         if (terminal.ws) {
           terminal.ws.close()
         }
+
+        // 销毁终端实例
         terminal.xterm.dispose()
       })
     }
