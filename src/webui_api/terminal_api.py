@@ -43,14 +43,18 @@ class TerminalInfo(BaseModel):
 _terminal_sessions: Dict[str, Dict[str, Any]] = {}
 _sessions_lock = threading.Lock()
 
+# 默认 Shell 配置（可修改）
+DEFAULT_WINDOWS_SHELL = "cmd"  # 可选: "cmd", "powershell"
+DEFAULT_LINUX_SHELL = "bash"
+
 
 def _get_default_shell() -> str:
     """获取默认 shell"""
     system = platform.system().lower()
     if system == "windows":
-        return "powershell"  # Windows 使用 PowerShell
+        return DEFAULT_WINDOWS_SHELL
     else:
-        return "bash"
+        return DEFAULT_LINUX_SHELL
 
 
 def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):

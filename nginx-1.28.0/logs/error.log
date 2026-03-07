@@ -11,3 +11,5 @@
 2026/03/07 18:32:39 [warn] 21288#28796: conflicting server name "localhost" on 0.0.0.0:80, ignored
 2026/03/07 18:32:43 [warn] 21852#8852: conflicting server name "localhost" on 0.0.0.0:80, ignored
 2026/03/07 18:32:44 [warn] 14944#16124: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 19:07:06 [warn] 25472#8096: conflicting server name "localhost" on 0.0.0.0:80, ignored
+2026/03/07 19:07:06 [notice] 25472#8096: signal process started
