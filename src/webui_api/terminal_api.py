@@ -114,10 +114,12 @@ def _start_output_reader(terminal_id: str, proc):
         try:
             if system == "windows":
                 # winpty 使用阻塞读取
+                logger.info("开始读取终端输出", terminal_id=terminal_id)
                 while True:
                     try:
                         # 读取输出（阻塞）
                         output = proc.read(1024)
+                        logger.debug("读取到输出", terminal_id=terminal_id, length=len(output) if output else 0)
                         if output:
                             # 更新最后活跃时间
                             with _sessions_lock:
@@ -130,6 +132,7 @@ def _start_output_reader(terminal_id: str, proc):
                                 f"terminal_{terminal_id}",
                                 {"type": "terminal_output", "terminal_id": terminal_id, "data": output}
                             ))
+                            logger.debug("已广播输出", terminal_id=terminal_id)
                     except EOFError:
                         # 进程退出
                         exit_code = proc.exitstatus if hasattr(proc, 'exitstatus') else 0
