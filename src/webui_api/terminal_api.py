@@ -61,26 +61,28 @@ def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
     if system == "windows":
         # Windows 使用 winpty
         try:
-            from winpty import PtyProcess
+            from winpty import PtyProcess, Backend
             import time
 
             shell_cmd = "powershell.exe" if shell == "powershell" else "cmd.exe"
 
-            # 创建 pty 进程，设置环境变量确保正确显示
+            # 创建 pty 进程，使用 ConPTY backend（更现代、更可靠）
             # PowerShell 添加 -NoLogo 参数减少启动输出，但保留提示符
             if shell == "powershell":
-                logger.info("创建 PowerShell 进程", shell_cmd=shell_cmd)
+                logger.info("创建 PowerShell 进程（ConPTY backend）", shell_cmd=shell_cmd)
                 proc = PtyProcess.spawn(
                     [shell_cmd, "-NoLogo"],
                     dimensions=(rows, cols),
-                    env={**os.environ, 'TERM': 'xterm-256color'}
+                    env={**os.environ, 'TERM': 'xterm-256color'},
+                    backend=Backend.ConPTY  # 使用 ConPTY 而不是 WinPTY
                 )
             else:
-                logger.info("创建 CMD 进程", shell_cmd=shell_cmd)
+                logger.info("创建 CMD 进程（ConPTY backend）", shell_cmd=shell_cmd)
                 proc = PtyProcess.spawn(
                     shell_cmd,
                     dimensions=(rows, cols),
-                    env={**os.environ, 'TERM': 'xterm-256color'}
+                    env={**os.environ, 'TERM': 'xterm-256color'},
+                    backend=Backend.ConPTY  # 使用 ConPTY 而不是 WinPTY
                 )
 
             logger.info("PTY 进程创建成功", pid=proc.pid if hasattr(proc, 'pid') else 'unknown')
