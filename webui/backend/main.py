@@ -95,22 +95,29 @@ class JsonLHandler(logging.Handler):
 def setup_logging():
     """配置日志系统"""
     log_dir = project_root / "log"
-    
+
     # 创建JSONL处理器
     jsonl_handler = JsonLHandler(str(log_dir))
     jsonl_handler.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     jsonl_handler.setFormatter(formatter)
-    
+
+    # 创建控制台处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+
     # 配置根日志记录器
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     root_logger.addHandler(jsonl_handler)
-    
+    root_logger.addHandler(console_handler)  # 添加控制台输出
+
     # 禁用uvicorn的默认日志处理器，避免重复输出
     uvicorn_logger = logging.getLogger("uvicorn")
     uvicorn_logger.handlers.clear()
     uvicorn_logger.addHandler(jsonl_handler)
+    uvicorn_logger.addHandler(console_handler)  # 添加控制台输出
     uvicorn_logger.setLevel(logging.INFO)
     
     return root_logger
