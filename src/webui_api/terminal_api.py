@@ -104,8 +104,12 @@ def _start_output_reader(terminal_id: str, proc):
     import asyncio
     from concurrent.futures import ThreadPoolExecutor
 
+    logger.info("准备启动输出读取线程", terminal_id=terminal_id)
+
     def read_loop():
         system = platform.system().lower()
+
+        logger.info("输出读取线程已启动", terminal_id=terminal_id, system=system)
 
         # 创建新的事件循环用于这个线程
         loop = asyncio.new_event_loop()
@@ -191,6 +195,7 @@ def _start_output_reader(terminal_id: str, proc):
 
     thread = threading.Thread(target=read_loop, daemon=True)
     thread.start()
+    logger.info("输出读取线程已启动", terminal_id=terminal_id, thread_id=thread.ident)
     return thread
 
 
