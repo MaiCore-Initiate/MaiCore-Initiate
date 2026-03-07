@@ -24,19 +24,24 @@ export default function WebShell() {
   // 创建新终端
   const createTerminal = async () => {
     try {
+      console.log('开始创建终端...')
       // 调用后端 API 创建终端会话
       const response = await fetch('/api/terminal/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shell: 'cmd' })
+        body: JSON.stringify({ shell: 'powershell' })  // 使用 PowerShell
       })
 
+      console.log('API 响应状态:', response.status)
+
       if (!response.ok) {
-        console.error('创建终端失败')
+        const errorText = await response.text()
+        console.error('创建终端失败:', response.status, errorText)
         return
       }
 
       const data = await response.json()
+      console.log('终端创建成功:', data)
       const terminalId = data.terminal_id
 
       // 创建 xterm 实例
