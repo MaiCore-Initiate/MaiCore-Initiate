@@ -69,58 +69,102 @@ export default function Misc() {
   }
 
   return (
-    <div className="flex flex-col gap-6 p-6 h-full overflow-auto">
-      {/* 页面标题 */}
-      <div className="animate-fade-slide-up" style={d(0)}>
-        <h1 className="text-black/80 mb-2" style={pageTitleStyle}>
-          杂项
-        </h1>
-      </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* 页面标题和标签 */}
+      <div className={`transition-all duration-500 ${activeTab === 'webshell' ? 'p-4' : 'p-6'}`}>
+        <div className="flex items-center gap-4 animate-fade-slide-up" style={d(0)}>
+          <h1 className="text-black/80" style={pageTitleStyle}>
+            杂项
+          </h1>
 
-      {/* 标签页导航 */}
-      <div className="animate-fade-slide-up" style={d(1)}>
-        <GlassCard>
-          <div className="p-[20px] flex gap-[12px] flex-wrap">
-            {[
-              { key: 'about', label: '关于项目', icon: Package },
-              { key: 'author', label: '关于作者', icon: User },
-              { key: 'tech', label: '技术栈', icon: Cpu },
-              { key: 'libs', label: '开源库', icon: BookOpen },
-              { key: 'license', label: '开源许可', icon: FileText },
-              { key: 'components', label: '组件下载', icon: Download },
-              { key: 'webshell', label: 'WebShell', icon: Terminal },
-            ].map(tab => {
-              const Icon = tab.icon
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key as any)}
-                  className={cn(
-                    'px-[24px] py-[12px] rounded-[20px] border-2 transition-all flex items-center gap-[8px]',
-                    activeTab === tab.key
-                      ? 'bg-white/60 border-black/50 text-black/80'
-                      : 'bg-white/20 border-black/30 text-black/50 hover:bg-white/40'
-                  )}
-                  style={{ ...labelFont, boxShadow: activeTab === tab.key ? '2px 3px 6px rgba(0,0,0,0.15)' : 'none' }}
-                >
-                  <Icon size={20} />
-                  {tab.label}
-                </button>
-              )
-            })}
+          {/* WebShell 激活时显示的小标签 */}
+          {activeTab === 'webshell' && (
+            <button
+              onClick={() => setActiveTab('about')}
+              className="px-6 py-3 rounded-2xl border-2 bg-white/60 border-black/50 text-black/80 flex items-center gap-2 shadow-md hover:bg-white/70 transition-all animate-scale-in"
+              style={labelFont}
+            >
+              <Terminal size={20} />
+              WebShell
+            </button>
+          )}
+        </div>
+
+        {/* 标签页导航 - WebShell 时隐藏 */}
+        {activeTab !== 'webshell' && (
+          <div className="animate-fade-slide-up mt-6" style={d(1)}>
+            <GlassCard>
+              <div className="p-[20px] flex gap-[12px] flex-wrap">
+                {[
+                  { key: 'about', label: '关于项目', icon: Package },
+                  { key: 'author', label: '关于作者', icon: User },
+                  { key: 'tech', label: '技术栈', icon: Cpu },
+                  { key: 'libs', label: '开源库', icon: BookOpen },
+                  { key: 'license', label: '开源许可', icon: FileText },
+                  { key: 'components', label: '组件下载', icon: Download },
+                  { key: 'webshell', label: 'WebShell', icon: Terminal },
+                ].map(tab => {
+                  const Icon = tab.icon
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key as any)}
+                      className={cn(
+                        'px-[24px] py-[12px] rounded-[20px] border-2 transition-all flex items-center gap-[8px]',
+                        activeTab === tab.key
+                          ? 'bg-white/60 border-black/50 text-black/80'
+                          : 'bg-white/20 border-black/30 text-black/50 hover:bg-white/40'
+                      )}
+                      style={{ ...labelFont, boxShadow: activeTab === tab.key ? '2px 3px 6px rgba(0,0,0,0.15)' : 'none' }}
+                    >
+                      <Icon size={20} />
+                      {tab.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </GlassCard>
           </div>
-        </GlassCard>
+        )}
       </div>
 
       {/* 内容区域 */}
-      <div className="animate-fade-slide-up" style={d(2)}>
-        {activeTab === 'about' && <AboutProject content={content.about} />}
-        {activeTab === 'author' && <AboutAuthor contributors={content.author.contributors} footer={content.author.footer} />}
-        {activeTab === 'tech' && <TechStack tech={content.tech} />}
-        {activeTab === 'libs' && <OpenSourceLibs libraries={content.libs.libraries} footer={content.libs.footer} />}
-        {activeTab === 'license' && <License content={content.license} />}
-        {activeTab === 'components' && <ComponentDownloadTab />}
-        {activeTab === 'webshell' && <WebShellTab />}
+      <div className={`flex-1 overflow-auto transition-all duration-500 ${activeTab === 'webshell' ? 'px-4 pb-4' : 'px-6 pb-6'}`}>
+        {activeTab === 'about' && (
+          <div className="animate-fade-slide-up" style={d(2)}>
+            <AboutProject content={content.about} />
+          </div>
+        )}
+        {activeTab === 'author' && (
+          <div className="animate-fade-slide-up" style={d(2)}>
+            <AboutAuthor contributors={content.author.contributors} footer={content.author.footer} />
+          </div>
+        )}
+        {activeTab === 'tech' && (
+          <div className="animate-fade-slide-up" style={d(2)}>
+            <TechStack tech={content.tech} />
+          </div>
+        )}
+        {activeTab === 'libs' && (
+          <div className="animate-fade-slide-up" style={d(2)}>
+            <OpenSourceLibs libraries={content.libs.libraries} footer={content.libs.footer} />
+          </div>
+        )}
+        {activeTab === 'license' && (
+          <div className="animate-fade-slide-up" style={d(2)}>
+            <License content={content.license} />
+          </div>
+        )}
+        {activeTab === 'components' && (
+          <div className="animate-fade-slide-up" style={d(2)}>
+            <ComponentDownloadTab />
+          </div>
+        )}
+        {activeTab === 'webshell' && (
+          <div className="h-full animate-fade-in">
+            <WebShellTab />
+          </div>
+        )}
       </div>
     </div>
   )
@@ -396,7 +440,7 @@ function ComponentDownloadTab() {
 /** WebShell 标签页 */
 function WebShellTab() {
   return (
-    <div className="-m-6 h-[calc(100vh-200px)]">
+    <div className="h-full">
       <WebShell />
     </div>
   )

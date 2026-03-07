@@ -326,9 +326,9 @@ export default function WebShell() {
 
   // 普通模式渲染
   return (
-    <div className="flex flex-col h-[600px] max-w-[1400px] mx-auto bg-gradient-to-br from-white/10 to-white/5 rounded-2xl overflow-hidden backdrop-blur-md border border-white/20 shadow-2xl">
+    <div className="flex flex-col h-full bg-gradient-to-br from-black/30 to-black/20 rounded-2xl overflow-hidden backdrop-blur-lg border border-white/20 shadow-2xl">
       {/* 标签栏 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-black/20 backdrop-blur-lg border-b border-white/10">
+      <div className="flex items-center justify-between px-4 py-3 bg-black/40 backdrop-blur-xl border-b border-white/20">
         <div className="flex items-center gap-2">
           {terminals.map(terminal => (
             <div
@@ -336,8 +336,8 @@ export default function WebShell() {
               className={`
                 flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-all duration-200
                 ${activeTerminalId === terminal.id
-                  ? 'bg-white/20 text-white shadow-lg border border-white/20'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 border border-transparent'
+                  ? 'bg-white/25 text-white shadow-lg border border-white/30'
+                  : 'bg-white/10 text-white/70 hover:bg-white/15 hover:text-white/90 border border-white/10'
                 }
               `}
               onClick={() => switchTerminal(terminal.id)}
@@ -356,7 +356,7 @@ export default function WebShell() {
           ))}
           <button
             onClick={createTerminal}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 hover:text-blue-100 transition-all duration-200 border border-blue-400/30 hover:border-blue-400/50 shadow-md"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500/25 hover:bg-blue-500/35 text-blue-100 hover:text-white transition-all duration-200 border border-blue-400/40 hover:border-blue-400/60 shadow-md"
           >
             <Plus className="w-4 h-4" />
             <span className="text-sm font-medium">新建</span>
@@ -367,7 +367,7 @@ export default function WebShell() {
         {terminals.length > 0 && (
           <button
             onClick={toggleImmersive}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-white/80 hover:text-white transition-all duration-200 border border-white/20 hover:border-white/30"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/15 hover:bg-white/20 text-white/90 hover:text-white transition-all duration-200 border border-white/25 hover:border-white/35 shadow-md"
           >
             <Maximize2 className="w-4 h-4" />
             <span className="text-sm font-medium">全屏</span>
@@ -376,13 +376,13 @@ export default function WebShell() {
       </div>
 
       {/* 终端容器 */}
-      <div ref={terminalContainerRef} className="flex-1 relative bg-black/40 backdrop-blur-sm overflow-hidden">
+      <div ref={terminalContainerRef} className="flex-1 relative bg-black/50 backdrop-blur-sm overflow-hidden">
         {terminals.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-white/40">
+          <div className="absolute inset-0 flex items-center justify-center text-white/50">
             <div className="text-center">
-              <Plus className="w-20 h-20 mx-auto mb-4 opacity-20" />
-              <p className="text-xl mb-2 font-medium">暂无终端</p>
-              <p className="text-sm opacity-70">点击"新建"开始使用 WebShell</p>
+              <Plus className="w-24 h-24 mx-auto mb-6 opacity-30" />
+              <p className="text-2xl mb-3 font-medium">暂无终端</p>
+              <p className="text-base opacity-80">点击"新建"开始使用 WebShell</p>
             </div>
           </div>
         ) : (
