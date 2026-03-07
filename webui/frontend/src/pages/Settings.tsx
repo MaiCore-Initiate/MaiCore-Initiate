@@ -99,6 +99,8 @@ export default function Settings() {
   const colorAnchorRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [localBg, setLocalBg] = useState<BgSettings>({ ...bgSettings })
+  const [webshellUseProfile, setWebshellUseProfile] = useState(false)
+  const [webuiDirty, setWebuiDirty] = useState(false)
   useEffect(() => { setLocalBg({ ...bgSettings }) }, [bgSettings])
 
   const loadPConfig = useCallback(() => {
@@ -113,19 +115,58 @@ export default function Settings() {
     fetch('/api/settings/backgrounds', { credentials: 'include' })
       .then(r => r.json()).then(d => { if (d.success) setBgFiles(d.files) }).catch(() => {})
   }, [])
-  useEffect(() => { loadPConfig(); loadToken(); loadBgFiles() }, [loadPConfig, loadToken, loadBgFiles])
+  const loadWebUIConfig = useCallback(() => {
+    fetch('/api/webui/config', { credentials: 'include' })
+      .then(r => r.json())
+      .then(cfg => {
+        const v = !!cfg?.terminal?.webshell_use_profile
+        setWebshellUseProfile(v)
+        setWebuiDirty(false)
+      })
+      .catch(() => {})
+  }, [])
+  useEffect(() => { loadPConfig(); loadToken(); loadBgFiles(); loadWebUIConfig() }, [loadPConfig, loadToken, loadBgFiles, loadWebUIConfig])
 
   const getVal = (key: string) => pDirty[key] ?? key.split('.').reduce((o: any, k) => o?.[k], pConfig)
   const setVal = (key: string, v: any) => setPDirty(prev => ({ ...prev, [key]: v }))
 
   const savePConfig = async () => {
-    if (Object.keys(pDirty).length === 0) return
+    if (Object.keys(pDirty).length === 0 && !webuiDirty) return
     setPSaving(true)
     try {
-      const r = await fetch('/api/settings/p-config', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updates: pDirty }) })
-      const d = await r.json()
-      if (d.success) { notify('配置已保存', 'success'); setPDirty({}); loadPConfig() }
-      else notify('保存失败', 'error')
+      let ok = true
+
+      if (Object.keys(pDirty).length > 0) {
+        const r = await fetch('/api/settings/p-config', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ updates: pDirty })
+        })
+        const d = await r.json()
+        if (!d.success) ok = false
+      }
+
+      if (webuiDirty) {
+        const r2 = await fetch('/api/webui/config', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'terminal.webshell_use_profile', value: webshellUseProfile })
+        })
+        const d2 = await r2.json()
+        if (!d2.success) ok = false
+      }
+
+      if (ok) {
+        notify('配置已保存', 'success')
+        setPDirty({})
+        setWebuiDirty(false)
+        loadPConfig()
+        loadWebUIConfig()
+      } else {
+        notify('保存失败', 'error')
+      }
     } catch { notify('保存失败', 'error') }
     setPSaving(false)
   }
@@ -265,9 +306,19 @@ export default function Settings() {
             <ConfigRow label="退出时进程处理" configKey="on_exit.process_action" type="exit_action" />
             <ConfigRow label="Windows通知中心" configKey="notifications.windows_center_enabled" type="toggle" />
             <ConfigRow label="最小化到托盘" configKey="ui.minimize_to_tray" type="toggle" />
+            <div className="flex items-center justify-between py-[10px]">
+              <span style={labelFont} className="text-black/70">WebShell 使用 PowerShell Profile（Oh-My-Posh）</span>
+              <Toggle
+                checked={webshellUseProfile}
+                onChange={v => {
+                  setWebshellUseProfile(v)
+                  setWebuiDirty(true)
+                }}
+              />
+            </div>
           </div>
           <div className="flex justify-end mt-[20px]">
-            <button onClick={savePConfig} disabled={pSaving || Object.keys(pDirty).length === 0}
+            <button onClick={savePConfig} disabled={pSaving || (Object.keys(pDirty).length === 0 && !webuiDirty)}
               className="relative rounded-[27px] px-[30px] py-[10px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
               <div className={pillShadow} style={pillShadowStyle} />
               <span style={btnFont} className="text-black/70">{pSaving ? '保存中...' : '保存配置'}</span>

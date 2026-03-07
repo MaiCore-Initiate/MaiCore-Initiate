@@ -26,6 +26,9 @@ class WebUIConfig:
             "default_granularity": "day",
             "split_by_instance": False,
         },
+        "terminal": {
+            "webshell_use_profile": False,
+        },
     }
 
     def __init__(self):
