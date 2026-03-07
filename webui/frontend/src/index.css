@@ -20,6 +20,15 @@
   font-display: swap;
 }
 
+/* WebShell 专用等宽 Nerd Font，避免提示符图标和字符宽度错位 */
+@font-face {
+  font-family: 'JetBrainsMono Nerd Font';
+  src: url('/fonts/JETBRAINSMONONERDFONT-REGULAR.TTF') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
