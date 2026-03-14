@@ -80,8 +80,12 @@ async function fetchDailyQuote(signal?: AbortSignal): Promise<DailyQuote> {
   }
 }
 
-export default function Misc() {
-  const [activeTab, setActiveTab] = useState<MiscTab>('about')
+interface MiscProps {
+  initialTab?: MiscTab
+}
+
+export default function Misc({ initialTab }: MiscProps) {
+  const [activeTab, setActiveTab] = useState<MiscTab>(initialTab ?? 'about')
   const [content, setContent] = useState<MiscContent | null>(null)
   const [loading, setLoading] = useState(true)
   const compactMode = activeTab === 'webshell' || activeTab === 'screensaver' || activeTab === 'desktop-pet'
