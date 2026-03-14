@@ -49,6 +49,19 @@ DEFAULT_WINDOWS_SHELL = "powershell"  # 可选: "cmd", "powershell"
 DEFAULT_LINUX_SHELL = "bash"
 
 
+def _is_expected_terminal_close_error(error: Exception) -> bool:
+    """判断是否为终端关闭过程中可忽略的预期错误。"""
+    error_msg = str(error).lower()
+    expected_markers = (
+        "winerror 10038",
+        "closed",
+        "invalid",
+        "bad file descriptor",
+        "在一个非套接字上尝试了一个操作",
+    )
+    return any(marker in error_msg for marker in expected_markers)
+
+
 def _get_default_shell() -> str:
     """获取默认 shell"""
     system = platform.system().lower()
@@ -229,6 +242,19 @@ def _start_output_reader(terminal_id: str, proc):
                         try:
                             output = proc.read(256)  # 减小读取块大小
                         except Exception as read_error:
+                            with _sessions_lock:
+                                session = _terminal_sessions.get(terminal_id)
+                                is_closing = session is None or bool(session.get("closing"))
+
+                            if is_closing or _is_expected_terminal_close_error(read_error):
+                                logger.info(
+                                    "终端读取已结束",
+                                    terminal_id=terminal_id,
+                                    error=str(read_error),
+                                    closing=is_closing
+                                )
+                                break
+
                             logger.error("读取失败", terminal_id=terminal_id, error=str(read_error))
                             time.sleep(0.1)
                             continue
@@ -257,8 +283,7 @@ def _start_output_reader(terminal_id: str, proc):
                         break
                     except Exception as e:
                         # 检查是否是连接关闭错误
-                        error_msg = str(e).lower()
-                        if "winerror" in error_msg or "closed" in error_msg or "invalid" in error_msg:
+                        if _is_expected_terminal_close_error(e):
                             logger.info("终端连接已关闭", terminal_id=terminal_id)
                             break
                         logger.error("读取终端输出时出错", terminal_id=terminal_id, error=str(e))
@@ -328,7 +353,8 @@ def create_terminal(request: CreateTerminalRequest):
                 "cwd": cwd,
                 "created_at": datetime.now().isoformat(),
                 "last_active": datetime.now().isoformat(),
-                "reader_thread": None
+                "reader_thread": None,
+                "closing": False,
             }
 
         # 启动输出读取线程
@@ -380,6 +406,7 @@ def close_terminal(terminal_id: str):
 
             session = _terminal_sessions[terminal_id]
             proc = session["process"]
+            session["closing"] = True
 
             # 关闭进程
             system = platform.system().lower()

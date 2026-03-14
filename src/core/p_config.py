@@ -5,9 +5,11 @@
 import os
 import toml
 import structlog
+from copy import deepcopy
 from typing import Dict, Any, Optional
 
 logger = structlog.get_logger(__name__)
+MASKED_LLM_API_KEY = "***已配置***"
 
 class PConfig:
     """程序配置管理类"""
@@ -77,6 +79,15 @@ class PConfig:
             "selected_mirror": "",
             "timeout": 30,
             "depth": 1
+        },
+        "llm": {
+            "provider": "openai",
+            "api_key": "",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-4o-mini",
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "timeout": 30
         },
         "webui": {
             "webui_token": "",
@@ -173,6 +184,23 @@ class PConfig:
     def is_proxy_enabled(self) -> bool:
         """检查代理是否启用"""
         return self.get("network.proxy.enabled", False)
+
+    def get_llm_config(self) -> Dict[str, Any]:
+        """获取LLM配置"""
+        config = deepcopy(self.get("llm", self.DEFAULT_CONFIG["llm"]))
+        api_key = str(config.get("api_key", "") or "").strip()
+        if api_key == MASKED_LLM_API_KEY:
+            logger.warning("检测到被掩码的LLM API Key，占位值将按未配置处理")
+            api_key = ""
+        elif api_key and not api_key.isascii():
+            logger.warning("检测到包含非ASCII字符的LLM API Key，按未配置处理")
+            api_key = ""
+
+        config["api_key"] = api_key
+        config["provider"] = str(config.get("provider", "openai") or "openai").strip() or "openai"
+        config["base_url"] = str(config.get("base_url", self.DEFAULT_CONFIG["llm"]["base_url"]) or "").strip() or self.DEFAULT_CONFIG["llm"]["base_url"]
+        config["model"] = str(config.get("model", self.DEFAULT_CONFIG["llm"]["model"]) or "").strip() or self.DEFAULT_CONFIG["llm"]["model"]
+        return config
 
     def reset_to_default(self) -> bool:
         """将配置重置为默认值并保存"""

@@ -39,8 +39,10 @@ from src.webui_api import (
     logs_router,
     settings_router,
     components_router,
-    terminal_router
+    terminal_router,
+    pet_router
 )
+from src.webui_api.pet_api_v2 import router as pet_v2_router
 
 # 导入配置管理器
 from src.core.p_config import p_config_manager
@@ -351,23 +353,46 @@ logger = logging.getLogger(__name__)
 # --- 登录验证依赖 ---
 
 def verify_session(request: Request):
-    """验证会话是否已登录"""
+    """验证会话是否已登录（支持 Cookie session 和 Bearer Token）"""
     # 登录页背景需要在未登录时也能读取：
     # 1) 背景偏好（是否启用自定义、固定文件等）
     # 2) 背景文件列表（用于随机选择）
-    if request.method == "GET" and request.url.path in {
+    path = request.url.path
+    if request.method == "GET" and path in {
         "/api/preferences/bg_settings",
         "/api/settings/backgrounds",
+        "/api/settings/live2d/models",
+        "/api/settings/live2d/settings",
+        "/api/settings/live2d/runtime/status",
+        "/api/settings/live2d/face-capture/state",
+        "/api/settings/live2d/widget/tips.json",
     }:
         return "public"
+    if request.method == "GET" and path.startswith("/api/settings/live2d/models/"):
+        return "public"
+    if request.method == "POST" and path in {
+        "/api/settings/live2d/runtime/position",
+        "/api/settings/live2d/face-capture/frame",
+        "/api/settings/live2d/chat",
+        "/api/settings/live2d/overlay/settings",
+    }:
+        return "public"
+
+    # Bearer Token 认证（供 Electron 桌宠使用）
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        bearer_token = auth_header[7:]
+        if bearer_token and token_manager.verify_token(bearer_token):
+            return "bearer"
+        raise HTTPException(status_code=401, detail="Bearer Token 无效")
 
     session_id = request.cookies.get("webui_session", "")
     if not session_id:
         raise HTTPException(status_code=401, detail="请先登录")
-    
+
     if not session_manager.is_logged_in(session_id):
         raise HTTPException(status_code=401, detail="请先登录")
-    
+
     return session_id
 
 
@@ -424,6 +449,12 @@ app.include_router(components_router, tags=["组件下载"], dependencies=auth_d
 
 # 终端管理API
 app.include_router(terminal_router, tags=["终端管理"], dependencies=auth_dep)
+
+# 桌宠AI API
+app.include_router(pet_router, prefix="/api/pet", tags=["桌宠AI"], dependencies=auth_dep)
+
+# 桌宠AI API v2 (Neo-MoFox架构)
+app.include_router(pet_v2_router, prefix="/api/pet-v2", tags=["桌宠AI v2"], dependencies=auth_dep)
 
 
 # --- 登录相关API ---
@@ -798,6 +829,33 @@ async def health_check():
 
 # --- WebSocket端点 ---
 
+@app.websocket("/ws/settings")
+async def settings_ws_endpoint(websocket: WebSocket):
+    """WebSocket 热重载端点：LLM 配置变更时广播给 Electron 桌宠。
+    支持 Bearer Token 认证（通过 query param token=xxx）。
+    """
+    # 允许 Cookie session 或 Bearer token（query param）验证
+    session_id = websocket.cookies.get("webui_session", "")
+    bearer_token = websocket.query_params.get("token", "")
+    authenticated = (
+        (session_id and session_manager.is_logged_in(session_id))
+        or (bearer_token and token_manager.verify_token(bearer_token))
+    )
+    if not authenticated:
+        await websocket.close(code=4001)
+        return
+
+    from src.webui_api.settings_api import settings_ws_manager
+    await settings_ws_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # keep-alive
+    except WebSocketDisconnect:
+        settings_ws_manager.disconnect(websocket)
+    except Exception:
+        settings_ws_manager.disconnect(websocket)
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket实时通信端点"""
@@ -967,6 +1025,21 @@ async def startup_event():
     # 启动后台任务
     asyncio.create_task(periodic_status_update())
 
+    # 启动提醒服务
+    try:
+        from src.core.pet_database import PetDatabase
+        from src.services.reminder_service import ReminderService
+
+        pet_db = PetDatabase()
+        reminder_service = ReminderService(pet_db)
+        await reminder_service.start()
+
+        # 保存到全局变量以便关闭时使用
+        app.state.reminder_service = reminder_service
+        logger.info("提醒服务已启动")
+    except Exception as e:
+        logger.error(f"提醒服务启动失败: {e}")
+
 
 # 挂载前端静态文件
 frontend_dist = project_root / "webui" / "frontend" / "dist"
@@ -974,10 +1047,16 @@ if frontend_dist.exists():
     app.mount("/static", StaticFiles(directory=str(frontend_dist / "assets")), name="static")
     # 挂载 public 目录中的资源
     frontend_public = project_root / "webui" / "frontend" / "public"
+    live2d_assets = project_root / "data" / "Live_2D"
+    desktop_pet_web = project_root / "src" / "modules" / "desktop_pet_web"
     if frontend_public.exists():
         app.mount("/fonts", StaticFiles(directory=str(frontend_public / "fonts")), name="fonts")
         app.mount("/backgrounds", StaticFiles(directory=str(frontend_public / "backgrounds")), name="backgrounds")
         app.mount("/default_backgrounds", StaticFiles(directory=str(frontend_public / "default_backgrounds")), name="default_backgrounds")
+    if live2d_assets.exists():
+        app.mount("/live2d", StaticFiles(directory=str(live2d_assets)), name="live2d")
+    if desktop_pet_web.exists():
+        app.mount("/desktop-pet", StaticFiles(directory=str(desktop_pet_web)), name="desktop-pet")
 
     # 添加根路径和 SPA 路由支持
     from fastapi.responses import FileResponse
@@ -991,7 +1070,7 @@ if frontend_dist.exists():
     async def serve_spa(full_path: str):
         """支持 SPA 路由，所有未匹配的路径返回 index.html"""
         # 如果是 API 或 WebSocket 路径，跳过
-        if full_path.startswith(("api/", "ws", "static/", "fonts/", "backgrounds/", "default_backgrounds/")):
+        if full_path.startswith(("api/", "ws", "static/", "fonts/", "backgrounds/", "default_backgrounds/", "live2d/", "desktop-pet/")):
             return {"detail": "Not Found"}
 
         # 检查文件是否存在
@@ -1011,6 +1090,14 @@ else:
 async def shutdown_event():
     """应用关闭事件"""
     logger.info("MaiCore WebUI API 服务关闭")
+
+    # 停止提醒服务
+    if hasattr(app.state, 'reminder_service'):
+        try:
+            await app.state.reminder_service.stop()
+            logger.info("提醒服务已停止")
+        except Exception as e:
+            logger.error(f"提醒服务停止失败: {e}")
 
 
 # 运行应用
