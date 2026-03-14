@@ -1,141 +1,145 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import GlassCard from '../components/ui/GlassCard'
 
-const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
-const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
-const pillShadow = "absolute inset-0 rounded-[27px] pointer-events-none"
-const pillShadowStyle = { border: '2px solid rgba(0,0,0,0.5)', boxShadow: '2px 3px 6px rgba(0,0,0,0.15)' }
+type LogSource = 'main' | 'webui' | 'desktop_pet'
 
-interface LogFile { name: string; size: number; date: string; type: 'main' | 'webui' }
-interface LogLine { timestamp: string; level: string; logger: string; message: string }
-
-const LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR'] as const
-const levelColors: Record<string, string> = { DEBUG: '#06b6d4', INFO: '#22c55e', WARNING: '#f59e0b', ERROR: '#ef4444' }
-
-const PAGE_SIZE = 200
-
-/* 自定义下拉框 - 参考 Deployment.tsx CustomSelect */
-function CustomSelect({ value, onChange, options, placeholder }: {
-  value: string; onChange: (v: string) => void
-  options: { value: string; label: string }[]; placeholder?: string
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const [pos, setPos] = useState({ top: 0, left: 0, width: 0, maxH: 240 })
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
-  }, [])
-  useEffect(() => {
-    if (open && btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect()
-      const spaceBelow = window.innerHeight - r.bottom - 8
-      const spaceAbove = r.top - 8
-      const dropUp = spaceBelow < 150 && spaceAbove > spaceBelow
-      const maxH = Math.min(240, dropUp ? spaceAbove : spaceBelow)
-      setPos({ top: dropUp ? r.top - Math.max(maxH, 60) - 4 : r.bottom + 4, left: r.left, width: r.width, maxH: Math.max(maxH, 60) })
-    }
-  }, [open])
-  const sel = options.find(o => o.value === value)
-  return (
-    <div ref={ref} className="relative">
-      <button ref={btnRef} onClick={() => setOpen(!open)}
-        className="h-[50px] px-[22px] rounded-[25px] bg-white/60 border-2 border-black/50 flex items-center justify-between cursor-pointer min-w-[280px] gap-[12px]"
-        style={{ ...monoFont, fontSize: 20 }}>
-        <span className={sel ? 'text-black truncate' : 'text-black/30 truncate'}>{sel?.label || placeholder || '请选择'}</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="shrink-0"><path d="M6 9l6 6 6-6" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" strokeLinecap="round" /></svg>
-      </button>
-      {open && options.length > 0 && createPortal(
-        <div className="fixed rounded-[20px] bg-white/95 backdrop-blur-xl border-2 border-black/30 overflow-y-auto custom-scrollbar"
-          style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxH, zIndex: 9999, boxShadow: '4px 4px 12px rgba(0,0,0,0.15)' }}
-          onMouseDown={e => e.stopPropagation()}>
-          {options.map(o => (
-            <button key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
-              className="w-full px-[22px] py-[10px] text-left hover:bg-black/5 transition-colors cursor-pointer"
-              style={{ ...monoFont, fontSize: 18, background: o.value === value ? 'rgba(0,0,0,0.06)' : undefined }}>
-              {o.label}
-            </button>
-          ))}
-        </div>,
-        document.body
-      )}
-    </div>
-  )
+interface LogFile {
+  name: string
+  size: number
+  date: string
+  type: 'main' | 'webui' | 'desktop_pet' | 'misc'
 }
 
-/* 日志源选择器 - 参考 Knowledge.tsx ModeSelector */
-function LogSourceSelector({ value, onChange }: { value: 'main' | 'webui'; onChange: (v: 'main' | 'webui') => void }) {
-  const isMain = value === 'main'
+interface LogLine {
+  timestamp: string
+  level: string
+  logger: string
+  message: string
+}
+
+interface LogFinding {
+  severity: 'error' | 'warning'
+  title: string
+  count: number
+  last_seen: string
+  hint: string
+}
+
+interface LogAnalysis {
+  kind: string
+  summary: string
+  findings: LogFinding[]
+  last_model_url?: string
+  last_backend_url?: string
+}
+
+const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
+const titleFont = { fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
+const PAGE_SIZE = 200
+const LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR'] as const
+const levelColors: Record<string, string> = {
+  DEBUG: '#06b6d4',
+  INFO: '#22c55e',
+  WARNING: '#f59e0b',
+  ERROR: '#ef4444',
+}
+
+function SourceTabs({ value, onChange }: { value: LogSource; onChange: (value: LogSource) => void }) {
+  const items: Array<{ value: LogSource; label: string }> = [
+    { value: 'main', label: '主程序日志' },
+    { value: 'webui', label: 'WebUI 日志' },
+    { value: 'desktop_pet', label: '桌宠日志' },
+  ]
+
   return (
-    <div className="relative shrink-0 flex items-center" style={{ width: 280, height: 50 }}>
-      <div className="absolute inset-0 rounded-[25px] pointer-events-none" style={{ border: '2px solid rgba(0,0,0,0.5)', boxShadow: '3px 3px 4.5px rgba(0,0,0,0.16)' }} />
-      <div
-        className="absolute top-[5px] rounded-[20px] bg-white transition-all duration-300 ease-in-out"
-        style={{
-          height: 40, width: 134,
-          left: isMain ? 4 : 142,
-          border: '1px solid rgba(0,0,0,0.5)', boxShadow: '3px 3px 4.5px rgba(0,0,0,0.16)',
-        }}
-      />
-      <button className="h-full flex items-center justify-center cursor-pointer relative z-10" style={{ width: 140, fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }} onClick={() => onChange('main')}>主程序日志</button>
-      <button className="h-full flex items-center justify-center cursor-pointer relative z-10" style={{ width: 140, fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }} onClick={() => onChange('webui')}>WebUI日志</button>
+    <div className="flex flex-wrap gap-[10px]">
+      {items.map(item => {
+        const active = item.value === value
+        return (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => onChange(item.value)}
+            className="h-[46px] px-[18px] rounded-[23px] transition-colors"
+            style={{
+              ...titleFont,
+              fontSize: 18,
+              background: active ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.45)',
+              border: `2px solid ${active ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.18)'}`,
+              boxShadow: active ? '3px 3px 6px rgba(0,0,0,0.12)' : 'none',
+            }}
+          >
+            {item.label}
+          </button>
+        )
+      })}
     </div>
   )
 }
 
 export default function Logs() {
-  const [source, setSource] = useState<'main' | 'webui'>('main')
+  const [source, setSource] = useState<LogSource>('main')
   const [files, setFiles] = useState<LogFile[]>([])
   const [selectedFile, setSelectedFile] = useState('')
   const [lines, setLines] = useState<LogLine[]>([])
+  const [analysis, setAnalysis] = useState<LogAnalysis | null>(null)
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(false)
 
-  // 过滤状态
   const [enabledLevels, setEnabledLevels] = useState<Set<string>>(new Set(LEVELS))
   const [keyword, setKeyword] = useState('')
-  const [loggerFilter, setLoggerFilter] = useState<string[]>([])
-  const [loggerInput, setLoggerInput] = useState('')
-  const [loggerMode, setLoggerMode] = useState<'blacklist' | 'whitelist'>('blacklist')
-  const [keywordBlacklist, setKeywordBlacklist] = useState<string[]>([])
-  const [kwBlackInput, setKwBlackInput] = useState('')
+  const [loggerKeyword, setLoggerKeyword] = useState('')
+  const [keywordBlacklist, setKeywordBlacklist] = useState('')
   const [autoScroll, setAutoScroll] = useState(false)
+
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // 加载文件列表
   useEffect(() => {
     fetch('/api/logs/files', { credentials: 'include' })
       .then(r => r.json())
-      .then(d => { if (d.success) setFiles(d.files) })
+      .then(d => {
+        if (d.success) setFiles(d.files || [])
+      })
       .catch(() => {})
   }, [])
 
-  const filteredFiles = files.filter(f => f.type === source)
+  const filteredFiles = useMemo(
+    () => files.filter(file => file.type === source),
+    [files, source],
+  )
 
-  // 切换source时自动选第一个文件
   useEffect(() => {
     const first = filteredFiles[0]
     setSelectedFile(first?.name ?? '')
     setOffset(0)
-  }, [source, files.length])
+  }, [filteredFiles])
 
-  // 加载日志内容
   const fetchContent = useCallback(() => {
-    if (!selectedFile) { setLines([]); setTotal(0); return }
+    if (!selectedFile) {
+      setLines([])
+      setAnalysis(null)
+      setTotal(0)
+      return
+    }
+
     setLoading(true)
     fetch(`/api/logs/content/${encodeURIComponent(selectedFile)}?offset=${offset}&limit=${PAGE_SIZE}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
-        if (d.success) { setLines(d.lines); setTotal(d.total) }
+        if (d.success) {
+          setLines(d.lines || [])
+          setAnalysis(d.analysis ?? null)
+          setTotal(d.total || 0)
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [selectedFile, offset])
 
-  useEffect(() => { fetchContent() }, [fetchContent])
+  useEffect(() => {
+    fetchContent()
+  }, [fetchContent])
 
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
@@ -143,154 +147,165 @@ export default function Logs() {
     }
   }, [lines, autoScroll])
 
-  // 前端过滤
-  const filtered = lines.filter(l => {
-    if (!enabledLevels.has(l.level)) return false
-    if (keyword && !l.message.toLowerCase().includes(keyword.toLowerCase()) && !l.logger.toLowerCase().includes(keyword.toLowerCase())) return false
-    if (keywordBlacklist.length > 0 && keywordBlacklist.some(kw => l.message.toLowerCase().includes(kw.toLowerCase()))) return false
-    if (loggerFilter.length > 0) {
-      const match = loggerFilter.some(f => l.logger.includes(f))
-      if (loggerMode === 'blacklist' && match) return false
-      if (loggerMode === 'whitelist' && !match) return false
-    }
-    return true
-  })
+  const filteredLines = useMemo(() => {
+    const kw = keyword.trim().toLowerCase()
+    const loggerKw = loggerKeyword.trim().toLowerCase()
+    const blacklist = keywordBlacklist
+      .split(',')
+      .map(item => item.trim().toLowerCase())
+      .filter(Boolean)
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const currentPage = Math.floor(offset / PAGE_SIZE) + 1
+    return lines.filter(line => {
+      if (!enabledLevels.has(line.level)) return false
+      if (kw && !line.message.toLowerCase().includes(kw) && !line.logger.toLowerCase().includes(kw)) return false
+      if (loggerKw && !line.logger.toLowerCase().includes(loggerKw)) return false
+      if (blacklist.some(item => line.message.toLowerCase().includes(item))) return false
+      return true
+    })
+  }, [enabledLevels, keyword, keywordBlacklist, lines, loggerKeyword])
 
-  const toggleLevel = (lv: string) => {
+  const toggleLevel = (level: string) => {
     setEnabledLevels(prev => {
       const next = new Set(prev)
-      if (next.has(lv)) next.delete(lv); else next.add(lv)
+      if (next.has(level)) next.delete(level)
+      else next.add(level)
       return next
     })
   }
 
-  const addLogger = () => {
-    const v = loggerInput.trim()
-    if (v && !loggerFilter.includes(v)) setLoggerFilter(prev => [...prev, v])
-    setLoggerInput('')
-  }
-
-  const addKwBlack = () => {
-    const v = kwBlackInput.trim()
-    if (v && !keywordBlacklist.includes(v)) setKeywordBlacklist(prev => [...prev, v])
-    setKwBlackInput('')
-  }
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const currentPage = Math.floor(offset / PAGE_SIZE) + 1
 
   return (
-    <div className="flex flex-col p-6 h-full">
-      <h1 className="text-black shrink-0 mb-[16px] animate-card-enter" style={pageTitleStyle}>日志查看器</h1>
-      <div className="flex-1 min-h-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
-        <GlassCard>
-          <div className="p-[28px] flex flex-col h-full">
-            {/* 顶部栏 */}
-            <div className="flex items-center gap-[16px] flex-wrap">
-              <LogSourceSelector value={source} onChange={setSource} />
-              <CustomSelect
+    <div className="w-full h-full p-[24px] overflow-hidden">
+      <div className="max-w-[1700px] mx-auto h-full flex flex-col gap-[20px]">
+        <div className="flex items-end justify-between gap-[16px] flex-wrap">
+          <div>
+            <div className="text-black/85" style={{ ...titleFont, fontSize: 56 }}>日志查看</div>
+            <div className="text-black/45 mt-[4px]" style={{ ...monoFont, fontSize: 16 }}>支持主程序、WebUI 与桌宠渲染日志解析</div>
+          </div>
+        </div>
+
+        <GlassCard className="flex-1 min-h-0">
+          <div className="p-[24px] h-full flex flex-col gap-[14px]">
+            <div className="flex items-center gap-[12px] flex-wrap">
+              <SourceTabs value={source} onChange={setSource} />
+              <select
                 value={selectedFile}
-                onChange={v => { setSelectedFile(v); setOffset(0) }}
-                options={filteredFiles.length === 0
-                  ? [{ value: '', label: '无日志文件' }]
-                  : filteredFiles.map(f => ({ value: f.name, label: `${f.name} (${(f.size / 1024).toFixed(1)}KB)` }))}
-                placeholder="选择日志文件"
-              />
+                onChange={e => { setSelectedFile(e.target.value); setOffset(0) }}
+                className="h-[46px] px-[16px] rounded-[23px] bg-white/70 min-w-[360px] max-w-full outline-none"
+                style={{ ...monoFont, fontSize: 17, border: '2px solid rgba(0,0,0,0.2)' }}
+              >
+                {filteredFiles.length === 0 ? (
+                  <option value="">暂无日志文件</option>
+                ) : (
+                  filteredFiles.map(file => (
+                    <option key={file.name} value={file.name}>
+                      {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
 
-            {/* 过滤栏 */}
-            <div className="flex items-center gap-[10px] mt-[12px] flex-wrap">
-              {LEVELS.map(lv => (
+            {analysis && source === 'desktop_pet' ? (
+              <div className="rounded-[18px] p-[16px]" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(0,0,0,0.12)' }}>
+                <div className="flex items-center justify-between gap-[12px] flex-wrap">
+                  <div className="text-black/80" style={{ ...titleFont, fontSize: 22 }}>桌宠渲染诊断</div>
+                  <div className="text-black/45" style={{ ...monoFont, fontSize: 14 }}>{analysis.kind}</div>
+                </div>
+                <div className="mt-[8px] text-black/70" style={{ ...monoFont, fontSize: 15 }}>{analysis.summary}</div>
+                {analysis.last_backend_url ? <div className="mt-[8px] text-black/55 break-all" style={{ ...monoFont, fontSize: 13 }}>后端地址: {analysis.last_backend_url}</div> : null}
+                {analysis.last_model_url ? <div className="mt-[4px] text-black/55 break-all" style={{ ...monoFont, fontSize: 13 }}>最近模型: {analysis.last_model_url}</div> : null}
+                <div className="mt-[12px] grid grid-cols-1 xl:grid-cols-2 gap-[10px]">
+                  {analysis.findings.length === 0 ? (
+                    <div className="rounded-[14px] px-[12px] py-[10px] text-black/55" style={{ ...monoFont, fontSize: 14, background: 'rgba(0,0,0,0.03)' }}>
+                      暂未识别到明确的桌宠渲染错误关键词。
+                    </div>
+                  ) : analysis.findings.map((item, idx) => (
+                    <div
+                      key={`${item.title}-${idx}`}
+                      className="rounded-[14px] px-[12px] py-[10px]"
+                      style={{
+                        background: item.severity === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.10)',
+                        border: `1px solid ${item.severity === 'error' ? 'rgba(239,68,68,0.20)' : 'rgba(245,158,11,0.25)'}`,
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-[10px] flex-wrap">
+                        <span style={{ ...monoFont, fontSize: 14, fontWeight: 700, color: item.severity === 'error' ? '#dc2626' : '#b45309' }}>{item.title}</span>
+                        <span style={{ ...monoFont, fontSize: 12, color: 'rgba(0,0,0,0.45)' }}>命中 {item.count} 次{item.last_seen ? ` · 最近 ${item.last_seen.replace('T', ' ').slice(0, 19)}` : ''}</span>
+                      </div>
+                      <div className="mt-[4px] text-black/65" style={{ ...monoFont, fontSize: 13 }}>{item.hint}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex items-center gap-[10px] flex-wrap">
+              {LEVELS.map(level => (
                 <button
-                  key={lv}
-                  onClick={() => toggleLevel(lv)}
-                  className="h-[40px] px-[18px] rounded-[20px] cursor-pointer transition-all duration-200 relative"
+                  key={level}
+                  type="button"
+                  onClick={() => toggleLevel(level)}
+                  className="h-[38px] px-[14px] rounded-[19px]"
                   style={{
-                    background: enabledLevels.has(lv) ? levelColors[lv] + '22' : 'transparent',
-                    color: enabledLevels.has(lv) ? levelColors[lv] : 'rgba(0,0,0,0.25)',
-                    border: `2px solid ${enabledLevels.has(lv) ? levelColors[lv] : 'rgba(0,0,0,0.15)'}`,
-                    ...monoFont, fontSize: 18, fontWeight: 600,
+                    ...monoFont,
+                    fontSize: 15,
+                    fontWeight: 700,
+                    background: enabledLevels.has(level) ? `${levelColors[level]}20` : 'transparent',
+                    color: enabledLevels.has(level) ? levelColors[level] : 'rgba(0,0,0,0.28)',
+                    border: `2px solid ${enabledLevels.has(level) ? levelColors[level] : 'rgba(0,0,0,0.15)'}`,
                   }}
-                >{lv}</button>
+                >
+                  {level}
+                </button>
               ))}
               <input
                 value={keyword}
                 onChange={e => setKeyword(e.target.value)}
-                placeholder="关键词搜索..."
-                className="h-[40px] px-[16px] rounded-[20px] bg-white/60 outline-none flex-1 min-w-[160px]"
-                style={{ ...monoFont, fontSize: 18, border: '2px solid rgba(0,0,0,0.3)' }}
+                placeholder="关键词搜索"
+                className="h-[38px] px-[14px] rounded-[19px] bg-white/65 outline-none min-w-[180px]"
+                style={{ ...monoFont, fontSize: 15, border: '2px solid rgba(0,0,0,0.18)' }}
+              />
+              <input
+                value={loggerKeyword}
+                onChange={e => setLoggerKeyword(e.target.value)}
+                placeholder="Logger 过滤"
+                className="h-[38px] px-[14px] rounded-[19px] bg-white/65 outline-none min-w-[180px]"
+                style={{ ...monoFont, fontSize: 15, border: '2px solid rgba(0,0,0,0.18)' }}
+              />
+              <input
+                value={keywordBlacklist}
+                onChange={e => setKeywordBlacklist(e.target.value)}
+                placeholder="屏蔽词，多个用逗号分隔"
+                className="h-[38px] px-[14px] rounded-[19px] bg-white/65 outline-none min-w-[240px] flex-1"
+                style={{ ...monoFont, fontSize: 15, border: '2px solid rgba(0,0,0,0.18)' }}
               />
             </div>
 
-            {/* Logger过滤栏 */}
-            <div className="flex items-center gap-[8px] mt-[8px] flex-wrap">
-              <button
-                onClick={() => setLoggerMode(prev => prev === 'blacklist' ? 'whitelist' : 'blacklist')}
-                className="h-[36px] px-[14px] rounded-[18px] cursor-pointer"
-                style={{ ...monoFont, fontSize: 16, border: '2px solid rgba(0,0,0,0.3)', background: loggerMode === 'whitelist' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)' }}
-              >{loggerMode === 'blacklist' ? '黑名单' : '白名单'}</button>
-              <input
-                value={loggerInput}
-                onChange={e => setLoggerInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addLogger() }}
-                placeholder="Logger名称"
-                className="h-[36px] px-[12px] rounded-[18px] bg-white/60 outline-none"
-                style={{ ...monoFont, fontSize: 16, border: '2px solid rgba(0,0,0,0.2)', width: 180 }}
-              />
-              <button onClick={addLogger} className="h-[36px] px-[12px] rounded-[18px] cursor-pointer" style={{ ...monoFont, fontSize: 16, border: '2px solid rgba(0,0,0,0.3)' }}>添加</button>
-              {loggerFilter.map(name => (
-                <span key={name} className="h-[36px] px-[12px] rounded-[18px] flex items-center gap-[6px]" style={{ ...monoFont, fontSize: 16, border: '2px solid rgba(0,0,0,0.2)' }}>
-                  {name}
-                  <button className="cursor-pointer hover:text-red-500" onClick={() => setLoggerFilter(prev => prev.filter(n => n !== name))}>×</button>
-                </span>
-              ))}
-            </div>
-
-            {/* 关键词黑名单栏 */}
-            <div className="flex items-center gap-[8px] mt-[8px] flex-wrap">
-              <span className="h-[36px] px-[14px] rounded-[18px] flex items-center" style={{ ...monoFont, fontSize: 16, border: '2px solid rgba(0,0,0,0.3)', background: 'rgba(239,68,68,0.15)' }}>关键词屏蔽</span>
-              <input
-                value={kwBlackInput}
-                onChange={e => setKwBlackInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addKwBlack() }}
-                placeholder="屏蔽关键词"
-                className="h-[36px] px-[12px] rounded-[18px] bg-white/60 outline-none"
-                style={{ ...monoFont, fontSize: 16, border: '2px solid rgba(0,0,0,0.2)', width: 180 }}
-              />
-              <button onClick={addKwBlack} className="h-[36px] px-[12px] rounded-[18px] cursor-pointer" style={{ ...monoFont, fontSize: 16, border: '2px solid rgba(0,0,0,0.3)' }}>添加</button>
-              {keywordBlacklist.map(kw => (
-                <span key={kw} className="h-[36px] px-[12px] rounded-[18px] flex items-center gap-[6px]" style={{ ...monoFont, fontSize: 16, border: '2px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)' }}>
-                  {kw}
-                  <button className="cursor-pointer hover:text-red-500" onClick={() => setKeywordBlacklist(prev => prev.filter(k => k !== kw))}>×</button>
-                </span>
-              ))}
-            </div>
-            <div ref={scrollRef} className="flex-1 mt-[12px] overflow-auto rounded-[16px]" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.1)' }}>
+            <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto rounded-[16px]" style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.1)' }}>
               {loading ? (
-                <div className="flex items-center justify-center h-full">
-                  <span className="text-black/30" style={{ ...monoFont, fontSize: 20 }}>加载中...</span>
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
-                  <span className="text-black/30" style={{ ...monoFont, fontSize: 20 }}>暂无日志</span>
-                </div>
+                <div className="h-full flex items-center justify-center text-black/35" style={{ ...monoFont, fontSize: 18 }}>加载中...</div>
+              ) : filteredLines.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-black/35" style={{ ...monoFont, fontSize: 18 }}>暂无日志</div>
               ) : (
-                <table className="w-full border-collapse" style={{ ...monoFont, fontSize: 16 }}>
+                <table className="w-full border-collapse" style={{ ...monoFont, fontSize: 14 }}>
                   <thead>
-                    <tr style={{ position: 'sticky', top: 0, background: 'rgba(255,255,255,0.9)', zIndex: 1 }}>
-                      <th className="text-left px-[12px] py-[8px] text-black/50" style={{ width: 200 }}>时间</th>
-                      <th className="text-left px-[12px] py-[8px] text-black/50" style={{ width: 80 }}>级别</th>
-                      <th className="text-left px-[12px] py-[8px] text-black/50" style={{ width: 200 }}>发出者</th>
-                      <th className="text-left px-[12px] py-[8px] text-black/50">消息</th>
+                    <tr style={{ position: 'sticky', top: 0, background: 'rgba(255,255,255,0.92)', zIndex: 1 }}>
+                      <th className="text-left px-[12px] py-[8px] text-black/45" style={{ width: 190 }}>时间</th>
+                      <th className="text-left px-[12px] py-[8px] text-black/45" style={{ width: 90 }}>级别</th>
+                      <th className="text-left px-[12px] py-[8px] text-black/45" style={{ width: 220 }}>来源</th>
+                      <th className="text-left px-[12px] py-[8px] text-black/45">消息</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((l, i) => (
-                      <tr key={i} className="hover:bg-black/[0.03]" style={{ height: 32 }}>
-                        <td className="px-[12px] text-black/40 whitespace-nowrap">{l.timestamp.replace('T', ' ').slice(0, 19)}</td>
-                        <td className="px-[12px] font-bold whitespace-nowrap" style={{ color: levelColors[l.level] || '#666' }}>{l.level}</td>
-                        <td className="px-[12px] text-black/60 truncate max-w-[200px]">{l.logger}</td>
-                        <td className="px-[12px] text-black/80 break-all">{l.message}</td>
+                    {filteredLines.map((line, index) => (
+                      <tr key={`${line.timestamp}-${index}`} className="hover:bg-black/[0.03]">
+                        <td className="px-[12px] py-[7px] text-black/42 whitespace-nowrap">{line.timestamp ? line.timestamp.replace('T', ' ').slice(0, 19) : '-'}</td>
+                        <td className="px-[12px] py-[7px] font-bold whitespace-nowrap" style={{ color: levelColors[line.level] || '#666' }}>{line.level}</td>
+                        <td className="px-[12px] py-[7px] text-black/60 truncate max-w-[220px]">{line.logger || '-'}</td>
+                        <td className="px-[12px] py-[7px] text-black/78 break-all">{line.message}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -298,37 +313,45 @@ export default function Logs() {
               )}
             </div>
 
-            {/* 底部栏 */}
-            <div className="flex items-center justify-between mt-[10px] shrink-0">
+            <div className="flex items-center justify-between gap-[12px] flex-wrap">
               <div className="flex items-center gap-[10px]">
                 <button
+                  type="button"
                   disabled={offset === 0}
                   onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                  className="h-[40px] px-[18px] rounded-[20px] cursor-pointer disabled:opacity-30 relative"
-                  style={{ ...monoFont, fontSize: 18 }}
+                  className="h-[40px] px-[16px] rounded-[20px] disabled:opacity-30"
+                  style={{ ...monoFont, fontSize: 15, border: '2px solid rgba(0,0,0,0.16)', background: 'rgba(255,255,255,0.65)' }}
                 >
-                  <div className={pillShadow} style={pillShadowStyle} />
                   上一页
                 </button>
-                <span className="text-black/50" style={{ ...monoFont, fontSize: 18 }}>{currentPage} / {totalPages || 1}</span>
+                <span className="text-black/48" style={{ ...monoFont, fontSize: 14 }}>{currentPage} / {totalPages}</span>
                 <button
+                  type="button"
                   disabled={offset + PAGE_SIZE >= total}
                   onClick={() => setOffset(offset + PAGE_SIZE)}
-                  className="h-[40px] px-[18px] rounded-[20px] cursor-pointer disabled:opacity-30 relative"
-                  style={{ ...monoFont, fontSize: 18 }}
+                  className="h-[40px] px-[16px] rounded-[20px] disabled:opacity-30"
+                  style={{ ...monoFont, fontSize: 15, border: '2px solid rgba(0,0,0,0.16)', background: 'rgba(255,255,255,0.65)' }}
                 >
-                  <div className={pillShadow} style={pillShadowStyle} />
                   下一页
                 </button>
               </div>
-              <button
-                onClick={() => setAutoScroll(prev => !prev)}
-                className="h-[40px] px-[18px] rounded-[20px] cursor-pointer relative"
-                style={{ ...monoFont, fontSize: 18, background: autoScroll ? 'rgba(34,197,94,0.15)' : 'transparent' }}
-              >
-                <div className={pillShadow} style={pillShadowStyle} />
-                自动滚动 {autoScroll ? 'ON' : 'OFF'}
-              </button>
+
+              <div className="flex items-center gap-[10px]">
+                <span className="text-black/48" style={{ ...monoFont, fontSize: 14 }}>总计 {total} 行</span>
+                <button
+                  type="button"
+                  onClick={() => setAutoScroll(prev => !prev)}
+                  className="h-[40px] px-[16px] rounded-[20px]"
+                  style={{
+                    ...monoFont,
+                    fontSize: 15,
+                    border: '2px solid rgba(0,0,0,0.16)',
+                    background: autoScroll ? 'rgba(34,197,94,0.16)' : 'rgba(255,255,255,0.65)',
+                  }}
+                >
+                  自动滚动 {autoScroll ? 'ON' : 'OFF'}
+                </button>
+              </div>
             </div>
           </div>
         </GlassCard>

@@ -13,7 +13,7 @@ import Settings from './pages/Settings'
 import Misc from './pages/Misc'
 import ComponentDownload from './pages/ComponentDownload'
 import { NotificationProvider, useNotification } from './components/ui/Notification'
-import DynamicBackground, { BgProvider, useBgContext } from './components/background/DynamicBackground'
+import DynamicBackground, { BgProvider, useBaseBgUrl, useBgContext } from './components/background/DynamicBackground'
 import type { Page, Tab } from './types'
 
 const pageLabels: Record<Page, string> = {
@@ -107,8 +107,24 @@ function useZoom() {
   return zoom
 }
 
+const VIDEO_EXTS = ['.mp4', '.webm']
+function isVideoUrl(url: string) {
+  return VIDEO_EXTS.some(ext => url.toLowerCase().endsWith(ext))
+}
+
+function BaseBackgroundLayer({ url, className = 'absolute inset-0' }: { url: string; className?: string }) {
+  return (
+    <div className={className} aria-hidden>
+      {isVideoUrl(url)
+        ? <video key={url} src={url} autoPlay muted loop playsInline className="w-full h-full object-cover" />
+        : <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${url}')` }} />}
+    </div>
+  )
+}
+
 function App() {
   const zoom = useZoom()
+  const baseBgUrl = useBaseBgUrl()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
@@ -189,8 +205,11 @@ function App() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
+        <BaseBackgroundLayer url={baseBgUrl} />
+        <div className="absolute inset-0 z-10 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
       </div>
     )
   }
@@ -199,9 +218,12 @@ function App() {
   const showMain = isAuthenticated
 
   return (
-    <BgProvider key={isAuthenticated ? 'auth' : 'guest'}>
-    <NotificationProvider>
     <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
+      {/* 基层背景（常驻），用于避免切换阶段出现白屏 */}
+      <BaseBackgroundLayer url={baseBgUrl} />
+
+      <BgProvider key={isAuthenticated ? 'auth' : 'guest'}>
+      <NotificationProvider>
       {/* 动态背景 */}
       <DynamicBackground />
 
@@ -253,9 +275,9 @@ function App() {
       {loginTransition !== 'none' && (
         <LoginTransitionOverlay loginTransition={loginTransition} />
       )}
+      </NotificationProvider>
+      </BgProvider>
     </div>
-    </NotificationProvider>
-    </BgProvider>
   )
 }
 

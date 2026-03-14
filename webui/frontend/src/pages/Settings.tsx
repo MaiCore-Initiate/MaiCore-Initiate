@@ -13,7 +13,39 @@ const pillShadow = "absolute inset-0 rounded-[27px] pointer-events-none"
 const pillShadowStyle = { border: '2px solid rgba(0,0,0,0.5)', boxShadow: '2px 3px 6px rgba(0,0,0,0.15)' }
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
 
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div onClick={() => onChange(!checked)} className="cursor-pointer shrink-0"
+      style={{ width: 56, height: 30, borderRadius: 15, background: checked ? '#4AF933' : '#ccc', position: 'relative', transition: 'background 0.2s' }}>
+      <div style={{ width: 24, height: 24, borderRadius: 12, background: '#fff', position: 'absolute', top: 3, left: checked ? 29 : 3, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+    </div>
+  )
+}
+
 interface BgFile { filename: string; size_kb: number; is_video: boolean }
+
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp'])
+const VIDEO_EXTENSIONS = new Set(['mp4', 'webm'])
+const MAX_IMAGE_FILE_SIZE = 50 * 1024 * 1024
+const MAX_VIDEO_FILE_SIZE = 600 * 1024 * 1024
+
+function getFileExt(filename: string): string {
+  const idx = filename.lastIndexOf('.')
+  return idx >= 0 ? filename.slice(idx + 1).toLowerCase() : ''
+}
+
+function toBackgroundFileUrl(filename: string): string {
+  return `/backgrounds/${encodeURIComponent(filename)}`
+}
+
+function toThumbnailUrl(filename: string): string {
+  return `/api/settings/backgrounds/thumbnail/${encodeURIComponent(filename)}?w=320&h=180`
+}
+
+function formatFileSize(sizeKb: number): string {
+  if (sizeKb >= 1024) return `${(sizeKb / 1024).toFixed(1)}MB`
+  return `${sizeKb.toFixed(0)}KB`
+}
 
 /** RGB string <-> hex helpers */
 function rgbToHex(rgb: string): string {
@@ -79,6 +111,401 @@ function ColorPickerPopup({ color, onChange, onClose, anchorRef }: { color: stri
       <div className="rounded-[8px] h-[24px]" style={{ background: `rgb(${rgb})`, border: '1px solid rgba(0,0,0,0.15)' }} />
     </div>,
     document.body
+  )
+}
+
+type PetCfg = {
+  model_id: string
+  scale: number
+  opacity: number
+  ai_enabled: boolean
+  window: { always_on_top: boolean; transparent: boolean; width: number; height: number }
+  persona: { name: string; tone: string; system_prompt: string; greeting: string }
+}
+
+const defaultPetCfg: PetCfg = {
+  model_id: '',
+  scale: 1,
+  opacity: 1,
+  ai_enabled: true,
+  window: { always_on_top: true, transparent: true, width: 360, height: 520 },
+  persona: { name: '', tone: '', system_prompt: '', greeting: '' },
+}
+
+function mergePet(base: PetCfg, patch: any): PetCfg {
+  return {
+    ...base,
+    ...patch,
+    window: { ...base.window, ...(patch?.window || {}) },
+    persona: { ...base.persona, ...(patch?.persona || {}) },
+  }
+}
+
+const petFieldClass = 'bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 focus:outline-none'
+const petFieldStyle = { ...monoFont, fontSize: 20, width: 260, height: 40 }
+
+/** 桌宠配置面板（精简版，与 Electron 设置共用同一后端接口） */
+export function PetConfigPanel() {
+  const { notify } = useNotification()
+  const [cfg, setCfg] = useState<PetCfg>(defaultPetCfg)
+  const [models, setModels] = useState<string[]>([])
+  const [runtime, setRuntime] = useState({ running: false, pid: null as number | null })
+  const [pending, setPending] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const [mRes, sRes, rRes] = await Promise.all([
+        fetch('/api/settings/live2d/models', { credentials: 'include' }),
+        fetch('/api/settings/live2d/settings', { credentials: 'include' }),
+        fetch('/api/settings/live2d/runtime/status', { credentials: 'include' }),
+      ])
+      const m = await mRes.json()
+      const s = await sRes.json()
+      const r = await rRes.json()
+      setModels((m?.models ?? []).map((x: any) => x.model_id).filter(Boolean))
+      if (s?.value) setCfg(mergePet(defaultPetCfg, s.value))
+      setRuntime({ running: !!r?.running, pid: r?.pid ?? null })
+    } catch {
+      // ignore load errors
+    }
+  }, [])
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    function connect() {
+      const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      const ws = new WebSocket(`${proto}://${window.location.host}/ws/settings`)
+      wsRef.current = ws
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data)
+          if (msg.type === 'pet_settings_updated') void load()
+        } catch {
+          // ignore malformed payload
+        }
+      }
+      ws.onclose = () => { timer = setTimeout(connect, 5000) }
+      ws.onerror = () => { ws.close() }
+    }
+    connect()
+    return () => { clearTimeout(timer); wsRef.current?.close() }
+  }, [load])
+
+  useEffect(() => { void load() }, [load])
+
+  const save = async (next: PetCfg) => {
+    setCfg(next)
+    try {
+      const res = await fetch('/api/settings/live2d/settings', {
+        method: 'PUT', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: next }),
+      })
+      const d = await res.json()
+      if (!d?.success) notify('保存失败', 'error')
+      else if (d.value) setCfg(mergePet(defaultPetCfg, d.value))
+    } catch {
+      notify('保存失败', 'error')
+    }
+  }
+
+  const patch = (p: any) => void save(mergePet(cfg, p))
+
+  const patchWindowNumber = (key: 'width' | 'height', value: string) => {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) return
+    patch({ window: { [key]: parsed } })
+  }
+
+  const toggleRuntime = async () => {
+    if (pending) return
+    setPending(true)
+    const action = runtime.running ? 'stop' : 'start'
+    try {
+      const res = await fetch(`/api/settings/live2d/runtime/${action}`, { method: 'POST', credentials: 'include' })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok || !d?.success) throw new Error(d?.detail || (runtime.running ? '停止失败' : '启动失败'))
+      notify(runtime.running ? '桌宠已停止' : '桌宠启动请求已发送', 'success')
+      await load()
+    } catch (e: any) {
+      notify(e?.message || '操作失败', 'error')
+    }
+    setPending(false)
+  }
+
+  return (
+    <div className="space-y-[12px]">
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">Live2D 模型</span>
+        <select value={cfg.model_id} onChange={e => patch({ model_id: e.target.value })}
+          className={petFieldClass}
+          style={petFieldStyle}>
+          {models.length === 0 && <option value="">暂无模型</option>}
+          {models.map(id => <option key={id} value={id}>{id}</option>)}
+        </select>
+      </div>
+
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">缩放</span>
+        <div className="flex items-center gap-[12px]">
+          <input type="range" min={0.2} max={2.5} step={0.05} value={cfg.scale} onChange={e => patch({ scale: Number(e.target.value) })} style={{ width: 200 }} />
+          <span style={{ ...monoFont, fontSize: 20, width: 56 }} className="text-black/50 text-right">{cfg.scale.toFixed(2)}x</span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">透明度</span>
+        <div className="flex items-center gap-[12px]">
+          <input type="range" min={0.1} max={1} step={0.05} value={cfg.opacity} onChange={e => patch({ opacity: Number(e.target.value) })} style={{ width: 200 }} />
+          <span style={{ ...monoFont, fontSize: 20, width: 56 }} className="text-black/50 text-right">{cfg.opacity.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">窗口尺寸</span>
+        <div className="flex items-center gap-[10px]">
+          <input type="number" min={180} max={1200} value={cfg.window?.width ?? 360}
+            onChange={e => patchWindowNumber('width', e.target.value)}
+            className={petFieldClass}
+            style={{ ...petFieldStyle, width: 120, textAlign: 'right' }} />
+          <span style={{ ...monoFont, fontSize: 18 }} className="text-black/40">×</span>
+          <input type="number" min={180} max={1600} value={cfg.window?.height ?? 520}
+            onChange={e => patchWindowNumber('height', e.target.value)}
+            className={petFieldClass}
+            style={{ ...petFieldStyle, width: 120, textAlign: 'right' }} />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">窗口置顶</span>
+        <Toggle checked={!!cfg.window?.always_on_top} onChange={v => patch({ window: { always_on_top: v } })} />
+      </div>
+
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">透明窗口</span>
+        <Toggle checked={!!cfg.window?.transparent} onChange={v => patch({ window: { transparent: v } })} />
+      </div>
+
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">AI 对话</span>
+        <Toggle checked={!!cfg.ai_enabled} onChange={v => patch({ ai_enabled: v })} />
+      </div>
+
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">人格名称</span>
+        <input type="text" value={cfg.persona?.name ?? ''} onChange={e => patch({ persona: { name: e.target.value } })}
+          className={petFieldClass}
+          style={petFieldStyle} />
+      </div>
+
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">语气风格</span>
+        <input type="text" value={cfg.persona?.tone ?? ''} onChange={e => patch({ persona: { tone: e.target.value } })}
+          className={petFieldClass}
+          style={petFieldStyle} />
+      </div>
+
+      <div className="flex items-center justify-between py-[6px]">
+        <span style={labelFont} className="text-black/70">问候语</span>
+        <input type="text" value={cfg.persona?.greeting ?? ''} onChange={e => patch({ persona: { greeting: e.target.value } })}
+          className={petFieldClass}
+          style={petFieldStyle} />
+      </div>
+
+      <div className="flex items-start justify-between py-[6px] gap-[12px]">
+        <span style={labelFont} className="text-black/70 pt-[8px]">系统提示词</span>
+        <textarea value={cfg.persona?.system_prompt ?? ''} onChange={e => patch({ persona: { system_prompt: e.target.value } })}
+          className={
+            `${petFieldClass} py-3 resize-y`
+          }
+          style={{ ...monoFont, fontSize: 18, width: 260, minHeight: 92 }} />
+      </div>
+
+      <div className="flex items-center justify-between pt-[12px]">
+        <span style={{ ...monoFont, fontSize: 18 }} className="text-black/50">
+          {runtime.running ? `运行中 · PID ${runtime.pid ?? '-'}` : '未运行'}
+        </span>
+        <button onClick={() => void toggleRuntime()} disabled={pending}
+          className="relative rounded-[27px] px-[30px] py-[10px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+          <div className={pillShadow} style={pillShadowStyle} />
+          <span style={btnFont} className="text-black/70">{pending ? '处理中...' : runtime.running ? '停止桌宠' : '启动桌宠'}</span>
+        </button>
+      </div>
+
+      <p className="text-right text-black/35" style={{ fontSize: 14 }}>
+        模型导入、封面和表情管理请前往「杂项 → 桌宠」标签页。
+      </p>
+    </div>
+  )
+}
+
+/** LLM配置组件 */
+function LLMConfigSection() {
+  const { notify } = useNotification()
+  const [llmConfig, setLlmConfig] = useState({
+    provider: 'openai',
+    api_key: '',
+    base_url: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+    temperature: 0.7,
+    max_tokens: 1000,
+    timeout: 30
+  })
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    loadLLMConfig()
+  }, [])
+
+  const loadLLMConfig = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/settings/llm-config', { credentials: 'include' })
+      const data = await res.json()
+      if (data.success) {
+        setLlmConfig(data.value)
+      }
+    } catch (error) {
+      console.error('加载LLM配置失败:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const saveLLMConfig = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch('/api/settings/llm-config', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: llmConfig })
+      })
+      const data = await res.json()
+      if (data.success) {
+        notify('LLM配置已保存', 'success')
+        await loadLLMConfig()
+      } else {
+        notify(data.message || '保存失败', 'error')
+      }
+    } catch (error) {
+      console.error('保存LLM配置失败:', error)
+      notify('保存失败', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: '20px', color: '#adb5bd' }}>加载中...</div>
+  }
+
+  return (
+    <div className="space-y-[16px]">
+      <div className="flex items-center justify-between">
+        <span style={labelFont} className="text-black/70">提供商</span>
+        <select
+          value={llmConfig.provider}
+          onChange={(e) => setLlmConfig({ ...llmConfig, provider: e.target.value })}
+          className="bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 focus:outline-none"
+          style={{ ...monoFont, fontSize: 22, width: 300, height: 40 }}
+        >
+          <option value="openai">OpenAI</option>
+          <option value="azure">Azure OpenAI</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="claude">Anthropic Claude</option>
+        </select>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span style={labelFont} className="text-black/70">API Key</span>
+        <input
+          type="password"
+          value={llmConfig.api_key}
+          onChange={(e) => setLlmConfig({ ...llmConfig, api_key: e.target.value })}
+          placeholder="请输入API Key"
+          className="bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 focus:outline-none"
+          style={{ ...monoFont, fontSize: 22, width: 300, height: 40 }}
+        />
+      </div>
+
+      {/* Base URL仅在OpenAI/Azure时显示 */}
+      {(llmConfig.provider === 'openai' || llmConfig.provider === 'azure') && (
+      <div className="flex items-center justify-between">
+        <span style={labelFont} className="text-black/70">Base URL</span>
+        <input
+          type="text"
+          value={llmConfig.base_url}
+          onChange={(e) => setLlmConfig({ ...llmConfig, base_url: e.target.value })}
+          placeholder="https://api.openai.com/v1"
+          className="bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 focus:outline-none"
+          style={{ ...monoFont, fontSize: 22, width: 300, height: 40 }}
+        />
+      </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <span style={labelFont} className="text-black/70">模型</span>
+        <input
+          type="text"
+          value={llmConfig.model}
+          onChange={(e) => setLlmConfig({ ...llmConfig, model: e.target.value })}
+          placeholder={
+            llmConfig.provider === 'openai' ? 'gpt-4o-mini' :
+            llmConfig.provider === 'gemini' ? 'gemini-1.5-flash' :
+            llmConfig.provider === 'claude' ? 'claude-3-5-sonnet-20241022' :
+            'gpt-4o-mini'
+          }
+          className="bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 focus:outline-none"
+          style={{ ...monoFont, fontSize: 22, width: 300, height: 40 }}
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span style={labelFont} className="text-black/70">Temperature</span>
+        <div className="flex items-center gap-[12px]">
+          <input
+            type="range"
+            min={0}
+            max={2}
+            step={0.1}
+            value={llmConfig.temperature}
+            onChange={(e) => setLlmConfig({ ...llmConfig, temperature: Number(e.target.value) })}
+            style={{ width: 200 }}
+          />
+          <span style={{ ...monoFont, fontSize: 20, width: 50 }} className="text-black/50 text-right">
+            {llmConfig.temperature.toFixed(1)}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span style={labelFont} className="text-black/70">Max Tokens</span>
+        <input
+          type="number"
+          min={100}
+          max={4000}
+          value={llmConfig.max_tokens}
+          onChange={(e) => setLlmConfig({ ...llmConfig, max_tokens: Number(e.target.value) })}
+          className="bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 focus:outline-none"
+          style={{ ...monoFont, fontSize: 22, width: 120, height: 40, textAlign: 'right' }}
+        />
+      </div>
+
+      <div className="flex justify-end mt-[24px]">
+        <button
+          onClick={saveLLMConfig}
+          disabled={saving}
+          className="relative rounded-[27px] px-[40px] py-[12px] bg-gradient-to-br from-blue-400 to-blue-600 text-white hover:from-blue-500 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={btnFont}
+        >
+          <div className={pillShadow} style={pillShadowStyle} />
+          {saving ? '保存中...' : '保存配置'}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -183,6 +610,19 @@ export default function Settings() {
   const uploadFiles = async (files: FileList | File[]) => {
     setUploading(true)
     for (const file of Array.from(files)) {
+      const ext = getFileExt(file.name)
+      const isVideo = VIDEO_EXTENSIONS.has(ext)
+      const isImage = IMAGE_EXTENSIONS.has(ext)
+      if (!isVideo && !isImage) {
+        notify(`不支持的文件类型: ${file.name}`, 'warning')
+        continue
+      }
+      const maxSize = isVideo ? MAX_VIDEO_FILE_SIZE : MAX_IMAGE_FILE_SIZE
+      if (file.size > maxSize) {
+        notify(`${file.name} 超过${isVideo ? '视频600MB' : '图片50MB'}大小限制`, 'warning')
+        continue
+      }
+
       const form = new FormData()
       form.append('file', file)
       try {
@@ -219,13 +659,6 @@ export default function Settings() {
   const onDrop = (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files) }
   const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragOver(true) }
   const onDragLeave = () => setDragOver(false)
-
-  const Toggle = ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
-    <div onClick={() => onChange(!checked)} className="cursor-pointer shrink-0"
-      style={{ width: 56, height: 30, borderRadius: 15, background: checked ? '#4AF933' : '#ccc', position: 'relative', transition: 'background 0.2s' }}>
-      <div style={{ width: 24, height: 24, borderRadius: 12, background: '#fff', position: 'absolute', top: 3, left: checked ? 29 : 3, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
-    </div>
-  )
 
   // 退出操作选项
   const EXIT_ACTION_OPTIONS = ['询问', '一律关闭', '一律保留']
@@ -385,15 +818,32 @@ export default function Settings() {
             <div className="grid grid-cols-4 gap-[16px] mb-[24px]">
               {bgFiles.map(f => (
                 <div key={f.filename} className="relative rounded-[15px] overflow-hidden border-2 border-black/20 group" style={{ aspectRatio: '16/9' }}>
-                  {f.is_video ? (
-                    <video src={`/backgrounds/${f.filename}`} muted className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full bg-cover bg-center" style={{ backgroundImage: `url('/backgrounds/${f.filename}')` }} />
+                  <img
+                    src={toThumbnailUrl(f.filename)}
+                    loading="lazy"
+                    decoding="async"
+                    alt={f.filename}
+                    className="w-full h-full object-cover"
+                    onError={(e) => { e.currentTarget.src = f.is_video ? '/default_backgrounds/default.jpg' : toBackgroundFileUrl(f.filename) }}
+                  />
+                  {f.is_video && (
+                    <div className="absolute top-[6px] left-[6px] px-[7px] py-[1px] rounded-[8px] bg-black/55 text-white/90" style={{ ...monoFont, fontSize: 12 }}>
+                      视频
+                    </div>
                   )}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end">
                     <div className="w-full p-[8px] bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between">
-                      <div className="truncate" style={{ ...monoFont, fontSize: 14 }}>{f.filename} ({f.size_kb}KB)</div>
+                      <div className="truncate" style={{ ...monoFont, fontSize: 14 }}>{f.filename} ({formatFileSize(f.size_kb)})</div>
                       <div className="flex gap-[6px] shrink-0">
+                        <a
+                          href={toBackgroundFileUrl(f.filename)}
+                          download={f.filename}
+                          onClick={e => e.stopPropagation()}
+                          className="px-[8px] py-[2px] rounded-[10px] text-white hover:bg-white/20 transition-colors"
+                          style={{ fontSize: 14 }}
+                        >
+                          导出
+                        </a>
                         <button onClick={() => pinFile(f.filename)} className="px-[8px] py-[2px] rounded-[10px] text-white hover:bg-white/20 transition-colors" style={{ fontSize: 14 }}>
                           {localBg.pinned_file === f.filename ? '取消固定' : '固定'}
                         </button>
@@ -412,7 +862,7 @@ export default function Settings() {
             <div onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave} onClick={() => fileInputRef.current?.click()}
               className={`border-2 border-dashed rounded-[20px] py-[30px] flex flex-col items-center justify-center cursor-pointer transition-colors mb-[24px] ${dragOver ? 'border-blue-400 bg-blue-50/30' : 'border-black/30 hover:border-black/50'}`}>
               <span className="text-black/50" style={labelFont}>{uploading ? '上传中...' : '拖拽或点击上传背景图片/视频'}</span>
-              <span className="text-black/30 mt-[4px]" style={{ fontSize: 18 }}>支持 jpg/png/gif/webp/mp4/webm，最大50MB</span>
+              <span className="text-black/30 mt-[4px]" style={{ fontSize: 18 }}>支持 jpg/png/gif/webp/mp4/webm，图片最大50MB，视频最大600MB</span>
               <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm" multiple hidden onChange={e => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = '' }} />
             </div>
           </>
@@ -463,8 +913,33 @@ export default function Settings() {
       </GlassCard>
       </div>
 
-      {/* 板块4：成员管理（预留） */}
+      {/* 板块4：桌宠设置 */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '240ms' }}>
+      <GlassCard>
+        <div className="p-[30px]">
+          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>桌宠设置（已迁移）</h2>
+          <div className="rounded-[14px] border-2 border-black/15 bg-white/35 p-[18px] text-black/65" style={labelFont}>
+            桌宠配置入口已统一到「杂项 → 桌宠」，避免多页面并行改动导致配置不同步。
+            <div className="mt-[8px] text-black/45" style={{ ...monoFont, fontSize: 16 }}>
+              当前页不再提供旧版桌宠配置编辑。
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+      </div>
+
+      {/* 板块4.5：LLM配置 */}
+      <div className="animate-fade-slide-up" style={{ animationDelay: '270ms' }}>
+      <GlassCard>
+        <div className="p-[30px]">
+          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>AI配置</h2>
+          <LLMConfigSection />
+        </div>
+      </GlassCard>
+      </div>
+
+      {/* 板块5：成员管理（预留） */}
+      <div className="animate-fade-slide-up" style={{ animationDelay: '300ms' }}>
       <GlassCard>
         <div className="p-[30px] flex items-center justify-center" style={{ minHeight: 120 }}>
           <span className="text-black/30" style={sectionTitle}>成员管理 — 开发中</span>
