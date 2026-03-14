@@ -1,0 +1,89 @@
+{
+  "enabled": true,
+  "model_id": "ariu",
+  "scale": 1.15,
+  "opacity": 1.0,
+  "position": {
+    "x": 1212,
+    "y": 17
+  },
+  "window": {
+    "width": 522,
+    "height": 594,
+    "always_on_top": true,
+    "transparent": true
+  },
+  "expression": "",
+  "motion_group": "",
+  "motion_index": 0,
+  "face_capture_enabled": false,
+  "face_capture_source": "camera",
+  "face_smoothing": 0.45,
+  "ai_enabled": true,
+  "persona": {
+    "name": "小森七",
+    "tone": "安稳，阳光，俏皮。喜欢在括号（）中写入动作、心理活动、情绪等",
+    "system_prompt": "用户名为星崽",
+    "greeting": "又见面啦"
+  },
+  "model_overrides": {
+    "小森七": {
+      "scale": 1.15,
+      "window": {
+        "width": 522,
+        "height": 594
+      },
+      "persona": {
+        "name": "小森七",
+        "tone": "安稳，阳光，俏皮。喜欢在括号（）中写入动作、心理活动、情绪等",
+        "system_prompt": "用户名为星崽",
+        "greeting": "又见面啦"
+      }
+    },
+    "魔女": {
+      "scale": 1.15,
+      "window": {
+        "width": 361,
+        "height": 693
+      }
+    },
+    "ariu": {
+      "scale": 1.0,
+      "window": {
+        "width": 312,
+        "height": 831
+      },
+      "persona": {
+        "name": "雪岚",
+        "tone": "温柔，安稳。喜欢在括号（）中写入动作、心理活动、情绪等",
+        "system_prompt": "用户名为星崽",
+        "greeting": "你好，是小雪岚呀"
+      }
+    }
+  },
+  "memory": {
+    "share_between_sessions_same_model": true,
+    "stage_management": {
+      "memory_digest_interval_turns": 50,
+      "impression_build_turns": [
+        30,
+        50,
+        100,
+        150
+      ],
+      "impression_rebuild_interval_turns": 150
+    },
+    "embedding": {
+      "provider": "",
+      "base_url": "",
+      "api_key": "",
+      "model": ""
+    },
+    "rerank": {
+      "provider": "",
+      "base_url": "",
+      "api_key": "",
+      "model": ""
+    }
+  }
+}

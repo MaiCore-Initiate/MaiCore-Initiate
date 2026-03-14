@@ -1,0 +1,143 @@
+{
+  "models": [
+    {
+      "model_id": "ariu",
+      "path": "D:\\MaiCore-Start\\MaiCore-Start\\data\\Live_2D\\ariu",
+      "model_json": "ariu.model3.json",
+      "model_json_url": "/live2d/ariu/ariu.model3.json",
+      "model_json_path": "D:\\MaiCore-Start\\MaiCore-Start\\data\\Live_2D\\ariu\\ariu.model3.json",
+      "cover_url": "/live2d/ariu/ariu.png",
+      "cover_path": "D:\\MaiCore-Start\\MaiCore-Start\\data\\Live_2D\\ariu\\ariu.png",
+      "expressions": [
+        {
+          "name": "jk包.exp3",
+          "file": "jk包.exp3.json"
+        },
+        {
+          "name": "圈圈眼.exp3",
+          "file": "圈圈眼.exp3.json"
+        },
+        {
+          "name": "戴帽子.exp3",
+          "file": "戴帽子.exp3.json"
+        },
+        {
+          "name": "手柄.exp3",
+          "file": "手柄.exp3.json"
+        },
+        {
+          "name": "爱心眼.exp3",
+          "file": "爱心眼.exp3.json"
+        },
+        {
+          "name": "脱外套.exp3",
+          "file": "脱外套.exp3.json"
+        },
+        {
+          "name": "裙子.exp3",
+          "file": "裙子.exp3.json"
+        },
+        {
+          "name": "马尾L隐藏.exp3",
+          "file": "马尾L隐藏.exp3.json"
+        },
+        {
+          "name": "马尾R隐藏.exp3",
+          "file": "马尾R隐藏.exp3.json"
+        },
+        {
+          "name": "黑化.exp3",
+          "file": "黑化.exp3.json"
+        }
+      ],
+      "motions": {},
+      "texture_count": 14
+    },
+    {
+      "model_id": "小森七",
+      "path": "D:\\MaiCore-Start\\MaiCore-Start\\data\\Live_2D\\小森七",
+      "model_json": "20250723.model3.json",
+      "model_json_url": "/live2d/%E5%B0%8F%E6%A3%AE%E4%B8%83/20250723.model3.json",
+      "model_json_path": "D:\\MaiCore-Start\\MaiCore-Start\\data\\Live_2D\\小森七\\20250723.model3.json",
+      "cover_url": "",
+      "cover_path": "",
+      "expressions": [
+        {
+          "name": "sy",
+          "file": "sy.exp3.json"
+        }
+      ],
+      "motions": {},
+      "texture_count": 2
+    },
+    {
+      "model_id": "魔女",
+      "path": "D:\\MaiCore-Start\\MaiCore-Start\\data\\Live_2D\\魔女",
+      "model_json": "魔女.model3.json",
+      "model_json_url": "/live2d/%E9%AD%94%E5%A5%B3/%E9%AD%94%E5%A5%B3.model3.json",
+      "model_json_path": "D:\\MaiCore-Start\\MaiCore-Start\\data\\Live_2D\\魔女\\魔女.model3.json",
+      "cover_url": "",
+      "cover_path": "",
+      "expressions": [
+        {
+          "name": "cw.exp3",
+          "file": "cw.exp3.json"
+        },
+        {
+          "name": "fz.exp3",
+          "file": "fz.exp3.json"
+        },
+        {
+          "name": "h.exp3",
+          "file": "h.exp3.json"
+        },
+        {
+          "name": "hdj.exp3",
+          "file": "hdj.exp3.json"
+        },
+        {
+          "name": "ku.exp3",
+          "file": "ku.exp3.json"
+        },
+        {
+          "name": "mz.exp3",
+          "file": "mz.exp3.json"
+        },
+        {
+          "name": "sq.exp3",
+          "file": "sq.exp3.json"
+        },
+        {
+          "name": "x.exp3",
+          "file": "x.exp3.json"
+        },
+        {
+          "name": "xx.exp3",
+          "file": "xx.exp3.json"
+        },
+        {
+          "name": "yj.exp3",
+          "file": "yj.exp3.json"
+        },
+        {
+          "name": "zs1.exp3",
+          "file": "zs1.exp3.json"
+        },
+        {
+          "name": "zs2.exp3",
+          "file": "zs2.exp3.json"
+        }
+      ],
+      "motions": {
+        "default": [
+          {
+            "index": 0,
+            "file": "Scene1.motion3.json"
+          }
+        ]
+      },
+      "texture_count": 2
+    }
+  ],
+  "updated_at": 1773462826216
+}
