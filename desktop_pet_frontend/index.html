@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Desktop Pet Scheduler</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
+  <style>
+    /* Guarantee SOMETHING is visible even if all JS fails */
+    body { margin: 0; }
+    pet-app:not(:defined) {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    pet-app:not(:defined)::after {
+      content: 'Loading...';
+      color: #4a6741;
+      font-size: 18px;
+      font-family: system-ui, sans-serif;
+      background: rgba(203, 239, 189, 0.9);
+      padding: 12px 24px;
+      border-radius: 16px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Cubism 4 SDK is loaded on-demand by live2d-viewer.ts to avoid blocking the renderer -->
+  <pet-app></pet-app>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

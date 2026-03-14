@@ -48,6 +48,9 @@ Temporary/
 
 # --- 构建产物 ---
 webui/frontend/dist/
+desktop_pet_frontend/dist/
+desktop_pet_frontend/dist-electron/
+desktop_pet_frontend/release/
 *.tsbuildinfo
 
 # --- 开发计划 ---
@@ -67,3 +70,16 @@ plans/
 
 *.db
 Live_2D/
+
+dist/
+
+# --- 私人数据文件 ---
+# 保留 Golden_sentence.json，忽略其他数据文件
+data/*
+!data/Golden_sentence.json
+
+# --- 临时脚本 ---
+scripts/
+
+# --- 构建产物 ---
+release/

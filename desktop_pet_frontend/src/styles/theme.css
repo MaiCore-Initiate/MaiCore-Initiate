@@ -1,0 +1,179 @@
+/* =============================================
+   Material 3 Expressive - Design Tokens
+   ============================================= */
+
+:root {
+  /* Primary */
+  --md-sys-color-primary: #4a6741;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #cbefbd;
+  --md-sys-color-on-primary-container: #072104;
+
+  /* Secondary */
+  --md-sys-color-secondary: #53634d;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #d6e8cc;
+  --md-sys-color-on-secondary-container: #111f0d;
+
+  /* Tertiary */
+  --md-sys-color-tertiary: #386568;
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-tertiary-container: #bcebee;
+  --md-sys-color-on-tertiary-container: #002022;
+
+  /* Error */
+  --md-sys-color-error: #ba1a1a;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-error-container: #ffdad6;
+  --md-sys-color-on-error-container: #410002;
+
+  /* Surface */
+  --md-sys-color-surface: #f8faf0;
+  --md-sys-color-on-surface: #191d17;
+  --md-sys-color-surface-variant: #dfe4d7;
+  --md-sys-color-on-surface-variant: #43483e;
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: #f2f5ea;
+  --md-sys-color-surface-container: #ecefe4;
+  --md-sys-color-surface-container-high: #e6e9df;
+  --md-sys-color-surface-container-highest: #e1e4d9;
+
+  /* Outline */
+  --md-sys-color-outline: #73796d;
+  --md-sys-color-outline-variant: #c3c8bb;
+
+  /* Inverse */
+  --md-sys-color-inverse-surface: #2e312b;
+  --md-sys-color-inverse-on-surface: #f0f2e7;
+  --md-sys-color-inverse-primary: #b0d3a2;
+
+  /* Shadow */
+  --md-sys-color-shadow: #000000;
+  --md-sys-color-scrim: #000000;
+
+  /* Elevation */
+  --md-sys-elevation-0: none;
+  --md-sys-elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-2: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 2px 6px 2px rgba(0, 0, 0, 0.15);
+  --md-sys-elevation-3: 0 4px 8px 3px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.3);
+
+  /* Shape */
+  --md-sys-shape-corner-none: 0;
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full: 9999px;
+
+  /* Typography */
+  --md-sys-typescale-body-font: 'Noto Sans SC', sans-serif;
+  --md-sys-typescale-display-font: 'Noto Sans SC', sans-serif;
+  --md-sys-typescale-headline-font: 'Noto Sans SC', sans-serif;
+  --md-sys-typescale-label-font: 'Noto Sans SC', sans-serif;
+  --md-sys-typescale-title-font: 'Noto Sans SC', sans-serif;
+
+  /* Motion - Expressive */
+  --md-sys-motion-duration-short: 150ms;
+  --md-sys-motion-duration-medium: 300ms;
+  --md-sys-motion-duration-long: 500ms;
+  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --md-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --md-sys-motion-spring-spatial: linear(0, 0.002, 0.01 2.3%, 0.082 5.7%, 0.198 9.4%, 0.842 27.1%, 1.02 34%, 1.069 37.5%, 1.093, 1.102 41.5%, 1.099 43.3%, 1.079 47%, 1.04 52.5%, 0.996 59.5%, 0.984 64%, 0.982 68.8%, 0.998 82.4%, 1.003 92%, 1);
+  --md-sys-motion-spring-bouncy: linear(0, 0.004, 0.016 2.3%, 0.13 5.7%, 0.314 9.4%, 1.314 27.1%, 1.59 34%, 1.698 37.5%, 1.748, 1.77 41.5%, 1.767 43.3%, 1.72 47%, 1.612 52.5%, 1.494 59.5%, 1.456 64%, 1.448 68.8%, 1.49 82.4%, 1.504 92%, 1.5);
+}
+
+/* Dark theme */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --md-sys-color-primary: #b0d3a2;
+    --md-sys-color-on-primary: #1d3715;
+    --md-sys-color-primary-container: #334f2b;
+    --md-sys-color-on-primary-container: #cbefbd;
+
+    --md-sys-color-secondary: #baccb1;
+    --md-sys-color-on-secondary: #263421;
+    --md-sys-color-secondary-container: #3c4b37;
+    --md-sys-color-on-secondary-container: #d6e8cc;
+
+    --md-sys-color-tertiary: #a0cfd2;
+    --md-sys-color-on-tertiary: #003739;
+    --md-sys-color-tertiary-container: #1e4d50;
+    --md-sys-color-on-tertiary-container: #bcebee;
+
+    --md-sys-color-error: #ffb4ab;
+    --md-sys-color-on-error: #690005;
+    --md-sys-color-error-container: #93000a;
+    --md-sys-color-on-error-container: #ffdad6;
+
+    --md-sys-color-surface: #111410;
+    --md-sys-color-on-surface: #e1e4d9;
+    --md-sys-color-surface-variant: #43483e;
+    --md-sys-color-on-surface-variant: #c3c8bb;
+    --md-sys-color-surface-container-lowest: #0c0f0b;
+    --md-sys-color-surface-container-low: #191d17;
+    --md-sys-color-surface-container: #1d211b;
+    --md-sys-color-surface-container-high: #282c25;
+    --md-sys-color-surface-container-highest: #333630;
+
+    --md-sys-color-outline: #8d9387;
+    --md-sys-color-outline-variant: #43483e;
+
+    --md-sys-color-inverse-surface: #e1e4d9;
+    --md-sys-color-inverse-on-surface: #2e312b;
+    --md-sys-color-inverse-primary: #4a6741;
+  }
+}
+
+/* Global reset & base */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--md-sys-typescale-body-font);
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--md-sys-color-outline);
+}
+
+/* Material Symbols config */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Utility classes */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
