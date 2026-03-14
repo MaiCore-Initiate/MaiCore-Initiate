@@ -29,8 +29,8 @@ export default function GlassCard({
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const { currentBgUrl } = useBgContext()
-  const [bgA, setBgA] = useState(currentBgUrl)
-  const [bgB, setBgB] = useState('')
+  const [bgA, setBgA] = useState<string | null>(currentBgUrl)
+  const [bgB, setBgB] = useState<string | null>(null)
   const [showA, setShowA] = useState(true)
   const prevUrlRef = useRef(currentBgUrl)
 
@@ -68,24 +68,27 @@ export default function GlassCard({
     return () => { clearInterval(raf); clearTimeout(timer); cancelAnimationFrame(rafId); window.removeEventListener('resize', update); window.removeEventListener('scroll', onScroll, true) }
   }, [])
 
-  const renderBgLayer = (url: string, visible: boolean, key: string) => (
-    <div
-      key={key}
-      style={{
-        position: 'absolute',
-        left: -pos.x,
-        top: -pos.y,
-        width: '100vw',
-        height: '100vh',
-        backgroundImage: `url('${url}')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        filter: `blur(${blur}px)`,
-        opacity: visible ? 1 : 0,
-        transition: 'opacity 3s ease-in-out',
-      }}
-    />
-  )
+  const renderBgLayer = (url: string | null, visible: boolean, key: string) => {
+    if (!url) return null
+    return (
+      <div
+        key={key}
+        style={{
+          position: 'absolute',
+          left: -pos.x,
+          top: -pos.y,
+          width: '100vw',
+          height: '100vh',
+          backgroundImage: `url('${url}')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: `blur(${blur}px)`,
+          opacity: visible ? 1 : 0,
+          transition: 'opacity 3s ease-in-out',
+        }}
+      />
+    )
+  }
 
   return (
     <div ref={ref} className={`relative h-full ${className}`} style={style} onClick={onClick}>

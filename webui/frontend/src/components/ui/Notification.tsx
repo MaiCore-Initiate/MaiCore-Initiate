@@ -33,8 +33,8 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const { currentBgUrl } = useBgContext()
-  const [bgA, setBgA] = useState(currentBgUrl)
-  const [bgB, setBgB] = useState('')
+  const [bgA, setBgA] = useState<string | null>(currentBgUrl)
+  const [bgB, setBgB] = useState<string | null>(null)
   const [showA, setShowA] = useState(true)
   const prevUrlRef = useRef(currentBgUrl)
 
@@ -69,24 +69,27 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
 
   const color = LEVEL_COLORS[toast.level]
 
-  const renderBgLayer = (url: string, visible: boolean, key: string) => (
-    <div
-      key={key}
-      style={{
-        position: 'absolute',
-        left: -pos.x,
-        top: -pos.y,
-        width: '100vw',
-        height: '100vh',
-        backgroundImage: `url('${url}')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        filter: 'blur(50px)',
-        opacity: visible ? 1 : 0,
-        transition: 'opacity 3s ease-in-out',
-      }}
-    />
-  )
+  const renderBgLayer = (url: string | null, visible: boolean, key: string) => {
+    if (!url) return null
+    return (
+      <div
+        key={key}
+        style={{
+          position: 'absolute',
+          left: -pos.x,
+          top: -pos.y,
+          width: '100vw',
+          height: '100vh',
+          backgroundImage: `url('${url}')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: 'blur(50px)',
+          opacity: visible ? 1 : 0,
+          transition: 'opacity 3s ease-in-out',
+        }}
+      />
+    )
+  }
 
   return (
     <div

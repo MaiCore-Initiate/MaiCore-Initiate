@@ -1,5 +1,57 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 
+const FALLBACK_BG_URL = '/default_backgrounds/default.jpg'
+const BASE_BG_STORAGE_KEY = 'mcstart.base_bg_url'
+const BASE_BG_CHANGE_EVENT = 'mcstart:base-bg-change'
+
+let baseBgUrlCache = FALLBACK_BG_URL
+
+function normalizeBgUrl(url?: string | null) {
+  const value = (url ?? '').trim()
+  return value || FALLBACK_BG_URL
+}
+
+function writeBaseBgUrl(url: string) {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(BASE_BG_STORAGE_KEY, url) } catch {}
+}
+
+function readBaseBgUrl() {
+  if (typeof window === 'undefined') return FALLBACK_BG_URL
+  try { return normalizeBgUrl(window.localStorage.getItem(BASE_BG_STORAGE_KEY)) } catch { return FALLBACK_BG_URL }
+}
+
+function setBaseBgUrl(url?: string | null) {
+  const next = normalizeBgUrl(url)
+  if (next === baseBgUrlCache) return
+  baseBgUrlCache = next
+  writeBaseBgUrl(next)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<string>(BASE_BG_CHANGE_EVENT, { detail: next }))
+  }
+}
+
+export function getBaseBgUrl() {
+  return baseBgUrlCache
+}
+
+export function useBaseBgUrl() {
+  const [url, setUrl] = useState(() => getBaseBgUrl())
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onChange = (event: Event) => {
+      const customEvent = event as CustomEvent<string>
+      setUrl(normalizeBgUrl(customEvent.detail))
+    }
+    window.addEventListener(BASE_BG_CHANGE_EVENT, onChange as EventListener)
+    return () => window.removeEventListener(BASE_BG_CHANGE_EVENT, onChange as EventListener)
+  }, [])
+  return url
+}
+
+baseBgUrlCache = readBaseBgUrl()
+writeBaseBgUrl(baseBgUrlCache)
+
 export interface BgSettings {
   interval_minutes: number
   pinned_file: string
@@ -19,8 +71,8 @@ const DEFAULT_SETTINGS: BgSettings = {
 }
 
 interface BgContextValue {
-  currentBgUrl: string
-  nextBgUrl: string
+  currentBgUrl: string | null
+  nextBgUrl: string | null
   isTransitioning: boolean
   settings: BgSettings
   refreshFiles: () => void
@@ -28,8 +80,8 @@ interface BgContextValue {
 }
 
 const BgContext = createContext<BgContextValue>({
-  currentBgUrl: '/default_backgrounds/default.jpg',
-  nextBgUrl: '/default_backgrounds/default.jpg',
+  currentBgUrl: getBaseBgUrl(),
+  nextBgUrl: getBaseBgUrl(),
   isTransitioning: false,
   settings: DEFAULT_SETTINGS,
   refreshFiles: () => {},
@@ -41,8 +93,8 @@ export const useBgContext = () => useContext(BgContext)
 export function BgProvider({ children }: { children: ReactNode }) {
   const [files, setFiles] = useState<string[]>([])
   const [settings, setSettings] = useState<BgSettings>(DEFAULT_SETTINGS)
-  const [currentBgUrl, setCurrentBgUrl] = useState('/default_backgrounds/default.jpg')
-  const [nextBgUrl, setNextBgUrl] = useState('/default_backgrounds/default.jpg')
+  const [currentBgUrl, setCurrentBgUrl] = useState<string | null>(() => getBaseBgUrl())
+  const [nextBgUrl, setNextBgUrl] = useState<string | null>(() => getBaseBgUrl())
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [filesLoaded, setFilesLoaded] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
@@ -79,10 +131,10 @@ export function BgProvider({ children }: { children: ReactNode }) {
   const pickUrl = useCallback(() => {
     // If custom background is disabled, use default background
     if (!settings.use_custom_background) {
-      return '/default_backgrounds/default.jpg'
+      return FALLBACK_BG_URL
     }
     const f = filesRef.current
-    if (f.length === 0) return '/default_backgrounds/default.jpg'
+    if (f.length === 0) return FALLBACK_BG_URL
     if (settings.pinned_file && f.includes(settings.pinned_file)) {
       return `/backgrounds/${settings.pinned_file}`
     }
@@ -114,6 +166,10 @@ export function BgProvider({ children }: { children: ReactNode }) {
 
   // Handle background transition
   useEffect(() => {
+    setBaseBgUrl(currentBgUrl)
+  }, [currentBgUrl])
+
+  useEffect(() => {
     if (currentBgUrl !== prevUrlRef.current) {
       prevUrlRef.current = currentBgUrl
       setNextBgUrl(currentBgUrl)
@@ -144,8 +200,8 @@ function isVideo(url: string) { return VIDEO_EXTS.some(e => url.toLowerCase().en
 
 export default function DynamicBackground() {
   const { currentBgUrl, settings } = useBgContext()
-  const [bgA, setBgA] = useState(currentBgUrl)
-  const [bgB, setBgB] = useState('')
+  const [bgA, setBgA] = useState<string | null>(currentBgUrl)
+  const [bgB, setBgB] = useState<string | null>(null)
   const [showA, setShowA] = useState(true)
   const prevUrl = useRef(currentBgUrl)
 
@@ -161,7 +217,12 @@ export default function DynamicBackground() {
     }
   }, [currentBgUrl])
 
-  const renderLayer = (url: string, visible: boolean, key: string) => (
+  // 未拿到可用背景时交给 App 的基层背景层兜底
+  if (currentBgUrl === null) {
+    return null
+  }
+
+  const renderLayer = (url: string | null, visible: boolean, key: string) => (
     <div key={key} className="absolute inset-0" style={{ opacity: visible ? 1 : 0, transition: 'opacity 3s' }}>
       {url && (isVideo(url) ? (
         <video src={url} autoPlay muted loop playsInline className="w-full h-full object-cover" />
@@ -173,7 +234,6 @@ export default function DynamicBackground() {
 
   return (
     <>
-      <div className="absolute inset-0 bg-white" />
       {renderLayer(bgA, showA, 'bg-a')}
       {renderLayer(bgB, !showA, 'bg-b')}
       <div className="absolute inset-0" style={{
