@@ -27,6 +27,7 @@ from .webui_installer import webui_installer
 from .deployment_core import (
     MaiBotDeployer,
     MoFoxBotDeployer,
+    NeoMoFoxDeployer,
     NapCatDeployer,
     InstanceUpdater
 )
@@ -41,9 +42,10 @@ class DeploymentManager:
         # 初始化各个部署器
         self.maibot_deployer = MaiBotDeployer()
         self.mofox_deployer = MoFoxBotDeployer()
+        self.neo_mofox_deployer = NeoMoFoxDeployer()
         self.napcat_deployer = NapCatDeployer()
         self.instance_updater = InstanceUpdater()
-        
+
         # 离线模式标志
         self._offline_mode = False
 
@@ -160,16 +162,24 @@ class DeploymentManager:
         ui.console.print("\n[🤖 Bot类型选择]", style=ui.colors["primary"])
         ui.console.print("请选择要部署的Bot类型：")
         ui.console.print(" [1] MaiBot (默认)")
-        ui.console.print(" [2] MoFox_bot")
+        ui.console.print(" [2] MoFox-Core")
+        ui.console.print(" [3] Neo-MoFox")
 
-        bot_type_choice = ui.get_input("请选择Bot类型 (1/2): ").strip()
-        bot_type = "MaiBot" if bot_type_choice != "2" else "MoFox_bot"
+        bot_type_choice = ui.get_input("请选择Bot类型 (1/2/3): ").strip()
+        if bot_type_choice == "2":
+            bot_type = "MoFox-Core"
+        elif bot_type_choice == "3":
+            bot_type = "Neo-MoFox"
+        else:
+            bot_type = "MaiBot"
 
         # 根据Bot类型选择版本管理器
         if bot_type == "MaiBot":
             version_manager = self.maibot_deployer.version_manager
-        else:
+        elif bot_type == "MoFox-Core":
             version_manager = self.mofox_deployer.version_manager
+        else:  # Neo-MoFox
+            version_manager = self.neo_mofox_deployer.version_manager
 
         # 选择版本
         selected_version = version_manager.show_version_menu(bot_type)
@@ -177,10 +187,10 @@ class DeploymentManager:
             return None
 
         # 组件安装选项
-        if bot_type == "MoFox_bot":
-            # MoFox_bot的适配器已经内置，无需下载
+        if bot_type in ["MoFox-Core", "Neo-MoFox"]:
+            # MoFox-Core 和 Neo-MoFox 的适配器已经内置，无需下载
             ui.console.print("\n[🔌 适配器配置]", style=ui.colors["info"])
-            ui.console.print("MoFox_bot的适配器已经内置，无需下载", style="green")
+            ui.console.print(f"{bot_type}的适配器已经内置，无需下载", style="green")
             install_adapter = False
         else:
             install_adapter = ui.confirm("是否需要安装适配器？")
@@ -196,7 +206,7 @@ class DeploymentManager:
             # MaiBot: 版本号大于等于0.7.0，或版本号为分支且不为classical时不要询问
             version_name = selected_version.get("name", "")
             version_type = selected_version.get("type", "release")
-            
+
             # 检查是否需要询问MongoDB
             should_ask_mongodb = True
             if version_type == "branch" and version_name != "classical":
@@ -205,11 +215,11 @@ class DeploymentManager:
             elif compare_versions(version_name, "0.7.0") >= 0:
                 # 版本>=0.7.0，不询问
                 should_ask_mongodb = False
-            
+
             if should_ask_mongodb:
                 install_mongodb = ui.confirm("是否需要安装MongoDB？")
         else:
-            # MoFox_bot: 永远不要询问是否安装MongoDB
+            # MoFox-Core 和 Neo-MoFox: 永远不要询问是否安装MongoDB
             install_mongodb = False
         
         # 根据Bot类型和版本决定WebUI处理
@@ -217,7 +227,7 @@ class DeploymentManager:
             # 检查版本是否内置WebUI
             version_name = selected_version.get("name", "")
             from ..utils.version_detector import has_builtin_webui
-            
+
             if has_builtin_webui(version_name):
                 # 版本内置WebUI，不询问安装，但记录信息
                 ui.console.print("\n[🌐 WebUI配置]", style=ui.colors["info"])
@@ -230,14 +240,19 @@ class DeploymentManager:
                 ui.console.print(f"当前版本 {version_name} 未内置WebUI", style="yellow")
                 ui.console.print("如需WebUI功能，请前往'杂项菜单 -> 组件下载中心'下载WebUI组件，请注意适配的版本", style="cyan")
                 install_webui = False  # 改为从组件下载页获取
-            
+
             install_mofox_admin_ui = False
             install_mofox_webui = False
-        else:
-            # MoFox_bot: 永远不要询问是否安装麦麦的webui
+        elif bot_type == "MoFox-Core":
+            # MoFox-Core: 永远不要询问是否安装麦麦的webui
             install_webui = False
             install_mofox_admin_ui = False
             install_mofox_webui = ui.confirm("是否需要安装MoFox WebUI？")
+        else:  # Neo-MoFox
+            # Neo-MoFox: 不需要 WebUI
+            install_webui = False
+            install_mofox_admin_ui = False
+            install_mofox_webui = False
 
         # 安装目录
         default_install_dir = os.path.join(os.getcwd(), "instances")
@@ -397,7 +412,13 @@ class DeploymentManager:
     def _run_deployment_steps(self, deploy_config: Dict, progress_callback: Optional[Callable] = None) -> Dict[str, str]:
         """执行所有部署步骤，可选进度回调"""
         bot_type = deploy_config.get("bot_type", "MaiBot")
-        bot_path_key = "mai_path" if bot_type == "MaiBot" else "mofox_path"
+        if bot_type == "MaiBot":
+            bot_path_key = "mai_path"
+        elif bot_type == "MoFox-Core":
+            bot_path_key = "mofox_path"
+        else:  # Neo-MoFox
+            bot_path_key = "neo_mofox_path"
+
         total_steps = 6
         selected_version = deploy_config.get("selected_version", {})
 
@@ -421,8 +442,10 @@ class DeploymentManager:
         _notify(1, f"安装{bot_type}本体", "running", f"正在从仓库克隆 {bot_type}...")
         if bot_type == "MaiBot":
             paths[bot_path_key] = self.maibot_deployer.install_bot(deploy_config)
-        else:
+        elif bot_type == "MoFox-Core":
             paths[bot_path_key] = self.mofox_deployer.install_bot(deploy_config)
+        else:  # Neo-MoFox
+            paths[bot_path_key] = self.neo_mofox_deployer.install_bot(deploy_config)
 
         if not paths[bot_path_key]:
             _notify(1, f"安装{bot_type}本体", "failed", f"{bot_type}安装失败，请检查网络连接或仓库地址")
@@ -440,14 +463,17 @@ class DeploymentManager:
                 _notify(2, "安装适配器", "completed", f"适配器安装完成，路径: {paths['adapter_path']}")
             else:
                 ui.console.print("\n[🔌 第二步：适配器配置]", style=ui.colors["primary"])
-                ui.print_info("MoFox_bot已内置适配器，跳过外置适配器安装")
+                ui.print_info(f"{bot_type}已内置适配器，跳过外置适配器安装")
                 paths["adapter_path"] = "内置适配器"
-                _notify(2, "安装适配器", "running", "MoFox_bot 使用内置适配器，无需额外下载")
-        elif bot_type == "MoFox_bot":
-            ui.print_info("检测到MoFox_bot，将记录内置适配器路径")
-            nickname = deploy_config.get("nickname", "MoFox_bot_instance")
+                _notify(2, "安装适配器", "running", f"{bot_type} 使用内置适配器，无需额外下载")
+        elif bot_type in ["MoFox-Core", "Neo-MoFox"]:
+            ui.print_info(f"检测到{bot_type}，将记录内置适配器路径")
+            nickname = deploy_config.get("nickname", f"{bot_type}_instance")
             instance_dir = os.path.join(deploy_config["install_dir"], nickname)
-            paths["adapter_path"] = os.path.join(instance_dir, "MoFox_bot-Adapter")
+            if bot_type == "MoFox-Core":
+                paths["adapter_path"] = os.path.join(instance_dir, "MoFox-Core", "MoFox_bot-Adapter")
+            else:  # Neo-MoFox
+                paths["adapter_path"] = os.path.join(instance_dir, "Neo-MoFox", "config", "plugins", "napcat_adapter")
         _notify(2, "安装适配器", "completed", "适配器处理完成")
 
         # 步骤3：安装NapCat
@@ -479,12 +505,12 @@ class DeploymentManager:
                 ui.print_info("当前版本未内置WebUI，如需WebUI功能请从组件下载页获取")
                 paths["webui_path"] = ""
                 _notify(4, "WebUI配置", "completed", "当前版本未内置WebUI，跳过")
-        elif bot_type == "MoFox_bot" and deploy_config.get("install_mofox_admin_ui"):
+        elif bot_type == "MoFox-Core" and deploy_config.get("install_mofox_admin_ui"):
             success, paths["webui_path"] = self._install_mofox_admin_ui(deploy_config)
             if not success:
-                ui.print_warning("MoFox_bot后台管理WebUI安装失败，但部署将继续...")
+                ui.print_warning("MoFox-Core后台管理WebUI安装失败，但部署将继续...")
             _notify(4, "WebUI配置", "completed", f"MoFox后台WebUI: {'安装成功' if success else '安装失败，已跳过'}")
-        elif bot_type == "MoFox_bot" and deploy_config.get("install_mofox_webui"):
+        elif bot_type == "MoFox-Core" and deploy_config.get("install_mofox_webui"):
             success, paths["webui_path"] = self.mofox_deployer.install_webui(deploy_config, paths[bot_path_key])
             if not success:
                 ui.print_warning("MoFox WebUI安装失败，但部署将继续...")
@@ -495,49 +521,94 @@ class DeploymentManager:
         # 步骤5：设置Python环境
         _notify(5, "Python环境", "running", f"正在为 {bot_type} 创建Python虚拟环境...")
         ui.console.print("\n[🐍 第五步：设置Python环境]", style=ui.colors["primary"])
-        ui.print_info("正在创建Python虚拟环境...")
-        _notify(5, "Python环境", "running", f"虚拟环境计划创建位置: {os.path.dirname(paths[bot_path_key])}")
-        venv_success, venv_path = self.maibot_deployer.create_virtual_environment(os.path.dirname(paths[bot_path_key]))
 
-        if venv_success:
-            _notify(5, "Python环境", "running", f"虚拟环境创建成功: {venv_path}，正在安装Bot本体依赖...")
-            requirements_path = os.path.join(paths[bot_path_key], "requirements.txt")
-            _notify(5, "Python环境", "running", f"依赖清单路径: {requirements_path}")
+        if bot_type == "Neo-MoFox":
+            # Neo-MoFox 使用 uv 管理环境
+            ui.print_info("正在使用 uv 创建虚拟环境...")
+            _notify(5, "Python环境", "running", f"虚拟环境计划创建位置: {os.path.dirname(paths[bot_path_key])}")
 
-            ui.print_info("正在安装Bot本体依赖...")
-            deps_success = self.maibot_deployer.install_dependencies_in_venv(venv_path, requirements_path)
+            venv_success, venv_path = self.neo_mofox_deployer.create_virtual_environment(os.path.dirname(paths[bot_path_key]))
 
-            adapter_deps_success = True
-            adapter_path = paths.get("adapter_path", "")
-            if adapter_path and adapter_path not in ["无需适配器", "内置适配器", "跳过适配器安装", ""] and not ("失败" in adapter_path):
-                adapter_requirements_path = os.path.join(adapter_path, "requirements.txt")
-                if os.path.exists(adapter_requirements_path):
-                    _notify(5, "Python环境", "running", "正在安装适配器依赖...")
-                    _notify(5, "Python环境", "running", f"适配器依赖清单路径: {adapter_requirements_path}")
-                    ui.print_info("正在安装napcat适配器依赖...")
-                    adapter_deps_success = self.maibot_deployer.install_dependencies_in_venv(venv_path, adapter_requirements_path)
+            if venv_success:
+                _notify(5, "Python环境", "running", f"虚拟环境创建成功: {venv_path}，正在使用 uv sync 安装依赖...")
+
+                # 使用 uv sync 安装依赖
+                deps_success = self.neo_mofox_deployer.install_dependencies(
+                    os.path.dirname(paths[bot_path_key]),
+                    progress_callback=progress_callback
+                )
+
+                if deps_success:
+                    ui.print_success("✅ Python环境设置完成")
+                    _notify(5, "Python环境", "completed", "Python虚拟环境创建成功，所有依赖安装完成")
+
+                    # 检查是否需要首次初始化
+                    config_dir = os.path.join(paths[bot_path_key], "config")
+                    if not os.path.exists(config_dir):
+                        _notify(5, "Python环境", "running", "检测到首次部署，正在初始化配置文件...")
+                        ui.print_info("\n检测到首次部署，需要初始化配置文件")
+                        if ui.confirm("是否现在运行初始化（推荐）？"):
+                            init_success = self.neo_mofox_deployer.initialize_first_run(paths[bot_path_key], venv_path)
+                            if init_success:
+                                _notify(5, "Python环境", "running", "配置文件初始化成功")
+                            else:
+                                _notify(5, "Python环境", "running", "配置文件初始化失败，请稍后手动启动一次程序")
+                        else:
+                            ui.print_info("已跳过初始化，请在首次启动时注意配置文件生成")
                 else:
-                    ui.print_info("适配器无requirements.txt文件，跳过适配器依赖安装")
-                    _notify(5, "Python环境", "running", "适配器未提供 requirements.txt，跳过适配器依赖安装")
+                    ui.print_warning("⚠️ 依赖安装失败，但继续部署过程")
+                    _notify(5, "Python环境", "completed", "虚拟环境已创建，但依赖安装失败")
 
-            if deps_success and adapter_deps_success:
-                ui.print_success("✅ Python环境设置完成")
-                _notify(5, "Python环境", "completed", "Python虚拟环境创建成功，所有依赖安装完成")
+                paths["venv_path"] = venv_path
             else:
-                ui.print_warning("⚠️ 依赖安装失败，但继续部署过程")
-                _notify(5, "Python环境", "completed", "虚拟环境已创建，但部分依赖安装失败")
-
-            paths["venv_path"] = venv_path
+                ui.print_warning("⚠️ 虚拟环境创建失败")
+                paths["venv_path"] = ""
+                _notify(5, "Python环境", "completed", "虚拟环境创建失败")
         else:
-            ui.print_warning("⚠️ 虚拟环境创建失败，将使用系统Python")
-            paths["venv_path"] = ""
-            _notify(5, "Python环境", "completed", "虚拟环境创建失败，将使用系统Python")
+            # MaiBot 和 MoFox-Core 使用传统方式
+            ui.print_info("正在创建Python虚拟环境...")
+            _notify(5, "Python环境", "running", f"虚拟环境计划创建位置: {os.path.dirname(paths[bot_path_key])}")
+            venv_success, venv_path = self.maibot_deployer.create_virtual_environment(os.path.dirname(paths[bot_path_key]))
 
-        if bot_type == "MaiBot" and paths.get("webui_path") and paths.get("venv_path"):
-            _notify(5, "Python环境", "running", "正在安装WebUI后端依赖...")
-            ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
-            webui_installer.install_webui_backend_dependencies(paths["webui_path"], paths["venv_path"])
-            _notify(5, "Python环境", "running", f"WebUI后端依赖安装路径: {paths['webui_path']}")
+            if venv_success:
+                _notify(5, "Python环境", "running", f"虚拟环境创建成功: {venv_path}，正在安装Bot本体依赖...")
+                requirements_path = os.path.join(paths[bot_path_key], "requirements.txt")
+                _notify(5, "Python环境", "running", f"依赖清单路径: {requirements_path}")
+
+                ui.print_info("正在安装Bot本体依赖...")
+                deps_success = self.maibot_deployer.install_dependencies_in_venv(venv_path, requirements_path)
+
+                adapter_deps_success = True
+                adapter_path = paths.get("adapter_path", "")
+                if adapter_path and adapter_path not in ["无需适配器", "内置适配器", "跳过适配器安装", ""] and not ("失败" in adapter_path):
+                    adapter_requirements_path = os.path.join(adapter_path, "requirements.txt")
+                    if os.path.exists(adapter_requirements_path):
+                        _notify(5, "Python环境", "running", "正在安装适配器依赖...")
+                        _notify(5, "Python环境", "running", f"适配器依赖清单路径: {adapter_requirements_path}")
+                        ui.print_info("正在安装napcat适配器依赖...")
+                        adapter_deps_success = self.maibot_deployer.install_dependencies_in_venv(venv_path, adapter_requirements_path)
+                    else:
+                        ui.print_info("适配器无requirements.txt文件，跳过适配器依赖安装")
+                        _notify(5, "Python环境", "running", "适配器未提供 requirements.txt，跳过适配器依赖安装")
+
+                if deps_success and adapter_deps_success:
+                    ui.print_success("✅ Python环境设置完成")
+                    _notify(5, "Python环境", "completed", "Python虚拟环境创建成功，所有依赖安装完成")
+                else:
+                    ui.print_warning("⚠️ 依赖安装失败，但继续部署过程")
+                    _notify(5, "Python环境", "completed", "虚拟环境已创建，但部分依赖安装失败")
+
+                paths["venv_path"] = venv_path
+            else:
+                ui.print_warning("⚠️ 虚拟环境创建失败，将使用系统Python")
+                paths["venv_path"] = ""
+                _notify(5, "Python环境", "completed", "虚拟环境创建失败，将使用系统Python")
+
+            if bot_type == "MaiBot" and paths.get("webui_path") and paths.get("venv_path"):
+                _notify(5, "Python环境", "running", "正在安装WebUI后端依赖...")
+                ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
+                webui_installer.install_webui_backend_dependencies(paths["webui_path"], paths["venv_path"])
+                _notify(5, "Python环境", "running", f"WebUI后端依赖安装路径: {paths['webui_path']}")
         _notify(5, "Python环境", "completed", "Python环境设置完成")
 
         # 步骤6：配置文件设置
@@ -547,7 +618,18 @@ class DeploymentManager:
             _notify(6, "配置文件", "running", f"适配器路径: {paths['adapter_path']}")
         if paths.get("napcat_path"):
             _notify(6, "配置文件", "running", f"NapCat路径: {paths['napcat_path']}")
-        if bot_type == "MaiBot":
+
+        if bot_type == "Neo-MoFox":
+            # Neo-MoFox 使用自己的配置设置方法
+            if not self.neo_mofox_deployer.setup_config_files(
+                deploy_config,
+                paths[bot_path_key],
+                paths.get("adapter_path", ""),
+                paths.get("napcat_path", "")
+            ):
+                _notify(6, "配置文件", "running", "⚠️ 配置文件设置失败，但部署将继续")
+                ui.print_warning("配置文件设置失败，但部署将继续...")
+        elif bot_type == "MaiBot":
             if not self.maibot_deployer.setup_config_files(
                 deploy_config,
                 paths[bot_path_key],
@@ -558,7 +640,7 @@ class DeploymentManager:
             ):
                 _notify(6, "配置文件", "running", "⚠️ 配置文件设置失败，但部署将继续")
                 ui.print_warning("配置文件设置失败，但部署将继续...")
-        else:
+        else:  # MoFox-Core
             if not self.mofox_deployer.setup_config_files(
                 deploy_config,
                 paths[bot_path_key],
@@ -576,7 +658,12 @@ class DeploymentManager:
     def _finalize_deployment(self, deploy_config: Dict, **paths: str) -> bool:
         """第七步：完成部署配置"""
         bot_type = deploy_config.get("bot_type", "MaiBot")
-        bot_path_key = "mai_path" if bot_type == "MaiBot" else "mofox_path"
+        if bot_type == "MaiBot":
+            bot_path_key = "mai_path"
+        elif bot_type == "MoFox-Core":
+            bot_path_key = "mofox_path"
+        else:  # Neo-MoFox
+            bot_path_key = "neo_mofox_path"
         bot_path = paths.get(bot_path_key, "")
         
         ui.console.print("\n[⚙️ 第七步：完成部署配置]", style=ui.colors["primary"])
@@ -675,16 +762,23 @@ class DeploymentManager:
                                       version_info.get("name") != "classical")
 
         ui.console.print("\n[📝 后续配置提醒]", style=ui.colors["info"])
-        if is_modern_config or bot_type == "MoFox_bot" or is_maibot_branch_not_classical:
+
+        if bot_type == "Neo-MoFox":
+            # Neo-MoFox 的配置提示
+            ui.console.print("1. 在 'config/model.toml' 文件中配置您的LLM API密钥。", style=ui.colors["attention"])
+            ui.console.print("2. 在 'config/core.toml' 文件中配置机器人人格等设置。", style=ui.colors["attention"])
+            ui.console.print("3. 如安装了NapCat，请在 'config/plugins/napcat_adapter/config.toml' 中配置适配器参数。", style=ui.colors["attention"])
+        elif is_modern_config or bot_type == "MoFox-Core" or is_maibot_branch_not_classical:
             ui.console.print("1. 在 'config/model_config.toml' 文件中配置您的API密钥。", style=ui.colors["attention"])
         else:
             ui.console.print("1. 在根目录的 '.env' 文件中配置您的APIKey（MaiCore的0.10.0及以上版本已经转移至model_config.toml文件中，LPMM知识库构建所需模型亦在此文件中配置）。", style=ui.colors["attention"])
 
-        ui.console.print("2. 修改 'config/bot_config.toml' 中的机器人配置。", style=ui.colors["attention"])
+        if bot_type != "Neo-MoFox":
+            ui.console.print("2. 修改 'config/bot_config.toml' 中的机器人配置。", style=ui.colors["attention"])
 
-        # 检查是否有 lpmm_config.toml
-        if os.path.exists(os.path.join(bot_path, 'config', 'lpmm_config.toml')):
-            ui.console.print("3. 如需使用LPMM知识库，请在 'config/lpmm_config.toml'中添加用于LPMM知识库构建所需的APIKey。", style=ui.colors["attention"])
+            # 检查是否有 lpmm_config.toml
+            if os.path.exists(os.path.join(bot_path, 'config', 'lpmm_config.toml')):
+                ui.console.print("3. 如需使用LPMM知识库，请在 'config/lpmm_config.toml'中添加用于LPMM知识库构建所需的APIKey。", style=ui.colors["attention"])
 
         ui.console.print("4. 如安装了NapCat，请配置QQ登录和WebSocket连接参数。", style=ui.colors["attention"])
         ui.console.print("\n您现在可以通过主菜单的启动选项来运行该实例。", style=ui.colors["success"])
@@ -692,37 +786,56 @@ class DeploymentManager:
         # 询问是否打开配置文件 - 在询问前发送通知
         if windows_notifier.is_enabled():
             windows_notifier.send("部署即将完成", "是否在文本编辑器中打开配置文件？")
-        
+
         if ui.confirm("\n是否立即在文本编辑器中打开主要配置文件？"):
             files_to_open = []
-            
-            # 始终打开.env文件（墨狐和麦麦都要打开）
-            env_file = os.path.join(bot_path, ".env")
-            if os.path.exists(env_file):
-                files_to_open.append(env_file)
-            
-            # 确定要打开的配置文件
-            if is_modern_config or bot_type == "MoFox_bot" or is_maibot_branch_not_classical:
-                model_config = os.path.join(bot_path, "config", "model_config.toml")
+
+            if bot_type == "Neo-MoFox":
+                # Neo-MoFox 的配置文件
+                model_config = os.path.join(bot_path, "config", "model.toml")
                 if os.path.exists(model_config):
                     files_to_open.append(model_config)
-            
-            bot_config_file = os.path.join(bot_path, "config", "bot_config.toml")
-            if os.path.exists(bot_config_file):
-                files_to_open.append(bot_config_file)
 
-            # 处理适配器配置文件
-            is_mofox_internal_adapter = (bot_type == "MoFox_bot" and not bot_config.get("install_adapter"))
+                core_config = os.path.join(bot_path, "config", "core.toml")
+                if os.path.exists(core_config):
+                    files_to_open.append(core_config)
 
-            if adapter_path and adapter_path not in ["无需适配器", "内置适配器"]:
-                adapter_config_file = os.path.join(adapter_path, "config.toml")
-                if os.path.exists(adapter_config_file):
-                    files_to_open.append(adapter_config_file)
-                elif is_mofox_internal_adapter:
-                    # 如果MoFox_bot的内置适配器配置不存在，检查plugins文件夹
-                    plugins_folder = os.path.join(bot_path, "config", "plugins")
-                    if not os.path.exists(plugins_folder):
+                # Neo-MoFox 的适配器配置
+                if adapter_path and adapter_path not in ["无需适配器", "内置适配器"]:
+                    adapter_config_file = os.path.join(adapter_path, "config.toml")
+                    if os.path.exists(adapter_config_file):
+                        files_to_open.append(adapter_config_file)
+                    else:
                         ui.print_warning("内置适配器配置文件尚未生成，请先启动一次主程序以自动创建，然后再使用本功能打开。")
+            else:
+                # MaiBot 和 MoFox-Core 的配置文件
+                # 始终打开.env文件（墨狐和麦麦都要打开）
+                env_file = os.path.join(bot_path, ".env")
+                if os.path.exists(env_file):
+                    files_to_open.append(env_file)
+
+                # 确定要打开的配置文件
+                if is_modern_config or bot_type == "MoFox-Core" or is_maibot_branch_not_classical:
+                    model_config = os.path.join(bot_path, "config", "model_config.toml")
+                    if os.path.exists(model_config):
+                        files_to_open.append(model_config)
+
+                bot_config_file = os.path.join(bot_path, "config", "bot_config.toml")
+                if os.path.exists(bot_config_file):
+                    files_to_open.append(bot_config_file)
+
+                # 处理适配器配置文件
+                is_mofox_internal_adapter = (bot_type == "MoFox-Core" and not bot_config.get("install_adapter"))
+
+                if adapter_path and adapter_path not in ["无需适配器", "内置适配器"]:
+                    adapter_config_file = os.path.join(adapter_path, "config.toml")
+                    if os.path.exists(adapter_config_file):
+                        files_to_open.append(adapter_config_file)
+                    elif is_mofox_internal_adapter:
+                        # 如果MoFox-Core的内置适配器配置不存在，检查plugins文件夹
+                        plugins_folder = os.path.join(bot_path, "config", "plugins")
+                        if not os.path.exists(plugins_folder):
+                            ui.print_warning("内置适配器配置文件尚未生成，请先启动一次主程序以自动创建，然后再使用本功能打开。")
 
             if files_to_open:
                 open_files_in_editor(files_to_open)
@@ -882,7 +995,12 @@ class DeploymentManager:
             for key in config_keys:
                 cfg = configs[key]
                 bot_type = str(cfg.get("bot_type", "MaiBot"))
-                bot_path = cfg.get("mai_path") if bot_type == "MaiBot" else cfg.get("mofox_path")
+                if bot_type == "MaiBot":
+                    bot_path = cfg.get("mai_path")
+                elif bot_type == "MoFox-Core":
+                    bot_path = cfg.get("mofox_path")
+                else:  # Neo-MoFox
+                    bot_path = cfg.get("neo_mofox_path")
                 bot_path = str(bot_path) if bot_path else "-"
                 nickname = str(cfg.get("nickname_path", "-"))
                 version = str(cfg.get("version_path", "-"))
@@ -929,8 +1047,10 @@ class DeploymentManager:
             # 根据Bot类型选择版本管理器
             if bot_type == "MaiBot":
                 version_manager = self.maibot_deployer.version_manager
-            else:
+            elif bot_type == "MoFox-Core":
                 version_manager = self.mofox_deployer.version_manager
+            else:  # Neo-MoFox
+                version_manager = self.neo_mofox_deployer.version_manager
             
             # 选择新版本
             new_version = version_manager.show_version_menu(bot_type)
@@ -971,14 +1091,19 @@ class DeploymentManager:
             for key in config_keys:
                 cfg = configs[key]
                 bot_type = str(cfg.get("bot_type", "MaiBot"))
-                bot_path = cfg.get("mai_path") if bot_type == "MaiBot" else cfg.get("mofox_path")
+                if bot_type == "MaiBot":
+                    bot_path = cfg.get("mai_path")
+                elif bot_type == "MoFox-Core":
+                    bot_path = cfg.get("mofox_path")
+                else:  # Neo-MoFox
+                    bot_path = cfg.get("neo_mofox_path")
                 bot_path = str(bot_path) if bot_path else "-"
                 nickname = str(cfg.get("nickname_path", "-"))
                 serial = str(cfg.get("serial_number", "-"))
                 table.add_row(
-                    nickname, 
-                    serial, 
-                    bot_path, 
+                    nickname,
+                    serial,
+                    bot_path,
                     bot_type
                 )
 
@@ -1010,7 +1135,12 @@ class DeploymentManager:
 
             # 显示匹配实例详情
             bot_type = matched_cfg.get("bot_type", "MaiBot")
-            bot_path = matched_cfg.get("mai_path") if bot_type == "MaiBot" else matched_cfg.get("mofox_path")
+            if bot_type == "MaiBot":
+                bot_path = matched_cfg.get("mai_path")
+            elif bot_type == "MoFox-Core":
+                bot_path = matched_cfg.get("mofox_path")
+            else:  # Neo-MoFox
+                bot_path = matched_cfg.get("neo_mofox_path")
             nickname = matched_cfg.get("nickname_path", "-")
             
             ui.console.print(f"\n[⚠️ 找到匹配实例]", style=ui.colors["warning"])
@@ -1217,7 +1347,12 @@ class DeploymentManager:
                 return {"success": False, "message": "实例昵称不匹配"}
 
             bot_type = matched_cfg.get("bot_type", "MaiBot")
-            bot_path = matched_cfg.get("mai_path") if bot_type == "MaiBot" else matched_cfg.get("mofox_path")
+            if bot_type == "MaiBot":
+                bot_path = matched_cfg.get("mai_path")
+            elif bot_type == "MoFox-Core":
+                bot_path = matched_cfg.get("mofox_path")
+            else:  # Neo-MoFox
+                bot_path = matched_cfg.get("neo_mofox_path")
             nickname_dir = os.path.dirname(bot_path) if bot_path else None
 
             if not nickname_dir or not os.path.exists(nickname_dir):
