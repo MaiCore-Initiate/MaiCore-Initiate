@@ -6,7 +6,7 @@ import { useNotification } from '../components/ui/Notification'
 interface VersionInfo { name: string; display_name: string; type: string; [k: string]: any }
 interface Instance {
   id: string; serial_number: string; nickname: string; bot_type: string
-  version: string; qq_account: string; mai_path: string; mofox_path: string
+  version: string; qq_account: string; mai_path: string; mofox_path: string; neo_mofox_path: string
 }
 interface DeployProgress {
   task_id: string; step: number; total_steps: number; step_name: string
@@ -320,7 +320,11 @@ function DeployNewTab() {
             <div className="flex flex-col gap-[6px]">
               <span className="text-black" style={smallLabel}>Bot 类型</span>
               <CustomSelect value={botType} onChange={v => { setBotType(v); setSelectedVersion('') }}
-                options={[{ value: 'MaiBot', label: 'MaiBot' }, { value: 'MoFox_bot', label: 'MoFox_bot' }]} placeholder="选择Bot类型" />
+                options={[
+                  { value: 'MaiBot', label: 'MaiBot' },
+                  { value: 'MoFox-Core', label: 'MoFox-Core' },
+                  { value: 'Neo-MoFox', label: 'Neo-MoFox' }
+                ]} placeholder="选择Bot类型" />
             </div>
             <div className="flex flex-col gap-[6px]">
               <span className="text-black" style={smallLabel}>版本</span>
@@ -357,7 +361,7 @@ function DeployNewTab() {
           <h3 className="text-black" style={sectionTitle}>组件选择</h3>
           <div className="flex flex-col gap-[12px]">
             {botType === 'MaiBot' && <ToggleItem label="适配器" checked={installAdapter} onChange={setInstallAdapter} />}
-            <ToggleItem label="NapCat" checked={installNapcat} onChange={setInstallNapcat} />
+            {botType !== 'Neo-MoFox' && <ToggleItem label="NapCat" checked={installNapcat} onChange={setInstallNapcat} />}
             {installNapcat && (
               <div className="ml-[40px]">
                 <CustomSelect value={selectedNapcatVer} onChange={setSelectedNapcatVer}
@@ -366,7 +370,7 @@ function DeployNewTab() {
             )}
             {botType === 'MaiBot' && <ToggleItem label="MongoDB" checked={installMongodb} onChange={setInstallMongodb} />}
             {botType === 'MaiBot' && <ToggleItem label="WebUI" checked={installWebui} onChange={setInstallWebui} />}
-            {botType === 'MoFox_bot' && <ToggleItem label="MoFox WebUI" checked={installMofoxWebui} onChange={setInstallMofoxWebui} />}
+            {botType === 'MoFox-Core' && <ToggleItem label="MoFox WebUI" checked={installMofoxWebui} onChange={setInstallMofoxWebui} />}
           </div>
           <div className="flex gap-[12px]">
             <button onClick={() => setStep(1)} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95"
@@ -389,9 +393,11 @@ function DeployNewTab() {
               ['Bot 类型', botType], ['版本', versionObj?.display_name || selectedVersion],
               ['实例昵称', nickname], ['安装目录', installDir],
               ...(qqAccount ? [['QQ 账号', qqAccount]] : []),
-              ['适配器', installAdapter ? '是' : '否'], ['NapCat', installNapcat ? (selectedNapcatVer || '是') : '否'],
-              ['MongoDB', installMongodb ? '是' : '否'],
-              [botType === 'MoFox_bot' ? 'MoFox WebUI' : 'WebUI', (botType === 'MoFox_bot' ? installMofoxWebui : installWebui) ? '是' : '否'],
+              ...(botType === 'MaiBot' ? [['适配器', installAdapter ? '是' : '否']] : []),
+              ...(botType !== 'Neo-MoFox' ? [['NapCat', installNapcat ? (selectedNapcatVer || '是') : '否']] : []),
+              ...(botType === 'MaiBot' ? [['MongoDB', installMongodb ? '是' : '否']] : []),
+              ...(botType === 'MaiBot' ? [['WebUI', installWebui ? '是' : '否']] : []),
+              ...(botType === 'MoFox-Core' ? [['MoFox WebUI', installMofoxWebui ? '是' : '否']] : []),
             ] as [string, string][]).map(([k, v]) => (
               <div key={k} className="flex gap-[16px]">
                 <span className="text-black shrink-0 w-[120px]" style={labelFont}>{k}</span>
@@ -448,7 +454,7 @@ function UpdateTab() {
         const list: Instance[] = Object.entries(map).map(([id, cfg]: [string, any]) => ({
           id, serial_number: cfg.serial_number || '', nickname: cfg.nickname || cfg.serial_number || '',
           bot_type: cfg.bot_type || 'MaiBot', version: cfg.version || '', qq_account: cfg.qq_account || '',
-          mai_path: cfg.mai_path || '', mofox_path: cfg.mofox_path || '',
+          mai_path: cfg.mai_path || '', mofox_path: cfg.mofox_path || '', neo_mofox_path: cfg.neo_mofox_path || '',
         }))
         setInstances(list)
       }).catch(() => {}).finally(() => setLoading(false))
@@ -579,7 +585,7 @@ function DeleteTab() {
         const list: Instance[] = Object.entries(map).map(([id, cfg]: [string, any]) => ({
           id, serial_number: cfg.serial_number || '', nickname: cfg.nickname || cfg.serial_number || '',
           bot_type: cfg.bot_type || 'MaiBot', version: cfg.version || '', qq_account: cfg.qq_account || '',
-          mai_path: cfg.mai_path || '', mofox_path: cfg.mofox_path || '',
+          mai_path: cfg.mai_path || '', mofox_path: cfg.mofox_path || '', neo_mofox_path: cfg.neo_mofox_path || '',
         }))
         setInstances(list); setSelected(null); setConfirmName('')
       }).catch(() => {}).finally(() => setLoading(false))
@@ -654,7 +660,7 @@ function DeleteTab() {
               <h2 className="text-black animate-fade-slide-up" style={{ ...sectionTitle, ...getTextDriftStyle(0, 'title') }}>删除实例</h2>
               <div className="flex flex-col gap-[6px]">
                 {([['实例昵称', inst.nickname], ['序列号', inst.serial_number], ['Bot 类型', inst.bot_type], ['版本', inst.version],
-                  ['路径', inst.bot_type === 'MaiBot' ? inst.mai_path : inst.mofox_path]] as [string, string][]).map(([k, v], idx) => (
+                  ['路径', inst.bot_type === 'MaiBot' ? inst.mai_path : inst.bot_type === 'MoFox-Core' ? inst.mofox_path : inst.neo_mofox_path]] as [string, string][]).map(([k, v], idx) => (
                   <div key={k} className="flex gap-[16px]">
                     <span className="text-black shrink-0 animate-fade-slide-up" style={{ ...labelFont, ...getTextDriftStyle(idx + 1, 'label') }}>{k}</span>
                     <span className="animate-fade-slide-up" style={{ ...valueFont, ...getTextDriftStyle(idx + 1, 'value') }}>{v || '-'}</span>
