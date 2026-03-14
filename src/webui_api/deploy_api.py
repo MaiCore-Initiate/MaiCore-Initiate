@@ -16,6 +16,7 @@ from ..modules.deployment import deployment_manager
 from ..modules.deployment_core import (
     MaiBotDeployer,
     MoFoxBotDeployer,
+    NeoMoFoxDeployer,
     NapCatDeployer
 )
 from ..core.config import config_manager
@@ -70,7 +71,7 @@ def _dispatch_progress(serial_number: str, payload: Dict[str, Any]) -> None:
 
 class DeployInstanceRequest(BaseModel):
     """部署实例请求"""
-    bot_type: str  # "MaiBot" or "MoFox_bot"
+    bot_type: str  # "MaiBot" or "MoFox-Core" or "Neo-MoFox"
     version: Dict[str, Any]  # 版本信息
     install_adapter: bool = False
     install_napcat: bool = False
@@ -104,19 +105,22 @@ class DeleteInstanceRequest(BaseModel):
 async def get_available_versions(bot_type: str):
     """
     获取指定Bot类型的可用版本列表
-    
-    - **bot_type**: Bot类型 (MaiBot 或 MoFox_bot)
+
+    - **bot_type**: Bot类型 (MaiBot 或 MoFox-Core 或 Neo-MoFox)
     """
     try:
         if bot_type == "MaiBot":
             deployer = MaiBotDeployer()
             versions = deployer.version_manager.get_versions(bot_type)
-        elif bot_type == "MoFox_bot":
+        elif bot_type == "MoFox-Core":
             deployer = MoFoxBotDeployer()
+            versions = deployer.version_manager.get_versions(bot_type)
+        elif bot_type == "Neo-MoFox":
+            deployer = NeoMoFoxDeployer()
             versions = deployer.version_manager.get_versions(bot_type)
         else:
             raise HTTPException(status_code=400, detail=f"不支持的Bot类型: {bot_type}")
-        
+
         return {
             "success": True,
             "bot_type": bot_type,
@@ -307,6 +311,7 @@ async def get_all_instances():
                 "qq_account": config.get("qq_account", ""),
                 "mai_path": config.get("mai_path", ""),
                 "mofox_path": config.get("mofox_path", ""),
+                "neo_mofox_path": config.get("neo_mofox_path", ""),
                 "adapter_path": config.get("adapter_path", ""),
                 "napcat_path": config.get("napcat_path", ""),
                 "venv_path": config.get("venv_path", ""),
@@ -344,6 +349,7 @@ async def get_instance_detail(serial_number: str):
                         "qq_account": config.get("qq_account", ""),
                         "mai_path": config.get("mai_path", ""),
                         "mofox_path": config.get("mofox_path", ""),
+                        "neo_mofox_path": config.get("neo_mofox_path", ""),
                         "adapter_path": config.get("adapter_path", ""),
                         "napcat_path": config.get("napcat_path", ""),
                         "venv_path": config.get("venv_path", ""),
