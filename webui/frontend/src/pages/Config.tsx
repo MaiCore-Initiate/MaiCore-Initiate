@@ -353,12 +353,12 @@ function RegisterModal({ open, onClose, onCreated, nextSerial }: { open: boolean
 
 const needsInstanceSelect = (a: Action) => a === 'edit' || a === 'open-config' || a === 'open-folder'
 
-export default function Config() {
+export default function Config({ initialAction }: { initialAction?: Action }) {
   const { notify } = useNotification()
   const [instances, setInstances] = useState<Instance[]>([])
   const [nextSerial, setNextSerial] = useState<number | null>(null)
+  const [action, setAction] = useState<Action>(initialAction || null)
   const [selected, setSelected] = useState<string | null>(null)
-  const [action, setAction] = useState<Action>(null)
   const [showRegister, setShowRegister] = useState(false)
 
   const fetchInstances = () => {

@@ -122,10 +122,12 @@ function catmullRomPath(points: { x: number; y: number }[], tension = 0.3, yMax?
 
 function periodToLocal(period: string, granularity: Granularity): string {
   if (granularity === '月') {
-    const d = new Date(period + 'T12:00:00Z')
-    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+    // 后端返回的是 UTC 日期字符串（如 "2026-03-14"），直接返回即可
+    return period
   }
-  const d = new Date(period + 'Z')
+  // 后端返回的是 UTC 时间字符串（如 "2026-03-14T08:00:00"）
+  // 需要转换为本地时区的对应时间槽位
+  const d = new Date(period + 'Z') // 明确标记为 UTC 时间
   const y = d.getFullYear(),
     m = pad2(d.getMonth() + 1),
     day = pad2(d.getDate()),

@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 
 class MaiMaiLauncher:
     """MCStart主程序类"""
-    
+
     def __init__(self):
         self.running = True
         self._keep_processes_on_exit = False
@@ -39,9 +39,72 @@ class MaiMaiLauncher:
         self.tray_manager.apply_console_icon()
         self._tray_restore_event = threading.Event()
         self._tray_exit_event = threading.Event()
+        self.webui_process = None  # WebUI后端进程
         setup_console()
         logger.info("MCStart已启动")
-    
+
+        # 启动WebUI后端服务器
+        self._start_webui_server()
+
+    def _start_webui_server(self):
+        """启动WebUI后端服务器"""
+        try:
+            import subprocess
+            import webbrowser
+            import time
+            webui_script = Path(__file__).parent / "webui" / "backend" / "main.py"
+
+            if not webui_script.exists():
+                logger.warning(f"WebUI后端脚本不存在: {webui_script}")
+                return
+
+            # 启动WebUI后端进程
+            self.webui_process = subprocess.Popen(
+                [sys.executable, str(webui_script)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
+
+            logger.info(f"WebUI后端服务器已启动 (PID: {self.webui_process.pid})")
+
+            # 获取WebUI配置
+            webui_host = p_config_manager.get("webui.host", "0.0.0.0")
+            webui_port = p_config_manager.get("webui.port", 10086)
+            webui_url = f"http://localhost:{webui_port}"
+
+            # 显示访问地址
+            ui.print_success(f"WebUI服务已启动: {webui_url}")
+
+            # 等待服务器启动（给服务器一点时间初始化）
+            time.sleep(2)
+
+            # 自动打开浏览器
+            try:
+                webbrowser.open(webui_url)
+                logger.info(f"已自动打开浏览器: {webui_url}")
+            except Exception as e:
+                logger.warning(f"自动打开浏览器失败: {e}")
+                ui.print_info(f"请手动访问: {webui_url}")
+
+        except Exception as e:
+            logger.error(f"启动WebUI后端服务器失败: {e}")
+            ui.print_warning(f"WebUI服务启动失败: {e}")
+
+    def _stop_webui_server(self):
+        """停止WebUI后端服务器"""
+        if self.webui_process:
+            try:
+                self.webui_process.terminate()
+                self.webui_process.wait(timeout=5)
+                logger.info("WebUI后端服务器已停止")
+            except Exception as e:
+                logger.error(f"停止WebUI后端服务器失败: {e}")
+                try:
+                    self.webui_process.kill()
+                except:
+                    pass
+
     def handle_launch_mai(self):
         """处理启动实例的菜单"""
         try:
@@ -306,23 +369,21 @@ class MaiMaiLauncher:
         ui.console.print("麦麦核心启动器控制台 MaiCore Start", style=ui.colors["primary"])
         ui.console.print("=================================")
         
-        ui.console.print("版本：V4.2.0-beta", style=ui.colors["info"])
+        ui.console.print("版本：V5.0.0-beta", style=ui.colors["info"])
         ui.console.print("新增亮点：", style=ui.colors["success"])
-        ui.console.print("  • 模块化部署逻辑", style="white")
-        ui.console.print("  • 精确的资源监控器", style="white")
-        ui.console.print("  • 丰富的可自定义UI界面（rich）", style="white")
-        ui.console.print("  • 改进的错误处理", style="white")
-        ui.console.print("  • 实例多开端口自动分配", style="white")
-        ui.console.print("  • 代理功能", style="white")
-        ui.console.print("  • 插件功能", style="white")
-        
+        ui.console.print("  • WebUI", style="white")
+        ui.console.print("  • Neo-MoFox支持", style="white")
+        ui.console.print("  • 桌宠功能", style="white")
+        ui.console.print("  • WebShell", style="white")
+        ui.console.print("  • 日志解析器", style="white")
+
         ui.console.print("\n技术栈：", style=ui.colors["info"])
-        ui.console.print("  • Python 3.12.8", style="white")
-        ui.console.print("  • structlog - 结构化日志", style="white")
-        ui.console.print("  • rich - 终端UI", style="white")
-        ui.console.print("  • toml - 配置管理", style="white")        
+        ui.console.print("  • Python", style="white")
+        ui.console.print("  • FastAPI", style="white")
+        ui.console.print("  • uvicorn", style="white")
+        ui.console.print("  • pydantic 等...", style="white")        
         
-        ui.console.print("\n开源许可：Apache License 2.0", style=ui.colors["secondary"])
+        ui.console.print("\n开源许可： GNU Affero General Public License v3.0", style=ui.colors["secondary"])
         ui.console.print("GitHub：https://github.com/MaiCore-Start/MaiCore-Start", style="#46AEF8")
         ui.console.print("你喜欢的话，请给个Star支持一下哦~", style="white")
         ui.console.print("欢迎加入我们的社区！（我们的QQ群聊：1025509724）", style="white")
@@ -1269,6 +1330,8 @@ class MaiMaiLauncher:
             logger.error("程序运行异常", error=str(e))
         finally:
             self.tray_manager.stop()
+            # 停止WebUI后端服务器
+            self._stop_webui_server()
             # 除非明确指示，否则停止所有进程
             if not self._keep_processes_on_exit:
                 launcher.stop_all_processes()

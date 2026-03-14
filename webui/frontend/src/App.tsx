@@ -73,18 +73,22 @@ function PageTransition({ tabId, children }: { tabId: string; children: React.Re
   )
 }
 
-function PageContent({ page }: { page: Page }) {
+function PageContent({ page, params, onNavigate }: {
+  page: Page;
+  params?: import('./types').SubPageParams;
+  onNavigate?: (page: Page, params?: import('./types').SubPageParams) => void;
+}) {
   switch (page) {
-    case 'home': return <HomePage />
+    case 'home': return <HomePage onNavigate={onNavigate} />
     case 'instances': return <Instances />
-    case 'config': return <Config />
+    case 'config': return <Config initialAction={params?.configAction} />
     case 'deploy': return <Deployment />
     case 'knowledge': return <Knowledge />
     case 'plugins': return <Plugins />
     case 'status': return <Status />
-    case 'logs': return <Logs />
+    case 'logs': return <Logs initialSource={params?.logSource} />
     case 'settings': return <Settings />
-    case 'misc': return <Misc />
+    case 'misc': return <Misc initialTab={params?.miscTab} />
     case 'component-download': return <ComponentDownload />
     default:
       return (
@@ -150,13 +154,19 @@ function App() {
     setIsAuthenticated(false)
   }
 
-  const handleNavigate = (page: Page) => {
+  const handleNavigate = (page: Page, params?: import('./types').SubPageParams) => {
     const existing = tabs.find(t => t.page === page)
     if (existing) {
       setActiveTabId(existing.id)
+      // 如果有参数，需要更新该标签页的参数
+      if (params) {
+        setTabs(prev => prev.map(t =>
+          t.id === existing.id ? { ...t, params } : t
+        ))
+      }
     } else {
       if (tabs.length >= 12) return
-      const tab = makeTab(page)
+      const tab = { ...makeTab(page), params }
       setTabs(prev => [...prev, tab])
       setActiveTabId(tab.id)
     }
@@ -264,7 +274,7 @@ function App() {
             />
             <main className="flex-1 overflow-auto relative">
               <PageTransition tabId={activeTabId}>
-                <PageContent page={activeTab.page} />
+                <PageContent page={activeTab.page} params={activeTab.params} onNavigate={handleNavigate} />
               </PageTransition>
             </main>
           </div>

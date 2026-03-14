@@ -304,7 +304,7 @@ export function DesktopPetManager({ compact = false }: { compact?: boolean }) {
         </div>
         {!runtime.running && (
           <div className="rounded-[8px] border border-emerald-500/30 bg-emerald-50/50 px-3 py-2 text-emerald-800/80" style={{ ...txt, fontSize: 14 }}>
-            全新 Electron 桌宠支持透明窗口、流畅渲染、AI 互动和鼠标视线跟随。
+            Electron 桌宠支持透明窗口、流畅渲染、AI 互动和鼠标视线跟随。
           </div>
         )}
         {runtimeHint ? (

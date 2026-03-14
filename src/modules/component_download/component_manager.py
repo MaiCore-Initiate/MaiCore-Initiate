@@ -21,6 +21,7 @@ from .mongodb_downloader import MongoDBDownloader
 from .sqlitestudio_downloader import SQLiteStudioDownloader
 from .napcat_downloader import NapCatDownloader
 from .webui_downloader import WebUIDownloader
+from .desktop_pet_downloader import DesktopPetDownloader
 
 logger = structlog.get_logger(__name__)
 
@@ -39,7 +40,8 @@ class ComponentManager:
             'mongodb': MongoDBDownloader(),
             'sqlitestudio': SQLiteStudioDownloader(),
             'napcat': NapCatDownloader(),
-            'webui': WebUIDownloader()
+            'webui': WebUIDownloader(),
+            'desktop_pet': DesktopPetDownloader()
         }
         
         # 组件信息
@@ -88,6 +90,11 @@ class ComponentManager:
                 'name': 'MaiBot WebUI',
                 'description': 'MaiBot控制面板Web界面',
                 'icon': '🌐'
+            },
+            'desktop_pet': {
+                'name': 'MCStart Desktop Pet',
+                'description': 'MCStart桌面宠物（AI助手、日程管理、待办事项）',
+                'icon': '🐾'
             }
         }
     

@@ -77,8 +77,8 @@ function SourceTabs({ value, onChange }: { value: LogSource; onChange: (value: L
   )
 }
 
-export default function Logs() {
-  const [source, setSource] = useState<LogSource>('main')
+export default function Logs({ initialSource }: { initialSource?: LogSource }) {
+  const [source, setSource] = useState<LogSource>(initialSource || 'main')
   const [files, setFiles] = useState<LogFile[]>([])
   const [selectedFile, setSelectedFile] = useState('')
   const [lines, setLines] = useState<LogLine[]>([])

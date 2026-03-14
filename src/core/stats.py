@@ -79,9 +79,9 @@ class StatsDB:
         where = "WHERE instance_id = ?" if instance_id else ""
         params: tuple = (instance_id,) if instance_id else ()
         row = conn.execute(
-            f"SELECT COALESCE(SUM(CASE WHEN event_type='start' THEN 1 ELSE 0 END), 0) AS launch_count, "
-            f"COALESCE(SUM(CASE WHEN event_type='stop' THEN duration_s ELSE 0 END), 0) AS stopped_uptime_s, "
-            f"COALESCE(SUM(CASE WHEN event_type='error' THEN 1 ELSE 0 END), 0) AS error_count "
+            f"SELECT COALESCE(SUM(CASE WHEN event_type='start' AND component='mai' THEN 1 ELSE 0 END), 0) AS launch_count, "
+            f"COALESCE(SUM(CASE WHEN event_type='stop' AND component='mai' THEN duration_s ELSE 0 END), 0) AS stopped_uptime_s, "
+            f"COALESCE(SUM(CASE WHEN event_type='error' AND component='mai' THEN 1 ELSE 0 END), 0) AS error_count "
             f"FROM instance_events {where}",
             params,
         ).fetchone()
@@ -113,7 +113,8 @@ class StatsDB:
             if key in seen:
                 continue
             seen.add(key)
-            if r["event_type"] == "start":
+            # 只统计 mai 组件（游戏本体）的运行时间，忽略 webui、adapter、napcat 等辅助组件
+            if r["event_type"] == "start" and r["component"] == "mai":
                 try:
                     start_time = datetime.fromisoformat(r["timestamp"])
                     total += (now - start_time).total_seconds()
@@ -134,10 +135,10 @@ class StatsDB:
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
         rows = conn.execute(
             f"SELECT strftime('{fmt}', timestamp) AS period, "
-            f"SUM(CASE WHEN event_type='start' THEN 1 ELSE 0 END) AS starts, "
-            f"SUM(CASE WHEN event_type='stop' THEN 1 ELSE 0 END) AS stops, "
-            f"SUM(CASE WHEN event_type='error' THEN 1 ELSE 0 END) AS errors, "
-            f"COALESCE(SUM(CASE WHEN event_type='stop' THEN duration_s ELSE 0 END), 0) AS uptime_s "
+            f"SUM(CASE WHEN event_type='start' AND component='mai' THEN 1 ELSE 0 END) AS starts, "
+            f"SUM(CASE WHEN event_type='stop' AND component='mai' THEN 1 ELSE 0 END) AS stops, "
+            f"SUM(CASE WHEN event_type='error' AND component='mai' THEN 1 ELSE 0 END) AS errors, "
+            f"COALESCE(SUM(CASE WHEN event_type='stop' AND component='mai' THEN duration_s ELSE 0 END), 0) AS uptime_s "
             f"FROM instance_events {where} "
             f"GROUP BY period ORDER BY period DESC LIMIT ?",
             params + [limit],
