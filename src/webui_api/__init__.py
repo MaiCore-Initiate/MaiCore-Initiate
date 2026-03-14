@@ -18,6 +18,7 @@ from .logs_api import router as logs_router
 from .settings_api import router as settings_router
 from .components_api import router as components_router
 from .terminal_api import router as terminal_router
+from .pet_api import router as pet_router
 
 __all__ = [
     "deploy_router",
@@ -34,5 +35,6 @@ __all__ = [
     "logs_router",
     "settings_router",
     "components_router",
-    "terminal_router"
+    "terminal_router",
+    "pet_router"
 ]
