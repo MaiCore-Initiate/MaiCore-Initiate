@@ -22,7 +22,10 @@ export class CustomSelect extends LitElement {
       :host {
         display: inline-block;
         position: relative;
+        width: 100%;
         min-width: 120px;
+        min-inline-size: 0;
+        box-sizing: border-box;
       }
 
       .select-trigger {
@@ -40,6 +43,7 @@ export class CustomSelect extends LitElement {
         cursor: pointer;
         transition: all var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
         user-select: none;
+        box-sizing: border-box;
       }
 
       .select-trigger:hover {

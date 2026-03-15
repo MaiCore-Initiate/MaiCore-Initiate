@@ -29,7 +29,7 @@
   },
   "build": {
     "appId": "com.xiaocz.mcstartdesktoppet",
-    "productName": "Desktop Pet",
+    "productName": "MCStart Desktop Pet",
     "directories": {
       "output": "release"
     },

@@ -742,10 +742,14 @@ def _desktop_pet_process_running() -> bool:
 
 def _desktop_pet_status() -> Dict[str, Any]:
     running = _desktop_pet_process_running()
+    mgr = _get_p_config()
+    mgr.reload_if_changed()
+    stored_electron_path = str(mgr.get("desktop_pet.exe_path", "") or "").strip()
     return {
         "running": running,
         "pid": _desktop_pet_process.pid if running and _desktop_pet_process else None,
         "started_at": _desktop_pet_started_at if running else None,
+        "electron_path": stored_electron_path or None,
     }
 
 
@@ -1570,6 +1574,8 @@ async def get_usage_stats():
     data = _read_usage_log()
     sessions = data.get("sessions", [])
     now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    recent_cutoff = today_start - timedelta(days=210)
 
     def parse_dt(s: str | None):
         if not s:
@@ -1587,7 +1593,6 @@ async def get_usage_stats():
         delta = (end - start).total_seconds()
         return max(0.0, delta / 60)
 
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=today_start.weekday())
     month_start = today_start.replace(day=1)
 
@@ -1595,6 +1600,7 @@ async def get_usage_stats():
     week_minutes = 0.0
     month_minutes = 0.0
     current_session_minutes = 0.0
+    recent_sessions: list[dict[str, Any]] = []
 
     # 7日每天统计
     daily_map: dict[str, float] = {}
@@ -1625,6 +1631,13 @@ async def get_usage_stats():
         if day_key in daily_map:
             daily_map[day_key] += mins
 
+        if start >= recent_cutoff:
+            recent_sessions.append({
+                "start": start.isoformat(),
+                "end": end.isoformat() if end_str else None,
+                "minutes": round(mins),
+            })
+
     daily = [{"date": d, "minutes": round(m)} for d, m in sorted(daily_map.items())]
 
     return {
@@ -1633,6 +1646,8 @@ async def get_usage_stats():
         "week_minutes": round(week_minutes),
         "month_minutes": round(month_minutes),
         "daily": daily,
+        "daily_stats": daily,
+        "sessions": recent_sessions,
         "running": _desktop_pet_process_running(),
         "current_session_minutes": round(current_session_minutes),
     }
