@@ -156,6 +156,11 @@ class VersionManager:
             # 返回默认版本
             versions = self._get_default_versions()
         
+        if not versions:
+            ui.print_warning("未从 GitHub 获取到版本信息，使用默认版本列表")
+            logger.warning("版本列表为空，回退到默认版本", repo=self.repo)
+            versions = self._get_default_versions()
+
         # 按优先级排序，确保关键分支优先展示
         versions = self._prioritize_versions(versions)
 

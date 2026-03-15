@@ -111,13 +111,13 @@ async def get_available_versions(bot_type: str):
     try:
         if bot_type == "MaiBot":
             deployer = MaiBotDeployer()
-            versions = deployer.version_manager.get_versions(bot_type)
+            versions = deployer.version_manager.get_versions()
         elif bot_type == "MoFox-Core":
             deployer = MoFoxBotDeployer()
-            versions = deployer.version_manager.get_versions(bot_type)
+            versions = deployer.version_manager.get_versions()
         elif bot_type == "Neo-MoFox":
             deployer = NeoMoFoxDeployer()
-            versions = deployer.version_manager.get_versions(bot_type)
+            versions = deployer.version_manager.get_versions()
         else:
             raise HTTPException(status_code=400, detail=f"不支持的Bot类型: {bot_type}")
 

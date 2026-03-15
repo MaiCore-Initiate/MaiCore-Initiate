@@ -13,6 +13,8 @@ interface DeployProgress {
   status: string; message: string; logs: string[]
 }
 
+type SelectOption = { value: string; label: string; disabled?: boolean }
+
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
@@ -48,14 +50,48 @@ function PillTab({ label, selected, onClick }: { label: string; selected: boolea
   )
 }
 
+function normalizeVersionList(payload: any): VersionInfo[] {
+  const list = Array.isArray(payload?.versions)
+    ? payload.versions
+    : Array.isArray(payload)
+      ? payload
+      : [
+          ...(Array.isArray(payload?.releases) ? payload.releases : []),
+          ...(Array.isArray(payload?.branches) ? payload.branches : []),
+        ]
+
+  const mapped = list
+    .map((item: any): VersionInfo | null => {
+      const rawName = item?.name ?? item?.tag_name
+      const name = typeof rawName === 'string' ? rawName.trim() : ''
+      if (!name) return null
+      return {
+        ...item,
+        name,
+        display_name: item?.display_name || item?.label || item?.title || name,
+        type: item?.type || (item?.tag_name ? 'release' : 'branch'),
+      } as VersionInfo
+    })
+    .filter((item: VersionInfo | null): item is VersionInfo => !!item)
+
+  const seen = new Set<string>()
+  return mapped.filter((item: VersionInfo) => {
+    const key = `${item.type}:${item.name}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function CustomSelect({ value, onChange, options, placeholder, disabled }: {
   value: string; onChange: (v: string) => void
-  options: { value: string; label: string }[]; placeholder?: string; disabled?: boolean
+  options: SelectOption[]; placeholder?: string; disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0, maxH: 240 })
+  const displayOptions = options.length > 0 ? options : [{ value: '__empty__', label: '暂无可用选项', disabled: true }]
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
@@ -75,20 +111,20 @@ function CustomSelect({ value, onChange, options, placeholder, disabled }: {
   const sel = options.find(o => o.value === value)
   return (
     <div ref={ref} className="relative">
-      <button ref={btnRef} disabled={disabled} onClick={() => !disabled && setOpen(!open)}
+      <button ref={btnRef} type="button" disabled={disabled} onClick={() => !disabled && setOpen(v => !v)}
         className="w-full h-[54px] px-[22px] rounded-[27px] bg-white/60 border-2 border-black/50 flex items-center justify-between cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ ...monoFont, fontSize: 22 }}>
         <span className={sel ? 'text-black' : 'text-black/30'}>{sel?.label || placeholder || '请选择'}</span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" strokeLinecap="round" /></svg>
       </button>
-      {open && options.length > 0 && createPortal(
+      {open && createPortal(
         <div className="fixed rounded-[20px] bg-white/95 backdrop-blur-xl border-2 border-black/30 overflow-y-auto custom-scrollbar"
           style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxH, zIndex: 9999, boxShadow: '4px 4px 12px rgba(0,0,0,0.15)' }}
           onMouseDown={e => e.stopPropagation()}>
-          {options.map(o => (
-            <button key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
-              className="w-full px-[22px] py-[10px] text-left hover:bg-black/5 transition-colors cursor-pointer"
-              style={{ ...monoFont, fontSize: 20, background: o.value === value ? 'rgba(0,0,0,0.06)' : undefined }}>
+          {displayOptions.map(o => (
+            <button key={o.value} type="button" disabled={o.disabled} onClick={() => { if (o.disabled) return; onChange(o.value); setOpen(false) }}
+              className="w-full px-[22px] py-[10px] text-left hover:bg-black/5 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
+              style={{ ...monoFont, fontSize: 20, color: o.disabled ? 'rgba(0,0,0,0.35)' : undefined, background: o.value === value ? 'rgba(0,0,0,0.06)' : undefined }}>
               {o.label}
             </button>
           ))}
@@ -251,8 +287,14 @@ function DeployNewTab() {
     if (!botType) { setVersions([]); setSelectedVersion(''); return }
     setVersionsLoading(true)
     fetch(`/api/deploy/versions/${botType}`, { credentials: 'include' })
-      .then(r => r.json()).then(d => setVersions(d.versions || []))
-      .catch(() => setVersions([]))
+      .then(async r => {
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(d?.detail || '获取版本列表失败')
+        const next = normalizeVersionList(d)
+        setVersions(next)
+        if (!next.length) notify('未获取到可用版本，请检查 GitHub 连接或后端日志', 'error')
+      })
+      .catch((err: any) => { setVersions([]); notify(err?.message || '获取版本列表失败', 'error') })
       .finally(() => setVersionsLoading(false))
   }, [botType])
 
@@ -336,6 +378,9 @@ function DeployNewTab() {
               ) : (
                 <CustomSelect value={selectedVersion} onChange={setSelectedVersion} disabled={!botType}
                   options={versions.map(v => ({ value: v.name, label: v.display_name || v.name }))} placeholder="选择版本" />
+              )}
+              {!versionsLoading && !!botType && versions.length === 0 && (
+                <span className="text-black/45" style={{ ...monoFont, fontSize: 16 }}>当前未获取到版本列表，点击下拉可查看空状态提示</span>
               )}
             </div>
           </div>
@@ -466,7 +511,14 @@ function UpdateTab() {
     if (!inst) { setVersions([]); setNewVersion(''); return }
     setVersionsLoading(true)
     fetch(`/api/deploy/versions/${inst.bot_type}`, { credentials: 'include' })
-      .then(r => r.json()).then(d => setVersions(d.versions || [])).catch(() => {})
+      .then(async r => {
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(d?.detail || '获取版本列表失败')
+        const next = normalizeVersionList(d)
+        setVersions(next)
+        if (!next.length) notify('未获取到可用版本，请检查 GitHub 连接或后端日志', 'error')
+      })
+      .catch((err: any) => { setVersions([]); notify(err?.message || '获取版本列表失败', 'error') })
       .finally(() => setVersionsLoading(false))
   }, [inst?.bot_type])
 
@@ -548,6 +600,9 @@ function UpdateTab() {
                 ) : (
                   <CustomSelect value={newVersion} onChange={setNewVersion}
                     options={versions.map(v => ({ value: v.name, label: v.display_name || v.name }))} placeholder="选择新版本" />
+                )}
+                {!versionsLoading && versions.length === 0 && (
+                  <span className="text-black/45 animate-fade-slide-up" style={{ ...monoFont, fontSize: 16, ...getTextDriftStyle(7, 'hint') }}>当前未获取到版本列表，点击下拉可查看空状态提示</span>
                 )}
               </div>
               <button disabled={!newVersion} onClick={handleUpdate}
