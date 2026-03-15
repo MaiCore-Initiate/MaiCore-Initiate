@@ -39,71 +39,91 @@ class MaiMaiLauncher:
         self.tray_manager.apply_console_icon()
         self._tray_restore_event = threading.Event()
         self._tray_exit_event = threading.Event()
-        self.webui_process = None  # WebUI后端进程
+        self.webui_process = None  # WebUI后端进程引用（仅用于检查）
         setup_console()
         logger.info("MCStart已启动")
+
+        # 初始化WebUI管理器
+        from src.utils.webui_manager import WebUIManager
+        self.webui_manager = WebUIManager(Path(__file__).parent)
 
         # 启动WebUI后端服务器
         self._start_webui_server()
 
     def _start_webui_server(self):
-        """启动WebUI后端服务器"""
+        """启动WebUI后端服务器（使用WebUIManager）"""
         try:
-            import subprocess
             import webbrowser
             import time
-            webui_script = Path(__file__).parent / "webui" / "backend" / "main.py"
-
-            if not webui_script.exists():
-                logger.warning(f"WebUI后端脚本不存在: {webui_script}")
-                return
-
-            # 启动WebUI后端进程
-            self.webui_process = subprocess.Popen(
-                [sys.executable, str(webui_script)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-            )
-
-            logger.info(f"WebUI后端服务器已启动 (PID: {self.webui_process.pid})")
 
             # 获取WebUI配置
-            webui_host = p_config_manager.get("webui.host", "0.0.0.0")
             webui_port = p_config_manager.get("webui.port", 10086)
             webui_url = f"http://localhost:{webui_port}"
 
-            # 显示访问地址
-            ui.print_success(f"WebUI服务已启动: {webui_url}")
+            # 检查是否已在运行
+            if self.webui_manager.is_running(webui_port):
+                ui.print_info(f"检测到WebUI服务已在运行: {webui_url}")
+                logger.info("WebUI服务已在运行，跳过启动")
 
-            # 等待服务器启动（给服务器一点时间初始化）
-            time.sleep(2)
+                # 尝试打开浏览器
+                try:
+                    webbrowser.open(webui_url)
+                except Exception as e:
+                    logger.warning(f"打开浏览器失败: {e}")
+                return
 
-            # 自动打开浏览器
-            try:
-                webbrowser.open(webui_url)
-                logger.info(f"已自动打开浏览器: {webui_url}")
-            except Exception as e:
-                logger.warning(f"自动打开浏览器失败: {e}")
-                ui.print_info(f"请手动访问: {webui_url}")
+            # 启动WebUI守护进程
+            ui.print_info("正在启动WebUI服务...")
+            if not self.webui_manager.start(webui_port):
+                ui.print_warning("WebUI服务启动失败")
+                logger.error("WebUI服务启动失败")
+                return
+
+            # 等待服务器启动并进行健康检查
+            ui.print_info("等待WebUI服务就绪...")
+            max_retries = 15
+            for i in range(max_retries):
+                time.sleep(1)
+                if self.webui_manager.is_running(webui_port):
+                    ui.print_success(f"WebUI服务已就绪: {webui_url}")
+                    logger.info(f"WebUI服务健康检查通过 (耗时: {i+1}秒)")
+
+                    # 自动打开浏览器
+                    try:
+                        webbrowser.open(webui_url)
+                        logger.info(f"已自动打开浏览器: {webui_url}")
+                    except Exception as e:
+                        logger.warning(f"自动打开浏览器失败: {e}")
+                        ui.print_info(f"请手动访问: {webui_url}")
+                    return
+
+            # 超时未启动成功
+            ui.print_warning(f"WebUI服务启动超时，请稍后手动访问: {webui_url}")
+            logger.warning("WebUI服务健康检查超时")
 
         except Exception as e:
             logger.error(f"启动WebUI后端服务器失败: {e}")
             ui.print_warning(f"WebUI服务启动失败: {e}")
 
     def _stop_webui_server(self):
-        """停止WebUI后端服务器"""
-        if self.webui_process:
-            try:
-                self.webui_process.terminate()
-                self.webui_process.wait(timeout=5)
-                logger.info("WebUI后端服务器已停止")
-            except Exception as e:
-                logger.error(f"停止WebUI后端服务器失败: {e}")
-                try:
-                    self.webui_process.kill()
-                except:
-                    pass
+        """停止WebUI后端服务器（使用WebUIManager）"""
+        # 守护进程模式：WebUI独立运行，有自己的托盘图标
+        # 主进程退出时根据配置决定是否关闭WebUI服务
+
+        webui_auto_close = p_config_manager.get("webui.auto_close_with_launcher", False)
+
+        if webui_auto_close:
+            ui.print_info("正在关闭WebUI服务...")
+            if self.webui_manager.stop():
+                ui.print_success("WebUI服务已关闭")
+                logger.info("WebUI服务已关闭")
+            else:
+                ui.print_warning("WebUI服务关闭失败，可能需要手动关闭")
+                logger.warning("WebUI服务关闭失败")
+        else:
+            # 不自动关闭，提示用户
+            ui.print_info("WebUI服务将继续在后台运行，可通过托盘图标管理")
+            logger.info("WebUI守护进程继续运行")
 
     def handle_launch_mai(self):
         """处理启动实例的菜单"""
@@ -401,8 +421,8 @@ class MaiMaiLauncher:
         """处理杂项菜单"""
         while True:
             ui.show_misc_menu()
-            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "E", "Q"])
-            
+            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "E", "F", "Q"])
+
             if choice == "Q":
                 break
             elif choice == "A":
@@ -415,6 +435,8 @@ class MaiMaiLauncher:
                 self.handle_instance_statistics()
             elif choice == "E":
                 self.handle_show_webui_token()
+            elif choice == "F":
+                self.handle_restart_webui()
 
     def handle_program_settings(self):
         """处理程序设置"""
@@ -951,7 +973,65 @@ class MaiMaiLauncher:
                 ui.console.print(f"新Token: {new_token}", style=ui.colors["primary"])
         
         ui.pause()
-    
+
+    def handle_restart_webui(self):
+        """处理重启WebUI服务器"""
+        ui.clear_screen()
+        ui.console.print("[🔄 重启WebUI服务器]", style=ui.colors["secondary"])
+        ui.console.print("==================")
+
+        # 获取当前WebUI状态
+        webui_port = p_config_manager.get("webui.port", 10086)
+        status = self.webui_manager.get_status(webui_port)
+
+        if status["running"]:
+            ui.console.print(f"当前WebUI服务状态: 运行中", style=ui.colors["success"])
+            ui.console.print(f"PID: {status.get('pid', 'N/A')}", style=ui.colors["info"])
+            ui.console.print(f"端口: {status['port']}", style=ui.colors["info"])
+            ui.console.print(f"访问地址: {status['url']}", style=ui.colors["info"])
+        else:
+            ui.console.print(f"当前WebUI服务状态: 未运行", style=ui.colors["warning"])
+
+        ui.console.print()
+
+        if not ui.confirm("确定要重启WebUI服务器吗？"):
+            ui.print_info("已取消重启操作")
+            ui.pause()
+            return
+
+        ui.print_info("正在重启WebUI服务器...")
+        logger.info("用户请求重启WebUI服务器")
+
+        # 执行重启
+        if self.webui_manager.restart(webui_port):
+            ui.print_success("WebUI服务器重启成功！")
+            logger.info("WebUI服务器重启成功")
+
+            # 等待服务就绪
+            import time
+            ui.print_info("等待服务就绪...")
+            for i in range(10):
+                time.sleep(1)
+                if self.webui_manager.is_running(webui_port):
+                    ui.print_success(f"WebUI服务已就绪: {status['url']}")
+
+                    # 询问是否打开浏览器
+                    if ui.confirm("是否在浏览器中打开WebUI？"):
+                        import webbrowser
+                        try:
+                            webbrowser.open(status['url'])
+                            ui.print_success("已在浏览器中打开WebUI")
+                        except Exception as e:
+                            ui.print_warning(f"打开浏览器失败: {e}")
+                    break
+            else:
+                ui.print_warning("WebUI服务启动超时，请稍后手动检查")
+        else:
+            ui.print_error("WebUI服务器重启失败！")
+            logger.error("WebUI服务器重启失败")
+
+        ui.pause()
+
     def _validate_maibot_instance(self, instance_path: str) -> bool:
         """验证是否为有效的MaiBot实例"""
         try:
