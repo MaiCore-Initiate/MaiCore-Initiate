@@ -1,7 +1,7 @@
 {
   
   "name": "desktop-pet-scheduler",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "private": true,
   "main": "dist-electron/main.js",
   "description": "MaiCoreStart desktop pet scheduler - Electron desktop pet app",
