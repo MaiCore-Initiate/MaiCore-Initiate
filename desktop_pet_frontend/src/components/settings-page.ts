@@ -993,7 +993,7 @@ export class SettingsPage extends LitElement {
       <div class="section">
         <span class="section-title">关于</span>
         <div class="about">
-          <strong>MaiCoreStart桌宠</strong> v5.0.0<br/>
+          <strong>MaiCoreStart桌宠</strong> v5.0.1<br/>
           MaiCoreStart桌宠，来源Neo-MoFox插件<br/>
           开源协议：AGPLv3.0
         </div>
