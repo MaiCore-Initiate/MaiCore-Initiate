@@ -28,24 +28,18 @@
     "vite-plugin-node-polyfills": "^0.25.0"
   },
   "build": {
-    "appId": "com.xiaocz.desktoppet",
-    "productName": "MCStart Desktop Pet",
+    "appId": "com.xiaocz.mcstartdesktoppet",
+    "productName": "Desktop Pet",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*",
-      "!dist/**/*.map",
-      "!**/*.md"
-    ],
-    "asarUnpack": [
-      "dist/assets/live2dcubismcore.min*.js"
+      "dist-electron/**/*"
     ],
     "win": {
       "target": "nsis",
-      "icon": "icon.ico",
-      "compression": "store"
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": false,
