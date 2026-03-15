@@ -19,6 +19,27 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 os.chdir(project_root)  # 确保相对路径基于项目根目录
 
+
+def _force_utf8_stdio() -> None:
+    """强制 WebUI 后端进程在 Windows 打包环境下使用 UTF-8 标准流。"""
+    os.environ["PYTHONUTF8"] = "1"
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+
+    for stream_name in ("stdout", "stderr", "stdin"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            if stream_name == "stdin":
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            else:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+_force_utf8_stdio()
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse

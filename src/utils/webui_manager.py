@@ -55,6 +55,10 @@ class WebUIManager:
                 logger.error(f"守护进程脚本不存在: {self.daemon_script}")
                 return False
 
+            env = os.environ.copy()
+            env["PYTHONUTF8"] = "1"
+            env["PYTHONIOENCODING"] = "utf-8"
+
             # 启动守护进程（完全后台，无窗口）
             if sys.platform == "win32":
                 # Windows: 使用pythonw.exe（无窗口）+ DETACHED_PROCESS
@@ -69,6 +73,7 @@ class WebUIManager:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     stdin=subprocess.DEVNULL,
+                    env=env,
                     creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
                     close_fds=True
                 )
@@ -79,6 +84,7 @@ class WebUIManager:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     stdin=subprocess.DEVNULL,
+                    env=env,
                     start_new_session=True,
                     close_fds=True
                 )

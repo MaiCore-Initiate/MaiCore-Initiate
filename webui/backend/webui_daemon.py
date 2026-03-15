@@ -15,6 +15,24 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 os.chdir(project_root)
 
+
+def _force_utf8_stdio() -> None:
+    """确保守护进程自身运行在 UTF-8 标准流环境。"""
+    os.environ["PYTHONUTF8"] = "1"
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+
+    for stream_name in ("stdout", "stderr", "stdin"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None or not hasattr(stream, "reconfigure"):
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+_force_utf8_stdio()
+
 from src.core.p_config import p_config_manager
 
 
