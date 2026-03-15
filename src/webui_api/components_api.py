@@ -24,6 +24,10 @@ class ComponentInfo(BaseModel):
     description: str
     icon: str
     status: str = "available"
+    version: Optional[str] = None
+    download_url: Optional[str] = None
+    installed: Optional[bool] = None
+    message: Optional[str] = None
 
 
 class DownloadRequest(BaseModel):
@@ -97,6 +101,19 @@ def get_component_manager():
         raise HTTPException(status_code=500, detail=f"组件管理器不可用: {str(e)}")
 
 
+def _get_component_runtime_info(manager, component_key: str) -> Dict[str, Any]:
+    """读取下载器暴露的动态组件信息"""
+    try:
+        downloader = getattr(manager, "downloaders", {}).get(component_key)
+        if downloader and hasattr(downloader, "get_download_info"):
+            info = downloader.get_download_info()
+            if isinstance(info, dict):
+                return info
+    except Exception as e:
+        logger.warning("读取组件动态信息失败", component_key=component_key, error=str(e))
+    return {}
+
+
 @router.get("/list", response_model=List[ComponentInfo], summary="获取组件列表")
 def get_components_list():
     """获取所有可用的组件列表"""
@@ -108,12 +125,17 @@ def get_components_list():
             info = manager.get_component_info(key)
             if info:
                 status_info = manager.check_component_status(key)
+                runtime_info = _get_component_runtime_info(manager, key)
                 components.append(ComponentInfo(
                     key=key,
                     name=info['name'],
                     description=info['description'],
                     icon=info['icon'],
-                    status=status_info.get('status', 'unknown')
+                    status=status_info.get('status', 'unknown'),
+                    version=runtime_info.get('version'),
+                    download_url=runtime_info.get('download_url'),
+                    installed=runtime_info.get('installed'),
+                    message=status_info.get('message', '')
                 ))
 
         return components
@@ -351,6 +373,7 @@ def get_component_info_detail(component_key: str):
             raise HTTPException(status_code=404, detail="组件不存在")
 
         status_info = manager.check_component_status(component_key)
+        runtime_info = _get_component_runtime_info(manager, component_key)
 
         return {
             "key": component_key,
@@ -358,7 +381,10 @@ def get_component_info_detail(component_key: str):
             "description": info['description'],
             "icon": info['icon'],
             "status": status_info.get('status', 'unknown'),
-            "message": status_info.get('message', '')
+            "message": status_info.get('message', ''),
+            "version": runtime_info.get('version'),
+            "download_url": runtime_info.get('download_url'),
+            "installed": runtime_info.get('installed'),
         }
 
     except HTTPException:
