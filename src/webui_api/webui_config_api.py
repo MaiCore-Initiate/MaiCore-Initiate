@@ -15,6 +15,29 @@ from ..core.p_config import p_config_manager
 
 router = APIRouter()
 
+_LEGACY_MOFOX_TYPE = "MoFox_bot"
+
+
+def _normalize_bot_type(bot_type: str) -> str:
+    if bot_type in {"MoFox-Core", _LEGACY_MOFOX_TYPE}:
+        return "MoFox-Core"
+    if bot_type == "Neo-MoFox":
+        return "Neo-MoFox"
+    return "MaiBot"
+
+
+def _get_bot_path_key(bot_type: str) -> str:
+    normalized = _normalize_bot_type(bot_type)
+    if normalized == "MoFox-Core":
+        return "mofox_path"
+    if normalized == "Neo-MoFox":
+        return "neo_mofox_path"
+    return "mai_path"
+
+
+def _get_bot_root_path(cfg: Dict[str, Any]) -> str:
+    return os.path.realpath(cfg.get(_get_bot_path_key(cfg.get("bot_type", "MaiBot")), ""))
+
 
 class UpdateConfigRequest(BaseModel):
     key: str
@@ -53,11 +76,12 @@ def get_instances():
                 "serial_number": cfg.get("serial_number", ""),
                 "nickname": cfg.get("nickname_path", ""),
                 "absolute_serial": cfg.get("absolute_serial_number", 0),
-                "bot_type": cfg.get("bot_type", ""),
+                "bot_type": _normalize_bot_type(cfg.get("bot_type", "")),
                 "qq_account": cfg.get("qq_account", ""),
                 "version": cfg.get("version_path", ""),
                 "mai_path": cfg.get("mai_path", ""),
                 "mofox_path": cfg.get("mofox_path", ""),
+                "neo_mofox_path": cfg.get("neo_mofox_path", ""),
                 "adapter_path": cfg.get("adapter_path", ""),
                 "napcat_path": cfg.get("napcat_path", ""),
                 "mongodb_path": cfg.get("mongodb_path", ""),
@@ -86,7 +110,8 @@ def create_instance(req: CreateInstanceRequest):
     if req.name in configs:
         raise HTTPException(400, f"配置集 '{req.name}' 已存在")
 
-    cfg = req.config
+    cfg = req.config.copy()
+    cfg["bot_type"] = _normalize_bot_type(cfg.get("bot_type", "MaiBot"))
     serial = cfg.get("serial_number", "").strip()
 
     # 序列号重复检查
@@ -97,7 +122,7 @@ def create_instance(req: CreateInstanceRequest):
 
     # 路径有效性检查
     bot_type = cfg.get("bot_type", "MaiBot")
-    path_key = "mofox_path" if bot_type == "MoFox_bot" else "mai_path"
+    path_key = _get_bot_path_key(bot_type)
     main_path = cfg.get(path_key, "").strip()
     if main_path and not os.path.isdir(main_path):
         raise HTTPException(400, f"主程序路径不存在: {main_path}")
@@ -117,8 +142,8 @@ def create_instance(req: CreateInstanceRequest):
 
 _UPDATABLE_FIELDS = {
     "serial_number", "nickname_path", "version_path", "bot_type",
-    "qq_account", "mai_path", "mofox_path", "adapter_path",
-    "napcat_path", "venv_path", "webui_path",
+    "qq_account", "mai_path", "mofox_path", "neo_mofox_path",
+    "adapter_path", "napcat_path", "venv_path", "mongodb_path", "webui_path",
 }
 
 
@@ -130,6 +155,8 @@ def update_instance(name: str, updates: Dict[str, Any]):
     if name not in configs:
         raise HTTPException(404, f"配置集 '{name}' 未找到")
     filtered = {k: v for k, v in updates.items() if k in _UPDATABLE_FIELDS}
+    if "bot_type" in filtered:
+        filtered["bot_type"] = _normalize_bot_type(filtered["bot_type"])
     configs[name].update(filtered)
     config_manager.save()
     return {"status": "success", "message": f"实例 '{name}' 更新成功"}
@@ -143,8 +170,7 @@ def open_instance_config(name: str):
     if name not in configs:
         raise HTTPException(404, f"配置集 '{name}' 未找到")
     cfg = configs[name]
-    bot_type = cfg.get("bot_type", "MaiBot")
-    bot_path = os.path.realpath(cfg.get("mai_path" if bot_type == "MaiBot" else "mofox_path", ""))
+    bot_path = _get_bot_root_path(cfg)
     if not bot_path or not os.path.isdir(bot_path):
         raise HTTPException(400, "Bot路径无效或不是目录")
 
@@ -175,8 +201,7 @@ def open_instance_folder(name: str):
     if name not in configs:
         raise HTTPException(404, f"配置集 '{name}' 未找到")
     cfg = configs[name]
-    bot_type = cfg.get("bot_type", "MaiBot")
-    bot_path = os.path.realpath(cfg.get("mai_path" if bot_type == "MaiBot" else "mofox_path", ""))
+    bot_path = _get_bot_root_path(cfg)
     if not bot_path or not os.path.isdir(bot_path):
         raise HTTPException(400, "Bot路径无效或不是目录")
     subprocess.Popen(["explorer", bot_path])

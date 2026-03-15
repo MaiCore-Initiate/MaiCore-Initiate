@@ -13,6 +13,7 @@ interface Instance {
   qqAccount: string
   maiPath?: string
   mofoxPath?: string
+  neoMofoxPath?: string
   adapterPath?: string
   napcatPath?: string
   mongodbPath?: string
@@ -29,11 +30,15 @@ interface RegisterForm {
   qq_account: string
   mai_path: string
   mofox_path: string
+  neo_mofox_path: string
   adapter_path: string
   napcat_path: string
+  venv_path: string
   mongodb_path: string
   webui_path: string
 }
+
+type BotType = 'MaiBot' | 'MoFox-Core' | 'Neo-MoFox'
 
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
 const labelFont = { fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
@@ -43,11 +48,41 @@ const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans 
 
 const emptyForm: RegisterForm = {
   name: '', serial_number: '', nickname_path: '', bot_type: 'MaiBot',
-  version_path: '', qq_account: '', mai_path: '', mofox_path: '',
-  adapter_path: '', napcat_path: '', mongodb_path: '', webui_path: '',
+  version_path: '', qq_account: '', mai_path: '', mofox_path: '', neo_mofox_path: '',
+  adapter_path: '', napcat_path: '', venv_path: '', mongodb_path: '', webui_path: '',
 }
 
 type Action = 'edit' | 'open-config' | 'open-folder' | null
+
+const BOT_TYPE_OPTIONS: BotType[] = ['MaiBot', 'MoFox-Core', 'Neo-MoFox']
+
+function normalizeBotType(botType: string): BotType {
+  if (botType === 'MoFox_bot' || botType === 'MoFox-Core') return 'MoFox-Core'
+  if (botType === 'Neo-MoFox') return 'Neo-MoFox'
+  return 'MaiBot'
+}
+
+function getMainPathKey(botType: string): 'mai_path' | 'mofox_path' | 'neo_mofox_path' {
+  const normalized = normalizeBotType(botType)
+  if (normalized === 'MoFox-Core') return 'mofox_path'
+  if (normalized === 'Neo-MoFox') return 'neo_mofox_path'
+  return 'mai_path'
+}
+
+function getMainPathValue(form: Pick<RegisterForm, 'mai_path' | 'mofox_path' | 'neo_mofox_path'>, botType: string): string {
+  return form[getMainPathKey(botType)] || ''
+}
+
+function switchBotTypeWithMainPath<T extends Pick<RegisterForm, 'bot_type' | 'mai_path' | 'mofox_path' | 'neo_mofox_path'>>(form: T, nextBotType: string): T {
+  const normalized = normalizeBotType(nextBotType)
+  const currentMainPath = getMainPathValue(form, form.bot_type)
+  const nextKey = getMainPathKey(normalized)
+  return {
+    ...form,
+    bot_type: normalized,
+    [nextKey]: form[nextKey] || currentMainPath,
+  } as T
+}
 
 function PillButton({ label, selected, onClick }: { label: string; selected?: boolean; onClick: () => void }) {
   return (
@@ -175,13 +210,15 @@ function EditPanel({ instance, onSaved, onClose }: { instance: Instance; onSaved
     serial_number: instance.serial,
     nickname_path: instance.nickname,
     version_path: instance.version,
-    bot_type: instance.botType,
+    bot_type: normalizeBotType(instance.botType),
     qq_account: instance.qqAccount,
     mai_path: instance.maiPath || '',
     mofox_path: instance.mofoxPath || '',
+    neo_mofox_path: instance.neoMofoxPath || '',
     adapter_path: instance.adapterPath || '',
     napcat_path: instance.napcatPath || '',
     venv_path: instance.venvPath || '',
+    mongodb_path: instance.mongodbPath || '',
     webui_path: instance.webuiPath || '',
   })
   const [form, setForm] = useState(buildForm)
@@ -189,10 +226,9 @@ function EditPanel({ instance, onSaved, onClose }: { instance: Instance; onSaved
 
   useEffect(() => { setForm(buildForm()) }, [instance])
 
-  const mainPath = instance.botType === 'MoFox_bot' ? form.mofox_path : form.mai_path
+  const mainPath = getMainPathValue(form, form.bot_type)
   const setMainPath = (v: string) => {
-    const key = instance.botType === 'MoFox_bot' ? 'mofox_path' : 'mai_path'
-    setForm(prev => ({ ...prev, [key]: v }))
+    setForm(prev => ({ ...prev, [getMainPathKey(prev.bot_type)]: v }))
   }
 
   const handleSave = async () => {
@@ -241,7 +277,7 @@ function EditPanel({ instance, onSaved, onClose }: { instance: Instance; onSaved
           <FieldRow label="实例昵称" value={form.nickname_path} onChange={v => setForm(p => ({ ...p, nickname_path: v }))} index={2} />
           <FieldRow label="实例版本" value={form.version_path} onChange={v => setForm(p => ({ ...p, version_path: v }))} index={3} />
           <FieldRow label="实例类型" index={4}>
-            <TypeToggle options={['MaiBot', 'MoFox_bot']} value={form.bot_type} onChange={v => setForm(p => ({ ...p, bot_type: v }))} />
+            <TypeToggle options={BOT_TYPE_OPTIONS} value={form.bot_type} onChange={v => setForm(p => switchBotTypeWithMainPath(p, v))} />
           </FieldRow>
           <FieldRow label="QQ账号" value={form.qq_account} onChange={v => setForm(p => ({ ...p, qq_account: v }))} index={5} />
 
@@ -318,10 +354,10 @@ function RegisterModal({ open, onClose, onCreated, nextSerial }: { open: boolean
           <FieldRow label="实例昵称" value={form.nickname_path} onChange={v => setForm(p => ({ ...p, nickname_path: v }))} index={3} />
           <FieldRow label="实例版本" value={form.version_path} onChange={v => setForm(p => ({ ...p, version_path: v }))} index={4} />
           <FieldRow label="实例类型" index={5}>
-            <TypeToggle options={['MaiBot', 'MoFox_bot']} value={form.bot_type} onChange={v => setForm(p => ({ ...p, bot_type: v }))} />
+            <TypeToggle options={BOT_TYPE_OPTIONS} value={form.bot_type} onChange={v => setForm(p => switchBotTypeWithMainPath(p, v))} />
           </FieldRow>
           <FieldRow label="QQ账号" value={form.qq_account} onChange={v => setForm(p => ({ ...p, qq_account: v }))} index={6} />
-          <FieldRow label="主程序路径" value={form.bot_type === 'MoFox_bot' ? form.mofox_path : form.mai_path} onChange={v => setForm(p => ({ ...p, [form.bot_type === 'MoFox_bot' ? 'mofox_path' : 'mai_path']: v }))} wide index={7} placeholder="bot.py 所在根目录" />
+          <FieldRow label="主程序路径" value={getMainPathValue(form, form.bot_type)} onChange={v => setForm(p => ({ ...p, [getMainPathKey(p.bot_type)]: v }))} wide index={7} placeholder="bot.py 所在根目录" />
           <FieldRow label="适配器目录" value={form.adapter_path} onChange={v => setForm(p => ({ ...p, adapter_path: v }))} wide index={8} placeholder="main.py 所在根目录" />
           <FieldRow label="NapCat路径" value={form.napcat_path} onChange={v => setForm(p => ({ ...p, napcat_path: v }))} wide index={9} placeholder="NapCatWinBootMain.exe 文件路径" />
           <FieldRow label="WebUI路径" value={form.webui_path} onChange={v => setForm(p => ({ ...p, webui_path: v }))} wide index={10} />
@@ -371,11 +407,12 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
           serial: cfg.serial_number ?? '',
           nickname: cfg.nickname || cfg.serial_number || '',
           absoluteSerial: cfg.absolute_serial ?? 0,
-          botType: cfg.bot_type || 'MaiBot',
+          botType: normalizeBotType(cfg.bot_type || 'MaiBot'),
           version: cfg.version || '',
           qqAccount: cfg.qq_account || '',
           maiPath: cfg.mai_path,
           mofoxPath: cfg.mofox_path,
+          neoMofoxPath: cfg.neo_mofox_path,
           adapterPath: cfg.adapter_path,
           napcatPath: cfg.napcat_path,
           mongodbPath: cfg.mongodb_path,
