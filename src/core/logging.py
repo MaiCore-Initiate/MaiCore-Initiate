@@ -11,6 +11,8 @@ from functools import partial
 from datetime import datetime, timedelta
 import structlog
 from rich.logging import RichHandler
+from rich.console import Console
+from rich.text import Text
 
 # 从程序配置模块导入 p_config_manager
 from .p_config import p_config_manager
@@ -20,6 +22,97 @@ LOG_DIR = "log"
 # 创建一个模块级别的logger实例，供本模块内部函数使用
 # 注意：在setup_logging完成前，它可能不会按预期工作
 logger = structlog.get_logger(__name__)
+
+# --- 控制台美化渲染器 ---
+def console_renderer(logger, name, event_dict):
+    """
+    美化控制台日志输出的渲染器
+    """
+    # 获取日志级别并设置对应颜色
+    level = event_dict.get("level", "info")
+    level_colors = {
+        "debug": "cyan",
+        "info": "green",
+        "warning": "yellow",
+        "error": "red",
+        "critical": "bold red"
+    }
+    color = level_colors.get(level, "white")
+    
+    # 构建美化后的消息
+    message_parts = []
+    
+    # 时间戳（简化格式）
+    if "timestamp" in event_dict:
+        timestamp = event_dict["timestamp"]
+        if isinstance(timestamp, str):
+            # 从 ISO 格式提取时间部分
+            try:
+                time_part = timestamp.split("T")[1].split(".")[0]
+                message_parts.append(f"[dim]{time_part}[/dim]")
+            except:
+                message_parts.append(f"[dim]{timestamp}[/dim]")
+    
+    # 日志级别（带颜色）
+    message_parts.append(f"[{color}]{level.upper().ljust(7)}[/{color}]")
+    
+    # 消息主体
+    event = event_dict.get("event", "")
+    message_parts.append(str(event))
+    
+    # 其他字段（简化显示）
+    extra_fields = []
+    for key, value in event_dict.items():
+        if key not in ("event", "level", "timestamp"):
+            extra_fields.append(f"{key}={value}")
+    
+    if extra_fields:
+        message_parts.append(" ".join(extra_fields))
+    
+    return " ".join(message_parts)
+
+
+# --- 自定义日志记录器 ---
+class DualOutputLogger:
+    """
+    双输出日志记录器，支持控制台美化和文件JSON格式
+    """
+    def __init__(self, name):
+        self._logger = structlog.get_logger(name)
+    
+    def _log(self, level, event, **kwargs):
+        # 控制台输出美化版本
+        console_msg = console_renderer(None, None, {
+            "event": event,
+            "level": level,
+            **kwargs
+        })
+        
+        # 文件输出保持JSON格式
+        json_msg = json.dumps({
+            "event": event,
+            "level": level,
+            **kwargs
+        }, ensure_ascii=False)
+        
+        # 分别记录到控制台和文件
+        # 注意：这里需要特殊处理，我们稍后实现
+        getattr(self._logger, level)(event, **kwargs)
+    
+    def debug(self, event, **kwargs):
+        self._log("debug", event, **kwargs)
+    
+    def info(self, event, **kwargs):
+        self._log("info", event, **kwargs)
+    
+    def warning(self, event, **kwargs):
+        self._log("warning", event, **kwargs)
+    
+    def error(self, event, **kwargs):
+        self._log("error", event, **kwargs)
+    
+    def critical(self, event, **kwargs):
+        self._log("critical", event, **kwargs)
 
 # --- 动态级别控制 ---
 _default_console_level = logging.WARNING
@@ -78,8 +171,14 @@ def rotate_logs():
                 # 从文件名中提取日期部分 (e.g., "2025-10-07_14-24-31.jsonl")
                 filename = os.path.basename(log_file)
                 timestamp_str = filename.split('.')[0]
-                log_date = datetime.strptime(timestamp_str, "%Y-%m-%d_%H-%M-%S")
-                
+                try:
+                    log_date = datetime.strptime(timestamp_str, "%Y-%m-%d_%H-%M-%S")
+                except ValueError:
+                    if timestamp_str.startswith("webui_"):
+                        log_date = datetime.strptime(timestamp_str[6:], "%Y-%m-%d")
+                    else:
+                        raise
+
                 # 如果日志文件早于截止日期，则删除它
                 if log_date < cutoff_date:
                     os.remove(log_file)
@@ -123,19 +222,66 @@ def setup_logging(level: str = "INFO"):
 
     # 4. 配置structlog
     # structlog的处理器是按顺序执行的，最终结果交给logger处理
+    
+    def remove_conflicting_fields(logger, name, event_dict):
+        """
+        移除与 LogRecord 冲突的字段
+        防止 'filename', 'name' 等字段导致 "Attempt to overwrite 'xxx' in LogRecord" 错误
+        """
+        # 复制一份 event_dict，避免修改原始数据
+        result = dict(event_dict)
+        
+        # 移除与 LogRecord 属性冲突的所有字段
+        # LogRecord 的标准属性列表
+        conflicting_fields = [
+            "name",           # logger name
+            "filename",       # source file name
+            "funcName",       # function name
+            "levelname",      # level name (DEBUG, INFO, etc.)
+            "levelno",        # level number
+            "processName",    # process name
+            "process",        # process ID
+            "threadName",     # thread name
+            "thread",         # thread ID
+            "msecs",          # milliseconds
+            "created",        # time when record was created
+            "relativeCreated",# time relative to module import
+            "lineno",         # line number in source file
+            "module",         # module name
+            "pathname",       # full source file path
+            "getMessage",     # message getter method
+            "msg",            # message format string
+            "args",           # arguments for message
+            "exc_info",       # exception info
+            "exc_text",       # exception text
+            "stack_info",     # stack info
+            "style",          # logging style
+            "stacklevel",     # stack level adjustment
+        ]
+        
+        for field in conflicting_fields:
+            result.pop(field, None)
+        
+        return result
+    
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
             structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.TimeStamper(fmt="iso"), # 使用ISO 8601格式时间戳
+            structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
-            # 这个处理器会把日志事件渲染成JSON字符串，用于文件输出
-            # 使用 functools.partial 来确保中文字符被正确编码
-            structlog.processors.JSONRenderer(serializer=partial(json.dumps, ensure_ascii=False)),
+            remove_conflicting_fields,  # 在 render_to_log_kwargs 之前移除冲突字段
+            # 使用自定义处理器来生成控制台和文件的不同格式
+            lambda logger, name, event_dict: {
+                **event_dict,
+                "_original_event": event_dict.get("event", ""),
+                "event": console_renderer(logger, name, event_dict)
+            },
+            structlog.stdlib.render_to_log_kwargs,
         ],
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -151,7 +297,9 @@ def setup_logging(level: str = "INFO"):
         rich_tracebacks=True,
         show_time=True,
         show_level=True,
-        show_path=False
+        show_path=False,
+        markup=True,      # 启用Rich标记语法
+        highlighter=None  # 禁用自动高亮，使用我们自己的颜色
     )
     # 为控制台handler单独设置一个更易读的格式化器
     # rich会自动处理日志级别和时间，这里我们只需要消息本身
@@ -169,7 +317,57 @@ def setup_logging(level: str = "INFO"):
     # 获取根logger并配置
     root_logger = logging.getLogger()
     root_logger.setLevel(level.upper())
-    root_logger.handlers = [console_handler, file_handler]
+    
+    # 创建自定义处理器来确保文件输出为JSON格式
+    class JSONFileHandler(logging.Handler):
+        def __init__(self, handler):
+            super().__init__()
+            self.handler = handler
+            
+        def emit(self, record):
+            # 保存原始消息
+            original_msg = record.msg
+            original_args = record.args
+            
+            # 生成JSON格式的消息
+            try:
+                # 从记录中提取结构化数据
+                log_data = {
+                    "event": getattr(record, "_original_event", record.getMessage()),
+                    "logger": getattr(record, "name", ""),
+                    "level": record.levelname.lower(),
+                    "timestamp": datetime.fromtimestamp(record.created).isoformat()
+                }
+                
+                # 添加其他字段
+                for attr in ["pathname", "lineno", "funcName"]:
+                    if hasattr(record, attr):
+                        log_data[attr] = getattr(record, attr)
+                
+                # 如果有额外的属性，也添加进去
+                # 注意：排除 filename 字段，因为它与 LogRecord 的属性冲突
+                for key, value in record.__dict__.items():
+                    if key not in ["name", "msg", "args", "levelname", "levelno", "pathname", 
+                                  "filename", "module", "lineno", "funcName", "created", 
+                                  "msecs", "relativeCreated", "thread", "threadName", 
+                                  "processName", "process", "getMessage", "_original_event",
+                                  "event"]:  # event 已经在外面处理了
+                        log_data[key] = value
+                
+                # 设置JSON消息
+                record.msg = json.dumps(log_data, ensure_ascii=False)
+                record.args = ()
+            except Exception:
+                # 如果转换失败，回退到原始消息
+                record.msg = original_msg
+                record.args = original_args
+                
+            self.handler.emit(record)
+    
+    # 应用自定义处理器
+    json_file_handler = JSONFileHandler(file_handler)
+    
+    root_logger.handlers = [console_handler, json_file_handler]
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:

@@ -253,14 +253,19 @@ class NapCatDeployer(BaseDeployer):
         ui.console.print("\n[🐱 第三步：安装NapCat]", style=ui.colors["primary"])
         
         napcat_version = deploy_config["napcat_version"]
-        install_dir = deploy_config["install_dir"]
+        
+        # 从bot_path推断出实例目录
+        # bot_path = D:\instances\test\MaiBot
+        # instance_dir = D:\instances\test
+        instance_dir = os.path.dirname(bot_path)
         
         ui.print_info(f"开始安装NapCat {napcat_version['display_name']}...")
+        ui.print_info(f"实例目录: {instance_dir}")
         
-        napcat_exe = self.download_napcat(napcat_version, install_dir)
+        napcat_exe = self.download_napcat(napcat_version, instance_dir, from_webui=deploy_config.get("from_webui", False))
         if napcat_exe:
             # 等待用户完成安装并进行3次检测
-            napcat_path = self._wait_for_napcat_installation(install_dir)
+            napcat_path = self._wait_for_napcat_installation(instance_dir, from_webui=deploy_config.get("from_webui", False))
             if napcat_path:
                 ui.print_success("✅ NapCat安装并检测完成")
                 logger.info("NapCat安装成功", path=napcat_path)
@@ -276,7 +281,7 @@ class NapCatDeployer(BaseDeployer):
             logger.error("NapCat下载失败")
             return ""
     
-    def download_napcat(self, napcat_version: Dict, install_dir: str) -> Optional[str]:
+    def download_napcat(self, napcat_version: Dict, install_dir: str, from_webui: bool = False) -> Optional[str]:
         """下载并解压NapCat"""
         try:
             ui.print_info(f"开始下载NapCat {napcat_version['display_name']}...")
@@ -322,8 +327,9 @@ class NapCatDeployer(BaseDeployer):
                 # 如果找到安装程序，询问是否自动安装
                 if installer_exe and os.path.exists(installer_exe):
                     ui.print_info(f"找到NapCat安装程序: {installer_exe}")
-                    
-                    if ui.confirm("是否自动运行NapCat安装程序？"):
+
+                    # WebUI模式自动运行安装程序，不询问
+                    if from_webui or ui.confirm("是否自动运行NapCat安装程序？"):
                         installer_success = self.run_napcat_installer(installer_exe)
                         if installer_success:
                             ui.print_success("NapCat安装程序已成功启动")
@@ -440,14 +446,15 @@ class NapCatDeployer(BaseDeployer):
             logger.error("启动NapCat安装程序失败", error=str(e))
             return False
     
-    def _wait_for_napcat_installation(self, install_dir: str) -> Optional[str]:
+    def _wait_for_napcat_installation(self, install_dir: str, from_webui: bool = False) -> Optional[str]:
         """等待NapCat安装完成并检测路径"""
         ui.print_info("等待NapCat安装完成...")
         ui.print_warning("请在弹出的安装窗口中完成NapCat安装")
         ui.print_info("安装完成后，按回车键开始检测NapCat路径(若您安装的是基础版[NapCat.Shell]，则可以直接回车检测，不必等待安装完成)")
-        
-        # 等待用户确认安装完成
-        ui.pause("NapCat安装完成后按回车继续...")
+
+        # WebUI模式跳过等待用户按回车，直接开始检测
+        if not from_webui:
+            ui.pause("NapCat安装完成后按回车继续...")
         
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):

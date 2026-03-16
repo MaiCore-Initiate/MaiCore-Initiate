@@ -713,15 +713,48 @@ class BaseDeployer:
         # Git clone失败，回退到下载压缩包
         if fallback_url:
             ui.print_warning("Git clone失败，回退到下载压缩包方式...")
-            archive_path = os.path.join(tempfile.gettempdir(), f"{repo.replace('/', '_')}.zip")
             
-            if self.download_file(fallback_url, archive_path):
-                if self.extract_archive(archive_path, target_dir):
-                    # 清理临时文件
-                    try:
-                        os.remove(archive_path)
-                    except:
-                        pass
-                    return True
+            # 使用临时目录进行下载和解压
+            with tempfile.TemporaryDirectory() as temp_dir:
+                archive_path = os.path.join(temp_dir, f"{repo.replace('/', '_')}.zip")
+                
+                if self.download_file(fallback_url, archive_path):
+                    if self.extract_archive(archive_path, temp_dir):
+                        # 检测并处理GitHub归档的嵌套根目录层级
+                        # GitHub的归档zip总是只包含一个根目录（格式：{repo_name}-{branch}）
+                        extracted_items = os.listdir(temp_dir)
+                        extracted_dirs = [d for d in extracted_items
+                                         if os.path.isdir(os.path.join(temp_dir, d))]
+                        extracted_files = [f for f in extracted_items
+                                          if os.path.isfile(os.path.join(temp_dir, f)) and not f.endswith('.zip')]
+                        
+                        # 只有一个目录且没有其他非zip文件 → GitHub归档嵌套层，需要展开
+                        if len(extracted_dirs) == 1 and len(extracted_files) == 0:
+                            source_dir = os.path.join(temp_dir, extracted_dirs[0])
+                            ui.print_info(f"检测到GitHub归档嵌套目录: {extracted_dirs[0]}")
+                            os.makedirs(target_dir, exist_ok=True)
+                            for item in os.listdir(source_dir):
+                                src_path = os.path.join(source_dir, item)
+                                dst_path = os.path.join(target_dir, item)
+                                if os.path.exists(dst_path):
+                                    if os.path.isdir(dst_path):
+                                        shutil.rmtree(dst_path)
+                                    else:
+                                        os.remove(dst_path)
+                                shutil.move(src_path, dst_path)
+                            ui.print_success(f"已展开嵌套目录到 {target_dir}")
+                        else:
+                            # 没有嵌套层，直接解压到目标目录
+                            if not self.extract_archive(archive_path, target_dir):
+                                ui.print_error("解压失败")
+                                return False
+                        
+                        # 验证目标目录是否有效
+                        if os.path.exists(target_dir) and os.listdir(target_dir):
+                            ui.print_success("压缩包部署完成")
+                            return True
+                        else:
+                            ui.print_error("部署后验证失败，目标目录为空或不存在")
+                            return False
         
         return False

@@ -21,6 +21,7 @@ from .mongodb_downloader import MongoDBDownloader
 from .sqlitestudio_downloader import SQLiteStudioDownloader
 from .napcat_downloader import NapCatDownloader
 from .webui_downloader import WebUIDownloader
+from .desktop_pet_downloader import DesktopPetDownloader
 
 logger = structlog.get_logger(__name__)
 
@@ -39,7 +40,8 @@ class ComponentManager:
             'mongodb': MongoDBDownloader(),
             'sqlitestudio': SQLiteStudioDownloader(),
             'napcat': NapCatDownloader(),
-            'webui': WebUIDownloader()
+            'webui': WebUIDownloader(),
+            'desktop_pet': DesktopPetDownloader()
         }
         
         # 组件信息
@@ -81,13 +83,18 @@ class ComponentManager:
             },
             'napcat': {
                 'name': 'NapCat',
-                'description': 'QQ机器人适配器',
+                'description': 'QQ机器人适配器（下载在用户下载目录）',
                 'icon': '🐱'
             },
             'webui': {
                 'name': 'MaiBot WebUI',
                 'description': 'MaiBot控制面板Web界面',
                 'icon': '🌐'
+            },
+            'desktop_pet': {
+                'name': 'MCStart Desktop Pet',
+                'description': 'MCStart桌面宠物（AI助手、日程管理、待办事项）',
+                'icon': '🐾'
             }
         }
     
@@ -148,42 +155,95 @@ class ComponentManager:
             except ValueError:
                 ui.print_error("请输入有效的数字")
     
-    def download_component(self, component_key: str) -> bool:
-        """下载指定组件"""
+    def download_component(self, component_key: str, non_interactive: bool = False, task_id: str | None = None, progress_cb=None, install_path: str | None = None) -> bool:
+        """下载指定组件
+        non_interactive=True 时用于 WebUI/API，自动选择默认版本以避免交互阻塞
+        progress_cb: 可选进度回调，签名为 callback(dict)
+        install_path: 可选安装路径（用于 SQLiteStudio 等绿色软件）
+        """
         if component_key not in self.downloaders:
             ui.print_error(f"组件 '{component_key}' 不受支持")
+            if progress_cb:
+                progress_cb({"status": "failed", "phase": "failed", "message": "组件不受支持"})
             return False
-        
+
         info = self.components_info[component_key]
         ui.print_info(f"开始下载 {info['name']}...")
-        
+
+        # 创建取消检查回调
+        def is_canceled():
+            if task_id:
+                try:
+                    from src.webui_api.components_api import _is_canceled
+                    return _is_canceled(task_id)
+                except Exception:
+                    return False
+            return False
+
         try:
             # 获取临时目录
             temp_dir = self.get_temporary_directory()
-            
-            # 执行下载
+
+            # 执行下载（通过 inspect 检查签名，兼容新旧下载器）
+            import inspect
             downloader = self.downloaders[component_key]
-            success = downloader.download_and_install(temp_dir)
-            
+            auto_latest = non_interactive and component_key != 'python'
+            params = inspect.signature(downloader.download_and_install).parameters
+            kwargs: dict = {}
+            if 'auto_select_latest' in params:
+                kwargs['auto_select_latest'] = auto_latest
+            if 'task_id' in params:
+                kwargs['task_id'] = task_id
+            if 'progress_cb' in params:
+                kwargs['progress_cb'] = progress_cb
+            if 'non_interactive' in params:
+                kwargs['non_interactive'] = non_interactive
+            if 'is_canceled_callback' in params:
+                kwargs['is_canceled_callback'] = is_canceled
+            if 'install_path' in params:
+                kwargs['install_path'] = install_path
+            success = downloader.download_and_install(temp_dir, **kwargs)
+
+            # 检查是否被取消
+            if is_canceled():
+                ui.print_warning("下载已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
             if success:
                 ui.print_success(f"✅ {info['name']} 下载并安装完成")
                 logger.info("组件下载成功", component=component_key)
-                
-                # NapCat不提供删除选项，因为文件已经在用户指定的位置
-                if component_key != 'napcat':
-                    # 询问是否删除安装包
-                    if ui.confirm("是否删除安装包以节省空间？"):
+
+                if progress_cb:
+                    progress_cb({"status": "done", "phase": "done", "percent": 100, "message": "完成"})
+
+                # NapCat和SQLiteStudio不删除安装包（文件已在用户指定位置或需要保留）
+                if component_key not in ('napcat', 'sqlitestudio'):
+                    # WebUI 模式延迟删除安装包（等待安装程序完成）
+                    if non_interactive:
+                        import threading
+                        import time
+                        def delayed_cleanup():
+                            time.sleep(5)  # 等待5秒让安装程序启动完成
+                            self._cleanup_installer(component_key, temp_dir)
+                        threading.Thread(target=delayed_cleanup, daemon=True).start()
+                    elif ui.confirm("是否删除安装包以节省空间？"):
                         self._cleanup_installer(component_key, temp_dir)
-                
+
                 return True
             else:
                 ui.print_error(f"❌ {info['name']} 下载或安装失败")
                 logger.error("组件下载失败", component=component_key)
+                if progress_cb:
+                    progress_cb({"status": "failed", "phase": "failed", "message": "下载或安装失败"})
                 return False
-                
+
         except Exception as e:
             ui.print_error(f"下载 {info['name']} 时发生错误：{str(e)}")
             logger.error("组件下载异常", component=component_key, error=str(e))
+            if progress_cb:
+                progress_cb({"status": "failed", "phase": "failed", "message": str(e), "error": str(e)})
             return False
     
     def _cleanup_installer(self, component_key: str, temp_dir: Path):

@@ -5,6 +5,7 @@
 """
 import time
 import os
+import sys
 import structlog
 from rich.console import Console
 from rich.table import Table
@@ -28,6 +29,63 @@ class UI:
         self.symbols = SYMBOLS
         self.menus = Menus(self.console)
         self.components = Components(self.console)
+
+    def _get_console_encoding(self) -> str:
+        """获取当前控制台编码，默认回退到 utf-8。"""
+        return getattr(sys.stdout, "encoding", None) or "utf-8"
+
+    def _sanitize_console_text(self, text: str) -> str:
+        """在非 UTF-8 控制台中降级不可编码字符，避免生产版输出异常。"""
+        if not isinstance(text, str):
+            text = str(text)
+
+        replacements = {
+            "✅": "[OK]",
+            "❌": "[ERR]",
+            "⚠️": "[WARN]",
+            "⚠": "[WARN]",
+            "ℹ️": "[INFO]",
+            "ℹ": "[INFO]",
+            "⏭️": "[SKIP]",
+            "⏭": "[SKIP]",
+            "🚀": "[RUN]",
+            "🔧": "[CFG]",
+            "📊": "[STAT]",
+            "👋": "[BYE]",
+            "📦": "[DEPLOY]",
+            "🧠": "[MEM]",
+            "↩️": "[BACK]",
+            "↩": "[BACK]",
+            "📝": "[EDIT]",
+            "👁️": "[VIEW]",
+            "👁": "[VIEW]",
+            "🗑️": "[DEL]",
+            "🗑": "[DEL]",
+            "🔍": "[CHK]",
+            "✨": "[NEW]",
+            "🧩": "[PLUGIN]",
+            "🚨": "[ATTN]",
+            "📥": "[DL]",
+            "📁": "[DIR]",
+            "🔐": "[KEY]",
+        }
+
+        normalized = text
+        for src, dst in replacements.items():
+            normalized = normalized.replace(src, dst)
+
+        encoding = self._get_console_encoding()
+        try:
+            normalized.encode(encoding)
+            return normalized
+        except UnicodeEncodeError:
+            return normalized.encode(encoding, errors="replace").decode(encoding)
+
+    def _safe_symbol(self, key: str) -> str:
+        return self._sanitize_console_text(self.symbols.get(key, ""))
+
+    def _safe_print(self, text: str, style: str):
+        self.console.print(self._sanitize_console_text(text), style=style)
 
     def clear_screen(self):
         """清屏"""
@@ -119,24 +177,24 @@ class UI:
 
     def print_success(self, message: str):
         logger.info(f"输出成功信息: {message}")
-        self.console.print(f"{self.symbols['success']} {message}", style=self.colors["success"])
+        self._safe_print(f"{self._safe_symbol('success')} {message}", self.colors["success"])
     
     def print_error(self, message: str):
         logger.error(f"输出错误信息: {message}")
-        self.console.print(f"{self.symbols['error']} {message}", style=self.colors["error"])
+        self._safe_print(f"{self._safe_symbol('error')} {message}", self.colors["error"])
     
     def print_warning(self, message: str):
         # 仅在日志中记录完整警告信息，控制台输出保持简洁
         logger.warning(f"警告: {message}")
-        self.console.print(f"{self.symbols['warning']} {message}", style=self.colors["warning"])
+        self._safe_print(f"{self._safe_symbol('warning')} {message}", self.colors["warning"])
     
     def print_info(self, message: str):
         logger.info(f"输出提示信息: {message}")
-        self.console.print(f"{self.symbols['info']} {message}", style=self.colors["info"])
+        self._safe_print(f"{self._safe_symbol('info')} {message}", self.colors["info"])
 
     def print_attention(self, message: str):
         logger.warning(f"输出注意信息: {message}")
-        self.console.print(f"{self.symbols['attention']} {message}", style=self.colors["attention"])
+        self._safe_print(f"{self._safe_symbol('attention')} {message}", self.colors["attention"])
     
     def get_input(self, prompt_text: str, default: str = "") -> str:
         logger.info(f"请求用户输入: {prompt_text}", default=default)

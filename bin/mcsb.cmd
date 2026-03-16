@@ -10,21 +10,21 @@ if /i "%1"=="--version" goto j_version
 set "CUR_DIR=%~dp0"
 for %%I in ("%CUR_DIR%..") do set "PARENT_DIR=%%~fI"
 
-if not exist "%PARENT_DIR%\MaiCoreStart-v4.2.1-beta.exe" (
-    echo Error: Cannot find MaiCoreStart-v4.2.1-beta.exe
-    echo Expected path: %PARENT_DIR%\MaiCoreStart-v4.2.1-beta.exe
+if not exist "%PARENT_DIR%\MaiCoreStart-v5.0.0-beta.exe" (
+    echo Error: Cannot find MaiCoreStart-v5.0.0-beta.exe
+    echo Expected path: %PARENT_DIR%\MaiCoreStart-v5.0.0-beta.exe
     pause
     exit /b 1
 )
 
 cd /d "%PARENT_DIR%"
-echo Starting MaiCoreStart-v4.2.1-beta.exe...
-start "" "%PARENT_DIR%\MaiCoreStart-v4.2.1-beta.exe"
+echo Starting MaiCoreStart-v5.0.0-beta.exe...
+"%PARENT_DIR%\MaiCoreStart-v5.0.0-beta.exe"
 
 if %errorlevel% equ 0 (
-    echo Started successfully!
+    echo Program exited successfully!
 ) else (
-    echo Failed to start, error code: %errorlevel%
+    echo Program exited with error code: %errorlevel%
     pause
 )
 
@@ -33,7 +33,7 @@ goto :eof
 :show_version
 echo.
 echo ========================================
-echo           MaiCoreStart v4.2.1-beta
+echo           MaiCoreStart v5.0.0-beta
 echo ========================================
 echo.
 echo "程序简介："
@@ -42,7 +42,7 @@ echo "  集成了多种组件管理和部署功能，支持多种开发环境。
 echo "  自动化安装、配置和管理各种开发工具。"
 echo.
 echo "版本信息："
-echo "  版本号: v4.2.0-beta"
+echo "  版本号: v5.0.0-beta"
 echo "  构建时间: 2025-12-13"
 echo "  开发者: xiaoCZX、一闪、Lui"
 echo.
@@ -57,5 +57,5 @@ echo ========================================
 echo.
 
 :j_version
-echo MaiCoreStart version v4.2.1-beta
+echo MaiCoreStart version v5.0.0-beta
 goto :eof

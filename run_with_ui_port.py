@@ -4,10 +4,6 @@ import subprocess
 import threading
 import time
 import webbrowser
-import json
-import os
-import subprocess
-import ctypes
 import sys
 
 
@@ -22,25 +18,36 @@ else:
 
 # 启动后端服务的函数
 def start_backend():
-    # 确定虚拟环境中的uvicorn路径
+    # 确定虚拟环境中的 Python 和 uvicorn 路径
     venv_path = os.path.join(os.path.dirname(__file__), 'venv')
+    
     if sys.platform == "win32":
-        uvicorn_executable = os.path.join(venv_path, 'Scripts', 'uvicorn.exe')
+        python_executable = os.path.join(venv_path, 'Scripts', 'python.exe')
+        uvicorn_module = os.path.join(venv_path, 'Scripts', 'uvicorn.exe')
     else:
-        uvicorn_executable = os.path.join(venv_path, 'bin', 'uvicorn')
+        python_executable = os.path.join(venv_path, 'bin', 'python')
+        uvicorn_module = os.path.join(venv_path, 'bin', 'uvicorn')
 
-    if os.path.exists(uvicorn_executable):
-        # 使用虚拟环境中的uvicorn
-        cmd = f'"{uvicorn_executable}" src.config_UI.config_UI:app --reload --port {port}'
-        print(f"[INFO] 在虚拟环境中启动: {cmd}")
+    # 获取项目根目录作为工作目录
+    base_dir = os.path.dirname(__file__)
+    
+    if os.path.exists(python_executable):
+        # 方式1: 直接使用虚拟环境中的 python -m uvicorn (推荐)
+        cmd = [python_executable, '-m', 'uvicorn', 'src.config_UI.config_UI:app', '--reload', '--port', str(port)]
+        print(f"[INFO] 使用虚拟环境 Python 启动: {' '.join(cmd)}")
+        subprocess.run(cmd, cwd=base_dir)
+    elif os.path.exists(uvicorn_module):
+        # 方式2: 使用虚拟环境中的 uvicorn.exe
+        cmd = [uvicorn_module, 'src.config_UI.config_UI:app', '--reload', '--port', str(port)]
+        print(f"[INFO] 使用 uvicorn.exe 启动: {' '.join(cmd)}")
+        subprocess.run(cmd, cwd=base_dir)
     else:
-        # 回退到全局uvicorn，并发出警告
-        print("[WARNING] 未找到项目虚拟环境中的uvicorn，将尝试使用全局uvicorn。")
+        # 回退到全局 uvicorn
+        print("[WARNING] 未找到项目虚拟环境中的 uvicorn，将尝试使用全局 uvicorn。")
         print("[WARNING] 如果后端闪退，请确保已在全局环境中安装了 'uvicorn' 和 'fastapi'。")
-        cmd = f"uvicorn src.config_UI.config_UI:app --reload --port {port}"
-        print(f"[INFO] 启动命令: {cmd}")
-        
-    subprocess.run(cmd, shell=True)
+        cmd = ['uvicorn', 'src.config_UI.config_UI:app', '--reload', '--port', str(port)]
+        print(f"[INFO] 启动命令: {' '.join(cmd)}")
+        subprocess.run(cmd, cwd=base_dir)
 
 # 启动前端页面的函数
 def open_frontend():

@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 
 class MaiMaiLauncher:
     """MCStart主程序类"""
-    
+
     def __init__(self):
         self.running = True
         self._keep_processes_on_exit = False
@@ -39,9 +39,92 @@ class MaiMaiLauncher:
         self.tray_manager.apply_console_icon()
         self._tray_restore_event = threading.Event()
         self._tray_exit_event = threading.Event()
+        self.webui_process = None  # WebUI后端进程引用（仅用于检查）
         setup_console()
         logger.info("MCStart已启动")
-    
+
+        # 初始化WebUI管理器
+        from src.utils.webui_manager import WebUIManager
+        self.webui_manager = WebUIManager(Path(__file__).parent)
+
+        # 启动WebUI后端服务器
+        self._start_webui_server()
+
+    def _start_webui_server(self):
+        """启动WebUI后端服务器（使用WebUIManager）"""
+        try:
+            import webbrowser
+            import time
+
+            # 获取WebUI配置
+            webui_port = p_config_manager.get("webui.port", 10086)
+            webui_url = f"http://localhost:{webui_port}"
+
+            # 检查是否已在运行
+            if self.webui_manager.is_running(webui_port):
+                ui.print_info(f"检测到WebUI服务已在运行: {webui_url}")
+                logger.info("WebUI服务已在运行，跳过启动")
+
+                # 尝试打开浏览器
+                try:
+                    webbrowser.open(webui_url)
+                except Exception as e:
+                    logger.warning(f"打开浏览器失败: {e}")
+                return
+
+            # 启动WebUI守护进程
+            ui.print_info("正在启动WebUI服务...")
+            if not self.webui_manager.start(webui_port):
+                ui.print_warning("WebUI服务启动失败")
+                logger.error("WebUI服务启动失败")
+                return
+
+            # 等待服务器启动并进行健康检查
+            ui.print_info("等待WebUI服务就绪...")
+            max_retries = 15
+            for i in range(max_retries):
+                time.sleep(1)
+                if self.webui_manager.is_running(webui_port):
+                    ui.print_success(f"WebUI服务已就绪: {webui_url}")
+                    logger.info(f"WebUI服务健康检查通过 (耗时: {i+1}秒)")
+
+                    # 自动打开浏览器
+                    try:
+                        webbrowser.open(webui_url)
+                        logger.info(f"已自动打开浏览器: {webui_url}")
+                    except Exception as e:
+                        logger.warning(f"自动打开浏览器失败: {e}")
+                        ui.print_info(f"请手动访问: {webui_url}")
+                    return
+
+            # 超时未启动成功
+            ui.print_warning(f"WebUI服务启动超时，请稍后手动访问: {webui_url}")
+            logger.warning("WebUI服务健康检查超时")
+
+        except Exception as e:
+            logger.error(f"启动WebUI后端服务器失败: {e}")
+            ui.print_warning(f"WebUI服务启动失败: {e}")
+
+    def _stop_webui_server(self):
+        """停止WebUI后端服务器（使用WebUIManager）"""
+        # 守护进程模式：WebUI独立运行，有自己的托盘图标
+        # 主进程退出时根据配置决定是否关闭WebUI服务
+
+        webui_auto_close = p_config_manager.get("webui.auto_close_with_launcher", False)
+
+        if webui_auto_close:
+            ui.print_info("正在关闭WebUI服务...")
+            if self.webui_manager.stop():
+                ui.print_success("WebUI服务已关闭")
+                logger.info("WebUI服务已关闭")
+            else:
+                ui.print_warning("WebUI服务关闭失败，可能需要手动关闭")
+                logger.warning("WebUI服务关闭失败")
+        else:
+            # 不自动关闭，提示用户
+            ui.print_info("WebUI服务将继续在后台运行，可通过托盘图标管理")
+            logger.info("WebUI守护进程继续运行")
+
     def handle_launch_mai(self):
         """处理启动实例的菜单"""
         try:
@@ -306,23 +389,21 @@ class MaiMaiLauncher:
         ui.console.print("麦麦核心启动器控制台 MaiCore Start", style=ui.colors["primary"])
         ui.console.print("=================================")
         
-        ui.console.print("版本：V4.2.0-beta", style=ui.colors["info"])
+        ui.console.print("版本：V5.0.0-beta", style=ui.colors["info"])
         ui.console.print("新增亮点：", style=ui.colors["success"])
-        ui.console.print("  • 模块化部署逻辑", style="white")
-        ui.console.print("  • 精确的资源监控器", style="white")
-        ui.console.print("  • 丰富的可自定义UI界面（rich）", style="white")
-        ui.console.print("  • 改进的错误处理", style="white")
-        ui.console.print("  • 实例多开端口自动分配", style="white")
-        ui.console.print("  • 代理功能", style="white")
-        ui.console.print("  • 插件功能", style="white")
-        
+        ui.console.print("  • WebUI", style="white")
+        ui.console.print("  • Neo-MoFox支持", style="white")
+        ui.console.print("  • 桌宠功能", style="white")
+        ui.console.print("  • WebShell", style="white")
+        ui.console.print("  • 日志解析器", style="white")
+
         ui.console.print("\n技术栈：", style=ui.colors["info"])
-        ui.console.print("  • Python 3.12.8", style="white")
-        ui.console.print("  • structlog - 结构化日志", style="white")
-        ui.console.print("  • rich - 终端UI", style="white")
-        ui.console.print("  • toml - 配置管理", style="white")        
+        ui.console.print("  • Python", style="white")
+        ui.console.print("  • FastAPI", style="white")
+        ui.console.print("  • uvicorn", style="white")
+        ui.console.print("  • pydantic 等...", style="white")        
         
-        ui.console.print("\n开源许可：Apache License 2.0", style=ui.colors["secondary"])
+        ui.console.print("\n开源许可： GNU Affero General Public License v3.0", style=ui.colors["secondary"])
         ui.console.print("GitHub：https://github.com/MaiCore-Start/MaiCore-Start", style="#46AEF8")
         ui.console.print("你喜欢的话，请给个Star支持一下哦~", style="white")
         ui.console.print("欢迎加入我们的社区！（我们的QQ群聊：1025509724）", style="white")
@@ -340,8 +421,8 @@ class MaiMaiLauncher:
         """处理杂项菜单"""
         while True:
             ui.show_misc_menu()
-            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "Q"])
-            
+            choice = ui.get_choice("请选择操作", ["A", "B", "C", "D", "E", "F", "Q"])
+
             if choice == "Q":
                 break
             elif choice == "A":
@@ -352,6 +433,10 @@ class MaiMaiLauncher:
                 self.handle_component_download()
             elif choice == "D":
                 self.handle_instance_statistics()
+            elif choice == "E":
+                self.handle_show_webui_token()
+            elif choice == "F":
+                self.handle_restart_webui()
 
     def handle_program_settings(self):
         """处理程序设置"""
@@ -791,6 +876,162 @@ class MaiMaiLauncher:
             logger.error("实例运行数据查看异常", error=str(e))
             ui.pause()
     
+    def handle_show_webui_token(self):
+        """处理查看WebUI Token"""
+        import re
+        
+        ui.clear_screen()
+        ui.console.print("[🔐 WebUI Token查看]", style=ui.colors["secondary"])
+        ui.console.print("==================")
+        
+        # 获取Token
+        from src.core.p_config import p_config_manager
+        token = p_config_manager.get("webui.webui_token", "")
+        webui_host = p_config_manager.get("webui.host", "0.0.0.0")
+        webui_port = p_config_manager.get("webui.port", 10086)
+        
+        # Token验证函数
+        def validate_token(token_str: str) -> tuple[bool, str]:
+            """验证Token是否符合安全要求"""
+            if len(token_str) < 16:
+                return False, "Token长度必须至少16位"
+            if not re.search(r"[A-Z]", token_str):
+                return False, "Token必须包含至少一个大写英文字母"
+            if not re.search(r"[a-z]", token_str):
+                return False, "Token必须包含至少一个小写英文字母"
+            if not re.search(r"\d", token_str):
+                return False, "Token必须包含至少一个数字"
+            if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\x5c|,.<>/?]", token_str):
+                return False, "Token必须包含至少一个特殊字符 (!@#$%^&*...)"
+            return True, "Token验证通过"
+        
+        # 生成符合安全要求的随机Token
+        def generate_secure_token(length: int = 24) -> str:
+            import secrets
+            import string
+            alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+            while True:
+                new_token = ''.join(secrets.choice(alphabet) for _ in range(length))
+                is_valid, _ = validate_token(new_token)
+                if is_valid:
+                    return new_token
+        
+        if not token:
+            # 如果没有token，自动生成一个符合要求的
+            token = generate_secure_token()
+            p_config_manager.set("webui.webui_token", token)
+            p_config_manager.save()
+            ui.console.print("已自动生成符合安全要求的Token", style=ui.colors["success"])
+        
+        ui.console.print(f"\nWebUI访问地址: http://localhost:{webui_port}", style=ui.colors["info"])
+        ui.console.print(f"\n[bold]当前Token:[/bold] {token}", style=ui.colors["primary"])
+        
+        # 显示Token安全状态
+        is_valid, msg = validate_token(token)
+        if is_valid:
+            ui.console.print(f"Token状态: ✅ {msg}", style=ui.colors["success"])
+        else:
+            ui.console.print(f"Token状态: ❌ {msg}", style=ui.colors["error"])
+        
+        ui.console.print("\n请妥善保管此Token，登录时需要输入", style=ui.colors["warning"])
+        
+        # 操作选择
+        ui.console.print("\n====== 操作 ======")
+        ui.console.print(" [A] 设置自定义Token", style=ui.colors["success"])
+        ui.console.print(" [B] 重新生成随机Token", style=ui.colors["warning"])
+        ui.console.print(" [Q] 返回上级菜单", style=ui.colors["exit"])
+        
+        choice = ui.get_choice("请选择操作", ["A", "B", "Q"])
+        
+        if choice == "A":
+            # 设置自定义Token
+            while True:
+                custom_token = ui.get_input("请输入自定义Token（至少16位，包含大写、小写、数字和特殊字符）: ")
+                if not custom_token:
+                    ui.print_warning("Token不能为空")
+                    continue
+                
+                is_valid, msg = validate_token(custom_token)
+                if is_valid:
+                    p_config_manager.set("webui.webui_token", custom_token)
+                    p_config_manager.save()
+                    ui.console.print(f"\n✅ 自定义Token设置成功！", style=ui.colors["success"])
+                    ui.console.print(f"新Token: {custom_token}", style=ui.colors["primary"])
+                    break
+                else:
+                    ui.console.print(f"❌ Token不符合要求: {msg}", style=ui.colors["error"])
+                    if not ui.confirm("是否重新输入？"):
+                        break
+                        
+        elif choice == "B":
+            # 重新生成随机Token
+            if ui.confirm("确定要重新生成Token吗？之前的Token将失效！"):
+                new_token = generate_secure_token()
+                p_config_manager.set("webui.webui_token", new_token)
+                p_config_manager.save()
+                ui.console.print(f"\n✅ 新Token已生成！", style=ui.colors["success"])
+                ui.console.print(f"新Token: {new_token}", style=ui.colors["primary"])
+        
+        ui.pause()
+
+    def handle_restart_webui(self):
+        """处理重启WebUI服务器"""
+        ui.clear_screen()
+        ui.console.print("[🔄 重启WebUI服务器]", style=ui.colors["secondary"])
+        ui.console.print("==================")
+
+        # 获取当前WebUI状态
+        webui_port = p_config_manager.get("webui.port", 10086)
+        status = self.webui_manager.get_status(webui_port)
+
+        if status["running"]:
+            ui.console.print(f"当前WebUI服务状态: 运行中", style=ui.colors["success"])
+            ui.console.print(f"PID: {status.get('pid', 'N/A')}", style=ui.colors["info"])
+            ui.console.print(f"端口: {status['port']}", style=ui.colors["info"])
+            ui.console.print(f"访问地址: {status['url']}", style=ui.colors["info"])
+        else:
+            ui.console.print(f"当前WebUI服务状态: 未运行", style=ui.colors["warning"])
+
+        ui.console.print()
+
+        if not ui.confirm("确定要重启WebUI服务器吗？"):
+            ui.print_info("已取消重启操作")
+            ui.pause()
+            return
+
+        ui.print_info("正在重启WebUI服务器...")
+        logger.info("用户请求重启WebUI服务器")
+
+        # 执行重启
+        if self.webui_manager.restart(webui_port):
+            ui.print_success("WebUI服务器重启成功！")
+            logger.info("WebUI服务器重启成功")
+
+            # 等待服务就绪
+            import time
+            ui.print_info("等待服务就绪...")
+            for i in range(10):
+                time.sleep(1)
+                if self.webui_manager.is_running(webui_port):
+                    ui.print_success(f"WebUI服务已就绪: {status['url']}")
+
+                    # 询问是否打开浏览器
+                    if ui.confirm("是否在浏览器中打开WebUI？"):
+                        import webbrowser
+                        try:
+                            webbrowser.open(status['url'])
+                            ui.print_success("已在浏览器中打开WebUI")
+                        except Exception as e:
+                            ui.print_warning(f"打开浏览器失败: {e}")
+                    break
+            else:
+                ui.print_warning("WebUI服务启动超时，请稍后手动检查")
+        else:
+            ui.print_error("WebUI服务器重启失败！")
+            logger.error("WebUI服务器重启失败")
+
+        ui.pause()
+
     def _validate_maibot_instance(self, instance_path: str) -> bool:
         """验证是否为有效的MaiBot实例"""
         try:
@@ -1169,6 +1410,8 @@ class MaiMaiLauncher:
             logger.error("程序运行异常", error=str(e))
         finally:
             self.tray_manager.stop()
+            # 停止WebUI后端服务器
+            self._stop_webui_server()
             # 除非明确指示，否则停止所有进程
             if not self._keep_processes_on_exit:
                 launcher.stop_all_processes()

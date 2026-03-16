@@ -34,107 +34,94 @@ class SQLiteStudioDownloader(BaseDownloader):
     def get_download_url(self) -> str:
         """获取SQLiteStudio下载链接"""
         # SQLiteStudio是跨平台的，通常提供zip包
-        version = "3.4.4"
-        
+        version = "3.4.21"
+
         # 统一使用正确的GitHub用户名
         github_user = "pawelsalawa"
-        
+
         if self.system == 'windows':
-            return f"https://github.com/{github_user}/sqlitestudio/releases/download/{version}/SQLiteStudio-{version}-Windows.zip"
+            # 使用小写的zip包名
+            return f"https://github.com/{github_user}/sqlitestudio/releases/download/{version}/sqlitestudio-{version}-windows-x64.zip"
         elif self.system == 'darwin':  # macOS
-            return f"https://github.com/{github_user}/sqlitestudio/releases/download/{version}/SQLiteStudio-{version}.dmg"
+            return f"https://github.com/{github_user}/sqlitestudio/releases/download/{version}/sqlitestudio-{version}-osx.dmg"
         else:  # Linux
-            return f"https://github.com/{github_user}/sqlitestudio/releases/download/{version}/SQLiteStudio-{version}.tar.gz"
-    
+            return f"https://github.com/{github_user}/sqlitestudio/releases/download/{version}/sqlitestudio-{version}-linux-x64.tar.xz"
+
     def get_filename(self) -> str:
         """获取下载文件名"""
-        version = "3.4.4"
-        
+        version = "3.4.21"
+
         if self.system == 'windows':
-            return f"SQLiteStudio-{version}-Windows.zip"
+            return f"sqlitestudio-{version}-windows-x64.zip"
         elif self.system == 'darwin':
-            return f"SQLiteStudio-{version}.dmg"
+            return f"sqlitestudio-{version}-osx.dmg"
         else:
-            return f"SQLiteStudio-{version}.tar.gz"
+            return f"sqlitestudio-{version}-linux-x64.tar.xz"
     
-    def download_and_install(self, temp_dir: Path) -> bool:
-        """下载并安装SQLiteStudio"""
+    def download_and_install(self, temp_dir: Path, auto_select_latest: bool = False, task_id: str | None = None, progress_cb=None, non_interactive: bool = False, is_canceled_callback=None, install_path: str | None = None) -> bool:
+        """下载并安装SQLiteStudio（非交互，默认指定版本）
+        is_canceled_callback: 可选回调，返回 True 表示任务已取消
+        install_path: 用户指定的安装目录
+        """
         try:
-            # 获取下载链接和文件名
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("下载已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
+            # 获取下载链接和文件名（固定最新/指定版本）
             download_url = self.get_download_url()
             filename = self.get_filename()
             file_path = temp_dir / filename
-            
+
             ui.print_info(f"正在下载 {self.name}...")
-            
+            if progress_cb:
+                progress_cb({"phase": "preparing", "status": "running", "percent": 5, "filename": filename})
+
             # 下载文件
-            if not self.download_file(download_url, str(file_path)):
+            if not self.download_file(download_url, str(file_path), progress_callback=progress_cb, is_canceled_callback=is_canceled_callback):
+                if progress_cb:
+                    progress_cb({"status": "failed", "phase": "failed", "message": "下载失败"})
                 return False
-            
-            ui.print_info(f"正在安装 {self.name}...")
-            
-            # 根据系统执行安装
-            if self.system == 'windows':
-                # Windows - 解压zip包
-                extract_dir = temp_dir / "SQLiteStudio_extract"
-                if self.extract_archive(str(file_path), str(extract_dir)):
-                    ui.print_info("SQLiteStudio已解压到临时目录")
-                    ui.print_info(f"解压位置: {extract_dir}")
-                    ui.print_info("请手动将SQLiteStudio复制到您希望的位置")
-                    
-                    # 查找可执行文件
-                    exe_files = list(extract_dir.glob("*.exe"))
-                    if exe_files:
-                        ui.print_info(f"找到可执行文件: {exe_files[0]}")
-                        if ui.confirm("是否创建桌面快捷方式？"):
-                            self._create_desktop_shortcut(exe_files[0])
-                    
-                    return True
-                else:
-                    return False
-            
-            elif self.system == 'darwin':
-                # macOS - 提示用户手动安装
-                ui.print_info("SQLiteStudio for macOS 需要手动安装")
-                ui.print_info(f"请打开下载的文件: {file_path}")
-                if ui.confirm("是否打开SQLiteStudio安装包？"):
-                    try:
-                        import os
-                        os.system(f"open '{file_path}'")
-                        ui.print_info("已尝试打开安装包，请按照提示完成安装")
-                        return True
-                    except Exception as e:
-                        ui.print_error(f"打开安装包失败: {str(e)}")
-                        return False
-                return True
-            
+
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("安装已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
+            if progress_cb:
+                progress_cb({"phase": "installing", "status": "running", "percent": 80, "filename": filename, "message": "解压中"})
+
+            ui.print_info(f"正在解压 {self.name}...")
+
+            # 确定解压目标目录
+            if install_path:
+                extract_dir = Path(install_path)
+                extract_dir.mkdir(parents=True, exist_ok=True)
             else:
-                # Linux - 解压并提供安装说明
                 extract_dir = temp_dir / "SQLiteStudio_extract"
-                if self.extract_archive(str(file_path), str(extract_dir)):
-                    ui.print_info("SQLiteStudio已解压到临时目录")
-                    ui.print_info(f"解压位置: {extract_dir}")
-                    ui.print_info("请手动将SQLiteStudio复制到您希望的位置")
-                    ui.print_info("例如: sudo cp -r {extract_dir} /opt/SQLiteStudio")
-                    
-                    # 查找可执行文件
-                    if self.arch == 'x86_64':
-                        exe_files = list(extract_dir.glob("SQLiteStudio"))
-                    else:
-                        exe_files = list(extract_dir.glob("SQLiteStudio*"))
-                    
-                    if exe_files:
-                        ui.print_info(f"找到可执行文件: {exe_files[0]}")
-                        if ui.confirm("是否创建桌面快捷方式？"):
-                            self._create_desktop_shortcut(exe_files[0])
-                    
-                    return True
-                else:
-                    return False
-            
+
+            # 解压文件
+            if self.extract_archive(str(file_path), str(extract_dir)):
+                ui.print_success(f"SQLiteStudio已解压到: {extract_dir}")
+                if progress_cb:
+                    progress_cb({"status": "done", "phase": "done", "percent": 100, "filename": filename, "message": f"已解压到 {extract_dir}"})
+                return True
+            else:
+                ui.print_error("解压失败")
+                if progress_cb:
+                    progress_cb({"status": "failed", "phase": "failed", "percent": 90, "filename": filename, "message": "解压失败"})
+                return False
+
         except Exception as e:
             ui.print_error(f"下载 {self.name} 时发生错误：{str(e)}")
             logger.error("SQLiteStudio下载安装失败", error=str(e))
+            if progress_cb:
+                progress_cb({"status": "failed", "phase": "failed", "message": str(e)})
             return False
     
     def _create_desktop_shortcut(self, exe_path: Path):

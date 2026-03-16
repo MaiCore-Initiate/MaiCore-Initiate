@@ -72,81 +72,125 @@ class WebUIDownloader(BaseDownloader):
             except ValueError:
                 ui.print_error("请输入有效数字")
     
-    def download_and_install(self, temp_dir: Path) -> bool:
-        """下载并安装WebUI"""
+    def download_and_install(self, temp_dir: Path, auto_select_latest: bool = False, task_id: str | None = None, progress_cb=None, non_interactive: bool = False, is_canceled_callback=None) -> bool:
+        """下载并安装WebUI
+        auto_select_latest/non_interactive: 非交互模式（WebUI使用），自动选 main 分支
+        is_canceled_callback: 可选回调，返回 True 表示任务已取消
+        """
         try:
-            # 选择分支
-            branch = self.select_branch()
-            if not branch:
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("下载已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
                 return False
-            
+
+            # 选择分支
+            if non_interactive or auto_select_latest:
+                branch = "main"  # 非交互模式默认 main 分支
+                if progress_cb:
+                    progress_cb({"phase": "preparing", "status": "running", "percent": 5, "message": "准备中"})
+            else:
+                branch = self.select_branch()
+                if not branch:
+                    return False
+
             ui.print_info(f"正在下载WebUI {branch}分支...")
-            
+
             # 下载文件
             download_url = self.get_download_url(branch)
             archive_path = temp_dir / f"webui_{branch}.zip"
-            
-            if not self.download_file(download_url, str(archive_path)):
+
+            if progress_cb:
+                progress_cb({"phase": "downloading", "status": "running", "percent": 10, "filename": f"webui_{branch}.zip"})
+
+            if not self.download_file(download_url, str(archive_path), progress_callback=progress_cb, is_canceled_callback=is_canceled_callback):
                 ui.print_error("WebUI下载失败")
+                if progress_cb:
+                    progress_cb({"status": "failed", "phase": "failed", "message": "下载失败"})
                 return False
-            
+
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("安装已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
             # 解压文件
             extract_dir = temp_dir / f"webui_extract_{branch}"
             extract_dir.mkdir(exist_ok=True)
-            
+
             ui.print_info("正在解压WebUI...")
+            if progress_cb:
+                progress_cb({"phase": "installing", "status": "running", "percent": 80, "message": "解压中"})
+
             with zipfile.ZipFile(archive_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
-            
+
             # 查找解压后的目录
             extracted_dirs = [
-                d for d in extract_dir.iterdir() 
+                d for d in extract_dir.iterdir()
                 if d.is_dir() and "MaiBot-Dashboard" in d.name
             ]
-            
+
             if not extracted_dirs:
                 ui.print_error("解压后未找到WebUI目录")
+                if progress_cb:
+                    progress_cb({"status": "failed", "phase": "failed", "message": "解压失败"})
                 return False
-            
+
             source_dir = extracted_dirs[0]
-            
+
             # 选择安装目录
-            ui.console.print("\n[📁 选择安装目录]", style=ui.colors["primary"])
             default_dir = Path.cwd() / "webui_components" / f"MaiBot-Dashboard-{branch}"
-            ui.print_info(f"默认安装目录: {default_dir}")
-            
-            install_dir_input = ui.get_input("请输入安装目录（回车使用默认）: ").strip()
-            install_dir = Path(install_dir_input) if install_dir_input else default_dir
-            
+            if non_interactive:
+                install_dir = default_dir
+            else:
+                ui.console.print("\n[📁 选择安装目录]", style=ui.colors["primary"])
+                ui.print_info(f"默认安装目录: {default_dir}")
+                install_dir_input = ui.get_input("请输入安装目录（回车使用默认）: ").strip()
+                install_dir = Path(install_dir_input) if install_dir_input else default_dir
+
             # 创建安装目录
             if install_dir.exists():
-                if ui.confirm(f"目录已存在，是否覆盖？{install_dir}"):
+                if non_interactive or ui.confirm(f"目录已存在，是否覆盖？{install_dir}"):
                     shutil.rmtree(install_dir)
                 else:
                     ui.print_info("已取消安装")
+                    if progress_cb:
+                        progress_cb({"status": "canceled", "phase": "canceled", "message": "用户取消"})
                     return False
-            
+
             install_dir.parent.mkdir(parents=True, exist_ok=True)
-            
+
             # 复制文件
             ui.print_info("正在安装WebUI文件...")
+            if progress_cb:
+                progress_cb({"phase": "installing", "status": "running", "percent": 90, "message": "安装中"})
+
             shutil.copytree(source_dir, install_dir)
-            
+
             ui.print_success(f"✅ WebUI安装完成")
             ui.console.print(f"安装路径: {install_dir}", style=ui.colors["info"])
-            
+
             # 安装依赖
             if self._install_dependencies(install_dir):
                 ui.print_success("✅ WebUI依赖安装完成")
             else:
                 ui.print_warning("⚠️ WebUI依赖安装失败，但文件已安装")
                 ui.print_info("可以稍后手动在WebUI目录中执行: npm install bun && bun install")
-            
+
+            if progress_cb:
+                progress_cb({"status": "done", "phase": "done", "percent": 100, "message": "完成"})
+
             return True
-            
+
         except Exception as e:
             ui.print_error(f"WebUI安装失败: {str(e)}")
             logger.error("WebUI安装失败", error=str(e))
+            if progress_cb:
+                progress_cb({"status": "failed", "phase": "failed", "message": str(e)})
             return False
     
     def _install_dependencies(self, webui_dir: Path) -> bool:

@@ -52,38 +52,63 @@ class NodeJSDownloader(BaseDownloader):
         else:
             return f"nodejs-v20.11.0-{self.arch}.tar.gz"
     
-    def download_and_install(self, temp_dir: Path) -> bool:
-        """下载并安装Node.js"""
+    def download_and_install(self, temp_dir: Path, auto_select_latest: bool = False, task_id: str | None = None, progress_cb=None, non_interactive: bool = False, is_canceled_callback=None) -> bool:
+        """下载并安装Node.js
+        auto_select_latest/non_interactive: 非交互模式（WebUI使用）
+        is_canceled_callback: 可选回调，返回 True 表示任务已取消
+        """
         try:
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("下载已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
             # 获取下载链接和文件名
             download_url = self.get_download_url()
             filename = self.get_filename()
             file_path = temp_dir / filename
-            
+
             ui.print_info(f"正在下载 {self.name}...")
-            
+            if progress_cb:
+                progress_cb({"phase": "preparing", "status": "running", "percent": 5, "filename": filename})
+
             # 下载文件
-            if not self.download_file(download_url, str(file_path)):
+            if not self.download_file(download_url, str(file_path), progress_callback=progress_cb, is_canceled_callback=is_canceled_callback):
+                if progress_cb:
+                    progress_cb({"status": "failed", "phase": "failed", "message": "下载失败"})
                 return False
-            
+
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("安装已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
             ui.print_info(f"正在安装 {self.name}...")
-            
+            if progress_cb:
+                progress_cb({"phase": "installing", "status": "running", "percent": 90, "filename": filename, "message": "安装中"})
+
             # 根据系统执行安装
             if self.system == 'windows':
-                # ✅ Windows系统 - 使用专门的方法
                 success = self._install_nodejs_windows(str(file_path))
             elif self.system == 'darwin':
-                # macOS系统使用PKG安装包
                 success = self.run_installer(str(file_path))
             else:
-                # Linux系统需要解压和编译安装
                 success = self._install_from_source(file_path, temp_dir)
-            
+
+            if success and progress_cb:
+                progress_cb({"status": "done", "phase": "done", "percent": 100, "filename": filename, "message": "完成"})
+
             return success
-            
+
         except Exception as e:
             ui.print_error(f"下载 {self.name} 时发生错误：{str(e)}")
             logger.error("Node.js下载安装失败", error=str(e))
+            if progress_cb:
+                progress_cb({"status": "failed", "phase": "failed", "message": str(e)})
             return False
     
     def _install_from_source(self, file_path: Path, temp_dir: Path) -> bool:

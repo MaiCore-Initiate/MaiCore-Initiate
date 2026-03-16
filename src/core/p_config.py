@@ -5,9 +5,11 @@
 import os
 import toml
 import structlog
+from copy import deepcopy
 from typing import Dict, Any, Optional
 
 logger = structlog.get_logger(__name__)
+MASKED_LLM_API_KEY = "***已配置***"
 
 class PConfig:
     """程序配置管理类"""
@@ -77,11 +79,27 @@ class PConfig:
             "selected_mirror": "",
             "timeout": 30,
             "depth": 1
+        },
+        "llm": {
+            "provider": "openai",
+            "api_key": "",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-4o-mini",
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "timeout": 30
+        },
+        "webui": {
+            "webui_token": "",
+            "token_max_attempts": 5,
+            "host": "0.0.0.0",
+            "port": 10086
         }
     }
 
     def __init__(self):
         self.config: Dict[str, Any] = {}
+        self._mtime: float = 0
         self.load()
 
     def load(self) -> Dict[str, Any]:
@@ -92,7 +110,8 @@ class PConfig:
                 self.config = self.DEFAULT_CONFIG.copy()
                 self.save()
                 return self.config
-            
+
+            self._mtime = os.path.getmtime(self.CONFIG_FILE)
             with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
                 self.config = toml.load(f)
                 logger.info("成功加载程序配置文件")
@@ -115,11 +134,22 @@ class PConfig:
             os.makedirs(os.path.dirname(self.CONFIG_FILE), exist_ok=True)
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
                 toml.dump(self.config, f)
+            self._mtime = os.path.getmtime(self.CONFIG_FILE)
             logger.info("程序配置文件保存成功")
             return True
         except Exception as e:
             logger.error("保存程序配置文件失败", error=str(e))
             return False
+
+    def reload_if_changed(self) -> bool:
+        """如果文件被外部修改则重新加载"""
+        try:
+            if os.path.exists(self.CONFIG_FILE) and os.path.getmtime(self.CONFIG_FILE) > self._mtime:
+                self.load()
+                return True
+        except Exception:
+            pass
+        return False
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置值，支持点分隔的嵌套键"""
@@ -154,6 +184,23 @@ class PConfig:
     def is_proxy_enabled(self) -> bool:
         """检查代理是否启用"""
         return self.get("network.proxy.enabled", False)
+
+    def get_llm_config(self) -> Dict[str, Any]:
+        """获取LLM配置"""
+        config = deepcopy(self.get("llm", self.DEFAULT_CONFIG["llm"]))
+        api_key = str(config.get("api_key", "") or "").strip()
+        if api_key == MASKED_LLM_API_KEY:
+            logger.warning("检测到被掩码的LLM API Key，占位值将按未配置处理")
+            api_key = ""
+        elif api_key and not api_key.isascii():
+            logger.warning("检测到包含非ASCII字符的LLM API Key，按未配置处理")
+            api_key = ""
+
+        config["api_key"] = api_key
+        config["provider"] = str(config.get("provider", "openai") or "openai").strip() or "openai"
+        config["base_url"] = str(config.get("base_url", self.DEFAULT_CONFIG["llm"]["base_url"]) or "").strip() or self.DEFAULT_CONFIG["llm"]["base_url"]
+        config["model"] = str(config.get("model", self.DEFAULT_CONFIG["llm"]["model"]) or "").strip() or self.DEFAULT_CONFIG["llm"]["model"]
+        return config
 
     def reset_to_default(self) -> bool:
         """将配置重置为默认值并保存"""

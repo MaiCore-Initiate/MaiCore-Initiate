@@ -23,8 +23,8 @@ class MaiBotDeployer(BaseDeployer):
     
     def __init__(self):
         super().__init__()
-        self.repo = "MaiM-with-u/MaiBot"
-        self.adapter_repo = "MaiM-with-u/MaiBot-Napcat-Adapter"
+        self.repo = "Mai-with-u/MaiBot"
+        self.adapter_repo = "Mai-with-u/MaiBot-Napcat-Adapter"
         self.version_manager = VersionManager(self.repo)
     
     def install_bot(self, deploy_config: Dict) -> Optional[str]:

@@ -112,76 +112,24 @@ class VSCODEDownloader(BaseDownloader):
                 "display_name": "VSCode 1.106.3 (推荐)",
                 "description": "稳定版本，适合大多数用户",
                 "download_url": "https://update.code.visualstudio.com/1.106.3/win32-x64/stable",
-                "asset_name": "VSCode-win32-x64-1.106.3.zip",
+                "asset_name": "VSCode-win32-x64-1.106.3.exe",
                 "version": "1.106.3"
             }
         ]
     
     def select_version(self) -> Optional[Dict]:
-        """选择VSCode版本"""
+        """选择VSCode版本（非交互，默认最新可用版本）"""
         try:
-            # 获取版本列表
             versions = self.get_vscode_versions()
-            
             if not versions:
                 ui.print_error("未找到可用的VSCode版本")
                 return None
-            
-            # 显示版本选择菜单
-            ui.clear_screen()
-            ui.components.show_title("选择VSCode版本", symbol="🔵")
-            
-            # 创建版本表格
-            from rich.table import Table
-            table = Table(
-                show_header=True,
-                header_style=ui.colors["table_header"],
-                title="[bold]VSCode 可用版本[/bold]",
-                title_style=ui.colors["primary"],
-                border_style=ui.colors["border"],
-                show_lines=True
-            )
-            table.add_column("选项", style="cyan", width=6, justify="center")
-            table.add_column("版本", style=ui.colors["primary"], width=25)
-            table.add_column("说明", style="green")
-            table.add_column("大小", style="yellow", width=10, justify="center")
-            
-            # 显示版本信息
-            for i, version in enumerate(versions, 1):
-                size_mb = f"{version.get('size', 0) / 1024 / 1024:.1f}MB" if version.get('size') else "未知"
-                table.add_row(
-                    f"[{i}]",
-                    version["display_name"],
-                    version["description"],
-                    size_mb
-                )
-            
-            ui.console.print(table)
-            ui.console.print("\n[Enter] 使用默认版本(第一个选项)  [Q] 跳过VSCode下载", style=ui.colors["info"])
-            ui.console.print("提示：推荐使用最新稳定版本", style=ui.colors["success"])
-            
-            while True:
-                choice = ui.get_input("请选择VSCode版本(直接回车使用默认版本)：").strip()
-                
-                # 如果用户直接按回车，使用默认版本(第一个选项)
-                if choice == "":
-                    ui.print_info("使用默认版本: " + versions[0]["display_name"])
-                    return versions[0]
-                
-                if choice.upper() == 'Q':
-                    return None
-                
-                try:
-                    choice_num = int(choice)
-                    if 1 <= choice_num <= len(versions):
-                        selected_version = versions[choice_num - 1]
-                        ui.print_info("已选择版本: " + selected_version["display_name"])
-                        return selected_version
-                    else:
-                        ui.print_error("无效选项，请重新选择")
-                except ValueError:
-                    ui.print_error("请输入有效的数字或直接回车使用默认版本")
-                    
+
+            # 直接选择第一个版本（最新稳定），避免交互阻塞
+            selected = versions[0]
+            ui.print_info("自动选择版本: " + selected["display_name"])
+            return selected
+
         except Exception as e:
             ui.print_error(f"选择VSCode版本时发生错误：{str(e)}")
             logger.error("VSCode版本选择失败", error=str(e))
@@ -207,62 +155,89 @@ class VSCODEDownloader(BaseDownloader):
         else:
             return "vscode-x64.tar.gz"
     
-    def download_and_install(self, temp_dir: Path) -> bool:
-        """下载并安装VSCode"""
+    def download_and_install(self, temp_dir: Path, auto_select_latest: bool = False, task_id: str | None = None, progress_cb=None, non_interactive: bool = False, is_canceled_callback=None) -> bool:
+        """下载并安装VSCode
+        auto_select_latest=True 时跳过交互，直接选择最新可用版本（用于 WebUI/API 非交互场景）
+        is_canceled_callback: 可选回调，返回 True 表示任务已取消
+        """
         try:
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("下载已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
             # 选择版本
-            selected_version = self.select_version()
+            if auto_select_latest:
+                versions = self.get_vscode_versions()
+                if not versions:
+                    ui.print_info("未找到可用版本，使用默认列表")
+                    versions = self._get_default_versions()
+                selected_version = versions[0] if versions else None
+            else:
+                selected_version = self.select_version()
+
             if not selected_version:
                 ui.print_info("已跳过VSCode下载")
+                if progress_cb:
+                    progress_cb({"status": "done", "phase": "skipped", "percent": 100, "message": "已跳过"})
                 return True
-            
+
             # 获取下载链接和文件名
             download_url = selected_version["download_url"]
             filename = selected_version.get("asset_name", self.get_filename())
             file_path = temp_dir / filename
-            
+
             ui.print_info(f"正在下载 {self.name} {selected_version['display_name']}...")
-            
+            if progress_cb:
+                progress_cb({"phase": "preparing", "status": "running", "percent": 5, "filename": filename})
+
             # 下载文件
-            if not self.download_file(download_url, str(file_path)):
+            if not self.download_file(download_url, str(file_path), progress_callback=progress_cb, is_canceled_callback=is_canceled_callback):
+                if progress_cb:
+                    progress_cb({"status": "failed", "phase": "failed", "message": "下载失败"})
                 return False
-            
+
+            # 检查是否已取消
+            if is_canceled_callback and is_canceled_callback():
+                ui.print_warning("安装已取消")
+                if progress_cb:
+                    progress_cb({"status": "canceled", "phase": "canceled", "message": "已取消"})
+                return False
+
+            if progress_cb:
+                progress_cb({"phase": "installing", "status": "running", "percent": 90, "filename": filename, "message": "安装中"})
+
             ui.print_info(f"正在安装 {self.name}...")
-            
+
             # 根据系统执行安装
             if self.system == 'windows':
-                # Windows系统
                 success = self.run_installer(str(file_path))
             elif self.system == 'darwin':
-                # macOS - 需要解压后安装
                 extract_dir = temp_dir / "vscode_extract"
                 if self.extract_archive(str(file_path), str(extract_dir)):
-                    # 查找.app文件
                     app_files = list(extract_dir.glob("*.app"))
-                    if app_files:
-                        ui.print_info("正在复制VSCode到应用程序文件夹...")
-                        # 这里可以添加复制到Applications的逻辑
-                        success = True
-                    else:
-                        ui.print_error("未找到VSCode应用程序文件")
-                        success = False
+                    success = True if app_files else False
                 else:
                     success = False
             else:
-                # Linux - 解压到指定位置
                 extract_dir = temp_dir / "vscode_extract"
                 if self.extract_archive(str(file_path), str(extract_dir)):
-                    ui.print_info("正在安装VSCode到系统...")
-                    # 这里可以添加安装到/usr/local的逻辑
                     success = True
                 else:
                     success = False
-            
+
+            if success and progress_cb:
+                progress_cb({"status": "done", "phase": "done", "percent": 100, "filename": filename, "message": "完成"})
+
             return success
-            
+
         except Exception as e:
             ui.print_error(f"下载 {self.name} 时发生错误：{str(e)}")
             logger.error("VSCode下载安装失败", error=str(e))
+            if progress_cb:
+                progress_cb({"status": "failed", "phase": "failed", "message": str(e)})
             return False
     
     def check_installation(self) -> tuple[bool, str]:

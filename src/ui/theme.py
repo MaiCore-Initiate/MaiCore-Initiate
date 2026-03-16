@@ -54,5 +54,6 @@ SYMBOLS = {
     "attention": "🚨",
     "download": "📥",
     "folder": "📁",
+    "key": "🔐",
     "refresh": ""
 }
