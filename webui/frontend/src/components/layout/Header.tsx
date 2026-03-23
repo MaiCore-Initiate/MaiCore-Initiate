@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Tab, Page } from '../../types'
+import type { AccountUser } from '../../lib/account-system'
+import { getAvatarFallback, ROLE_LABELS } from '../../lib/account-system'
 import {
   HomeIcon, InstancesIcon, ConfigIcon, KnowledgeIcon, DbMigrationIcon,
   PluginsIcon, DeployIcon, StatusIcon, LogsIcon, MiscIcon, SettingsIcon
@@ -24,6 +26,7 @@ interface HeaderProps {
   onReorderTabs: (from: number, to: number) => void
   onAddTab: () => void
   onLogout: () => void
+  currentUser: AccountUser
 }
 
 function CloseIcon({ className }: { className?: string }) {
@@ -53,7 +56,7 @@ function ScrollArrow({ direction, onClick }: { direction: 'left' | 'right'; onCl
   )
 }
 
-export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onCloseOtherTabs, onCloseRightTabs, onReorderTabs, onAddTab, onLogout }: HeaderProps) {
+export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onCloseOtherTabs, onCloseRightTabs, onReorderTabs, onAddTab, onLogout, currentUser }: HeaderProps) {
   const [closingId, setClosingId] = useState<string | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -138,6 +141,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
   }
 
   const atLimit = tabs.length >= MAX_TABS
+  const avatarFallback = getAvatarFallback(currentUser.name, currentUser.email)
 
   return (
     <header className="h-[87px] flex items-center px-[8px] shrink-0 gap-[10px]" style={{ borderBottom: '1px solid var(--mc-divider)' }}>
@@ -251,20 +255,56 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
         </div>
       </div>
 
-      {/* 退出按钮 */}
-      <button
-        onClick={onLogout}
-        className="ml-auto shrink-0 cursor-pointer transition-all select-none"
+      <div
+        className="ml-auto shrink-0 flex items-center gap-[12px] px-[14px] py-[8px]"
         style={{
-          color: 'var(--mc-text-muted)',
-          fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
-          border: '2px solid var(--mc-border-strong)', borderRadius: 30, padding: '8px 20px',
+          border: '2px solid var(--mc-border-strong)',
+          borderRadius: 30,
           boxShadow: '5px 5px 4px var(--mc-shadow-soft)',
           backgroundColor: 'var(--mc-panel-bg-soft)',
         }}
       >
-        退出
-      </button>
+        <div
+          className="rounded-full overflow-hidden flex items-center justify-center shrink-0"
+          style={{
+            width: 46,
+            height: 46,
+            border: '2px solid var(--mc-border-strong)',
+            backgroundColor: 'rgba(255,255,255,0.18)',
+          }}
+        >
+          {currentUser.avatar ? (
+            <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+          ) : (
+            <span style={{ fontSize: 18, fontFamily: "'Ubuntu', 'HarmonyOS Sans SC', monospace", color: 'var(--mc-text-primary)' }}>
+              {avatarFallback}
+            </span>
+          )}
+        </div>
+        <div className="leading-tight min-w-0">
+          <div className="truncate" style={{ color: 'var(--mc-text-primary)', fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+            {currentUser.name}
+          </div>
+          <div className="truncate" style={{ color: 'var(--mc-text-muted)', fontSize: 13, fontFamily: "'Ubuntu', 'HarmonyOS Sans SC', monospace" }}>
+            {ROLE_LABELS[currentUser.role]} · {currentUser.email}
+          </div>
+        </div>
+        <button
+          onClick={onLogout}
+          className="shrink-0 cursor-pointer transition-all select-none"
+          style={{
+            color: 'var(--mc-text-muted)',
+            fontSize: 18,
+            fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
+            border: '2px solid var(--mc-border-strong)',
+            borderRadius: 24,
+            padding: '8px 18px',
+            backgroundColor: 'rgba(255,255,255,0.08)',
+          }}
+        >
+          退出
+        </button>
+      </div>
 
       {/* 右键菜单 */}
       {contextMenu && (

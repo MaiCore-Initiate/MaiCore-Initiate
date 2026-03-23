@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import GlassCard from '../components/ui/GlassCard'
+import AccessGuard from '../components/ui/AccessGuard'
+import AccountManagementPanel from '../components/auth/AccountManagementPanel'
 import { useNotification } from '../components/ui/Notification'
 import { resolveOverlayColor, useBgContext } from '../components/background/DynamicBackground'
 import type { BgSettings } from '../components/background/DynamicBackground'
 import { useTheme, type ThemeMode } from '../components/theme/ThemeProvider'
+import { useAccountSystem } from '../lib/account-system'
 
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
@@ -513,6 +516,7 @@ export default function Settings() {
   const { notify } = useNotification()
   const { settings: bgSettings, refreshFiles, refreshSettings } = useBgContext()
   const { mode, setMode, resolvedTheme } = useTheme()
+  const { currentUser, appearancePolicy } = useAccountSystem()
 
   const [pConfig, setPConfig] = useState<Record<string, any>>({})
   const [pDirty, setPDirty] = useState<Record<string, any>>({})
@@ -695,6 +699,8 @@ export default function Settings() {
     const next = THEME_MODE_REVERSE_MAP[display]
     if (next) setMode(next)
   }
+  const isAdmin = currentUser?.role === 'admin'
+  const canCustomizeAppearance = isAdmin || appearancePolicy.allowCustomAppearance
 
   // 滑块选择器组件
   const ActionSlider = ({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) => {
@@ -749,78 +755,88 @@ export default function Settings() {
       {/* 板块1：主程序配置 */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '60ms' }}>
       <GlassCard>
-        <div className="p-[30px]">
-          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>主程序配置</h2>
-          <div className="space-y-[4px]">
-            <ConfigRow label="日志保留天数" configKey="logging.log_rotation_days" type="number" />
-            <ConfigRow label="最大版本显示数" configKey="display.max_versions_display" type="number" />
-            <ConfigRow label="退出时进程处理" configKey="on_exit.process_action" type="exit_action" />
-            <ConfigRow label="Windows通知中心" configKey="notifications.windows_center_enabled" type="toggle" />
-            <ConfigRow label="最小化到托盘" configKey="ui.minimize_to_tray" type="toggle" />
-            <div className="flex items-center justify-between py-[10px]">
-              <span style={labelFont} className="text-black/70">WebShell 使用 PowerShell Profile（Oh-My-Posh）</span>
-              <Toggle
-                checked={webshellUseProfile}
-                onChange={v => {
-                  setWebshellUseProfile(v)
-                  setWebuiDirty(true)
-                }}
-              />
+        <AccessGuard allowed={!!isAdmin} detail="主程序配置属于系统级控制面板，仅管理员可修改。">
+          <div className="p-[30px]">
+            <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>主程序配置</h2>
+            <div className="space-y-[4px]">
+              <ConfigRow label="日志保留天数" configKey="logging.log_rotation_days" type="number" />
+              <ConfigRow label="最大版本显示数" configKey="display.max_versions_display" type="number" />
+              <ConfigRow label="退出时进程处理" configKey="on_exit.process_action" type="exit_action" />
+              <ConfigRow label="Windows通知中心" configKey="notifications.windows_center_enabled" type="toggle" />
+              <ConfigRow label="最小化到托盘" configKey="ui.minimize_to_tray" type="toggle" />
+              <div className="flex items-center justify-between py-[10px]">
+                <span style={labelFont} className="text-black/70">WebShell 使用 PowerShell Profile（Oh-My-Posh）</span>
+                <Toggle
+                  checked={webshellUseProfile}
+                  onChange={v => {
+                    setWebshellUseProfile(v)
+                    setWebuiDirty(true)
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end mt-[20px]">
+              <button onClick={savePConfig} disabled={pSaving || (Object.keys(pDirty).length === 0 && !webuiDirty)}
+                className="relative rounded-[27px] px-[30px] py-[10px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                <div className={pillShadow} style={pillShadowStyle} />
+                <span style={btnFont} className="text-black/70">{pSaving ? '保存中...' : '保存配置'}</span>
+              </button>
             </div>
           </div>
-          <div className="flex justify-end mt-[20px]">
-            <button onClick={savePConfig} disabled={pSaving || (Object.keys(pDirty).length === 0 && !webuiDirty)}
-              className="relative rounded-[27px] px-[30px] py-[10px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-              <div className={pillShadow} style={pillShadowStyle} />
-              <span style={btnFont} className="text-black/70">{pSaving ? '保存中...' : '保存配置'}</span>
-            </button>
-          </div>
-        </div>
+        </AccessGuard>
       </GlassCard>
       </div>
 
       {/* 板块2：安全配置 */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '120ms' }}>
       <GlassCard>
-        <div className="p-[30px]">
-          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>安全配置</h2>
-          <div className="space-y-[16px]">
-            <div>
-              <span style={labelFont} className="text-black/70">当前Token</span>
-              <div className="flex items-center gap-[12px] mt-[8px]">
-                <div className="flex-1 bg-white/30 border-2 border-black/30 rounded-[15px] px-4 py-[6px] text-black/70 cursor-pointer select-all"
-                  style={{ ...monoFont, fontSize: 22, minHeight: 40 }} onClick={() => setShowToken(!showToken)}>
-                  {showToken ? currentToken : '••••••••••••••••'}
+        <AccessGuard allowed={!!isAdmin} detail="系统 Token 与安全配置属于管理员专属能力。">
+          <div className="p-[30px]">
+            <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>安全配置</h2>
+            <div className="space-y-[16px]">
+              <div>
+                <span style={labelFont} className="text-black/70">当前Token</span>
+                <div className="flex items-center gap-[12px] mt-[8px]">
+                  <div className="flex-1 bg-white/30 border-2 border-black/30 rounded-[15px] px-4 py-[6px] text-black/70 cursor-pointer select-all"
+                    style={{ ...monoFont, fontSize: 22, minHeight: 40 }} onClick={() => setShowToken(!showToken)}>
+                    {showToken ? currentToken : '••••••••••••••••'}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <span style={labelFont} className="text-black/70">更改Token</span>
+                <div className="flex items-center gap-[12px] mt-[8px]">
+                  <input type="text" value={newToken} onChange={e => setNewToken(e.target.value)}
+                    placeholder="输入新Token（留空自动生成）"
+                    className="flex-1 bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 placeholder-black/30 focus:outline-none focus:border-black/50"
+                    style={{ ...monoFont, fontSize: 22, height: 40 }} />
+                  <button onClick={() => setNewToken(crypto.randomUUID().replace(/-/g, ''))}
+                    className="relative rounded-[27px] px-[20px] py-[6px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer">
+                    <div className={pillShadow} style={pillShadowStyle} />
+                    <span style={{ ...btnFont, fontSize: 22 }} className="text-black/70">随机生成</span>
+                  </button>
+                  <button onClick={saveToken}
+                    className="relative rounded-[27px] px-[20px] py-[6px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer">
+                    <div className={pillShadow} style={pillShadowStyle} />
+                    <span style={{ ...btnFont, fontSize: 22 }} className="text-black/70">保存</span>
+                  </button>
                 </div>
               </div>
             </div>
-            <div>
-              <span style={labelFont} className="text-black/70">更改Token</span>
-              <div className="flex items-center gap-[12px] mt-[8px]">
-                <input type="text" value={newToken} onChange={e => setNewToken(e.target.value)}
-                  placeholder="输入新Token（留空自动生成）"
-                  className="flex-1 bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 placeholder-black/30 focus:outline-none focus:border-black/50"
-                  style={{ ...monoFont, fontSize: 22, height: 40 }} />
-                <button onClick={() => setNewToken(crypto.randomUUID().replace(/-/g, ''))}
-                  className="relative rounded-[27px] px-[20px] py-[6px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer">
-                  <div className={pillShadow} style={pillShadowStyle} />
-                  <span style={{ ...btnFont, fontSize: 22 }} className="text-black/70">随机生成</span>
-                </button>
-                <button onClick={saveToken}
-                  className="relative rounded-[27px] px-[20px] py-[6px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer">
-                  <div className={pillShadow} style={pillShadowStyle} />
-                  <span style={{ ...btnFont, fontSize: 22 }} className="text-black/70">保存</span>
-                </button>
-              </div>
-            </div>
           </div>
-        </div>
+        </AccessGuard>
       </GlassCard>
       </div>
 
       {/* 板块3：页面配置（背景管理） */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '180ms' }}>
       <GlassCard>
+        <AccessGuard
+          allowed={canCustomizeAppearance}
+          detail={appearancePolicy.syncAdminAppearance
+            ? '管理员已开启外观同步，当前账号将跟随管理员主题与背景。'
+            : '管理员当前未开放个性化主题与背景自定义。'}
+        >
         <div className="p-[30px]">
           <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>页面配置</h2>
 
@@ -952,6 +968,7 @@ export default function Settings() {
             </div>
           </div>
         </div>
+        </AccessGuard>
       </GlassCard>
       </div>
 
@@ -973,18 +990,21 @@ export default function Settings() {
       {/* 板块4.5：LLM配置 */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '270ms' }}>
       <GlassCard>
-        <div className="p-[30px]">
-          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>AI配置</h2>
-          <LLMConfigSection />
-        </div>
+        <AccessGuard allowed={!!isAdmin} detail="AI 服务提供商、密钥与模型参数只允许管理员维护。">
+          <div className="p-[30px]">
+            <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>AI配置</h2>
+            <LLMConfigSection />
+          </div>
+        </AccessGuard>
       </GlassCard>
       </div>
 
-      {/* 板块5：成员管理（预留） */}
+      {/* 板块5：账号与成员管理 */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '300ms' }}>
       <GlassCard>
-        <div className="p-[30px] flex items-center justify-center" style={{ minHeight: 120 }}>
-          <span className="text-black/30" style={sectionTitle}>成员管理 — 开发中</span>
+        <div className="p-[30px]">
+          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>账号与成员管理</h2>
+          <AccountManagementPanel />
         </div>
       </GlassCard>
       </div>

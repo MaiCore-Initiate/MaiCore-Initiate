@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import GlassCard from '../ui/GlassCard'
+import AccessGuard from '../ui/AccessGuard'
 import { useNotification } from '../ui/Notification'
 import { useTheme } from '../theme/ThemeProvider'
+import { useAccountSystem } from '../../lib/account-system'
 
 const labelFont = { fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
@@ -105,6 +107,7 @@ function formatUptime(seconds: number): string {
 export default function InstanceOverviewCard() {
   const { isDark } = useTheme()
   const { notify } = useNotification()
+  const { can } = useAccountSystem()
   const [instances, setInstances] = useState<Instance[]>([])
   const [showPopover, setShowPopover] = useState(false)
   const [favorites, setFavorites] = useState<Instance[]>([])
@@ -194,6 +197,7 @@ export default function InstanceOverviewCard() {
   const dividerColor = isDark ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.5)'
   const pillBorder = isDark ? 'rgba(255,255,255,0.34)' : '#707070'
   const pillText = isDark ? 'rgba(255,255,255,0.84)' : 'rgba(0,0,0,0.85)'
+  const canControlInstances = can('instances.control')
 
   return (
     <GlassCard bgOpacity={isDark ? 0.7 : 0.45} borderColor={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.5)'}>
@@ -215,7 +219,12 @@ export default function InstanceOverviewCard() {
           <div className="w-[3px] self-stretch rounded-full shrink-0" style={{ backgroundColor: dividerColor }} />
 
           {/* 右侧常用实例 */}
-          <div className="flex-1 pl-[24px] flex flex-col relative">
+          <AccessGuard
+            allowed={canControlInstances}
+            className="flex-1 pl-[24px] flex flex-col relative"
+            radius={24}
+            detail="当前账号可以查看实例统计，但没有快捷启动权限。"
+          >
             <span className="mb-[12px]" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: labelColor }}>
               常用实例/快捷启动
             </span>
@@ -276,7 +285,7 @@ export default function InstanceOverviewCard() {
                   </button>
                 </>
               )}
-              {showPopover && (
+              {showPopover && canControlInstances && (
                 <AddInstancePopover
                   anchorRef={addBtnRef}
                   instances={instances}
@@ -290,7 +299,7 @@ export default function InstanceOverviewCard() {
                 />
               )}
             </div>
-          </div>
+          </AccessGuard>
         </div>
       </div>
     </GlassCard>

@@ -7,6 +7,16 @@ import {
 interface SidebarProps {
   currentPage: Page
   onNavigate: (page: Page) => void
+  isPageAccessible: (page: Page) => boolean
+}
+
+function LockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="6" y="11" width="12" height="9" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8.5 11V8.7a3.5 3.5 0 0 1 7 0V11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
 }
 
 const sections = [
@@ -38,7 +48,7 @@ const sections = [
   },
 ]
 
-export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+export default function Sidebar({ currentPage, onNavigate, isPageAccessible }: SidebarProps) {
   return (
     <aside className="w-[340px] h-full flex flex-col shrink-0" style={{ borderRight: '1px solid var(--mc-border-soft)' }}>
       {/* 品牌区 */}
@@ -62,6 +72,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             {section.items.map((item) => {
               const active = currentPage === item.id
               const Icon = item.icon
+              const accessible = isPageAccessible(item.id)
               return (
                 <button
                   key={item.id}
@@ -75,6 +86,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                     paddingLeft: 16,
                     border: active ? '5px solid var(--mc-border-strong)' : '3px solid var(--mc-divider)',
                     background: active ? 'var(--mc-sidebar-active-bg)' : 'transparent',
+                    opacity: accessible ? 1 : 0.76,
                     transition: 'border 0.25s ease, background 0.25s ease',
                   }}
                 >
@@ -84,6 +96,11 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   >
                     {item.label}
                   </span>
+                  {!accessible && (
+                    <span className="ml-auto pr-[10px]" style={{ color: 'var(--mc-text-muted)' }}>
+                      <LockIcon />
+                    </span>
+                  )}
                 </button>
               )
             })}

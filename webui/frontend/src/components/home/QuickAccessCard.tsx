@@ -7,6 +7,7 @@ import {
 } from '../icons/SidebarIcons'
 import type { Page, SubPageParams } from '../../types'
 import { useTheme } from '../theme/ThemeProvider'
+import { useAccountSystem } from '../../lib/account-system'
 
 const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
 
@@ -80,12 +81,14 @@ function ConfigModal({
   open,
   onClose,
   currentItems,
-  onSave
+  onSave,
+  options,
 }: {
   open: boolean
   onClose: () => void
   currentItems: QuickItem[]
   onSave: (items: QuickItem[]) => void
+  options: PageOption[]
 }) {
   const [selectedOptions, setSelectedOptions] = useState<PageOption[]>([])
 
@@ -93,7 +96,7 @@ function ConfigModal({
     if (open) {
       // 根据 currentItems 初始化选中状态
       const selected = currentItems.map(item =>
-        PAGE_OPTIONS.find(opt =>
+        options.find(opt =>
           opt.page === item.page &&
           JSON.stringify(opt.params) === JSON.stringify(item.params)
         )
@@ -132,7 +135,7 @@ function ConfigModal({
   }
 
   // 按分组整理选项
-  const groupedOptions = PAGE_OPTIONS.reduce((acc, opt) => {
+  const groupedOptions = options.reduce((acc, opt) => {
     if (!acc[opt.group]) acc[opt.group] = []
     acc[opt.group].push(opt)
     return acc
@@ -208,6 +211,7 @@ export default function QuickAccessCard({
   onNavigate?: (page: Page, params?: SubPageParams) => void
 }) {
   const { isDark } = useTheme()
+  const { can, canAccessPage } = useAccountSystem()
   const [items, setItems] = useState<QuickItem[]>(defaultItems)
   const [configOpen, setConfigOpen] = useState(false)
 
@@ -232,6 +236,9 @@ export default function QuickAccessCard({
   const titleColor = isDark ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.92)'
   const itemBorder = isDark ? 'rgba(255,255,255,0.26)' : 'rgba(112,112,112,0.45)'
   const itemText = isDark ? 'rgba(255,255,255,0.82)' : '#707070'
+  const canCustomize = can('quick-access.customize')
+  const availableOptions = PAGE_OPTIONS.filter(option => canAccessPage(option.page))
+  const displayItems = items.filter(item => canAccessPage(item.page))
 
   return (
     <>
@@ -240,9 +247,10 @@ export default function QuickAccessCard({
           <div className="flex items-center justify-between pb-[16px]">
             <h2 style={{ ...titleStyle, color: titleColor }}>快捷访问</h2>
             <button
-              onClick={() => setConfigOpen(true)}
-              className="w-[40px] h-[40px] rounded-[9px] flex items-center justify-center cursor-pointer transition-colors"
-              style={{ filter: 'drop-shadow(5px 3px 3px rgba(0,0,0,0.16))', border: `3px solid ${isDark ? 'rgba(255,255,255,0.34)' : 'rgba(0,0,0,0.5)'}`, color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.5)', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}
+              onClick={() => canCustomize && setConfigOpen(true)}
+              className="w-[40px] h-[40px] rounded-[9px] flex items-center justify-center transition-colors"
+              style={{ filter: 'drop-shadow(5px 3px 3px rgba(0,0,0,0.16))', border: `3px solid ${isDark ? 'rgba(255,255,255,0.34)' : 'rgba(0,0,0,0.5)'}`, color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.5)', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent', opacity: canCustomize ? 1 : 0.45, cursor: canCustomize ? 'pointer' : 'not-allowed' }}
+              title={canCustomize ? '配置快捷访问' : '当前账号无权自定义快捷访问'}
             >
               <svg width="30" height="30" viewBox="0 0 20 20" fill="none">
                 <line x1="3" y1="4" x2="17" y2="4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
@@ -256,11 +264,11 @@ export default function QuickAccessCard({
           </div>
 
           <div className="flex flex-col items-center gap-[7px]">
-            {items.length === 0 ? (
+            {displayItems.length === 0 ? (
               <div className="flex items-center justify-center rounded-[30px] border-3 border-dashed border-[#9e9e9e]" style={{ width: 316, height: 60 }}>
-                <span className="text-[#9e9e9e] font-semibold text-base" style={{ fontFamily: "'Segoe UI', 'HarmonyOS Sans SC', sans-serif" }}>no items</span>
+                <span className="text-[#9e9e9e] font-semibold text-base" style={{ fontFamily: "'Segoe UI', 'HarmonyOS Sans SC', sans-serif" }}>no accessible items</span>
               </div>
-            ) : items.map(item => {
+            ) : displayItems.map(item => {
               const Icon = iconMap[item.page]
               return (
                 <button
@@ -290,6 +298,7 @@ export default function QuickAccessCard({
         onClose={() => setConfigOpen(false)}
         currentItems={items}
         onSave={saveItems}
+        options={availableOptions}
       />
     </>
   )

@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import GlassCard from '../components/ui/GlassCard'
+import AccessGuard from '../components/ui/AccessGuard'
 import Modal from '../components/ui/Modal'
 import { useNotification } from '../components/ui/Notification'
+import { useAccountSystem } from '../lib/account-system'
 
 interface Instance {
   serial: string
@@ -325,6 +327,7 @@ function LaunchPanel({ instance }: { instance: Instance }) {
 }
 
 export default function Instances() {
+  const { can } = useAccountSystem()
   const [instances, setInstances] = useState<Instance[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -357,6 +360,7 @@ export default function Instances() {
   })
 
   const selectedInstance = instances.find(i => i.serial === selected)
+  const canControlInstances = can('instances.control')
 
   return (
     <div className="flex flex-col p-6 h-full">
@@ -430,15 +434,21 @@ export default function Instances() {
 
         {/* 右侧：操作面板 */}
         <div className="flex-1 min-w-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
-          {selectedInstance ? (
-            <LaunchPanel instance={selectedInstance} />
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
-                请选择一个实例
-              </span>
-            </div>
-          )}
+          <AccessGuard
+            allowed={canControlInstances}
+            className="h-full"
+            detail="当前账号仅可查看实例列表，不能执行启动、停止与高级启动操作。"
+          >
+            {selectedInstance ? (
+              <LaunchPanel instance={selectedInstance} />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+                  请选择一个实例
+                </span>
+              </div>
+            )}
+          </AccessGuard>
         </div>
       </div>
     </div>
