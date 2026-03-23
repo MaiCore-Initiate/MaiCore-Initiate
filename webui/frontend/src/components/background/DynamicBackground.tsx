@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useTheme, type ResolvedTheme } from '../theme/ThemeProvider'
 
 const FALLBACK_BG_URL = '/default_backgrounds/default.jpg'
 const BASE_BG_STORAGE_KEY = 'mcstart.base_bg_url'
@@ -58,6 +59,7 @@ export interface BgSettings {
   overlay_opacity: number
   overlay_blur: number
   overlay_color: string
+  overlay_color_auto?: boolean
   use_custom_background: boolean
 }
 
@@ -67,7 +69,34 @@ const DEFAULT_SETTINGS: BgSettings = {
   overlay_opacity: 0.5,
   overlay_blur: 0,
   overlay_color: '255,255,255',
+  overlay_color_auto: true,
   use_custom_background: false,
+}
+
+function mergeBgSettings(patch?: Partial<BgSettings> | null): BgSettings {
+  const merged = { ...DEFAULT_SETTINGS, ...(patch || {}) }
+  if (patch && !Object.prototype.hasOwnProperty.call(patch, 'overlay_color_auto')) {
+    merged.overlay_color_auto = !patch.overlay_color || patch.overlay_color === DEFAULT_SETTINGS.overlay_color
+  }
+  return merged
+}
+
+export function getThemeDefaultOverlayColor(theme: ResolvedTheme) {
+  return theme === 'dark' ? '0,0,0' : '255,255,255'
+}
+
+export function resolveOverlayColor(settings: BgSettings, theme: ResolvedTheme) {
+  if (settings.overlay_color_auto !== false) {
+    return getThemeDefaultOverlayColor(theme)
+  }
+  return settings.overlay_color
+}
+
+export function resolveOverlayStyle(settings: BgSettings, theme: ResolvedTheme) {
+  return {
+    backgroundColor: `rgba(${resolveOverlayColor(settings, theme)},${settings.overlay_opacity})`,
+    backdropFilter: settings.overlay_blur > 0 ? `blur(${settings.overlay_blur}px)` : undefined,
+  }
 }
 
 interface BgContextValue {
@@ -121,7 +150,7 @@ export function BgProvider({ children }: { children: ReactNode }) {
     setSettingsLoaded(false)
     fetch('/api/preferences/bg_settings', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.value) setSettings({ ...DEFAULT_SETTINGS, ...d.value }) })
+      .then(d => { if (d?.value) setSettings(mergeBgSettings(d.value)) })
       .catch(() => {})
       .finally(() => setSettingsLoaded(true))
   }, [])
@@ -200,6 +229,7 @@ function isVideo(url: string) { return VIDEO_EXTS.some(e => url.toLowerCase().en
 
 export default function DynamicBackground() {
   const { currentBgUrl, settings } = useBgContext()
+  const { resolvedTheme } = useTheme()
   const [bgA, setBgA] = useState<string | null>(currentBgUrl)
   const [bgB, setBgB] = useState<string | null>(null)
   const [showA, setShowA] = useState(true)
@@ -236,10 +266,7 @@ export default function DynamicBackground() {
     <>
       {renderLayer(bgA, showA, 'bg-a')}
       {renderLayer(bgB, !showA, 'bg-b')}
-      <div className="absolute inset-0" style={{
-        background: `rgba(${settings.overlay_color},${settings.overlay_opacity})`,
-        backdropFilter: settings.overlay_blur > 0 ? `blur(${settings.overlay_blur}px)` : undefined,
-      }} />
+      <div className="absolute inset-0" style={resolveOverlayStyle(settings, resolvedTheme)} />
     </>
   )
 }

@@ -13,7 +13,8 @@ import Settings from './pages/Settings'
 import Misc from './pages/Misc'
 import ComponentDownload from './pages/ComponentDownload'
 import { NotificationProvider, useNotification } from './components/ui/Notification'
-import DynamicBackground, { BgProvider, useBaseBgUrl, useBgContext } from './components/background/DynamicBackground'
+import DynamicBackground, { BgProvider, resolveOverlayStyle, useBaseBgUrl, useBgContext } from './components/background/DynamicBackground'
+import { useTheme } from './components/theme/ThemeProvider'
 import type { Page, Tab } from './types'
 
 const pageLabels: Record<Page, string> = {
@@ -129,6 +130,7 @@ function BaseBackgroundLayer({ url, className = 'absolute inset-0' }: { url: str
 function App() {
   const zoom = useZoom()
   const baseBgUrl = useBaseBgUrl()
+  const { resolvedTheme } = useTheme()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
@@ -228,7 +230,7 @@ function App() {
   const showMain = isAuthenticated
 
   return (
-    <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
+    <div className={`relative overflow-hidden theme-shell theme-${resolvedTheme}`} style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
       {/* 基层背景（常驻），用于避免切换阶段出现白屏 */}
       <BaseBackgroundLayer url={baseBgUrl} />
 
@@ -296,10 +298,11 @@ function App() {
  */
 function LoginTransitionOverlay({ loginTransition }: { loginTransition: 'cover-in' | 'cover-out' }) {
   const { currentBgUrl, settings } = useBgContext()
+  const { resolvedTheme } = useTheme()
   return (
     <div className={`absolute inset-0 z-30 pointer-events-none ${loginTransition === 'cover-in' ? 'animate-login-fade-in' : 'animate-login-fade-out'}`}>
       <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${currentBgUrl}')` }} />
-      <div className="absolute inset-0" style={{ background: `rgba(${settings.overlay_color},${settings.overlay_opacity})` }} />
+      <div className="absolute inset-0" style={resolveOverlayStyle(settings, resolvedTheme)} />
     </div>
   )
 }

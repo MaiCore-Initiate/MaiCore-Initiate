@@ -14,7 +14,7 @@ interface Instance {
 
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-const valueFont = { fontSize: 25, ...monoFont, color: '#707070' }
+const valueFont = { fontSize: 25, ...monoFont, color: 'var(--mc-text-secondary)' }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
 
@@ -57,8 +57,8 @@ function PillButton({ label, selected, onClick }: { label: string; selected: boo
       onClick={onClick}
       className="h-[54px] px-[24px] rounded-[27px] cursor-pointer transition-all duration-300 shrink-0"
       style={{
-        background: selected ? 'rgba(255,255,255,0.6)' : 'transparent',
-        border: '2px solid rgba(0,0,0,0.5)',
+        background: selected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+        border: '2px solid var(--mc-choice-selected-border)',
       }}
     >
       <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative', top: 2 }}>{label}</span>
@@ -367,7 +367,7 @@ export default function Instances() {
       <div className="flex gap-6 flex-1 min-h-0">
         {/* 左侧：实例选择卡片 */}
         <div className="w-[425px] shrink-0 animate-card-enter">
-          <GlassCard>
+          <GlassCard bgOpacity={0.62}>
             <div className="p-[24px] flex flex-col h-full">
               <h2 className="text-black pb-[12px]" style={sectionTitle}>选择实例</h2>
 
@@ -388,12 +388,12 @@ export default function Instances() {
               <div className="flex-1 overflow-y-auto mt-[12px] px-[4px]">
                 {loading ? (
                   <div className="flex items-center justify-center h-[120px] gap-[10px] animate-fade-in">
-                    <div className="rounded-full animate-spin" style={{ width: 20, height: 20, border: '3px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
+                  <div className="rounded-full animate-spin" style={{ width: 20, height: 20, border: '3px solid var(--mc-loading-ring)', borderTopColor: 'var(--mc-loading-ring-active)' }} />
                     <span className="text-black/40" style={monoFont}>正在加载实例列表...</span>
                   </div>
                 ) : filtered.length === 0 ? (
-                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed border-[#9e9e9e] animate-fade-in">
-                    <span className="text-[#9e9e9e] font-semibold text-base" style={monoFont}>no instance</span>
+                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed animate-fade-in" style={{ borderColor: 'var(--mc-empty-border)' }}>
+                    <span className="font-semibold text-base" style={{ ...monoFont, color: 'var(--mc-empty-text)' }}>no instance</span>
                   </div>
                 ) : (
                   filtered.map((inst, i) => {
@@ -409,8 +409,8 @@ export default function Instances() {
                             height: 54,
                             padding: isSelected ? '0 20px' : '0 4px',
                             borderRadius: isSelected ? 27 : 6,
-                            background: isSelected ? 'rgba(255,255,255,0.6)' : 'transparent',
-                            border: isSelected ? '2px solid rgba(0,0,0,0.5)' : '2px solid transparent',
+                            background: isSelected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+                            border: isSelected ? '2px solid var(--mc-choice-selected-border)' : '2px solid transparent',
                           }}
                         >
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
@@ -418,7 +418,7 @@ export default function Instances() {
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
                         </button>
                         {isSelected && i < filtered.length - 1 && <div className="h-[6px]" />}
-                        {!isSelected && i < filtered.length - 1 && <hr className="border-[#707070]" />}
+                        {!isSelected && i < filtered.length - 1 && <hr style={{ borderColor: 'var(--mc-divider-strong)' }} />}
                       </div>
                     )
                   })

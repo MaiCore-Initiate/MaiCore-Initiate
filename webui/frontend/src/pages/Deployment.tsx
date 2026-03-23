@@ -20,8 +20,8 @@ const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
 const btnFont = { fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative' as const, top: 2 }
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-const valueFont = { fontSize: 25, ...monoFont, color: '#707070' }
-const pillShadowStyle = { border: '2px solid rgba(0,0,0,0.5)', boxShadow: '2px 3px 6px rgba(0,0,0,0.15)' }
+const valueFont = { fontSize: 25, ...monoFont, color: 'var(--mc-text-secondary)' }
+const pillShadowStyle = { border: '2px solid var(--mc-border-strong)', boxShadow: '2px 3px 6px var(--mc-shadow-soft)' }
 const smallLabel = { fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 
 function getTextDriftStyle(index: number, lane: 'title' | 'label' | 'value' | 'hint') {
@@ -43,7 +43,7 @@ function PillTab({ label, selected, onClick }: { label: string; selected: boolea
   return (
     <button onClick={onClick}
       className="h-[54px] px-[24px] rounded-[27px] cursor-pointer transition-all duration-300 shrink-0 relative"
-      style={{ background: selected ? 'rgba(255,255,255,0.6)' : 'transparent', border: '2px solid rgba(0,0,0,0.5)' }}>
+      style={{ background: selected ? 'var(--mc-choice-selected-bg)' : 'transparent', border: '2px solid var(--mc-choice-selected-border)' }}>
       {selected && <div className="absolute inset-0 rounded-[27px] pointer-events-none" style={pillShadowStyle} />}
       <span style={btnFont}>{label}</span>
     </button>
@@ -112,19 +112,19 @@ function CustomSelect({ value, onChange, options, placeholder, disabled }: {
   return (
     <div ref={ref} className="relative">
       <button ref={btnRef} type="button" disabled={disabled} onClick={() => !disabled && setOpen(v => !v)}
-        className="w-full h-[54px] px-[22px] rounded-[27px] bg-white/60 border-2 border-black/50 flex items-center justify-between cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-        style={{ ...monoFont, fontSize: 22 }}>
-        <span className={sel ? 'text-black' : 'text-black/30'}>{sel?.label || placeholder || '请选择'}</span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" strokeLinecap="round" /></svg>
+        className="w-full h-[54px] px-[22px] rounded-[27px] flex items-center justify-between cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ ...monoFont, fontSize: 22, background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
+        <span style={{ color: sel ? 'var(--mc-text-primary)' : 'var(--mc-text-faint)' }}>{sel?.label || placeholder || '请选择'}</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="var(--mc-icon-stroke)" strokeWidth="2.5" strokeLinecap="round" /></svg>
       </button>
       {open && createPortal(
-        <div className="fixed rounded-[20px] bg-white/95 backdrop-blur-xl border-2 border-black/30 overflow-y-auto custom-scrollbar"
-          style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxH, zIndex: 9999, boxShadow: '4px 4px 12px rgba(0,0,0,0.15)' }}
+        <div className="fixed rounded-[20px] backdrop-blur-xl overflow-y-auto custom-scrollbar"
+          style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxH, zIndex: 9999, boxShadow: '4px 4px 12px var(--mc-shadow-soft)', background: 'var(--mc-panel-bg-strong)', border: '2px solid var(--mc-border-soft)' }}
           onMouseDown={e => e.stopPropagation()}>
           {displayOptions.map(o => (
             <button key={o.value} type="button" disabled={o.disabled} onClick={() => { if (o.disabled) return; onChange(o.value); setOpen(false) }}
-              className="w-full px-[22px] py-[10px] text-left hover:bg-black/5 transition-colors cursor-pointer disabled:cursor-default disabled:hover:bg-transparent"
-              style={{ ...monoFont, fontSize: 20, color: o.disabled ? 'rgba(0,0,0,0.35)' : undefined, background: o.value === value ? 'rgba(0,0,0,0.06)' : undefined }}>
+              className="w-full px-[22px] py-[10px] text-left transition-colors cursor-pointer disabled:cursor-default"
+              style={{ ...monoFont, fontSize: 20, color: o.disabled ? 'var(--mc-text-faint)' : 'var(--mc-text-primary)', background: o.value === value ? 'var(--mc-choice-selected-bg)' : 'transparent' }}>
               {o.label}
             </button>
           ))}
@@ -140,10 +140,10 @@ function InputField({ label, value, onChange, placeholder, disabled }: {
 }) {
   return (
     <div className="flex flex-col gap-[6px]">
-      <span className="text-black" style={smallLabel}>{label}</span>
+      <span style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>{label}</span>
       <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} disabled={disabled}
-        className="h-[54px] px-[22px] rounded-[27px] bg-white/60 border-2 border-black/50 outline-none text-black placeholder:text-black/20 disabled:opacity-40"
-        style={{ ...monoFont, fontSize: 22 }} />
+        className="h-[54px] px-[22px] rounded-[27px] outline-none disabled:opacity-40"
+        style={{ ...monoFont, fontSize: 22, background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)', color: 'var(--mc-text-primary)' }} />
     </div>
   )
 }
@@ -209,7 +209,7 @@ function ProgressPanel({ taskId, onDone }: { taskId: string; onDone?: () => void
 
   return (
     <div className="flex flex-col gap-[16px] animate-fade-slide-up">
-      <h2 className="text-black" style={sectionTitle}>{panelTitle}</h2>
+      <h2 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>{panelTitle}</h2>
 
       {/* 步骤指示器 */}
       <div className="flex gap-[8px] items-center flex-wrap">
@@ -221,36 +221,36 @@ function ProgressPanel({ taskId, onDone }: { taskId: string; onDone?: () => void
           return (
             <div key={i} className="flex items-center gap-[4px]">
               <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center text-white text-sm font-bold transition-all"
-                style={{ background: isFailed ? '#ef4444' : isDone ? '#22c55e' : isCurrent ? '#3b82f6' : 'rgba(0,0,0,0.15)', fontSize: 14 }}>
+                style={{ background: isFailed ? '#ef4444' : isDone ? '#22c55e' : isCurrent ? '#3b82f6' : 'var(--mc-control-solid)', fontSize: 14 }}>
                 {isDone ? '✓' : step}
               </div>
-              <span style={{ ...monoFont, fontSize: 16, color: isCurrent ? '#000' : '#888' }}>{name}</span>
-              {i < stepNames.length - 1 && <div className="w-[20px] h-[2px] bg-black/15 mx-[2px]" />}
+              <span style={{ ...monoFont, fontSize: 16, color: isCurrent ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }}>{name}</span>
+              {i < stepNames.length - 1 && <div className="w-[20px] h-[2px] mx-[2px]" style={{ background: 'var(--mc-border-soft)' }} />}
             </div>
           )
         })}
       </div>
 
       {/* 进度条 */}
-      <div className="h-[12px] rounded-full bg-black/10 overflow-hidden">
+      <div className="h-[12px] rounded-full overflow-hidden" style={{ background: 'var(--mc-control-bg-soft)' }}>
         <div className="h-full rounded-full transition-all duration-500"
           style={{ width: `${pct}%`, background: p?.status === 'failed' ? '#ef4444' : '#22c55e' }} />
       </div>
-      <span style={{ ...monoFont, fontSize: 18, color: '#555' }}>{p?.message || '等待中...'}</span>
+      <span style={{ ...monoFont, fontSize: 18, color: 'var(--mc-text-secondary)' }}>{p?.message || '等待中...'}</span>
 
       {/* 日志面板 */}
-      <button onClick={() => setLogsOpen(!logsOpen)} className="self-start cursor-pointer" style={{ ...smallLabel, color: '#555' }}>
+      <button onClick={() => setLogsOpen(!logsOpen)} className="self-start cursor-pointer" style={{ ...smallLabel, color: 'var(--mc-text-secondary)' }}>
         {logsOpen ? '▼ 收起日志' : '▶ 展开日志'}
       </button>
       {logsOpen && (
-        <div ref={logRef} className="h-[305px] overflow-y-auto rounded-[16px] bg-black/5 p-[16px] custom-scrollbar">
-          {(p?.logs || []).map((l, i) => <div key={i} style={{ ...monoFont, fontSize: 14, color: '#555' }}>{l}</div>)}
+        <div ref={logRef} className="h-[305px] overflow-y-auto rounded-[16px] p-[16px] custom-scrollbar" style={{ background: 'var(--mc-panel-bg-soft)', border: '1px solid var(--mc-border-soft)' }}>
+          {(p?.logs || []).map((l, i) => <div key={i} style={{ ...monoFont, fontSize: 14, color: 'var(--mc-text-secondary)' }}>{l}</div>)}
         </div>
       )}
 
       {done && onDone && (
         <button onClick={onDone} className="self-start h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95"
-          style={{ background: p?.status === 'completed' ? 'rgba(74,222,128,0.3)' : 'rgba(255,100,100,0.3)', border: '2px solid rgba(0,0,0,0.5)' }}>
+          style={{ background: p?.status === 'completed' ? 'rgba(74,222,128,0.3)' : 'rgba(255,100,100,0.3)', border: '2px solid var(--mc-border-strong)' }}>
           <span style={smallLabel}>{p?.status === 'completed' ? '完成' : '返回'}</span>
         </button>
       )}
@@ -347,11 +347,11 @@ function DeployNewTab() {
         {['基础配置', '组件选择', '确认部署'].map((name, i) => (
           <div key={i} className="flex items-center gap-[6px]">
             <div className="w-[36px] h-[36px] rounded-full flex items-center justify-center text-white font-bold"
-              style={{ background: step > i + 1 ? '#22c55e' : step === i + 1 ? '#3b82f6' : 'rgba(0,0,0,0.15)', fontSize: 16 }}>
+              style={{ background: step > i + 1 ? '#22c55e' : step === i + 1 ? '#3b82f6' : 'var(--mc-control-solid)', fontSize: 16 }}>
               {step > i + 1 ? '✓' : i + 1}
             </div>
-            <span style={{ ...smallLabel, color: step === i + 1 ? '#000' : '#888' }}>{name}</span>
-            {i < 2 && <div className="w-[30px] h-[2px] bg-black/15" />}
+            <span style={{ ...smallLabel, color: step === i + 1 ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }}>{name}</span>
+            {i < 2 && <div className="w-[30px] h-[2px]" style={{ background: 'var(--mc-border-soft)' }} />}
           </div>
         ))}
       </div>
@@ -360,7 +360,7 @@ function DeployNewTab() {
         <div className="flex flex-col gap-[16px]">
           <div className="grid grid-cols-2 gap-[16px] animate-fade-slide-up" style={d(1)}>
             <div className="flex flex-col gap-[6px]">
-              <span className="text-black" style={smallLabel}>Bot 类型</span>
+              <span style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>Bot 类型</span>
               <CustomSelect value={botType} onChange={v => { setBotType(v); setSelectedVersion('') }}
                 options={[
                   { value: 'MaiBot', label: 'MaiBot' },
@@ -369,18 +369,18 @@ function DeployNewTab() {
                 ]} placeholder="选择Bot类型" />
             </div>
             <div className="flex flex-col gap-[6px]">
-              <span className="text-black" style={smallLabel}>版本</span>
+              <span style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>版本</span>
               {versionsLoading ? (
-                <div className="w-full h-[54px] px-[22px] rounded-[27px] bg-white/60 border-2 border-black/50 flex items-center gap-[10px]">
-                  <div className="w-[20px] h-[20px] rounded-full animate-spin" style={{ border: '3px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
-                  <span className="text-black/40" style={{ ...monoFont, fontSize: 22 }}>正在获取版本列表...</span>
+                <div className="w-full h-[54px] px-[22px] rounded-[27px] flex items-center gap-[10px]" style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
+                  <div className="w-[20px] h-[20px] rounded-full animate-spin" style={{ border: '3px solid var(--mc-loading-ring)', borderTopColor: 'var(--mc-loading-ring-active)' }} />
+                  <span style={{ ...monoFont, fontSize: 22, color: 'var(--mc-text-faint)' }}>正在获取版本列表...</span>
                 </div>
               ) : (
                 <CustomSelect value={selectedVersion} onChange={setSelectedVersion} disabled={!botType}
                   options={versions.map(v => ({ value: v.name, label: v.display_name || v.name }))} placeholder="选择版本" />
               )}
               {!versionsLoading && !!botType && versions.length === 0 && (
-                <span className="text-black/45" style={{ ...monoFont, fontSize: 16 }}>当前未获取到版本列表，点击下拉可查看空状态提示</span>
+                <span style={{ ...monoFont, fontSize: 16, color: 'var(--mc-text-muted)' }}>当前未获取到版本列表，点击下拉可查看空状态提示</span>
               )}
             </div>
           </div>
@@ -394,7 +394,7 @@ function DeployNewTab() {
           <div className="animate-fade-slide-up" style={d(4)}>
             <button disabled={!canStep2} onClick={() => setStep(2)}
               className="h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: 'rgba(74,222,128,0.3)', border: '2px solid rgba(0,0,0,0.5)' }}>
+              style={{ background: 'rgba(74,222,128,0.3)', border: '2px solid var(--mc-border-strong)' }}>
               <span style={smallLabel}>下一步</span>
             </button>
           </div>
@@ -403,7 +403,7 @@ function DeployNewTab() {
 
       {step === 2 && (
         <div className="flex flex-col gap-[16px] animate-fade-slide-up">
-          <h3 className="text-black" style={sectionTitle}>组件选择</h3>
+          <h3 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>组件选择</h3>
           <div className="flex flex-col gap-[12px]">
             {botType === 'MaiBot' && <ToggleItem label="适配器" checked={installAdapter} onChange={setInstallAdapter} />}
             {botType !== 'Neo-MoFox' && <ToggleItem label="NapCat" checked={installNapcat} onChange={setInstallNapcat} />}
@@ -419,11 +419,11 @@ function DeployNewTab() {
           </div>
           <div className="flex gap-[12px]">
             <button onClick={() => setStep(1)} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95"
-              style={{ background: 'rgba(255,255,255,0.3)', border: '2px solid rgba(0,0,0,0.5)' }}>
+              style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
               <span style={smallLabel}>上一步</span>
             </button>
             <button onClick={() => setStep(3)} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95"
-              style={{ background: 'rgba(74,222,128,0.3)', border: '2px solid rgba(0,0,0,0.5)' }}>
+              style={{ background: 'rgba(74,222,128,0.3)', border: '2px solid var(--mc-border-strong)' }}>
               <span style={smallLabel}>下一步</span>
             </button>
           </div>
@@ -432,8 +432,8 @@ function DeployNewTab() {
 
       {step === 3 && (
         <div className="flex flex-col gap-[16px] animate-fade-slide-up">
-          <h3 className="text-black" style={sectionTitle}>确认部署配置</h3>
-          <div className="rounded-[20px] bg-white/40 p-[20px] flex flex-col gap-[6px]">
+          <h3 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>确认部署配置</h3>
+          <div className="rounded-[20px] p-[20px] flex flex-col gap-[6px]" style={{ background: 'var(--mc-panel-bg-soft)', border: '1px solid var(--mc-border-soft)' }}>
             {([
               ['Bot 类型', botType], ['版本', versionObj?.display_name || selectedVersion],
               ['实例昵称', nickname], ['安装目录', installDir],
@@ -445,18 +445,18 @@ function DeployNewTab() {
               ...(botType === 'MoFox-Core' ? [['MoFox WebUI', installMofoxWebui ? '是' : '否']] : []),
             ] as [string, string][]).map(([k, v]) => (
               <div key={k} className="flex gap-[16px]">
-                <span className="text-black shrink-0 w-[120px]" style={labelFont}>{k}</span>
+                <span className="shrink-0 w-[120px]" style={{ ...labelFont, color: 'var(--mc-text-primary)' }}>{k}</span>
                 <span style={valueFont}>{v}</span>
               </div>
             ))}
           </div>
           <div className="flex gap-[12px]">
             <button onClick={() => setStep(2)} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95"
-              style={{ background: 'rgba(255,255,255,0.3)', border: '2px solid rgba(0,0,0,0.5)' }}>
+              style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
               <span style={smallLabel}>上一步</span>
             </button>
             <button onClick={handleDeploy} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95"
-              style={{ background: 'rgba(74,222,128,0.3)', border: '2px solid rgba(0,0,0,0.5)' }}>
+              style={{ background: 'rgba(74,222,128,0.3)', border: '2px solid var(--mc-border-strong)' }}>
               <span style={smallLabel}>开始部署</span>
             </button>
           </div>
@@ -470,9 +470,9 @@ function ToggleItem({ label, checked, onChange }: { label: string; checked: bool
   return (
     <button onClick={() => onChange(!checked)} className="flex items-center gap-[12px] cursor-pointer">
       <div className="w-[44px] h-[26px] rounded-full transition-all duration-200 relative"
-        style={{ background: checked ? '#22c55e' : 'rgba(0,0,0,0.15)' }}>
-        <div className="absolute top-[3px] w-[20px] h-[20px] rounded-full bg-white transition-all duration-200 shadow"
-          style={{ left: checked ? 21 : 3 }} />
+        style={{ background: checked ? '#22c55e' : 'var(--mc-control-solid)' }}>
+        <div className="absolute top-[3px] w-[20px] h-[20px] rounded-full transition-all duration-200 shadow"
+          style={{ left: checked ? 21 : 3, background: 'var(--mc-panel-bg-strong)' }} />
       </div>
       <span style={smallLabel}>{label}</span>
     </button>
@@ -546,28 +546,28 @@ function UpdateTab() {
       <div className="w-[380px] shrink-0">
         <GlassCard>
           <div className="p-[24px] flex flex-col h-full">
-            <h2 className="text-black pb-[12px]" style={sectionTitle}>选择实例</h2>
-            <div className="flex items-center h-[54px] px-[22px] gap-[12px] rounded-[27px] bg-white/60 border-2 border-black/50 shrink-0">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="9.5" cy="9.5" r="7.5" stroke="rgba(0,0,0,0.5)" strokeWidth="3" /><line x1="15" y1="15.5" x2="22" y2="23" stroke="rgba(0,0,0,0.5)" strokeWidth="3" strokeLinecap="round" /></svg>
+            <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
+            <div className="flex items-center h-[54px] px-[22px] gap-[12px] rounded-[27px] shrink-0" style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="9.5" cy="9.5" r="7.5" stroke="var(--mc-icon-stroke)" strokeWidth="3" /><line x1="15" y1="15.5" x2="22" y2="23" stroke="var(--mc-icon-stroke)" strokeWidth="3" strokeLinecap="round" /></svg>
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索实例"
-                className="flex-1 bg-transparent outline-none text-black placeholder:text-black/20" style={{ ...monoFont, fontSize: 22 }} />
+                className="flex-1 bg-transparent outline-none" style={{ ...monoFont, fontSize: 22, color: 'var(--mc-text-primary)' }} />
             </div>
             <div className="flex-1 overflow-y-auto mt-[12px] custom-scrollbar">
               {loading ? (
                 <div className="flex items-center justify-center h-[100px] gap-[10px] animate-fade-in">
-                  <div className="w-[20px] h-[20px] rounded-full animate-spin" style={{ border: '3px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
-                  <span className="text-black/40" style={monoFont}>正在加载实例列表...</span>
+                  <div className="w-[20px] h-[20px] rounded-full animate-spin" style={{ border: '3px solid var(--mc-loading-ring)', borderTopColor: 'var(--mc-loading-ring-active)' }} />
+                  <span style={{ ...monoFont, color: 'var(--mc-text-faint)' }}>正在加载实例列表...</span>
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="flex items-center justify-center h-[100px] rounded-[20px] border-3 border-dashed border-[#9e9e9e] animate-fade-in">
-                  <span className="text-[#9e9e9e]" style={monoFont}>无实例</span>
+                <div className="flex items-center justify-center h-[100px] rounded-[20px] border-3 border-dashed animate-fade-in" style={{ borderColor: 'var(--mc-empty-border)' }}>
+                  <span style={{ ...monoFont, color: 'var(--mc-empty-text)' }}>无实例</span>
                 </div>
               ) : filtered.map((i, idx) => (
                 <button key={i.serial_number} onClick={() => setSelected(i.serial_number)}
                   className="w-full flex items-center cursor-pointer transition-all duration-300 overflow-hidden animate-fade-slide-up"
                   style={{ height: 48, padding: i.serial_number === selected ? '0 20px' : '0 4px', borderRadius: i.serial_number === selected ? 24 : 6,
-                    background: i.serial_number === selected ? 'rgba(255,255,255,0.6)' : 'transparent',
-                    border: i.serial_number === selected ? '2px solid rgba(0,0,0,0.5)' : '2px solid transparent',
+                    background: i.serial_number === selected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+                    border: i.serial_number === selected ? '2px solid var(--mc-choice-selected-border)' : '2px solid transparent',
                     animationDelay: `${idx * 40}ms`, animationFillMode: 'backwards' }}>
                   <span className="truncate" style={{ ...monoFont, fontSize: 22 }}>{i.nickname}|{i.serial_number}</span>
                 </button>
@@ -581,40 +581,40 @@ function UpdateTab() {
         {inst ? (
           <GlassCard key={`update-${inst.serial_number}`}>
             <div className="p-[28px] flex flex-col gap-[16px]">
-              <h2 className="text-black animate-fade-slide-up" style={{ ...sectionTitle, ...getTextDriftStyle(0, 'title') }}>更新实例</h2>
+              <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...getTextDriftStyle(0, 'title'), color: 'var(--mc-text-primary)' }}>更新实例</h2>
               <div className="flex flex-col gap-[6px]">
                 {([['实例昵称', inst.nickname], ['序列号', inst.serial_number], ['Bot 类型', inst.bot_type], ['当前版本', inst.version]] as [string, string][]).map(([k, v], idx) => (
                   <div key={k} className="flex gap-[16px]">
-                    <span className="text-black shrink-0 animate-fade-slide-up" style={{ ...labelFont, ...getTextDriftStyle(idx + 1, 'label') }}>{k}</span>
+                    <span className="shrink-0 animate-fade-slide-up" style={{ ...labelFont, ...getTextDriftStyle(idx + 1, 'label'), color: 'var(--mc-text-primary)' }}>{k}</span>
                     <span className="animate-fade-slide-up" style={{ ...valueFont, ...getTextDriftStyle(idx + 1, 'value') }}>{v}</span>
                   </div>
                 ))}
               </div>
               <div className="flex flex-col gap-[6px]">
-                <span className="text-black animate-fade-slide-up" style={{ ...smallLabel, ...getTextDriftStyle(6, 'label') }}>新版本</span>
+                <span className="animate-fade-slide-up" style={{ ...smallLabel, ...getTextDriftStyle(6, 'label'), color: 'var(--mc-text-primary)' }}>新版本</span>
                 {versionsLoading ? (
-                  <div className="w-full h-[54px] px-[22px] rounded-[27px] bg-white/60 border-2 border-black/50 flex items-center gap-[10px]">
-                    <div className="w-[20px] h-[20px] rounded-full animate-spin" style={{ border: '3px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
-                    <span className="text-black/40 animate-fade-slide-up" style={{ ...monoFont, fontSize: 22, ...getTextDriftStyle(7, 'hint') }}>正在获取版本列表...</span>
+                  <div className="w-full h-[54px] px-[22px] rounded-[27px] flex items-center gap-[10px]" style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
+                    <div className="w-[20px] h-[20px] rounded-full animate-spin" style={{ border: '3px solid var(--mc-loading-ring)', borderTopColor: 'var(--mc-loading-ring-active)' }} />
+                    <span className="animate-fade-slide-up" style={{ ...monoFont, fontSize: 22, ...getTextDriftStyle(7, 'hint'), color: 'var(--mc-text-faint)' }}>正在获取版本列表...</span>
                   </div>
                 ) : (
                   <CustomSelect value={newVersion} onChange={setNewVersion}
                     options={versions.map(v => ({ value: v.name, label: v.display_name || v.name }))} placeholder="选择新版本" />
                 )}
                 {!versionsLoading && versions.length === 0 && (
-                  <span className="text-black/45 animate-fade-slide-up" style={{ ...monoFont, fontSize: 16, ...getTextDriftStyle(7, 'hint') }}>当前未获取到版本列表，点击下拉可查看空状态提示</span>
+                  <span className="animate-fade-slide-up" style={{ ...monoFont, fontSize: 16, ...getTextDriftStyle(7, 'hint'), color: 'var(--mc-text-muted)' }}>当前未获取到版本列表，点击下拉可查看空状态提示</span>
                 )}
               </div>
               <button disabled={!newVersion} onClick={handleUpdate}
                 className="self-start h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: 'rgba(96,165,250,0.3)', border: '2px solid rgba(0,0,0,0.5)' }}>
+                style={{ background: 'rgba(96,165,250,0.3)', border: '2px solid var(--mc-border-strong)' }}>
                 <span className="animate-fade-slide-up" style={{ ...smallLabel, ...getTextDriftStyle(8, 'value') }}>开始更新</span>
               </button>
             </div>
           </GlassCard>
         ) : (
           <div className="flex items-center justify-center h-full">
-            <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>请选择一个实例</span>
+            <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>请选择一个实例</span>
           </div>
         )}
       </div>
@@ -677,28 +677,28 @@ function DeleteTab() {
       <div className="w-[380px] shrink-0">
         <GlassCard>
           <div className="p-[24px] flex flex-col h-full">
-            <h2 className="text-black pb-[12px]" style={sectionTitle}>选择实例</h2>
-            <div className="flex items-center h-[54px] px-[22px] gap-[12px] rounded-[27px] bg-white/60 border-2 border-black/50 shrink-0">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="9.5" cy="9.5" r="7.5" stroke="rgba(0,0,0,0.5)" strokeWidth="3" /><line x1="15" y1="15.5" x2="22" y2="23" stroke="rgba(0,0,0,0.5)" strokeWidth="3" strokeLinecap="round" /></svg>
+            <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
+            <div className="flex items-center h-[54px] px-[22px] gap-[12px] rounded-[27px] shrink-0" style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="9.5" cy="9.5" r="7.5" stroke="var(--mc-icon-stroke)" strokeWidth="3" /><line x1="15" y1="15.5" x2="22" y2="23" stroke="var(--mc-icon-stroke)" strokeWidth="3" strokeLinecap="round" /></svg>
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索实例"
-                className="flex-1 bg-transparent outline-none text-black placeholder:text-black/20" style={{ ...monoFont, fontSize: 22 }} />
+                className="flex-1 bg-transparent outline-none" style={{ ...monoFont, fontSize: 22, color: 'var(--mc-text-primary)' }} />
             </div>
             <div className="flex-1 overflow-y-auto mt-[12px] custom-scrollbar">
               {loading ? (
                 <div className="flex items-center justify-center h-[100px] gap-[10px] animate-fade-in">
-                  <div className="w-[20px] h-[20px] rounded-full animate-spin" style={{ border: '3px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
-                  <span className="text-black/40" style={monoFont}>正在加载实例列表...</span>
+                  <div className="w-[20px] h-[20px] rounded-full animate-spin" style={{ border: '3px solid var(--mc-loading-ring)', borderTopColor: 'var(--mc-loading-ring-active)' }} />
+                  <span style={{ ...monoFont, color: 'var(--mc-text-faint)' }}>正在加载实例列表...</span>
                 </div>
               ) : filtered.length === 0 ? (
-                <div className="flex items-center justify-center h-[100px] rounded-[20px] border-3 border-dashed border-[#9e9e9e] animate-fade-in">
-                  <span className="text-[#9e9e9e]" style={monoFont}>无实例</span>
+                <div className="flex items-center justify-center h-[100px] rounded-[20px] border-3 border-dashed animate-fade-in" style={{ borderColor: 'var(--mc-empty-border)' }}>
+                  <span style={{ ...monoFont, color: 'var(--mc-empty-text)' }}>无实例</span>
                 </div>
               ) : filtered.map((i, idx) => (
                 <button key={i.serial_number} onClick={() => { setSelected(i.serial_number); setConfirmName('') }}
                   className="w-full flex items-center cursor-pointer transition-all duration-300 overflow-hidden animate-fade-slide-up"
                   style={{ height: 48, padding: i.serial_number === selected ? '0 20px' : '0 4px', borderRadius: i.serial_number === selected ? 24 : 6,
-                    background: i.serial_number === selected ? 'rgba(255,255,255,0.6)' : 'transparent',
-                    border: i.serial_number === selected ? '2px solid rgba(0,0,0,0.5)' : '2px solid transparent',
+                    background: i.serial_number === selected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+                    border: i.serial_number === selected ? '2px solid var(--mc-choice-selected-border)' : '2px solid transparent',
                     animationDelay: `${idx * 40}ms`, animationFillMode: 'backwards' }}>
                   <span className="truncate" style={{ ...monoFont, fontSize: 22 }}>{i.nickname}|{i.serial_number}</span>
                 </button>
@@ -712,12 +712,12 @@ function DeleteTab() {
         {inst ? (
           <GlassCard key={`delete-${inst.serial_number}`}>
             <div className="p-[28px] flex flex-col gap-[16px]">
-              <h2 className="text-black animate-fade-slide-up" style={{ ...sectionTitle, ...getTextDriftStyle(0, 'title') }}>删除实例</h2>
+              <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...getTextDriftStyle(0, 'title'), color: 'var(--mc-text-primary)' }}>删除实例</h2>
               <div className="flex flex-col gap-[6px]">
                 {([['实例昵称', inst.nickname], ['序列号', inst.serial_number], ['Bot 类型', inst.bot_type], ['版本', inst.version],
                   ['路径', inst.bot_type === 'MaiBot' ? inst.mai_path : inst.bot_type === 'MoFox-Core' ? inst.mofox_path : inst.neo_mofox_path]] as [string, string][]).map(([k, v], idx) => (
                   <div key={k} className="flex gap-[16px]">
-                    <span className="text-black shrink-0 animate-fade-slide-up" style={{ ...labelFont, ...getTextDriftStyle(idx + 1, 'label') }}>{k}</span>
+                    <span className="shrink-0 animate-fade-slide-up" style={{ ...labelFont, ...getTextDriftStyle(idx + 1, 'label'), color: 'var(--mc-text-primary)' }}>{k}</span>
                     <span className="animate-fade-slide-up" style={{ ...valueFont, ...getTextDriftStyle(idx + 1, 'value') }}>{v || '-'}</span>
                   </div>
                 ))}
@@ -726,13 +726,13 @@ function DeleteTab() {
                 <span className="animate-fade-slide-up" style={{ ...smallLabel, color: '#dc2626', ...getTextDriftStyle(7, 'hint') }}>此操作不可逆！请输入实例昵称「{inst.nickname}」以确认删除</span>
               </div>
               <div className="flex flex-col gap-[6px]">
-                <span className="text-black animate-fade-slide-up" style={{ ...smallLabel, ...getTextDriftStyle(8, 'label') }}>输入实例昵称确认</span>
+                <span className="animate-fade-slide-up" style={{ ...smallLabel, ...getTextDriftStyle(8, 'label'), color: 'var(--mc-text-primary)' }}>输入实例昵称确认</span>
                 <input
                   value={confirmName}
                   onChange={e => setConfirmName(e.target.value)}
                   placeholder={inst.nickname}
-                  className="h-[54px] px-[22px] rounded-[27px] bg-white/60 border-2 border-black/50 outline-none text-black placeholder:text-black/20"
-                  style={{ ...monoFont, fontSize: 22 }}
+                  className="h-[54px] px-[22px] rounded-[27px] outline-none"
+                  style={{ ...monoFont, fontSize: 22, background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)', color: 'var(--mc-text-primary)' }}
                 />
               </div>
               <button disabled={confirmName !== inst.nickname || deleting} onClick={handleDelete}
@@ -744,7 +744,7 @@ function DeleteTab() {
           </GlassCard>
         ) : (
           <div className="flex items-center justify-center h-full">
-            <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>请选择一个实例</span>
+            <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>请选择一个实例</span>
           </div>
         )}
       </div>
@@ -758,7 +758,7 @@ export default function Deployment() {
 
   return (
     <div className="flex flex-col p-6 h-full">
-      <h1 className="text-black shrink-0 mb-[16px] animate-card-enter" style={pageTitleStyle}>部署管理</h1>
+      <h1 className="shrink-0 mb-[16px] animate-card-enter" style={{ ...pageTitleStyle, color: 'var(--mc-text-primary)' }}>部署管理</h1>
 
       <div className="flex gap-[10px] mb-[20px] animate-card-enter" style={{ animationDelay: '60ms' }}>
         <PillTab label="部署新实例" selected={tab === 'deploy'} onClick={() => setTab('deploy')} />

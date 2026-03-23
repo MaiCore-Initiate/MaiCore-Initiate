@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import GlassCard from '../ui/GlassCard'
+import { useTheme } from '../theme/ThemeProvider'
 
 // ─── 常量与类型 ──────────────────────────────────────────────
 
@@ -471,6 +472,7 @@ function InstancePickerPopover({
 // ─── 主组件 ────────────────────────────────────────────────
 
 export default function DashboardChartCard() {
+  const { isDark } = useTheme()
   const [granularity, setGranularity] = useState<Granularity>('日')
   const [splitByInstance, setSplitByInstance] = useState(false)
   const [selectedInstance, setSelectedInstance] = useState('')
@@ -659,23 +661,23 @@ export default function DashboardChartCard() {
     ...labelFont,
     fontSize: 18,
     fontWeight: 600 as const,
-    background: active ? '#ffffff89' : 'transparent',
-    color: 'rgba(0,0,0,0.7)',
-    boxShadow: active ? '0 0 4px rgba(0,0,0,0.2)' : 'none',
-    border: active ? '1px solid rgba(0,0,0,0.5)' : '1px solid transparent',
+    background: active ? (isDark ? 'rgba(255,255,255,0.18)' : '#ffffff89') : 'transparent',
+    color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.7)',
+    boxShadow: active ? (isDark ? '0 0 10px rgba(255,255,255,0.06)' : '0 0 4px rgba(0,0,0,0.2)') : 'none',
+    border: active ? `1px solid ${isDark ? 'rgba(255,255,255,0.34)' : 'rgba(0,0,0,0.5)'}` : '1px solid transparent',
     borderRadius: 16,
   })
 
   return (
-    <GlassCard>
+    <GlassCard bgOpacity={isDark ? 0.72 : 0.45} borderColor={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.5)'}>
       <div className="px-[24px] py-[20px] flex h-full gap-[16px]">
         {/* 左侧面板 */}
         <div className="flex flex-col shrink-0" style={{ width: 150 }}>
-          <h2 className="text-black pb-[12px]" style={titleStyle}>仪表盘</h2>
+          <h2 className="pb-[12px]" style={{ ...titleStyle, color: isDark ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.92)' }}>仪表盘</h2>
 
           <div className="flex flex-col gap-[4px] mb-[16px]">
-            <span className="text-[#707070]" style={{ ...labelFont, fontSize: 17 }}>时间粒度</span>
-            <div className="flex rounded-full overflow-hidden" style={{ border: '2px solid #707070', width: 'fit-content' }}>
+            <span style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.68)' : '#707070' }}>时间粒度</span>
+            <div className="flex rounded-full overflow-hidden" style={{ border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`, width: 'fit-content', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
               {granularities.map((g) => (
                 <button key={g} onClick={() => setGranularity(g)} className="transition-all cursor-pointer flex items-center justify-center" style={pillBtn(granularity === g)}>{g}</button>
               ))}
@@ -683,8 +685,8 @@ export default function DashboardChartCard() {
           </div>
 
           <div className="flex flex-col gap-[4px]">
-            <span className="text-[#707070]" style={{ ...labelFont, fontSize: 17 }}>区分实例</span>
-            <div className="flex rounded-full overflow-hidden" style={{ border: '2px solid #707070', width: 'fit-content' }}>
+            <span style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.68)' : '#707070' }}>区分实例</span>
+            <div className="flex rounded-full overflow-hidden" style={{ border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`, width: 'fit-content', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
               {(['关', '开'] as const).map((opt) => (
                 <button key={opt} onClick={() => setSplitByInstance(opt === '开')} className="transition-all cursor-pointer flex items-center justify-center" style={pillBtn((opt === '开') === splitByInstance)}>{opt}</button>
               ))}
@@ -692,15 +694,15 @@ export default function DashboardChartCard() {
           </div>
 
           <div className="flex flex-col gap-[4px] mt-[16px]">
-            <span className="text-[#707070]" style={{ ...labelFont, fontSize: 17 }}>筛选实例</span>
+            <span style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.68)' : '#707070' }}>筛选实例</span>
             <button
               ref={pickerBtnRef}
               onClick={() => { setShowInstancePicker((v) => !v); setInstanceSearch('') }}
               className="cursor-pointer text-center truncate"
               style={{
-                ...labelFont, fontSize: 16, color: 'rgba(0,0,0,0.7)',
-                border: '2px solid #707070', borderRadius: 30,
-                padding: '5px 14px', background: '#ffffff36', width: 145,
+                ...labelFont, fontSize: 16, color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.7)',
+                border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`, borderRadius: 30,
+                padding: '5px 14px', background: isDark ? 'rgba(255,255,255,0.08)' : '#ffffff36', width: 145,
                 filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))',
               }}
             >{selectedInstance || '全部'}</button>
@@ -709,11 +711,11 @@ export default function DashboardChartCard() {
           <div className="mt-auto flex flex-col gap-[4px] pt-[12px]">
             {seriesData.map((s, si) => (
               <div key={`leg${si}`} className="flex items-center gap-[4px]">
-                <div className="w-[10px] h-[10px] rounded-[2px]" style={{ background: s.color.bar, border: '1px solid rgba(0,0,0,0.15)' }} />
+                <div className="w-[10px] h-[10px] rounded-[2px]" style={{ background: s.color.bar, border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}` }} />
                 <svg width="14" height="7" viewBox="0 0 14 7">
                   <path d="M0,5 C3,5 4,2 7,2 C10,2 11,5 14,5" fill="none" stroke={s.color.line} strokeWidth={1.5} />
                 </svg>
-                <span style={{ ...labelFont, fontSize: 11, color: 'rgba(0,0,0,0.45)' }}>
+                <span style={{ ...labelFont, fontSize: 11, color: isDark ? 'rgba(255,255,255,0.52)' : 'rgba(0,0,0,0.45)' }}>
                   {s.id === '_all' ? '全部' : `实例${s.id}`}
                 </span>
               </div>
@@ -724,7 +726,7 @@ export default function DashboardChartCard() {
         {/* 右侧图表 */}
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="mb-[2px]" style={{ paddingLeft: padL }}>
-            <span style={{ ...labelFont, fontSize: 20, color: 'rgba(0,0,0,0.35)' }}>
+            <span style={{ ...labelFont, fontSize: 20, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)' }}>
               启动次数/启动时间({timeUnit})
             </span>
           </div>
@@ -749,19 +751,19 @@ export default function DashboardChartCard() {
               {/* 网格线 */}
               {Array.from({ length: yTicks }, (_, i) => {
                 const y = padT + (i / (yTicks - 1)) * plotH
-                return <line key={`g${i}`} x1={padL} y1={y} x2={padL + plotW} y2={y} stroke="rgba(0,0,0,0.06)" strokeWidth={1} />
+                return <line key={`g${i}`} x1={padL} y1={y} x2={padL + plotW} y2={y} stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'} strokeWidth={1} />
               })}
 
               {/* 坐标轴 */}
-              <line x1={padL} y1={padT} x2={padL} y2={padT + plotH} stroke="rgba(0,0,0,0.5)" strokeWidth={2} />
-              <polygon points={`${padL},${padT - 6} ${padL - 4},${padT + 2} ${padL + 4},${padT + 2}`} fill="rgba(0,0,0,0.5)" />
-              <line x1={padL} y1={padT + plotH} x2={padL + plotW + 8} y2={padT + plotH} stroke="rgba(0,0,0,0.5)" strokeWidth={2} />
-              <polygon points={`${padL + plotW + 14},${padT + plotH} ${padL + plotW + 6},${padT + plotH - 4} ${padL + plotW + 6},${padT + plotH + 4}`} fill="rgba(0,0,0,0.5)" />
+              <line x1={padL} y1={padT} x2={padL} y2={padT + plotH} stroke={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} strokeWidth={2} />
+              <polygon points={`${padL},${padT - 6} ${padL - 4},${padT + 2} ${padL + 4},${padT + 2}`} fill={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} />
+              <line x1={padL} y1={padT + plotH} x2={padL + plotW + 8} y2={padT + plotH} stroke={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} strokeWidth={2} />
+              <polygon points={`${padL + plotW + 14},${padT + plotH} ${padL + plotW + 6},${padT + plotH - 4} ${padL + plotW + 6},${padT + plotH + 4}`} fill={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} />
 
               {/* Y轴标签 */}
               {yLabels.map((label, i) => (
                 <text key={`yl${i}`} x={padL - 6} y={padT + (i / (yTicks - 1)) * plotH + 4} textAnchor="end"
-                  fontSize={10} fontFamily="'Ubuntu','HarmonyOS Sans SC','Cascadia Code', monospace" fill="rgba(0,0,0,0.45)">{label}</text>
+                  fontSize={10} fontFamily="'Ubuntu','HarmonyOS Sans SC','Cascadia Code', monospace" fill={isDark ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.45)'}>{label}</text>
               ))}
 
               {/* X轴标签 */}
@@ -769,7 +771,7 @@ export default function DashboardChartCard() {
                 if (!label || i % labelInterval !== 0) return null
                 return (
                   <text key={`xl${i}`} x={padL + (i + 0.5) * (plotW / slotCount)} y={padT + plotH + 18} textAnchor="middle"
-                    fontSize={10} fontFamily="'Ubuntu','HarmonyOS Sans SC','Cascadia Code', monospace" fill="rgba(0,0,0,0.45)">{label}</text>
+                    fontSize={10} fontFamily="'Ubuntu','HarmonyOS Sans SC','Cascadia Code', monospace" fill={isDark ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.45)'}>{label}</text>
                 )
               })}
 
@@ -778,7 +780,7 @@ export default function DashboardChartCard() {
                 <rect
                   x={padL + hoverSlot.slotIdx * (plotW / slotCount)}
                   y={padT} width={plotW / slotCount} height={plotH}
-                  fill="rgba(0,0,0,0.04)" rx={2}
+                  fill={isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)'} rx={2}
                 />
               )}
 
@@ -814,12 +816,12 @@ export default function DashboardChartCard() {
               {/* Hover 虚线 */}
               {hoverSlot && (
                 <line x1={hoverSlot.svgX} y1={padT} x2={hoverSlot.svgX} y2={padT + plotH}
-                  stroke="rgba(0,0,0,0.35)" strokeWidth={1} strokeDasharray="4 3" />
+                  stroke={isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.35)'} strokeWidth={1} strokeDasharray="4 3" />
               )}
 
               {!hasData && (
                 <text x={padL + plotW / 2} y={padT + plotH / 2} textAnchor="middle"
-                  fontSize={14} fill="rgba(0,0,0,0.2)" style={labelFont}>暂无数据</text>
+                  fontSize={14} fill={isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'} style={labelFont}>暂无数据</text>
               )}
             </svg>
 

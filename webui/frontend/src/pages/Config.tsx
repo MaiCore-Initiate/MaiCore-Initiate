@@ -90,8 +90,8 @@ function PillButton({ label, selected, onClick }: { label: string; selected?: bo
       onClick={onClick}
       className="h-[54px] px-[24px] rounded-[27px] cursor-pointer transition-all duration-300 shrink-0"
       style={{
-        background: selected ? 'rgba(255,255,255,0.6)' : 'transparent',
-        border: '2px solid rgba(0,0,0,0.5)',
+        background: selected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+        border: `2px solid ${selected ? 'var(--mc-choice-selected-border)' : 'var(--mc-border-strong)'}`,
       }}
     >
       <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative', top: 2 }}>{label}</span>
@@ -109,8 +109,9 @@ function InstanceCard({ instance, selected, onClick, index }: {
       <GlassCard
         radius={24}
         shadow={selected ? '6px 6px 8px rgba(0,0,0,0.45)' : '4px 4px 4px rgba(0,0,0,0.25)'}
-        borderColor={selected ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)'}
+        borderColor={selected ? 'var(--mc-choice-selected-border)' : 'var(--mc-border-muted)'}
         borderWidth={selected ? 3 : 2}
+        bgOpacity={0.62}
         className="cursor-pointer transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
         onClick={onClick}
       >
@@ -119,9 +120,9 @@ function InstanceCard({ instance, selected, onClick, index }: {
             {title}
           </div>
           <div className="mt-[4px] flex flex-col gap-[2px]">
-            <span style={{ ...valueFont, color: '#707070' }}>序列号：{instance.serial}</span>
-            <span style={{ ...valueFont, color: '#707070' }}>版本：{instance.version || '-'}</span>
-            <span style={{ ...valueFont, color: '#707070' }}>QQ账号：{instance.qqAccount || '-'}</span>
+            <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>序列号：{instance.serial}</span>
+            <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>版本：{instance.version || '-'}</span>
+            <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>QQ账号：{instance.qqAccount || '-'}</span>
           </div>
         </div>
       </GlassCard>
@@ -149,15 +150,18 @@ function TypeToggle({ options, value, onChange }: {
   return (
     <div
       ref={containerRef}
-      className="relative inline-flex items-center h-[50px] rounded-[25px] border-2 border-black/50 p-[5px]"
+      className="relative inline-flex items-center h-[50px] rounded-[25px] p-[5px]"
       style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))' }}
     >
+      <div className="absolute inset-0 rounded-[25px] pointer-events-none" style={{ border: '2px solid var(--mc-border-strong)' }} />
       <div
-        className="absolute h-[40px] rounded-[20px] bg-white border border-black/50 transition-all duration-300 ease-out"
+        className="absolute h-[40px] rounded-[20px] transition-all duration-300 ease-out"
         style={{
           width: sliderStyle.width,
           left: sliderStyle.left,
           top: 3,
+          background: 'var(--mc-control-solid)',
+          border: '1px solid var(--mc-border-strong)',
           filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))',
         }}
       />
@@ -166,7 +170,7 @@ function TypeToggle({ options, value, onChange }: {
           key={opt}
           onClick={() => onChange(opt)}
           className="relative z-10 h-[40px] px-[20px] cursor-pointer bg-transparent border-none transition-colors duration-200"
-          style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: value === opt ? '#000' : 'rgba(0,0,0,0.4)' }}
+          style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: value === opt ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }}
         >
           {opt}
         </button>
@@ -194,7 +198,8 @@ function FieldRow({ label, value, onChange, disabled, wide, index, children, pla
             style={{
               ...valueFont,
               width: wide ? 595 : 221,
-              color: disabled ? 'rgba(0,0,0,0.5)' : 'inherit',
+              color: disabled ? 'var(--mc-text-faint)' : 'var(--mc-text-secondary)',
+              borderColor: 'var(--mc-border-strong)',
             }}
           />
         </div>

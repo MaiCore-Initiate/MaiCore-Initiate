@@ -67,7 +67,7 @@ const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
 const btnFont = { fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative' as const, top: 2 }
 const pillShadow = "absolute inset-0 rounded-[27px] pointer-events-none"
-const pillShadowStyle = { border: '2px solid rgba(0,0,0,0.5)', boxShadow: '2px 3px 6px rgba(0,0,0,0.15)' }
+const pillShadowStyle = { border: '2px solid var(--mc-border-strong)', boxShadow: '2px 3px 6px var(--mc-shadow-soft)' }
 
 /* ─── 原有：插件详情弹窗 (略有折叠保留) ─── */
 function PluginDetailModal({ plugin, instanceName, instanceSerial, open, onClose, onChanged }: any) {
@@ -123,16 +123,16 @@ function PluginDetailModal({ plugin, instanceName, instanceSerial, open, onClose
 
   const m = detail?.manifest
   const labelStyle = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-  const valStyle = { fontSize: 25, ...monoFont, color: '#707070' }
+  const valStyle = { fontSize: 25, ...monoFont, color: 'var(--mc-text-secondary)' }
 
   return (
     <Modal open={open} onClose={onClose} width={720}>
       <div className="p-[40px] max-h-[90vh] overflow-y-auto custom-scrollbar">
         {loading ? (
-          <div className="text-center text-black/30 py-[40px]" style={labelStyle}>加载中...</div>
+          <div className="text-center py-[40px]" style={{ ...labelStyle, color: 'var(--mc-text-faint)' }}>加载中...</div>
         ) : (
           <>
-            <h2 className="text-black mb-[8px]" style={{ fontSize: 45, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+            <h2 className="mb-[8px]" style={{ fontSize: 45, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-primary)' }}>
               {m?.name || plugin.name}
             </h2>
             <div className="flex flex-col gap-[6px]">
@@ -148,7 +148,7 @@ function PluginDetailModal({ plugin, instanceName, instanceSerial, open, onClose
                 ['语言', m?.default_locale || plugin.default_locale || '-'],
               ] as [string, string][]).map(([label, val]) => (
                 <div key={label} className="flex items-baseline gap-[12px]">
-                  <span className="text-black shrink-0" style={labelStyle}>{label}</span>
+                  <span className="shrink-0" style={{ ...labelStyle, color: 'var(--mc-text-primary)' }}>{label}</span>
                   <span className="break-all" style={valStyle}>{val}</span>
                 </div>
               ))}
@@ -167,8 +167,8 @@ function PluginDetailModal({ plugin, instanceName, instanceSerial, open, onClose
                   onClick={handleUninstall} disabled={operating}
                   className="h-[54px] px-[36px] rounded-[27px] flex items-center gap-[12px] cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-40 relative"
                 >
-                  <div className={pillShadow} style={{ ...pillShadowStyle, borderColor: 'rgba(200,0,0,0.5)' }} />
-                  <span style={{ ...btnFont, color: '#c00' }}>卸载</span>
+                  <div className={pillShadow} style={{ ...pillShadowStyle, borderColor: 'rgba(255,120,120,0.5)' }} />
+                  <span style={{ ...btnFont, color: '#ff8a8a' }}>卸载</span>
                 </button>
               )}
               <div className="flex-1" />
@@ -179,7 +179,7 @@ function PluginDetailModal({ plugin, instanceName, instanceSerial, open, onClose
                   title="在 GitHub 上查看" onClick={e => e.stopPropagation()}
                 >
                   <div className={pillShadow} style={pillShadowStyle} />
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
                     <path d="M9 18c-4.51 2-5-2-7-2" />
                   </svg>
@@ -197,25 +197,25 @@ function PluginDetailModal({ plugin, instanceName, instanceSerial, open, onClose
 function PluginCard({ plugin, instanceSerial, onClick }: any) {
   const isInstalled = plugin.installed_in?.includes(instanceSerial)
   const cardLabel = { fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-  const cardMono = { fontSize: 18, ...monoFont, color: '#707070' }
+  const cardMono = { fontSize: 18, ...monoFont, color: 'var(--mc-text-secondary)' }
 
   return (
     <div
       className="relative rounded-[20px] p-[20px] cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] animate-fade-slide-up"
       style={{
-        border: '2px solid rgba(0,0,0,0.3)',
-        boxShadow: '2px 3px 6px rgba(0,0,0,0.1)',
-        background: isInstalled ? 'rgba(0,0,0,0.04)' : 'transparent',
+        border: '2px solid var(--mc-border-muted)',
+        boxShadow: '2px 3px 6px var(--mc-shadow-soft)',
+        background: isInstalled ? 'var(--mc-control-hover)' : 'transparent',
       }}
       onClick={onClick}
     >
       {isInstalled && (
         <div className="absolute top-[12px] right-[16px] px-[10px] py-[2px] rounded-[10px]"
-          style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.2)' }}>
-          <span style={{ fontSize: 14, ...monoFont, color: '#555' }}>已安装</span>
+          style={{ background: 'var(--mc-control-hover)', border: '1px solid var(--mc-border-soft)' }}>
+          <span style={{ fontSize: 14, ...monoFont, color: 'var(--mc-text-muted)' }}>已安装</span>
         </div>
       )}
-      <div className="text-black font-semibold truncate pr-[60px]" style={{ fontSize: 28, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+      <div className="font-semibold truncate pr-[60px]" style={{ fontSize: 28, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-primary)' }}>
         {plugin.name}
       </div>
       <div className="flex items-center gap-[12px] mt-[4px]">
@@ -223,14 +223,14 @@ function PluginCard({ plugin, instanceSerial, onClick }: any) {
         <span style={{ ...cardMono, opacity: 0.5 }}>|</span>
         <span style={cardMono}>v{plugin.version}</span>
       </div>
-      <div className="mt-[6px] text-black/60 line-clamp-2" style={cardLabel}>
+      <div className="mt-[6px] line-clamp-2" style={{ ...cardLabel, color: 'var(--mc-text-secondary)' }}>
         {plugin.description || '暂无描述'}
       </div>
       {plugin.keywords?.length > 0 && (
         <div className="flex flex-wrap gap-[6px] mt-[8px]">
           {plugin.keywords.slice(0, 4).map((k: string) => (
-            <span key={k} className="px-[8px] py-[1px] rounded-[8px] text-black/40"
-              style={{ fontSize: 14, ...monoFont, border: '1px solid rgba(0,0,0,0.15)' }}>
+            <span key={k} className="px-[8px] py-[1px] rounded-[8px]"
+              style={{ fontSize: 14, ...monoFont, border: '1px solid var(--mc-border-soft)', color: 'var(--mc-text-muted)' }}>
               {k}
             </span>
           ))}
@@ -368,7 +368,7 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
   collectDirs(tree)
 
   const labelStyle = { fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-  const inputStyle = "flex-1 h-[42px] px-[14px] rounded-[21px] bg-white/60 border-2 border-black/30 outline-none text-black"
+  const inputStyle = "flex-1 h-[42px] px-[14px] rounded-[21px] outline-none"
 
   const renderTree = (items: any[], depth = 0) => (
     <div style={{ paddingLeft: depth * 16 }}>
@@ -389,11 +389,11 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
     <div className="flex flex-col gap-[16px] animate-fade-slide-up">
       {/* 步骤1：创建插件文件夹 */}
       <div className="flex items-center gap-[12px]">
-        <span className="text-black shrink-0" style={labelStyle}>插件文件夹名</span>
+        <span className="shrink-0" style={{ ...labelStyle, color: 'var(--mc-text-primary)' }}>插件文件夹名</span>
         <input
           value={folderName} onChange={e => setFolderName(e.target.value)}
           disabled={created} placeholder="例如: my-plugin"
-          className={inputStyle} style={{ ...monoFont, fontSize: 20 }}
+          className={inputStyle} style={{ ...monoFont, fontSize: 20, background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-soft)', color: 'var(--mc-text-primary)' }}
         />
         {!created ? (
           <button onClick={handleCreate} className="h-[42px] px-[18px] rounded-[21px] cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative shrink-0">
@@ -401,24 +401,24 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
             <span style={{ ...labelStyle, position: 'relative' }}>创建</span>
           </button>
         ) : (
-          <span className="text-black/30 shrink-0" style={labelStyle}>已创建</span>
+          <span className="shrink-0" style={{ ...labelStyle, color: 'var(--mc-text-faint)' }}>已创建</span>
         )}
       </div>
 
       {created && (
         <>
           {/* 文件树 */}
-          <div className="rounded-[16px] p-[16px] max-h-[200px] overflow-y-auto custom-scrollbar" style={{ border: '2px solid rgba(0,0,0,0.15)', background: 'rgba(255,255,255,0.3)' }}>
-            <div className="text-black/40 mb-[4px]" style={{ fontSize: 16, ...monoFont }}>/{folderName}/</div>
-            {tree.length > 0 ? renderTree(tree) : <div className="text-black/20" style={{ fontSize: 16, ...monoFont }}>(空)</div>}
+          <div className="rounded-[16px] p-[16px] max-h-[200px] overflow-y-auto custom-scrollbar" style={{ border: '2px solid var(--mc-border-soft)', background: 'var(--mc-panel-bg-soft)' }}>
+            <div className="mb-[4px]" style={{ fontSize: 16, ...monoFont, color: 'var(--mc-text-muted)' }}>/{folderName}/</div>
+            {tree.length > 0 ? renderTree(tree) : <div style={{ fontSize: 16, ...monoFont, color: 'var(--mc-text-faint)' }}>(空)</div>}
           </div>
 
           {/* 创建子文件夹 */}
           <div className="flex items-center gap-[12px]">
-            <span className="text-black/60 shrink-0" style={labelStyle}>新建子文件夹</span>
+            <span className="shrink-0" style={{ ...labelStyle, color: 'var(--mc-text-secondary)' }}>新建子文件夹</span>
             <input
               value={newSubFolder} onChange={e => setNewSubFolder(e.target.value)}
-              placeholder="例如: utils" className={inputStyle} style={{ ...monoFont, fontSize: 20 }}
+              placeholder="例如: utils" className={inputStyle} style={{ ...monoFont, fontSize: 20, background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-soft)', color: 'var(--mc-text-primary)' }}
             />
             <button onClick={handleCreateSub} className="h-[42px] px-[18px] rounded-[21px] cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative shrink-0">
               <div className="absolute inset-0 rounded-[21px] pointer-events-none" style={pillShadowStyle} />
@@ -428,23 +428,23 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
 
           {/* 上传文件 */}
           <div className="flex items-center gap-[12px]">
-            <span className="text-black/60 shrink-0" style={labelStyle}>上传到</span>
+            <span className="shrink-0" style={{ ...labelStyle, color: 'var(--mc-text-secondary)' }}>上传到</span>
             <div className="relative" ref={dropdownRef}>
               <button
                 type="button"
-                className="h-[42px] px-[14px] rounded-[21px] bg-white/60 border-2 border-black/30 outline-none text-black cursor-pointer flex items-center gap-[8px]"
-                style={{ ...monoFont, fontSize: 18, minWidth: 160 }}
+                className="h-[42px] px-[14px] rounded-[21px] outline-none cursor-pointer flex items-center gap-[8px]"
+                style={{ ...monoFont, fontSize: 18, minWidth: 160, background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-soft)', color: 'var(--mc-text-primary)' }}
                 onClick={() => setDropdownOpen(!dropdownOpen)}
               >
                 <span className="flex-1 text-left truncate">{uploadTarget || '(根目录)'}</span>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0" style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                  <path d="M2 4L6 8L10 4" stroke="rgba(0,0,0,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M2 4L6 8L10 4" stroke="var(--mc-icon-stroke)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
               {dropdownOpen && (
                 <div
-                  className="absolute top-[46px] left-0 min-w-full rounded-[14px] bg-white/60 backdrop-blur-md border-2 border-black/20 py-[6px] z-50 max-h-[200px] overflow-y-auto custom-scrollbar"
-                  style={{ boxShadow: '2px 4px 12px rgba(0,0,0,0.12)' }}
+                  className="absolute top-[46px] left-0 min-w-full rounded-[14px] backdrop-blur-md py-[6px] z-50 max-h-[200px] overflow-y-auto custom-scrollbar"
+                  style={{ boxShadow: '2px 4px 12px var(--mc-shadow-soft)', background: 'var(--mc-panel-bg-strong)', border: '2px solid var(--mc-border-soft)' }}
                 >
                   {folderPaths.map(p => {
                     const val = p === '(根目录)' ? '' : p
@@ -453,8 +453,8 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
                       <div
                         key={p}
                         className="px-[14px] py-[6px] cursor-pointer transition-colors duration-150"
-                        style={{ ...monoFont, fontSize: 16, background: active ? 'rgba(0,0,0,0.07)' : 'transparent', color: active ? '#000' : '#555' }}
-                        onMouseEnter={e => { if (!active) (e.currentTarget.style.background = 'rgba(0,0,0,0.04)') }}
+                        style={{ ...monoFont, fontSize: 16, background: active ? 'var(--mc-choice-selected-bg)' : 'transparent', color: active ? 'var(--mc-text-primary)' : 'var(--mc-text-secondary)' }}
+                        onMouseEnter={e => { if (!active) (e.currentTarget.style.background = 'var(--mc-control-bg-soft)') }}
                         onMouseLeave={e => { if (!active) (e.currentTarget.style.background = 'transparent') }}
                         onClick={() => { setUploadTarget(val); setDropdownOpen(false) }}
                       >
@@ -484,12 +484,12 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
                   <div className="absolute inset-0 rounded-[21px] pointer-events-none" style={pillShadowStyle} />
                   <button
                     title="移除"
-                    className="w-[22px] h-[22px] rounded-full flex items-center justify-center cursor-pointer hover:bg-black/10 transition-colors shrink-0"
+                    className="w-[22px] h-[22px] rounded-full flex items-center justify-center cursor-pointer transition-colors shrink-0"
                     onClick={() => setUploadQueue(prev => prev.filter((_, j) => j !== i))}
                   >
                     <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
-                      <line x1="2" y1="2" x2="12" y2="12" stroke="black" strokeWidth="2" strokeLinecap="round"/>
-                      <line x1="12" y1="2" x2="2" y2="12" stroke="black" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="2" y1="2" x2="12" y2="12" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="12" y1="2" x2="2" y2="12" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round"/>
                     </svg>
                   </button>
                   <span style={{ ...monoFont, fontSize: 16, position: 'relative' }}>{entry.name}</span>
@@ -502,7 +502,7 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
             </div>
           )}
 
-          <div className="text-black/30" style={{ fontSize: 16, ...monoFont }}>
+          <div style={{ fontSize: 16, ...monoFont, color: 'var(--mc-text-faint)' }}>
             * plugin.py 和 _manifest.json 必须位于根目录
           </div>
 
@@ -513,8 +513,8 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
               <span style={{ fontSize: 24, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative' as const }}>验证并注册插件</span>
             </button>
             <button onClick={onDone} className="h-[46px] px-[24px] rounded-[23px] cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative">
-              <div className="absolute inset-0 rounded-[23px] pointer-events-none" style={{ ...pillShadowStyle, borderColor: 'rgba(0,0,0,0.3)' }} />
-              <span className="text-black/50" style={{ fontSize: 24, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative' as const }}>取消</span>
+              <div className="absolute inset-0 rounded-[23px] pointer-events-none" style={{ ...pillShadowStyle, borderColor: 'var(--mc-border-soft)' }} />
+              <span style={{ fontSize: 24, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative' as const, color: 'var(--mc-text-muted)' }}>取消</span>
             </button>
           </div>
         </>
@@ -527,7 +527,7 @@ function LocalPluginDetailModal({ plugin, open, onClose }: { plugin: LocalPlugin
   if (!plugin) return null
 
   const labelStyle = { fontSize: 23, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-  const valStyle = { fontSize: 22, ...monoFont, color: '#707070' }
+  const valStyle = { fontSize: 22, ...monoFont, color: 'var(--mc-text-secondary)' }
   const installedAt = plugin.installed_at ? new Date(plugin.installed_at).toLocaleString() : '-'
   const compat = plugin.host_application
     ? `${plugin.host_application.min_version || '?'} ~ ${plugin.host_application.max_version || '最新'}`
@@ -536,7 +536,7 @@ function LocalPluginDetailModal({ plugin, open, onClose }: { plugin: LocalPlugin
   return (
     <Modal open={open} onClose={onClose} width={760}>
       <div className="p-[36px] max-h-[90vh] overflow-y-auto custom-scrollbar">
-        <h2 className="text-black mb-[10px]" style={{ fontSize: 42, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+        <h2 className="mb-[10px]" style={{ fontSize: 42, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-primary)' }}>
           {plugin.name}
         </h2>
         <div className="flex flex-col gap-[6px]">
@@ -556,7 +556,7 @@ function LocalPluginDetailModal({ plugin, open, onClose }: { plugin: LocalPlugin
             ['plugin.py', plugin.has_plugin_py ? '存在' : '缺失'],
           ] as [string, string][]).map(([label, val]) => (
             <div key={label} className="flex items-baseline gap-[12px]">
-              <span className="text-black shrink-0" style={labelStyle}>{label}</span>
+              <span className="shrink-0" style={{ ...labelStyle, color: 'var(--mc-text-primary)' }}>{label}</span>
               <span className="break-all" style={valStyle}>{val}</span>
             </div>
           ))}
@@ -583,7 +583,7 @@ function LocalPluginDetailModal({ plugin, open, onClose }: { plugin: LocalPlugin
               title="查看仓库"
             >
               <div className="absolute inset-0 rounded-[23px] pointer-events-none" style={pillShadowStyle} />
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative' }}>
                 <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
                 <path d="M9 18c-4.51 2-5-2-7-2" />
               </svg>
@@ -717,8 +717,8 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
       <div
         className="min-h-[120px] rounded-[30px] flex flex-col items-center justify-center cursor-pointer transition-all duration-200 mb-[16px]"
         style={{
-          border: `3px dashed ${dragging ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)'}`,
-          background: dragging ? 'rgba(0,0,0,0.04)' : 'transparent',
+          border: `3px dashed ${dragging ? 'var(--mc-border-strong)' : 'var(--mc-empty-border)'}`,
+          background: dragging ? 'var(--mc-control-bg-soft)' : 'transparent',
         }}
         onDragOver={e => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
@@ -726,10 +726,10 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
         onClick={() => archiveInputRef.current?.click()}
       >
         <svg width="64" height="40" viewBox="0 0 118 72" fill="none" className="mb-[8px]">
-          <rect x="2.5" y="2.5" width="113" height="67" rx="17.5" stroke="rgba(0,0,0,0.2)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="210 190" fill="none" />
-          <path d="M59 15 L39 42 M59 15 L78 42" stroke="rgba(0,0,0,0.2)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <rect x="2.5" y="2.5" width="113" height="67" rx="17.5" stroke="var(--mc-empty-border)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="210 190" fill="none" />
+          <path d="M59 15 L39 42 M59 15 L78 42" stroke="var(--mc-empty-border)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
         </svg>
-        <span className="text-black/20" style={{ fontSize: 22, fontFamily: "'问藏书房','HarmonyOS Sans SC', sans-serif" }}>
+        <span style={{ fontSize: 22, fontFamily: "'问藏书房','HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
           点击或拖拽压缩包导入插件{'  '}
           <span style={{ ...monoFont, fontStyle: 'italic' }}>|  *.zip</span>、
           <span style={{ ...monoFont, fontStyle: 'italic' }}>*.tar.gz</span>、
@@ -751,12 +751,12 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
         {selectedIds.size > 0 && (
           <>
             <button onClick={handleBatchUnregister} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative animate-fade-slide-up">
-              <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23, borderColor: 'rgba(160,120,0,0.55)' }} />
-              <span style={{ ...localBtnStyle, color: '#8a6400' }}>批量注销 ({selectedIds.size})</span>
+              <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23, borderColor: 'rgba(245,158,11,0.45)' }} />
+              <span style={{ ...localBtnStyle, color: '#f59e0b' }}>批量注销 ({selectedIds.size})</span>
             </button>
             <button onClick={handleBatchUninstall} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative animate-fade-slide-up">
-              <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23, borderColor: 'rgba(180,0,0,0.5)' }} />
-              <span style={{ ...localBtnStyle, color: '#a00' }}>批量卸载 ({selectedIds.size})</span>
+              <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23, borderColor: 'rgba(255,120,120,0.45)' }} />
+              <span style={{ ...localBtnStyle, color: '#ff8a8a' }}>批量卸载 ({selectedIds.size})</span>
             </button>
           </>
         )}
@@ -766,12 +766,12 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
       <div className="flex-1 overflow-y-auto overflow-x-visible custom-scrollbar px-[8px] pb-[8px]">
         {loading ? (
           <div className="flex items-center justify-center h-[120px] gap-[10px] animate-fade-in">
-            <div className="rounded-full animate-spin" style={{ width: 20, height: 20, border: '3px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
-            <span className="text-black/20" style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>加载中...</span>
+            <div className="rounded-full animate-spin" style={{ width: 20, height: 20, border: '3px solid var(--mc-loading-ring)', borderTopColor: 'var(--mc-loading-ring-active)' }} />
+            <span style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>加载中...</span>
           </div>
         ) : localPlugins.length === 0 ? (
           <div className="flex items-center justify-center h-[120px] animate-fade-in">
-            <span className="text-black/20" style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>未找到本地插件</span>
+            <span style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>未找到本地插件</span>
           </div>
         ) : (
           <div className="flex flex-col gap-[10px]">
@@ -782,45 +782,46 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
                   key={p.folder_name}
                   className="relative rounded-[14px] px-[14px] py-[10px] pl-[44px] transition-all duration-200 hover:scale-[1.01] cursor-pointer origin-center animate-fade-slide-up"
                   style={{
-                    border: '2px solid rgba(0,0,0,0.2)',
-                    boxShadow: '2px 3px 6px rgba(0,0,0,0.08)',
-                    background: checked ? 'rgba(0,0,0,0.04)' : 'transparent',
+                    border: '2px solid var(--mc-border-soft)',
+                    boxShadow: '2px 3px 6px var(--mc-shadow-soft)',
+                    background: checked ? 'var(--mc-choice-selected-bg)' : 'transparent',
                     animationDelay: `${idx * 40}ms`, animationFillMode: 'backwards',
                   }}
                   onClick={() => toggleSelect(p.id)}
                 >
                   {/* checkbox */}
                   <input
-                    type="checkbox" className="absolute left-[14px] top-[16px] w-[18px] h-[18px] cursor-pointer accent-black"
+                    type="checkbox" className="absolute left-[14px] top-[16px] w-[18px] h-[18px] cursor-pointer"
+                    style={{ accentColor: 'var(--mc-text-primary)' }}
                     checked={checked}
                     onClick={e => e.stopPropagation()}
                     onChange={() => toggleSelect(p.id)}
                     title="选择"
                   />
                   <div className="flex items-center gap-[10px] min-w-0">
-                    <span className="text-black font-semibold min-w-0 max-w-[220px] truncate" style={{ fontSize: 21, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>{p.name}</span>
-                    <span className="shrink-0" style={{ ...monoFont, fontSize: 16, color: '#888' }}>v{p.version || '?'}</span>
-                    <span className="min-w-0 max-w-[220px] truncate" style={{ ...monoFont, fontSize: 14, color: '#aaa' }}>{p.folder_name}</span>
+                    <span className="font-semibold min-w-0 max-w-[220px] truncate" style={{ fontSize: 21, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-primary)' }}>{p.name}</span>
+                    <span className="shrink-0" style={{ ...monoFont, fontSize: 16, color: 'var(--mc-text-muted)' }}>v{p.version || '?'}</span>
+                    <span className="min-w-0 max-w-[220px] truncate" style={{ ...monoFont, fontSize: 14, color: 'var(--mc-text-faint)' }}>{p.folder_name}</span>
                     <div className="flex-1" />
                     <button
                       className="h-[30px] px-[10px] rounded-[15px] shrink-0 cursor-pointer transition-all duration-200 hover:scale-[1.03] active:scale-95 relative"
                       onClick={e => { e.stopPropagation(); setDetailPlugin(p) }}
                     >
-                      <div className="absolute inset-0 rounded-[15px] pointer-events-none" style={{ border: '1px solid rgba(0,0,0,0.25)' }} />
+                      <div className="absolute inset-0 rounded-[15px] pointer-events-none" style={{ border: '1px solid var(--mc-border-soft)' }} />
                       <span style={{ ...monoFont, fontSize: 13, position: 'relative' }}>详情</span>
                     </button>
                     {/* 状态标签 */}
                     {p.registered ? (
-                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: '#555', background: 'rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.15)' }}>已注册</span>
+                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: 'var(--mc-text-secondary)', background: 'var(--mc-control-bg-soft)', border: '1px solid var(--mc-border-soft)' }}>已注册</span>
                     ) : (
-                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: '#a66', background: 'rgba(180,0,0,0.06)', border: '1px solid rgba(180,0,0,0.2)' }}>未注册</span>
+                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: '#ffb4b4', background: 'rgba(180,0,0,0.12)', border: '1px solid rgba(255,120,120,0.28)' }}>未注册</span>
                     )}
                     {(!p.has_manifest || !p.has_plugin_py) && (
-                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: '#a00', background: 'rgba(180,0,0,0.06)', border: '1px solid rgba(180,0,0,0.2)' }}>缺少关键文件</span>
+                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: '#ff8a8a', background: 'rgba(180,0,0,0.14)', border: '1px solid rgba(255,120,120,0.30)' }}>缺少关键文件</span>
                     )}
                   </div>
                   {p.description && (
-                    <div className="mt-[2px] text-black/50 line-clamp-1 pr-[6px]" style={{ fontSize: 14, ...monoFont }}>{p.description}</div>
+                    <div className="mt-[2px] line-clamp-1 pr-[6px]" style={{ fontSize: 14, ...monoFont, color: 'var(--mc-text-muted)' }}>{p.description}</div>
                   )}
                 </div>
               )
@@ -908,32 +909,32 @@ export default function Plugins() {
 
   return (
     <div className="flex flex-col p-12 h-full">
-      <h1 className="text-black shrink-0 mb-[16px] animate-card-enter" style={pageTitleStyle}>插件管理</h1>
+      <h1 className="shrink-0 mb-[16px] animate-card-enter" style={{ ...pageTitleStyle, color: 'var(--mc-text-primary)' }}>插件管理</h1>
 
       <div className="flex gap-6 flex-1 min-h-0">
         {/* 左侧：实例选择 (无改动) */}
         <div className="w-[425px] shrink-0 animate-card-enter">
           <GlassCard>
             <div className="p-[24px] flex flex-col h-full">
-              <h2 className="text-black pb-[12px]" style={sectionTitle}>选择实例</h2>
+              <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
 
-              <div className="flex items-center h-[71px] px-[22px] gap-[12px] rounded-[35.5px] bg-white/60 border-2 border-black/50 shrink-0">
+              <div className="flex items-center h-[71px] px-[22px] gap-[12px] rounded-[35.5px] shrink-0" style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                  <circle cx="9.5" cy="9.5" r="7.5" stroke="rgba(0,0,0,0.5)" strokeWidth="3" />
-                  <line x1="15" y1="15.5" x2="22" y2="23" stroke="rgba(0,0,0,0.5)" strokeWidth="3" strokeLinecap="round" />
+                  <circle cx="9.5" cy="9.5" r="7.5" stroke="var(--mc-icon-stroke)" strokeWidth="3" />
+                  <line x1="15" y1="15.5" x2="22" y2="23" stroke="var(--mc-icon-stroke)" strokeWidth="3" strokeLinecap="round" />
                 </svg>
                 <input
                   value={instSearch} onChange={e => setInstSearch(e.target.value)}
                   placeholder="Search instance"
-                  className="flex-1 bg-transparent outline-none text-black placeholder:text-black/20"
-                  style={{ ...monoFont, fontSize: 25 }}
+                  className="flex-1 bg-transparent outline-none"
+                  style={{ ...monoFont, fontSize: 25, color: 'var(--mc-text-primary)' }}
                 />
               </div>
 
               <div className="flex-1 overflow-y-auto mt-[12px] px-[4px]">
                 {filteredInstances.length === 0 ? (
-                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed border-[#9e9e9e]">
-                    <span className="text-[#9e9e9e] font-semibold text-base" style={monoFont}>no instance</span>
+                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed" style={{ borderColor: 'var(--mc-empty-border)' }}>
+                    <span className="font-semibold text-base" style={{ ...monoFont, color: 'var(--mc-empty-text)' }}>no instance</span>
                   </div>
                 ) : (
                   filteredInstances.map((inst, i) => {
@@ -948,8 +949,8 @@ export default function Plugins() {
                           style={{
                             height: 54, padding: isSelected ? '0 20px' : '0 4px',
                             borderRadius: isSelected ? 27 : 6,
-                            background: isSelected ? 'rgba(255,255,255,0.6)' : 'transparent',
-                            border: isSelected ? '2px solid rgba(0,0,0,0.5)' : '2px solid transparent',
+                            background: isSelected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+                            border: isSelected ? '2px solid var(--mc-choice-selected-border)' : '2px solid transparent',
                           }}
                         >
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
@@ -957,7 +958,7 @@ export default function Plugins() {
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
                         </button>
                         {isSelected && i < filteredInstances.length - 1 && <div className="h-[6px]" />}
-                        {!isSelected && i < filteredInstances.length - 1 && <hr className="border-[#707070]" />}
+                        {!isSelected && i < filteredInstances.length - 1 && <hr style={{ borderColor: 'var(--mc-divider-strong)' }} />}
                       </div>
                     )
                   })
@@ -972,13 +973,13 @@ export default function Plugins() {
           {selectedInstance ? (
             selectedInstance.botType === 'MoFox_bot' ? (
               <div className="flex items-center justify-center h-full">
-                <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+                <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
                   当前实例类型不支持自动安装插件
                 </span>
               </div>
             ) : selectedInstance.version === 'classical' ? (
               <div className="flex items-center justify-center h-full">
-                <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+                <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
                   Classical 版本不支持插件功能
                 </span>
               </div>
@@ -987,21 +988,21 @@ export default function Plugins() {
                 <div className="p-[28px] flex flex-col h-full">
                   {/* 顶部操作栏 */}
                   <div className="flex items-center gap-[16px] mb-[16px]">
-                    <h2 className="text-black flex-1" style={sectionTitle}>
+                    <h2 className="flex-1" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>
                       {isLocalMode ? '本地插件管理' : '可用插件'}
                     </h2>
 
                     {!isLocalMode && (
-                      <div className="flex items-center h-[50px] px-[18px] gap-[8px] rounded-[25px] bg-white/60 border-2 border-black/50" style={{ width: 300 }}>
+                      <div className="flex items-center h-[50px] px-[18px] gap-[8px] rounded-[25px]" style={{ width: 300, background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                          <circle cx="9.5" cy="9.5" r="7.5" stroke="rgba(0,0,0,0.5)" strokeWidth="3" />
-                          <line x1="15" y1="15.5" x2="22" y2="23" stroke="rgba(0,0,0,0.5)" strokeWidth="3" strokeLinecap="round" />
+                          <circle cx="9.5" cy="9.5" r="7.5" stroke="var(--mc-icon-stroke)" strokeWidth="3" />
+                          <line x1="15" y1="15.5" x2="22" y2="23" stroke="var(--mc-icon-stroke)" strokeWidth="3" strokeLinecap="round" />
                         </svg>
                         <input
                           value={search} onChange={e => setSearch(e.target.value)}
                           placeholder="搜索插件"
-                          className="flex-1 bg-transparent outline-none text-black placeholder:text-black/20"
-                          style={{ ...monoFont, fontSize: 20 }}
+                          className="flex-1 bg-transparent outline-none"
+                          style={{ ...monoFont, fontSize: 20, color: 'var(--mc-text-primary)' }}
                         />
                       </div>
                     )}
@@ -1010,9 +1011,9 @@ export default function Plugins() {
                     <button
                       onClick={() => setIsLocalMode(!isLocalMode)}
                       className="h-[50px] px-[20px] rounded-[25px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative"
-                      style={{ background: isLocalMode ? 'rgba(0,0,0,0.1)' : 'transparent' }}
+                      style={{ background: isLocalMode ? 'var(--mc-control-hover)' : 'transparent' }}
                     >
-                      <div className="absolute inset-0 rounded-[25px] pointer-events-none" style={{...pillShadowStyle, borderColor: isLocalMode ? 'black' : 'rgba(0,0,0,0.5)' }} />
+                      <div className="absolute inset-0 rounded-[25px] pointer-events-none" style={{...pillShadowStyle, borderColor: isLocalMode ? 'var(--mc-choice-selected-border)' : 'var(--mc-border-strong)' }} />
                       <span style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative', top: 1 }}>
                         {isLocalMode ? '返回远端市场' : '本地插件管理'}
                       </span>
@@ -1049,7 +1050,7 @@ export default function Plugins() {
                     ) : (
                       filtered.length === 0 ? (
                         <div className="flex items-center justify-center h-[200px]">
-                          <span className="text-black/20" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+                          <span style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
                             {plugins.length === 0 ? '正在加载插件列表...' : '没有匹配的插件'}
                           </span>
                         </div>
@@ -1070,7 +1071,7 @@ export default function Plugins() {
             )
           ) : (
             <div className="flex items-center justify-center h-full">
-              <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+              <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
                 请选择一个实例
               </span>
             </div>

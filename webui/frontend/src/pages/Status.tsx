@@ -132,11 +132,11 @@ type WindowSec = 60 | 180
 
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-const valueFont = { fontSize: 25, ...monoFont, color: '#707070' }
+const valueFont = { fontSize: 25, ...monoFont, color: 'var(--mc-text-secondary)' }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
 const smallLabel = { fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-const smallValue = { fontSize: 20, ...monoFont, color: '#707070' }
+const smallValue = { fontSize: 20, ...monoFont, color: 'var(--mc-text-secondary)' }
 
 const HISTORY_MAX_POINTS = 180
 
@@ -333,13 +333,13 @@ function ProcessTrendPanel({
   const buttonStyle = (active: boolean) => ({
     height: 46,
     borderRadius: 23,
-    border: `2px solid ${active ? 'rgba(0,0,0,0.52)' : 'rgba(0,0,0,0.28)'}`,
-    background: active ? 'rgba(255,255,255,0.58)' : 'rgba(255,255,255,0.28)',
+    border: `2px solid ${active ? 'var(--mc-choice-selected-border)' : 'var(--mc-border-muted)'}`,
+    background: active ? 'var(--mc-choice-selected-bg)' : 'var(--mc-control-bg-soft)',
     cursor: 'pointer',
   })
 
   return (
-    <div className="rounded-[22px] p-[14px]" style={{ border: '2px solid rgba(0,0,0,0.25)', boxShadow: '2px 3px 8px rgba(0,0,0,0.12)' }}>
+    <div className="rounded-[22px] p-[14px]" style={{ border: '2px solid var(--mc-border-soft)', boxShadow: '2px 3px 8px var(--mc-shadow-soft)' }}>
       <div className="flex gap-[14px]">
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-[8px] px-[4px]">
@@ -373,17 +373,17 @@ function ProcessTrendPanel({
 
               {Array.from({ length: 5 }, (_, i) => {
                 const y = padT + (i / 4) * plotH
-                return <line key={`grid-${i}`} x1={padL} y1={y} x2={padL + plotW} y2={y} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />
+                return <line key={`grid-${i}`} x1={padL} y1={y} x2={padL + plotW} y2={y} stroke="var(--mc-chart-grid)" strokeWidth={1} />
               })}
 
-              <line x1={padL} y1={padT} x2={padL} y2={baseY} stroke="rgba(0,0,0,0.45)" strokeWidth={2} />
-              <line x1={padL} y1={baseY} x2={padL + plotW} y2={baseY} stroke="rgba(0,0,0,0.45)" strokeWidth={2} />
+              <line x1={padL} y1={padT} x2={padL} y2={baseY} stroke="var(--mc-chart-axis)" strokeWidth={2} />
+              <line x1={padL} y1={baseY} x2={padL + plotW} y2={baseY} stroke="var(--mc-chart-axis)" strokeWidth={2} />
 
               {Array.from({ length: 5 }, (_, i) => {
                 const val = config.max - (config.max * i) / 4
                 const y = padT + (i / 4) * plotH + 4
                 return (
-                  <text key={`tick-${i}`} x={padL - 8} y={y} textAnchor="end" fill="rgba(0,0,0,0.52)" style={{ fontSize: 12, ...monoFont }}>
+                  <text key={`tick-${i}`} x={padL - 8} y={y} textAnchor="end" fill="var(--mc-chart-label)" style={{ fontSize: 12, ...monoFont }}>
                     {formatNumber(val, config.max >= 100 ? 0 : 1)}{config.unit}
                   </text>
                 )
@@ -396,7 +396,7 @@ function ProcessTrendPanel({
                   y1={padT}
                   x2={hoverX}
                   y2={baseY}
-                  stroke="rgba(0,0,0,0.55)"
+                  stroke="var(--mc-chart-axis)"
                   strokeWidth={1.5}
                   strokeDasharray="6 6"
                 />
@@ -411,9 +411,9 @@ function ProcessTrendPanel({
                 style={{
                   left: Math.max(6, tooltipPos.x),
                   top: Math.max(6, tooltipPos.y),
-                  border: '1px solid rgba(0,0,0,0.22)',
-                  background: 'rgba(255,255,255,0.85)',
-                  boxShadow: '1px 2px 6px rgba(0,0,0,0.12)',
+                  border: '1px solid var(--mc-border-soft)',
+                  background: 'var(--mc-chart-tooltip-bg)',
+                  boxShadow: '1px 2px 6px var(--mc-shadow-soft)',
                   pointerEvents: 'none',
                   zIndex: 8,
                   minWidth: 156,
@@ -443,7 +443,7 @@ function ProcessTrendPanel({
           <button style={buttonStyle(windowSec === 180)} onClick={() => onChangeWindow(180)}>
             <span style={smallLabel}>3 分钟</span>
           </button>
-          <div className="mt-[8px] rounded-[14px] p-[10px]" style={{ border: '1px solid rgba(0,0,0,0.2)' }}>
+          <div className="mt-[8px] rounded-[14px] p-[10px]" style={{ border: '1px solid var(--mc-border-soft)', background: 'var(--mc-control-bg-soft)' }}>
             <div style={{ ...smallValue, fontSize: 16, lineHeight: 1.5 }}>
               当前显示：{config.label}（滚轮可切换CPU/内存）
             </div>
@@ -577,14 +577,14 @@ function SystemTrendPanel({
   const buttonStyle = (active: boolean, disabled = false) => ({
     height: 46,
     borderRadius: 23,
-    border: `2px solid ${active ? 'rgba(0,0,0,0.52)' : 'rgba(0,0,0,0.28)'}`,
-    background: active ? 'rgba(255,255,255,0.58)' : 'rgba(255,255,255,0.28)',
+    border: `2px solid ${active ? 'var(--mc-choice-selected-border)' : 'var(--mc-border-muted)'}`,
+    background: active ? 'var(--mc-choice-selected-bg)' : 'var(--mc-control-bg-soft)',
     opacity: disabled ? 0.45 : 1,
     cursor: disabled ? 'not-allowed' : 'pointer',
   })
 
   return (
-    <div className="rounded-[22px] p-[14px]" style={{ border: '2px solid rgba(0,0,0,0.25)', boxShadow: '2px 3px 8px rgba(0,0,0,0.12)' }}>
+    <div className="rounded-[22px] p-[14px]" style={{ border: '2px solid var(--mc-border-soft)', boxShadow: '2px 3px 8px var(--mc-shadow-soft)' }}>
       <div className="flex gap-[14px]">
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-[8px] px-[4px]">
@@ -618,17 +618,17 @@ function SystemTrendPanel({
 
               {Array.from({ length: 5 }, (_, i) => {
                 const y = padT + (i / 4) * plotH
-                return <line key={`grid-${i}`} x1={padL} y1={y} x2={padL + plotW} y2={y} stroke="rgba(0,0,0,0.08)" strokeWidth={1} />
+                return <line key={`grid-${i}`} x1={padL} y1={y} x2={padL + plotW} y2={y} stroke="var(--mc-chart-grid)" strokeWidth={1} />
               })}
 
-              <line x1={padL} y1={padT} x2={padL} y2={baseY} stroke="rgba(0,0,0,0.45)" strokeWidth={2} />
-              <line x1={padL} y1={baseY} x2={padL + plotW} y2={baseY} stroke="rgba(0,0,0,0.45)" strokeWidth={2} />
+              <line x1={padL} y1={padT} x2={padL} y2={baseY} stroke="var(--mc-chart-axis)" strokeWidth={2} />
+              <line x1={padL} y1={baseY} x2={padL + plotW} y2={baseY} stroke="var(--mc-chart-axis)" strokeWidth={2} />
 
               {Array.from({ length: 5 }, (_, i) => {
                 const val = 100 - i * 25
                 const y = padT + (i / 4) * plotH + 4
                 return (
-                  <text key={`tick-${val}`} x={padL - 8} y={y} textAnchor="end" fill="rgba(0,0,0,0.52)" style={{ fontSize: 12, ...monoFont }}>
+                  <text key={`tick-${val}`} x={padL - 8} y={y} textAnchor="end" fill="var(--mc-chart-label)" style={{ fontSize: 12, ...monoFont }}>
                     {val}%
                   </text>
                 )
@@ -641,7 +641,7 @@ function SystemTrendPanel({
                   y1={padT}
                   x2={hoverX}
                   y2={baseY}
-                  stroke="rgba(0,0,0,0.55)"
+                  stroke="var(--mc-chart-axis)"
                   strokeWidth={1.5}
                   strokeDasharray="6 6"
                 />
@@ -656,9 +656,9 @@ function SystemTrendPanel({
                 style={{
                   left: Math.max(6, tooltipPos.x),
                   top: Math.max(6, tooltipPos.y),
-                  border: '1px solid rgba(0,0,0,0.22)',
-                  background: 'rgba(255,255,255,0.85)',
-                  boxShadow: '1px 2px 6px rgba(0,0,0,0.12)',
+                  border: '1px solid var(--mc-border-soft)',
+                  background: 'var(--mc-chart-tooltip-bg)',
+                  boxShadow: '1px 2px 6px var(--mc-shadow-soft)',
                   pointerEvents: 'none',
                   zIndex: 8,
                   minWidth: 156,
@@ -697,7 +697,7 @@ function SystemTrendPanel({
           <button style={buttonStyle(windowSec === 180)} onClick={() => onChangeWindow(180)}>
             <span style={smallLabel}>3 分钟</span>
           </button>
-          <div className="mt-[8px] rounded-[14px] p-[10px]" style={{ border: '1px solid rgba(0,0,0,0.2)' }}>
+          <div className="mt-[8px] rounded-[14px] p-[10px]" style={{ border: '1px solid var(--mc-border-soft)', background: 'var(--mc-control-bg-soft)' }}>
             <div style={{ ...smallValue, fontSize: 16, lineHeight: 1.5 }}>
               {metric === 'gpu' && !gpuAvailable ? '未检测到可用GPU监控数据' : `当前显示：${config.label}（滚轮可切换CPU/GPU/内存）`}
             </div>
@@ -710,7 +710,7 @@ function SystemTrendPanel({
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[20px] p-[16px] min-w-[210px]" style={{ border: '2px solid rgba(0,0,0,0.24)', boxShadow: '2px 3px 6px rgba(0,0,0,0.1)' }}>
+    <div className="rounded-[20px] p-[16px] min-w-[210px]" style={{ border: '2px solid var(--mc-border-soft)', boxShadow: '2px 3px 6px var(--mc-shadow-soft)', background: 'var(--mc-control-bg-soft)' }}>
       <div style={{ ...smallLabel, opacity: 0.75 }}>{label}</div>
       <div style={{ ...valueFont, fontSize: 30 }}>{value}</div>
     </div>
@@ -884,11 +884,11 @@ export default function Status() {
       <div className="min-h-full p-[30px] pb-[20px]">
         <div className="h-full flex flex-col gap-[20px]">
           <div className="flex items-center justify-between">
-            <h1 className="text-black animate-fade-slide-up" style={{ ...pageTitleStyle, ...d(0) }}>运行状态 - 进程详情</h1>
+            <h1 className="animate-fade-slide-up" style={{ ...pageTitleStyle, ...d(0), color: 'var(--mc-text-primary)' }}>运行状态 - 进程详情</h1>
             <button
               onClick={backToOverview}
               className="h-[50px] px-[24px] rounded-[25px] cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95"
-              style={{ border: '2px solid rgba(0,0,0,0.5)', background: 'rgba(255,255,255,0.4)' }}
+              style={{ border: '2px solid var(--mc-border-strong)', background: 'var(--mc-control-bg)' }}
             >
               <span style={smallLabel}>返回总览</span>
             </button>
@@ -897,12 +897,12 @@ export default function Status() {
           <GlassCard>
             <div className="p-[24px] h-full flex flex-col gap-[18px]">
               {loadingDetail && !detail ? (
-                <div className="flex items-center justify-center h-full text-black/30" style={labelFont}>加载中...</div>
+                <div className="flex items-center justify-center h-full" style={{ ...labelFont, color: 'var(--mc-text-faint)' }}>加载中...</div>
               ) : detail ? (
                 <>
                   <div className="flex items-center justify-between gap-[12px]">
                     <div className="min-w-0">
-                      <h2 className="truncate text-black" style={sectionTitle}>{detail.title || detail.name}</h2>
+                      <h2 className="truncate" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>{detail.title || detail.name}</h2>
                       <div className="flex items-center gap-[16px] mt-[4px]">
                         <span style={smallValue}>PID {detail.pid}</span>
                         <span style={{ ...smallValue, color: statusColor(detail.status) }}>{detail.status}</span>
@@ -914,7 +914,7 @@ export default function Status() {
                         onClick={() => { void handleProcessAction('restart') }}
                         disabled={actionLoading !== null}
                         className="h-[44px] px-[18px] rounded-[22px] cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50"
-                        style={{ border: '2px solid rgba(0,0,0,0.45)', background: 'rgba(255,255,255,0.45)' }}
+                        style={{ border: '2px solid var(--mc-border-strong)', background: 'var(--mc-control-bg)' }}
                       >
                         <span style={smallLabel}>{actionLoading === 'restart' ? '重启中...' : '重启进程'}</span>
                       </button>
@@ -922,9 +922,9 @@ export default function Status() {
                         onClick={() => { void handleProcessAction('stop') }}
                         disabled={actionLoading !== null}
                         className="h-[44px] px-[18px] rounded-[22px] cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50"
-                        style={{ border: '2px solid rgba(176,35,35,0.5)', background: 'rgba(255,190,190,0.45)' }}
+                        style={{ border: '2px solid rgba(255,120,120,0.45)', background: 'rgba(150,30,30,0.18)' }}
                       >
-                        <span style={{ ...smallLabel, color: '#8f1f1f' }}>{actionLoading === 'stop' ? '停止中...' : '停止进程'}</span>
+                        <span style={{ ...smallLabel, color: 'rgba(255,160,160,0.92)' }}>{actionLoading === 'stop' ? '停止中...' : '停止进程'}</span>
                       </button>
                     </div>
                   </div>
@@ -953,15 +953,15 @@ export default function Status() {
                       ['RSS / VMS', `${bytesToMb(detail.rss_bytes)} / ${bytesToMb(detail.vms_bytes)}`],
                     ].map(([k, v]) => (
                       <div key={k} className="flex items-baseline gap-[10px] min-w-0">
-                        <span className="shrink-0 text-black" style={smallLabel}>{k}</span>
+                        <span className="shrink-0" style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>{k}</span>
                         <span className="truncate" style={smallValue} title={v}>{v}</span>
                       </div>
                     ))}
                   </div>
 
                   <div className="grid grid-cols-2 gap-[16px] min-h-0 flex-1">
-                    <div className="rounded-[16px] p-[12px] overflow-auto custom-scrollbar" style={{ border: '2px solid rgba(0,0,0,0.2)' }}>
-                      <div className="mb-[8px] text-black" style={smallLabel}>子进程（{detail.children.length}）</div>
+                    <div className="rounded-[16px] p-[12px] overflow-auto custom-scrollbar" style={{ border: '2px solid var(--mc-border-soft)', background: 'var(--mc-control-bg-soft)' }}>
+                      <div className="mb-[8px]" style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>子进程（{detail.children.length}）</div>
                       {detail.children.length === 0 ? (
                         <div style={smallValue}>无</div>
                       ) : detail.children.map(ch => (
@@ -972,8 +972,8 @@ export default function Status() {
                       ))}
                     </div>
 
-                    <div className="rounded-[16px] p-[12px] overflow-auto custom-scrollbar" style={{ border: '2px solid rgba(0,0,0,0.2)' }}>
-                      <div className="mb-[8px] text-black" style={smallLabel}>网络连接（最多20条）</div>
+                    <div className="rounded-[16px] p-[12px] overflow-auto custom-scrollbar" style={{ border: '2px solid var(--mc-border-soft)', background: 'var(--mc-control-bg-soft)' }}>
+                      <div className="mb-[8px]" style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>网络连接（最多20条）</div>
                       {detail.connections.length === 0 ? (
                         <div style={smallValue}>无</div>
                       ) : detail.connections.map((conn, i) => (
@@ -988,7 +988,7 @@ export default function Status() {
                   </div>
                 </>
               ) : (
-                <div className="flex items-center justify-center h-full text-black/30" style={labelFont}>未找到进程详情</div>
+                <div className="flex items-center justify-center h-full" style={{ ...labelFont, color: 'var(--mc-text-faint)' }}>未找到进程详情</div>
               )}
             </div>
           </GlassCard>
@@ -1000,15 +1000,15 @@ export default function Status() {
   return (
     <div className="min-h-full p-[30px] pb-[20px]">
       <div className="h-full flex flex-col gap-[20px]">
-        <h1 className="text-black animate-fade-slide-up" style={{ ...pageTitleStyle, ...d(0) }}>查看运行状态</h1>
+        <h1 className="animate-fade-slide-up" style={{ ...pageTitleStyle, ...d(0), color: 'var(--mc-text-primary)' }}>查看运行状态</h1>
 
         <GlassCard>
           <div className="p-[24px] h-full flex flex-col gap-[18px]">
             {loadingOverview && !overview ? (
-              <div className="flex items-center justify-center h-full text-black/30" style={labelFont}>加载中...</div>
+              <div className="flex items-center justify-center h-full" style={{ ...labelFont, color: 'var(--mc-text-faint)' }}>加载中...</div>
             ) : (
               <>
-                <h2 className="text-black animate-fade-slide-up" style={{ ...sectionTitle, ...d(1) }}>总览</h2>
+                <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...d(1), color: 'var(--mc-text-primary)' }}>总览</h2>
 
                 <div className="flex flex-wrap gap-[10px] animate-fade-slide-up" style={d(2)}>
                   <StatCard label="托管进程数" value={String(summary?.total_processes ?? 0)} />
@@ -1029,13 +1029,13 @@ export default function Status() {
                 />
 
                 <div className="flex items-center justify-between">
-                  <h2 className="text-black" style={sectionTitle}>托管进程</h2>
+                  <h2 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>托管进程</h2>
                   <div className="flex items-center gap-[8px] flex-wrap">
                     {sortedComponentTags.map(([name, count]) => (
                       <span
                         key={name}
                         className="px-[10px] py-[4px] rounded-[12px]"
-                        style={{ border: '1px solid rgba(0,0,0,0.25)', ...smallValue, fontSize: 16 }}
+                        style={{ border: '1px solid var(--mc-border-soft)', background: 'var(--mc-control-bg-soft)', ...smallValue, fontSize: 16 }}
                       >
                         {name}: {count}
                       </span>
@@ -1043,20 +1043,20 @@ export default function Status() {
                   </div>
                 </div>
 
-                <div className="rounded-[18px] p-[10px] flex-1 min-h-0 overflow-auto custom-scrollbar" style={{ border: '2px solid rgba(0,0,0,0.22)' }}>
+                <div className="rounded-[18px] p-[10px] flex-1 min-h-0 overflow-auto custom-scrollbar" style={{ border: '2px solid var(--mc-border-soft)', background: 'var(--mc-panel-bg-soft)' }}>
                   {processes.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-black/35" style={labelFont}>当前没有托管进程在运行</div>
+                    <div className="h-full flex items-center justify-center" style={{ ...labelFont, color: 'var(--mc-text-faint)' }}>当前没有托管进程在运行</div>
                   ) : (
                     <div className="flex flex-col gap-[8px]">
                       {processes.map((p, idx) => (
                         <div
                           key={p.pid}
                           className="rounded-[14px] p-[12px] flex items-center gap-[10px] animate-fade-slide-up"
-                          style={{ ...d(3 + idx), border: '2px solid rgba(0,0,0,0.18)', background: 'rgba(255,255,255,0.25)' }}
+                          style={{ ...d(3 + idx), border: '2px solid var(--mc-border-soft)', background: 'var(--mc-control-bg-soft)' }}
                         >
                           <div className="w-[10px] h-[10px] rounded-full shrink-0" style={{ background: statusColor(p.status) }} />
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-black" style={{ ...smallLabel, fontSize: 24 }} title={p.title}>{p.title}</div>
+                            <div className="truncate" style={{ ...smallLabel, fontSize: 24, color: 'var(--mc-text-primary)' }} title={p.title}>{p.title}</div>
                             <div className="flex items-center gap-[14px] flex-wrap">
                               <span style={smallValue}>PID {p.pid}</span>
                               <span style={smallValue}>{p.component || '-'}</span>
@@ -1069,7 +1069,7 @@ export default function Status() {
                           <button
                             onClick={() => openProcessDetail(p.pid)}
                             className="h-[40px] px-[14px] rounded-[20px] shrink-0 cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95"
-                            style={{ border: '2px solid rgba(0,0,0,0.45)', background: 'rgba(255,255,255,0.45)' }}
+                            style={{ border: '2px solid var(--mc-border-strong)', background: 'var(--mc-control-bg)' }}
                           >
                             <span style={smallLabel}>查看详情</span>
                           </button>

@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import GlassCard from '../ui/GlassCard'
 import { useNotification } from '../ui/Notification'
+import { useTheme } from '../theme/ThemeProvider'
 
 const labelFont = { fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-const valueFont = { fontSize: 20, fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace", color: '#585858' }
 const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
 
 interface Instance {
@@ -103,6 +103,7 @@ function formatUptime(seconds: number): string {
 }
 
 export default function InstanceOverviewCard() {
+  const { isDark } = useTheme()
   const { notify } = useNotification()
   const [instances, setInstances] = useState<Instance[]>([])
   const [showPopover, setShowPopover] = useState(false)
@@ -182,29 +183,40 @@ export default function InstanceOverviewCard() {
 
   const displayList = favorites.length > 0 ? favorites : instances
   const isFavMode = favorites.length > 0
+  const valueFont = {
+    fontSize: 20,
+    fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace",
+    color: isDark ? 'rgba(255,255,255,0.7)' : '#585858',
+    fontWeight: isDark ? 600 : 400,
+  }
+  const titleColor = isDark ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.92)'
+  const labelColor = isDark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.9)'
+  const dividerColor = isDark ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.5)'
+  const pillBorder = isDark ? 'rgba(255,255,255,0.34)' : '#707070'
+  const pillText = isDark ? 'rgba(255,255,255,0.84)' : 'rgba(0,0,0,0.85)'
 
   return (
-    <GlassCard>
+    <GlassCard bgOpacity={isDark ? 0.7 : 0.45} borderColor={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.5)'}>
       <div className="p-[33px] flex flex-col h-full">
-        <h2 className="text-black pb-[16px]" style={titleStyle}>实例概览</h2>
+        <h2 className="pb-[16px]" style={{ ...titleStyle, color: titleColor }}>实例概览</h2>
 
         <div className="flex flex-1 gap-0">
           {/* 左侧统计 */}
           <div className="space-y-[6px] pr-[24px]">
             {stats.map(([label, val]) => (
-              <div key={label} className="flex items-baseline gap-[16px]">
-                <span className="text-black shrink-0 w-[100px]" style={labelFont}>{label}</span>
+            <div key={label} className="flex items-baseline gap-[16px]">
+                <span className="shrink-0 w-[100px]" style={{ ...labelFont, color: labelColor }}>{label}</span>
                 <span style={valueFont}>{val}</span>
               </div>
             ))}
           </div>
 
           {/* 分隔线 */}
-          <div className="w-[3px] self-stretch bg-black/50 rounded-full shrink-0" />
+          <div className="w-[3px] self-stretch rounded-full shrink-0" style={{ backgroundColor: dividerColor }} />
 
           {/* 右侧常用实例 */}
           <div className="flex-1 pl-[24px] flex flex-col relative">
-            <span className="text-black mb-[12px]" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+            <span className="mb-[12px]" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: labelColor }}>
               常用实例/快捷启动
             </span>
             <div className="flex-1 relative">
@@ -230,7 +242,7 @@ export default function InstanceOverviewCard() {
                         key={inst.serial}
                         onClick={() => quickLaunch(inst.serial)}
                         className="flex items-center gap-[8px] px-[16px] h-[40px] rounded-[20px] border-2 border-[#707070] cursor-pointer hover:bg-white/30 transition-all"
-                        style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))', opacity: launching === inst.serial ? 0.5 : 1 }}
+                        style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))', opacity: launching === inst.serial ? 0.5 : 1, borderColor: pillBorder, color: pillText, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}
                       >
                         {launching === inst.serial && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black/50 shrink-0" />}
                         <span className="truncate max-w-[90px]" style={{ fontSize: 20, fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }}>
@@ -239,7 +251,8 @@ export default function InstanceOverviewCard() {
                         {isFavMode && (
                         <button
                           onClick={() => saveFavorites(favorites.filter(x => x.serial !== inst.serial))}
-                          className="text-black/40 hover:text-black/70 transition-colors cursor-pointer"
+                          className="transition-colors cursor-pointer"
+                          style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)' }}
                         >
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                             <line x2="14.142" transform="rotate(45)" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
@@ -253,8 +266,8 @@ export default function InstanceOverviewCard() {
                   <button
                     ref={addBtnRef}
                     onClick={() => setShowPopover(v => !v)}
-                    className="absolute bottom-0 right-0 w-[50px] h-[50px] rounded-full border-2 border-[#707070] flex items-center justify-center text-black/60 hover:text-black/80 transition-colors cursor-pointer"
-                    style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))' }}
+                    className="absolute bottom-0 right-0 w-[50px] h-[50px] rounded-full border-2 flex items-center justify-center transition-colors cursor-pointer"
+                    style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))', borderColor: pillBorder, color: isDark ? 'rgba(255,255,255,0.68)' : 'rgba(0,0,0,0.6)', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}
                   >
                     <svg width="17" height="17" viewBox="0 0 17 17" fill="none" style={{ transform: 'rotate(45deg)' }}>
                       <line x2="24.042" transform="rotate(45)" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />

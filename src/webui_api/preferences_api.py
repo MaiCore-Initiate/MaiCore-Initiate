@@ -19,10 +19,15 @@ DEFAULT_BG_SETTINGS = {
     "overlay_opacity": 0.5,
     "overlay_blur": 0,
     "overlay_color": "255,255,255",
+    "overlay_color_auto": True,
     "use_custom_background": False,
+}
+DEFAULT_THEME_SETTINGS = {
+    "mode": "system",
 }
 DEFAULT_PREFERENCES = {
     "bg_settings": DEFAULT_BG_SETTINGS,
+    "theme_settings": DEFAULT_THEME_SETTINGS,
 }
 
 

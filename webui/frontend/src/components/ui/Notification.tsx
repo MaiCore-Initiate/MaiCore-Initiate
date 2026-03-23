@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { useBgContext } from '../background/DynamicBackground'
+import { resolveOverlayStyle, useBgContext } from '../background/DynamicBackground'
+import { useTheme } from '../theme/ThemeProvider'
 
 type ToastLevel = 'success' | 'error' | 'info' | 'warning'
 
@@ -33,6 +34,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const { currentBgUrl, settings } = useBgContext()
+  const { resolvedTheme } = useTheme()
   const [bgA, setBgA] = useState<string | null>(currentBgUrl)
   const [bgB, setBgB] = useState<string | null>(null)
   const [showA, setShowA] = useState(true)
@@ -90,10 +92,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
       >
         <div
           className="absolute inset-0"
-          style={{
-            background: `rgba(${settings.overlay_color},${settings.overlay_opacity})`,
-            backdropFilter: settings.overlay_blur > 0 ? `blur(${settings.overlay_blur}px)` : undefined,
-          }}
+          style={resolveOverlayStyle(settings, resolvedTheme)}
         />
       </div>
     )
@@ -111,7 +110,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
         {renderBgLayer(bgA, showA, 'bg-a')}
         {renderBgLayer(bgB, !showA, 'bg-b')}
         {/* 白色叠加层 */}
-        <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.45)' }} />
+        <div className="absolute inset-0" style={{ backgroundColor: 'var(--mc-glass-fill)' }} />
       </div>
 
       {/* 边框层 */}
