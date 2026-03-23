@@ -40,7 +40,7 @@ def _force_utf8_stdio() -> None:
 
 _force_utf8_stdio()
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -50,6 +50,7 @@ import uvicorn
 
 # 导入API路由
 from src.webui_api import (
+    auth_router,
     deploy_router,
     launcher_router,
     multi_instance_router,
@@ -64,6 +65,13 @@ from src.webui_api import (
     pet_router
 )
 from src.webui_api.pet_api_v2 import router as pet_v2_router
+from src.webui_api.auth_core import (
+    account_store,
+    attach_request_auth_state,
+    resolve_request_auth,
+    session_manager,
+    token_manager,
+)
 
 # 导入配置管理器
 from src.core.p_config import p_config_manager
@@ -144,139 +152,6 @@ def setup_logging():
     uvicorn_logger.setLevel(logging.INFO)
     
     return root_logger
-
-
-# Token管理
-class TokenManager:
-    """WebUI Token管理器 - 始终读取项目根目录的配置文件"""
-
-    def __init__(self):
-        self.config_path = project_root / "config" / "P-config.toml"
-        self._ensure_token()
-
-    def _load_config(self) -> dict:
-        """从项目根目录加载配置"""
-        try:
-            if self.config_path.exists():
-                import toml as toml_lib
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    return toml_lib.load(f)
-        except Exception as e:
-            logging.error(f"读取配置文件失败: {e}")
-        return {}
-
-    def _save_config(self, config: dict):
-        """保存配置到项目根目录"""
-        try:
-            import toml as toml_lib
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.config_path, 'w', encoding='utf-8') as f:
-                toml_lib.dump(config, f)
-        except Exception as e:
-            logging.error(f"保存配置文件失败: {e}")
-
-    def _ensure_token(self):
-        """确保token存在，如果不存在则生成"""
-        config = self._load_config()
-        token = config.get("webui", {}).get("webui_token", "")
-        if not token:
-            token = secrets.token_hex(16)
-            config.setdefault("webui", {})["webui_token"] = token
-            self._save_config(config)
-            logging.info("已生成新的WebUI Token")
-
-    def get_token(self) -> str:
-        """获取当前token - 每次从文件读取，确保一致"""
-        config = self._load_config()
-        return config.get("webui", {}).get("webui_token", "")
-
-    def verify_token(self, input_token: str) -> bool:
-        """验证token"""
-        return input_token == self.get_token()
-
-
-# 全局Token管理器
-token_manager = TokenManager()
-
-# 登录会话管理
-class SessionManager:
-    """登录会话管理 - 带指数退避锁定"""
-
-    def __init__(self):
-        self.sessions: Dict[str, Dict[str, Any]] = {}
-        self.max_attempts = 5
-
-    def create_session(self, session_id: str) -> Dict[str, Any]:
-        self.sessions[session_id] = {
-            "attempts": 0,
-            "lock_count": 0,
-            "locked_until": None,
-            "login_time": None
-        }
-        return self.sessions[session_id]
-
-    def get_session(self, session_id: str) -> Dict[str, Any]:
-        if session_id not in self.sessions:
-            return self.create_session(session_id)
-        return self.sessions[session_id]
-
-    def _check_unlock(self, session: Dict[str, Any]):
-        """检查锁定是否已过期，过期则解锁"""
-        locked_until = session.get("locked_until")
-        if locked_until and datetime.now() >= datetime.fromisoformat(locked_until):
-            session["locked_until"] = None
-            session["attempts"] = 0
-
-    def is_locked(self, session_id: str) -> bool:
-        session = self.get_session(session_id)
-        self._check_unlock(session)
-        return session.get("locked_until") is not None
-
-    def get_lock_remaining_seconds(self, session_id: str) -> int:
-        """获取锁定剩余秒数"""
-        session = self.get_session(session_id)
-        locked_until = session.get("locked_until")
-        if not locked_until:
-            return 0
-        remaining = (datetime.fromisoformat(locked_until) - datetime.now()).total_seconds()
-        return max(0, int(remaining))
-
-    def verify_login(self, session_id: str, input_token: str) -> bool:
-        session = self.get_session(session_id)
-        self._check_unlock(session)
-
-        if session.get("locked_until"):
-            return False
-
-        if token_manager.verify_token(input_token):
-            session["attempts"] = 0
-            session["lock_count"] = 0
-            session["login_time"] = datetime.now().isoformat()
-            return True
-
-        session["attempts"] = session.get("attempts", 0) + 1
-
-        if session["attempts"] >= self.max_attempts:
-            # 指数退避：1m, 2m, 4m, 8m...
-            session["lock_count"] = session.get("lock_count", 0) + 1
-            lock_minutes = 2 ** (session["lock_count"] - 1)
-            from datetime import timedelta
-            session["locked_until"] = (datetime.now() + timedelta(minutes=lock_minutes)).isoformat()
-            logging.warning(f"登录尝试过多，会话锁定 {lock_minutes} 分钟: {session_id}")
-
-        return False
-
-    def is_logged_in(self, session_id: str) -> bool:
-        session = self.get_session(session_id)
-        return session.get("login_time") is not None and not session.get("locked_until")
-
-    def get_remaining_attempts(self, session_id: str) -> int:
-        session = self.get_session(session_id)
-        return max(0, self.max_attempts - session.get("attempts", 0))
-
-
-# 全局会话管理器
-session_manager = SessionManager()
 
 
 # 创建FastAPI应用
@@ -397,29 +272,22 @@ def verify_session(request: Request):
         "/api/settings/live2d/chat",
         "/api/settings/live2d/overlay/settings",
     }:
+        attach_request_auth_state(request, None, auth_type="public", user=None)
         return "public"
 
-    # Bearer Token 认证（供 Electron 桌宠使用）
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        bearer_token = auth_header[7:]
-        if bearer_token and token_manager.verify_token(bearer_token):
-            return "bearer"
-        raise HTTPException(status_code=401, detail="Bearer Token 无效")
-
-    session_id = request.cookies.get("webui_session", "")
-    if not session_id:
+    user = resolve_request_auth(request)
+    if not user:
         raise HTTPException(status_code=401, detail="请先登录")
 
-    if not session_manager.is_logged_in(session_id):
-        raise HTTPException(status_code=401, detail="请先登录")
-
-    return session_id
+    return getattr(request.state, "session_id", None) or getattr(request.state, "auth_type", "session")
 
 
 # --- API路由注册 ---
 
 auth_dep = [Depends(verify_session)]
+
+# 账号系统 API
+app.include_router(auth_router, prefix="/api/account", tags=["账号系统"])
 
 # 部署管理API
 app.include_router(deploy_router, prefix="/api/deploy", tags=["部署管理"], dependencies=auth_dep)
@@ -509,67 +377,48 @@ async def verify_token(request: VerifyRequest, http_request: Request):
 
 
 @app.post("/api/auth/login")
-async def login(request: LoginRequest, http_request: Request):
+async def login(request: LoginRequest, http_request: Request, response: Response):
     """登录验证"""
     session_id = http_request.cookies.get("webui_session", "")
     if not session_id:
         session_id = secrets.token_hex(16)
 
-    # 检查是否被锁定
-    if session_manager.is_locked(session_id):
-        lock_seconds = session_manager.get_lock_remaining_seconds(session_id)
-        return {
-            "success": False,
-            "message": f"登录已锁定，请等待",
-            "locked": True,
-            "lock_seconds": lock_seconds
-        }
-
-    if session_manager.verify_login(session_id, request.token):
-        return {
-            "success": True,
-            "message": "登录成功",
-            "session_id": session_id
-        }
-    else:
-        remaining = session_manager.get_remaining_attempts(session_id)
-        lock_seconds = session_manager.get_lock_remaining_seconds(session_id)
-        locked = lock_seconds > 0
-        return {
-            "success": False,
-            "message": f"Token错误，剩余尝试次数: {remaining}" if not locked else "登录已锁定，请等待",
-            "remaining_attempts": remaining,
-            "locked": locked,
-            "lock_seconds": lock_seconds
-        }
+    result = session_manager.login_with_token(session_id, request.token)
+    if result.get("success"):
+        response.set_cookie(
+            key="webui_session",
+            value=session_id,
+            max_age=7 * 24 * 60 * 60,
+            path="/",
+            samesite="lax",
+        )
+        result["session_id"] = session_id
+    return result
 
 
 @app.get("/api/auth/status")
 async def auth_status(http_request: Request):
     """检查登录状态"""
+    user = resolve_request_auth(http_request)
     session_id = http_request.cookies.get("webui_session", "")
-    if not session_id:
-        return {
-            "logged_in": False,
-            "message": "未登录"
-        }
-    
-    logged_in = session_manager.is_logged_in(session_id)
-    remaining = session_manager.get_remaining_attempts(session_id) if not logged_in else 0
-    
+    remaining = session_manager.get_remaining_attempts(session_id) if session_id and not user else 0
+
     return {
-        "logged_in": logged_in,
-        "remaining_attempts": remaining
+        "logged_in": user is not None,
+        "remaining_attempts": remaining,
+        "auth_type": getattr(http_request.state, "auth_type", "anonymous"),
+        "current_user": account_store._public_user(user) if user else None,
+        "admin_token_configured": bool(token_manager.get_token()),
     }
 
 
 @app.post("/api/auth/logout")
-async def logout(http_request: Request):
+async def logout(http_request: Request, response: Response):
     """登出"""
     session_id = http_request.cookies.get("webui_session", "")
-    if session_id and session_id in session_manager.sessions:
-        del session_manager.sessions[session_id]
-    
+    if session_id:
+        session_manager.logout(session_id)
+    response.delete_cookie("webui_session", path="/")
     return {
         "success": True,
         "message": "已登出"

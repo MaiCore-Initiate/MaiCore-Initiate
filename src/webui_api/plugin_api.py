@@ -16,11 +16,12 @@ import tarfile
 from typing import Any, Dict, List, Optional
 
 import requests as http_requests
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from packaging.version import parse as parse_version, InvalidVersion
 
 from ..core.config import config_manager
+from .auth_core import require_admin
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -287,7 +288,7 @@ def get_plugin_detail(plugin_id: str):
     raise HTTPException(404, "插件未找到")
 
 
-@router.post("/refresh")
+@router.post("/refresh", dependencies=[Depends(require_admin)])
 def refresh_plugins():
     _fetch_plugin_data(force=True)
     return {"success": True, "message": "插件列表已刷新"}
@@ -324,7 +325,7 @@ def get_installed_plugins(instance_serial: str):
     return {"success": True, "plugins": enriched}
 
 
-@router.post("/install")
+@router.post("/install", dependencies=[Depends(require_admin)])
 def install_plugin(req: InstallRequest):
     if not shutil.which("git"):
         raise HTTPException(400, "未检测到 Git，无法安装插件")
@@ -358,7 +359,7 @@ def install_plugin(req: InstallRequest):
     return {"success": True, "message": f"插件 {req.plugin_id} 安装成功"}
 
 
-@router.post("/uninstall")
+@router.post("/uninstall", dependencies=[Depends(require_admin)])
 def uninstall_plugin(req: UninstallRequest):
     _, cfg = _get_instance(instance_name=req.instance_name)
     if not cfg:
@@ -442,7 +443,7 @@ def local_list_plugins(instance_serial: str):
     return {"success": True, "plugins": result}
 
 
-@router.post("/local/scan")
+@router.post("/local/scan", dependencies=[Depends(require_admin)])
 def local_scan_plugins(req: ScanRequest):
     """扫描本地插件目录，将未注册的有效插件注册到配置"""
     name, cfg = _get_instance(instance_name=req.instance_name, instance_serial=req.instance_serial)
@@ -488,7 +489,7 @@ def local_scan_plugins(req: ScanRequest):
     return {"success": True, "scanned": scanned, "registered_count": registered_count}
 
 
-@router.post("/local/batch-uninstall")
+@router.post("/local/batch-uninstall", dependencies=[Depends(require_admin)])
 def local_batch_uninstall(req: BatchUninstallRequest):
     """批量卸载插件"""
     name, cfg = _get_instance(instance_name=req.instance_name, instance_serial=req.instance_serial)
@@ -510,7 +511,7 @@ def local_batch_uninstall(req: BatchUninstallRequest):
     return {"success": True, "removed": removed}
 
 
-@router.post("/local/batch-unregister")
+@router.post("/local/batch-unregister", dependencies=[Depends(require_admin)])
 def local_batch_unregister(req: BatchUninstallRequest):
     """批量注销插件（仅取消注册，不删除本地文件）"""
     name, cfg = _get_instance(instance_name=req.instance_name, instance_serial=req.instance_serial)
@@ -525,7 +526,7 @@ def local_batch_unregister(req: BatchUninstallRequest):
     return {"success": True, "unregistered": unregistered}
 
 
-@router.post("/local/upload-archive")
+@router.post("/local/upload-archive", dependencies=[Depends(require_admin)])
 async def local_upload_archive(
     instance_serial: str = Form(...),
     file: UploadFile = File(...),
@@ -587,7 +588,7 @@ async def local_upload_archive(
             pass
 
 
-@router.post("/local/upload-files")
+@router.post("/local/upload-files", dependencies=[Depends(require_admin)])
 async def local_upload_files(
     instance_serial: str = Form(...),
     plugin_folder: str = Form(...),
@@ -621,7 +622,7 @@ async def local_upload_files(
     return {"success": True, "saved": saved}
 
 
-@router.post("/local/create-folder")
+@router.post("/local/create-folder", dependencies=[Depends(require_admin)])
 def local_create_folder(req: CreateFolderRequest):
     """在插件目录下创建子文件夹"""
     _, cfg = _get_instance(instance_serial=req.instance_serial)
@@ -639,7 +640,7 @@ def local_create_folder(req: CreateFolderRequest):
     return {"success": True, "path": os.path.join(safe_folder, safe_sub) if safe_sub else safe_folder}
 
 
-@router.post("/local/finalize")
+@router.post("/local/finalize", dependencies=[Depends(require_admin)])
 def local_finalize_plugin(req: FinalizePluginRequest):
     """验证插件目录完整性并注册到配置"""
     name, cfg = _get_instance(instance_serial=req.instance_serial)

@@ -6,12 +6,13 @@ WebUI 配置 API 模块
 import os
 import subprocess
 from typing import Any, Dict
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..core.webui_config import webui_config
 from ..core.config import config_manager
 from ..core.p_config import p_config_manager
+from .auth_core import require_admin
 
 router = APIRouter()
 
@@ -55,7 +56,7 @@ def get_config():
     return webui_config.config
 
 
-@router.post("/config")
+@router.post("/config", dependencies=[Depends(require_admin)])
 def update_config(req: UpdateConfigRequest):
     webui_config.set(req.key, req.value)
     webui_config.save()
@@ -100,7 +101,7 @@ def get_next_serial():
     return {"next_serial": config_manager.generate_unique_serial()}
 
 
-@router.post("/instances")
+@router.post("/instances", dependencies=[Depends(require_admin)])
 def create_instance(req: CreateInstanceRequest):
     """创建新实例配置，含校验"""
     config_manager.reload_if_changed()
@@ -147,7 +148,7 @@ _UPDATABLE_FIELDS = {
 }
 
 
-@router.post("/instances/{name}")
+@router.post("/instances/{name}", dependencies=[Depends(require_admin)])
 def update_instance(name: str, updates: Dict[str, Any]):
     """更新实例配置（仅允许白名单字段）"""
     config_manager.reload_if_changed()
@@ -162,7 +163,7 @@ def update_instance(name: str, updates: Dict[str, Any]):
     return {"status": "success", "message": f"实例 '{name}' 更新成功"}
 
 
-@router.post("/instances/{name}/open-config")
+@router.post("/instances/{name}/open-config", dependencies=[Depends(require_admin)])
 def open_instance_config(name: str):
     """打开实例的配置文件"""
     config_manager.reload_if_changed()
@@ -193,7 +194,7 @@ def open_instance_config(name: str):
     return {"success": True, "opened": len(files_to_open)}
 
 
-@router.post("/instances/{name}/open-folder")
+@router.post("/instances/{name}/open-folder", dependencies=[Depends(require_admin)])
 def open_instance_folder(name: str):
     """打开实例所在目录"""
     config_manager.reload_if_changed()
@@ -215,7 +216,7 @@ def get_p_config():
     return p_config_manager.config
 
 
-@router.post("/reload")
+@router.post("/reload", dependencies=[Depends(require_admin)])
 def reload_all():
     """强制重载所有配置文件"""
     config_manager.load()

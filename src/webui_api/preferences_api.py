@@ -4,9 +4,11 @@ import json
 import sqlite3
 import logging
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Any
+
+from .auth_core import request_user_id
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -73,8 +75,9 @@ class PrefBody(BaseModel):
     value: Any
 
 @router.get("/{key}")
-async def get_preference(key: str, user_id: str = "default"):
+async def get_preference(key: str, request: Request):
     """获取偏好值"""
+    user_id = request_user_id(request, fallback=DEFAULT_USER_ID)
     conn = _get_conn()
     try:
         row = conn.execute(
@@ -88,8 +91,9 @@ async def get_preference(key: str, user_id: str = "default"):
         conn.close()
 
 @router.put("/{key}")
-async def set_preference(key: str, body: PrefBody, user_id: str = "default"):
+async def set_preference(key: str, body: PrefBody, request: Request):
     """设置偏好值"""
+    user_id = request_user_id(request, fallback=DEFAULT_USER_ID)
     conn = _get_conn()
     try:
         conn.execute(
@@ -102,8 +106,9 @@ async def set_preference(key: str, body: PrefBody, user_id: str = "default"):
         conn.close()
 
 @router.delete("/{key}")
-async def delete_preference(key: str, user_id: str = "default"):
+async def delete_preference(key: str, request: Request):
     """删除偏好值"""
+    user_id = request_user_id(request, fallback=DEFAULT_USER_ID)
     conn = _get_conn()
     try:
         conn.execute(

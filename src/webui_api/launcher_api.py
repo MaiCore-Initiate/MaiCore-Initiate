@@ -5,12 +5,13 @@
 """
 import os
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
 
 from ..modules.launcher import launcher
 from ..modules.config_manager import config_manager
+from .auth_core import require_action
 
 router = APIRouter()
 
@@ -126,7 +127,7 @@ async def get_instance_status(serial_number: str):
         raise HTTPException(status_code=500, detail=f"获取实例状态失败: {str(e)}")
 
 
-@router.post("/instances/{serial_number}/start", summary="启动实例")
+@router.post("/instances/{serial_number}/start", summary="启动实例", dependencies=[Depends(require_action("instances.control"))])
 async def start_instance(serial_number: str, request: StartInstanceRequest):
     """
     启动指定实例的组件
@@ -185,7 +186,7 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
         raise HTTPException(status_code=500, detail=f"启动实例失败: {str(e)}")
 
 
-@router.post("/instances/{serial_number}/stop", summary="停止实例")
+@router.post("/instances/{serial_number}/stop", summary="停止实例", dependencies=[Depends(require_action("instances.control"))])
 async def stop_instance(serial_number: str):
     """
     停止指定实例的所有进程
@@ -299,7 +300,7 @@ async def get_process_detail(pid: int):
         raise HTTPException(status_code=500, detail=f"获取进程详情失败: {str(e)}")
 
 
-@router.post("/processes/{pid}/stop", summary="停止指定进程")
+@router.post("/processes/{pid}/stop", summary="停止指定进程", dependencies=[Depends(require_action("instances.control"))])
 async def stop_process(pid: int):
     """
     停止指定PID的进程
@@ -323,7 +324,7 @@ async def stop_process(pid: int):
         raise HTTPException(status_code=500, detail=f"停止进程失败: {str(e)}")
 
 
-@router.post("/processes/{pid}/restart", summary="重启指定进程")
+@router.post("/processes/{pid}/restart", summary="重启指定进程", dependencies=[Depends(require_action("instances.control"))])
 async def restart_process(pid: int):
     """
     重启指定PID的进程
