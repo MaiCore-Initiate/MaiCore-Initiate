@@ -47,7 +47,7 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           MaiCoreStart
         </span>
         <span className="text-[#707070] select-none mt-[3px]" style={{ fontSize: 20, fontFamily: "'Segoe', 'HarmonyOS Sans SC', sans-serif" }}>
-          v4.2.1-beta
+          v5.1.0-beta
         </span>
       </div>
 

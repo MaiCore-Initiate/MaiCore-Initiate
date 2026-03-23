@@ -85,3 +85,5 @@ scripts/
 release/
 
 *.pid
+
+backgrounds/
