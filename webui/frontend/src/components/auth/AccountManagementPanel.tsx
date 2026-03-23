@@ -248,9 +248,9 @@ export default function AccountManagementPanel() {
     <div className="space-y-[18px]">
       <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px]">
         <SectionTitle>账号资料</SectionTitle>
-        <div className="mt-[16px] flex items-center gap-[18px]">
+        <div className="mt-[16px] flex flex-col items-start gap-[18px] xl:flex-row xl:items-center">
           <Avatar name={profileName || currentUser.name} email={currentUser.email} avatar={profileAvatar} size={88} />
-          <div className="flex-1 grid grid-cols-2 gap-[14px]">
+          <div className="flex-1 grid w-full grid-cols-1 gap-[14px] xl:grid-cols-2">
             <input
               value={profileName}
               onChange={event => setProfileName(event.target.value)}
@@ -293,7 +293,7 @@ export default function AccountManagementPanel() {
           </div>
         ) : (
           <>
-            <div className="mt-[14px] grid grid-cols-3 gap-[12px]">
+            <div className="mt-[14px] grid grid-cols-1 gap-[12px] xl:grid-cols-[1fr,1fr,1.1fr]">
               <input value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} type="password" placeholder="当前密码" className="bg-white/40 border-2 border-black/20 rounded-[18px] px-[18px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
               <input value={nextPassword} onChange={event => setNextPassword(event.target.value)} type="password" placeholder="新密码（至少8位，含字母和数字）" className="bg-white/40 border-2 border-black/20 rounded-[18px] px-[18px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
               <div className="flex gap-[10px]">
@@ -337,7 +337,7 @@ export default function AccountManagementPanel() {
       ) : null}
 
       {currentUser.role === 'admin' && can('accounts.manage') ? (
-        <>
+        <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-2">
           <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px]">
             <SectionTitle>申请与成员管理</SectionTitle>
             <div className="mt-[14px] space-y-[12px]">
@@ -375,7 +375,7 @@ export default function AccountManagementPanel() {
 
           <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px]">
             <SectionTitle>注册与个性化规则</SectionTitle>
-            <div className="mt-[14px] grid grid-cols-2 gap-[22px]">
+            <div className="mt-[14px] grid grid-cols-1 gap-[22px] 2xl:grid-cols-2">
               <div className="space-y-[12px]">
                 <div className="flex items-center justify-between">
                   <span style={{ ...titleFont, fontSize: 21 }}>白名单模式</span>
@@ -430,7 +430,7 @@ export default function AccountManagementPanel() {
             </div>
           </div>
 
-          <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px]">
+          <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px] xl:col-span-2">
             <SectionTitle>成员与访客权限模板</SectionTitle>
             <div className="mt-[14px] overflow-auto">
               <table className="w-full border-collapse">
@@ -463,7 +463,7 @@ export default function AccountManagementPanel() {
 
           <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px]">
             <SectionTitle>账号名册</SectionTitle>
-            <div className="mt-[14px] space-y-[10px]">
+            <div className="mt-[14px] grid grid-cols-1 gap-[10px] 2xl:grid-cols-2">
               {users.map(user => (
                 <div key={user.id} className="flex items-center justify-between gap-[14px] rounded-[18px] border-2 border-black/10 bg-white/20 px-[14px] py-[12px]">
                   <div className="flex items-center gap-[12px] min-w-0">
@@ -497,7 +497,7 @@ export default function AccountManagementPanel() {
 
           <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px]">
             <SectionTitle>管理员账号转让</SectionTitle>
-            <div className="mt-[14px] grid grid-cols-[1fr,1fr,1fr,160px] gap-[12px]">
+            <div className="mt-[14px] grid grid-cols-1 gap-[12px] 2xl:grid-cols-[1fr,1fr,1fr,160px]">
               <select value={transferTarget} onChange={event => setTransferTarget(event.target.value)} className="rounded-[18px] border-2 border-black/15 bg-white/35 px-[16px] outline-none" style={{ height: 50, ...titleFont, fontSize: 18 }}>
                 <option value="">选择目标成员</option>
                 {members.map(member => (
@@ -520,7 +520,7 @@ export default function AccountManagementPanel() {
             </div>
           </div>
 
-          <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px]">
+          <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px] xl:col-span-2">
             <SectionTitle>审计轨迹</SectionTitle>
             <div className="mt-[14px] max-h-[240px] overflow-auto space-y-[8px] pr-[4px]">
               {auditTrail.length === 0 ? (
@@ -534,7 +534,7 @@ export default function AccountManagementPanel() {
               ))}
             </div>
           </div>
-        </>
+        </div>
       ) : null}
     </div>
   )
