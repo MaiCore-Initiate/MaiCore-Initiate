@@ -32,7 +32,7 @@ const LEVEL_COLORS: Record<ToastLevel, string> = {
 function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x: 0, y: 0 })
-  const { currentBgUrl } = useBgContext()
+  const { currentBgUrl, settings } = useBgContext()
   const [bgA, setBgA] = useState<string | null>(currentBgUrl)
   const [bgB, setBgB] = useState<string | null>(null)
   const [showA, setShowA] = useState(true)
@@ -87,7 +87,15 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: number) =
           opacity: visible ? 1 : 0,
           transition: 'opacity 3s ease-in-out',
         }}
-      />
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `rgba(${settings.overlay_color},${settings.overlay_opacity})`,
+            backdropFilter: settings.overlay_blur > 0 ? `blur(${settings.overlay_blur}px)` : undefined,
+          }}
+        />
+      </div>
     )
   }
 
