@@ -1069,12 +1069,7 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     updateAppearancePolicy,
     transferAdmin,
   }), [
-    state.adminToken,
-    state.auditTrail,
-    state.appearancePolicy,
-    state.registerPolicy,
-    state.requests,
-    state.roleTemplates,
+    state,
     currentAdmin,
     currentUser,
     users,

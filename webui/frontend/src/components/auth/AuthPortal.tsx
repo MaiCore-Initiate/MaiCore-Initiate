@@ -229,11 +229,23 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
   }
 
   const loginTitle = previewUser?.role === 'admin' ? '使用系统 Token 登录管理员账号' : '输入账号凭证继续使用系统'
+  const previewName = previewUser?.name ?? identifier.trim() ?? ''
+  const previewEmail = previewUser?.email ?? identifier.trim() ?? currentAdmin.email
+  const isLoginView = view === 'login'
 
   return (
     <div
       className="bg-white/5 border-2 border-black/30 backdrop-blur-[50px] shadow-login-card animate-scale-fade-in"
-      style={{ width: 900, minHeight: 860, borderRadius: 30, padding: '32px 48px 28px' }}
+      style={{
+        width: isLoginView ? 'min(720px, calc(100vw - 22px))' : 'min(720px, calc(100vw - 36px))',
+        height: isLoginView ? 'calc(100vh - 2px)' : 'auto',
+        maxHeight: 'calc(100vh - 2px)',
+        overflowY: isLoginView ? 'hidden' : 'auto',
+        borderRadius: 30,
+        padding: isLoginView ? '20px clamp(18px,4vw,30px) 16px' : '30px clamp(18px,4vw,38px) 26px',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
       <div className="flex items-center justify-center gap-[12px]">
         {(['login', 'register'] as const).map(item => {
@@ -244,13 +256,13 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
               onClick={() => setView(item)}
               className="cursor-pointer transition-colors"
               style={{
-                width: 180,
-                height: 56,
+                width: 168,
+                height: 52,
                 borderRadius: 28,
                 border: active ? '3px solid rgba(0,0,0,0.55)' : '2px solid rgba(0,0,0,0.2)',
                 background: active ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.15)',
                 ...titleFont,
-                fontSize: 26,
+                fontSize: 24,
                 color: 'rgba(0,0,0,0.75)',
               }}
             >
@@ -260,22 +272,24 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
         })}
       </div>
 
-      <h1 className="mt-[28px] text-center text-black/80" style={{ ...titleFont, fontSize: 56 }}>
-        账号中心
-      </h1>
-      <p className="mt-[12px] text-center text-black/50" style={{ ...titleFont, fontSize: 24 }}>
-        {view === 'login' ? loginTitle : '创建访客账号，或提交访客注册申请'}
-      </p>
+      <div key={view} className="flex flex-1 flex-col animate-scale-in" style={{ animationDuration: '0.28s' }}>
+        <h1 className={`${isLoginView ? 'mt-[24px]' : 'mt-[34px]'} text-center text-black/80`} style={{ ...titleFont, fontSize: 54 }}>
+          账号中心
+        </h1>
+        <p className={`${isLoginView ? 'mt-[10px]' : 'mt-[14px]'} text-center text-black/50`} style={{ ...titleFont, fontSize: 22 }}>
+          {view === 'login' ? loginTitle : '创建访客账号，或提交访客注册申请'}
+        </p>
 
-      {view === 'login' ? (
-        <form className="mt-[28px] flex flex-col items-center gap-[22px]" onSubmit={handleLogin}>
+        {view === 'login' ? (
+          <form className="mt-[20px] flex flex-1 flex-col items-center justify-center gap-[18px]" onSubmit={handleLogin}>
           <AvatarCircle
-            name={previewUser?.name ?? '未识别账号'}
-            email={previewUser?.email ?? identifier}
+            name={previewName || '访客'}
+            email={previewEmail}
             avatar={previewUser?.avatar}
+            size={100}
           />
 
-          <div className="w-full grid grid-cols-[1fr,1fr] gap-[18px]">
+          <div className="w-full grid grid-cols-1 gap-[14px] md:grid-cols-2">
             <input
               ref={inputRef}
               value={identifier}
@@ -285,7 +299,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
               }}
               placeholder="账号名 / 邮箱"
               className="bg-white/15 border-[3px] border-black/40 text-black/80 placeholder-black/30 focus:outline-none"
-              style={{ height: 72, borderRadius: 28, padding: '0 26px', ...titleFont, fontSize: 28 }}
+              style={{ height: 68, borderRadius: 26, padding: '0 24px', ...titleFont, fontSize: 26 }}
             />
             <input
               value={secret}
@@ -293,18 +307,18 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
               type={previewUser?.role === 'admin' ? 'password' : 'password'}
               placeholder={previewUser?.role === 'admin' ? '系统 Token' : '登录密码'}
               className="bg-white/15 border-[3px] border-black/40 text-black/80 placeholder-black/30 focus:outline-none"
-              style={{ height: 72, borderRadius: 28, padding: '0 26px', ...titleFont, fontSize: 28 }}
+              style={{ height: 68, borderRadius: 26, padding: '0 24px', ...titleFont, fontSize: 26 }}
             />
           </div>
 
-          <div className="w-full grid grid-cols-[1fr,180px] gap-[18px]">
+          <div className="w-full grid grid-cols-1 gap-[14px] md:grid-cols-[1fr,156px]">
             <input
               value={loginCode}
               onChange={(event) => setLoginCode(event.target.value)}
               placeholder={previewUser?.role === 'admin' ? '管理员无需验证码' : '登录验证码'}
               disabled={previewUser?.role === 'admin'}
               className="bg-white/15 border-[3px] border-black/40 text-black/80 placeholder-black/30 focus:outline-none disabled:opacity-50"
-              style={{ height: 72, borderRadius: 28, padding: '0 26px', ...monoFont, fontSize: 28 }}
+              style={{ height: 68, borderRadius: 26, padding: '0 24px', ...monoFont, fontSize: 26 }}
             />
             <button
               type="button"
@@ -312,22 +326,22 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
               disabled={!identifier.trim() || previewUser?.role === 'admin'}
               className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               style={{
-                height: 72,
-                borderRadius: 28,
+                height: 68,
+                borderRadius: 26,
                 border: '3px solid rgba(0,0,0,0.4)',
                 background: 'rgba(255,255,255,0.32)',
                 ...titleFont,
-                fontSize: 26,
+                fontSize: 22,
               }}
             >
-              发送验证码
+              获取验证码
             </button>
           </div>
 
-          <div className="w-full rounded-[24px] border-2 border-black/15 bg-white/18 px-[20px] py-[16px]">
+          <div className="w-full rounded-[24px] border-2 border-black/15 bg-white/18 px-[20px] py-[14px]">
             <div className="flex items-center justify-between gap-[12px]">
               <div>
-                <div className="text-black/75" style={{ ...titleFont, fontSize: 24 }}>
+                <div className="text-black/75" style={{ ...titleFont, fontSize: 22 }}>
                   {previewUser ? `${previewUser.name} · ${ROLE_LABELS[previewUser.role]}` : '管理员账号使用系统 Token 登录'}
                 </div>
                 <div className="mt-[4px] text-black/45" style={{ ...monoFont, fontSize: 16 }}>
@@ -343,7 +357,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             <div className="mt-[10px] text-black/45" style={{ ...monoFont, fontSize: 16 }}>
               {loginHint || (previewUser?.role === 'admin'
                 ? '管理员需要使用系统初始化时生成的 Token。'
-                : '成员/访客需输入密码并完成验证码校验。')}
+                : '当前是演示模式，验证码会直接显示在这里，不会真的发送到邮箱或短信。')}
             </div>
           </div>
 
@@ -352,22 +366,22 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             disabled={submitting}
             className="w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
             style={{
-              height: 78,
-              borderRadius: 32,
+              height: 74,
+              borderRadius: 30,
               border: '3px solid rgba(0,0,0,0.45)',
               background: 'rgba(255,255,255,0.5)',
               ...titleFont,
-              fontSize: 32,
+              fontSize: 30,
               color: 'rgba(0,0,0,0.72)',
             }}
           >
             {submitting ? '验证中...' : '登录'}
           </button>
-        </form>
-      ) : (
-        <form className="mt-[28px] flex flex-col gap-[18px]" onSubmit={handleRegister}>
-          <div className="flex items-center gap-[22px]">
-            <AvatarCircle name={registerName || '新访客'} email={registerEmail} avatar={registerAvatar} />
+          </form>
+        ) : (
+          <form className="mt-[34px] flex flex-col gap-[20px]" onSubmit={handleRegister}>
+          <div className="flex flex-col items-start gap-[18px] md:flex-row md:items-center md:gap-[22px]">
+            <AvatarCircle name={registerName || '新访客'} email={registerEmail} avatar={registerAvatar} size={104} />
             <label
               className="cursor-pointer rounded-[24px] px-[24px] py-[14px]"
               style={{ border: '2px solid rgba(0,0,0,0.3)', background: 'rgba(255,255,255,0.28)', ...titleFont, fontSize: 24 }}
@@ -377,7 +391,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             </label>
           </div>
 
-          <div className="grid grid-cols-2 gap-[18px]">
+          <div className="grid grid-cols-1 gap-[18px] md:grid-cols-2">
             <input
               ref={inputRef}
               value={registerName}
@@ -414,7 +428,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             />
           </div>
 
-          <div className="grid grid-cols-[1fr,180px] gap-[18px]">
+          <div className="grid grid-cols-1 gap-[18px] md:grid-cols-[1fr,180px]">
             <input
               value={registerCode}
               onChange={(event) => setRegisterCode(event.target.value)}
@@ -435,7 +449,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
                 fontSize: 24,
               }}
             >
-              发送验证码
+              获取验证码
             </button>
           </div>
 
@@ -459,6 +473,9 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             <div className="mt-[8px] text-black/42" style={{ ...monoFont, fontSize: 15 }}>
               {registerHint || `白名单模式：${registerPolicy.whitelistMode ? '开启' : '关闭'} · 常见域名：${whitelistPreview}`}
             </div>
+            <div className="mt-[8px] text-black/38" style={{ ...monoFont, fontSize: 14, lineHeight: 1.6 }}>
+              当前版本仅做本地演示校验，验证码会直接显示，不会真正发到邮箱。要做真实邮箱验证，还需要接 SMTP 或邮件服务。
+            </div>
           </div>
 
           <button
@@ -477,10 +494,11 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
           >
             {submitting ? '提交中...' : '创建账号 / 提交申请'}
           </button>
-        </form>
-      )}
+          </form>
+        )}
+      </div>
 
-      <p className="mt-[22px] text-center text-black/40" style={{ ...monoFont, fontSize: 16 }}>
+      <p className={`${isLoginView ? 'mt-[14px]' : 'mt-[26px]'} text-center text-black/40`} style={{ ...monoFont, fontSize: 15 }}>
         © 2026 xiaoCZX · 账号系统前端原型
       </p>
     </div>
