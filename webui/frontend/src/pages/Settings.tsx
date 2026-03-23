@@ -499,11 +499,10 @@ function LLMConfigSection() {
         <button
           onClick={saveLLMConfig}
           disabled={saving}
-          className="relative rounded-[27px] px-[40px] py-[12px] bg-gradient-to-br from-blue-400 to-blue-600 text-white hover:from-blue-500 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          style={btnFont}
+          className="relative rounded-[27px] px-[30px] py-[10px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <div className={pillShadow} style={pillShadowStyle} />
-          {saving ? '保存中...' : '保存配置'}
+          <span style={btnFont} className="text-black/70">{saving ? '保存中...' : '保存配置'}</span>
         </button>
       </div>
     </div>

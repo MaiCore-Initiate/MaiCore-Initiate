@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import GlassCard from '../components/ui/GlassCard'
+import { createPortal } from 'react-dom'
 
 type LogSource = 'main' | 'webui' | 'desktop_pet'
 
@@ -42,6 +43,121 @@ const levelColors: Record<string, string> = {
   INFO: '#22c55e',
   WARNING: '#f59e0b',
   ERROR: '#ef4444',
+}
+
+function FileSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  options: Array<{ value: string; label: string; disabled?: boolean }>
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0, maxHeight: 260 })
+
+  useEffect(() => {
+    const handleMouseDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [])
+
+  useEffect(() => {
+    if (!open || !buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom - 8
+    const spaceAbove = rect.top - 8
+    const dropUp = spaceBelow < 180 && spaceAbove > spaceBelow
+    const maxHeight = Math.min(260, dropUp ? spaceAbove : spaceBelow)
+    setPos({
+      top: dropUp ? rect.top - Math.max(maxHeight, 60) - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      maxHeight: Math.max(maxHeight, 60),
+    })
+  }, [open])
+
+  const selectedOption = options.find(option => option.value === value)
+  const disabled = options.length === 0 || options.every(option => option.disabled)
+
+  return (
+    <div ref={ref} className="relative min-w-[360px] max-w-full">
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen(current => !current)}
+        className="h-[46px] w-full px-[16px] rounded-[23px] text-left transition disabled:cursor-not-allowed disabled:opacity-50"
+        style={{
+          ...monoFont,
+          fontSize: 17,
+          border: '2px solid var(--mc-border-soft)',
+          background: 'var(--mc-control-bg)',
+          color: selectedOption ? 'var(--mc-text-primary)' : 'var(--mc-text-faint)',
+        }}
+      >
+        <span className="flex items-center justify-between gap-[12px]">
+          <span className="truncate">{selectedOption?.label || placeholder || '请选择日志文件'}</span>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="shrink-0 transition-transform duration-200"
+            style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          >
+            <path d="M6 9l6 6 6-6" stroke="var(--mc-icon-stroke)" strokeWidth="2.5" strokeLinecap="round" />
+          </svg>
+        </span>
+      </button>
+      {open ? createPortal(
+        <div
+          className="fixed overflow-y-auto rounded-[18px] backdrop-blur-xl custom-scrollbar"
+          style={{
+            top: pos.top,
+            left: pos.left,
+            width: pos.width,
+            maxHeight: pos.maxHeight,
+            zIndex: 9999,
+            boxShadow: '4px 4px 12px var(--mc-shadow-soft)',
+            background: 'var(--mc-panel-bg-strong)',
+            border: '2px solid var(--mc-border-soft)',
+          }}
+          onMouseDown={event => event.stopPropagation()}
+        >
+          {options.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              disabled={option.disabled}
+              onClick={() => {
+                if (option.disabled) return
+                onChange(option.value)
+                setOpen(false)
+              }}
+              className="w-full px-[16px] py-[10px] text-left transition disabled:cursor-not-allowed"
+              style={{
+                ...monoFont,
+                fontSize: 16,
+                color: option.disabled ? 'var(--mc-text-faint)' : 'var(--mc-text-primary)',
+                background: option.value === value ? 'var(--mc-choice-selected-bg)' : 'transparent',
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>,
+        document.body,
+      ) : null}
+    </div>
+  )
 }
 
 function SourceTabs({ value, onChange }: { value: LogSource; onChange: (value: LogSource) => void }) {
@@ -175,6 +291,17 @@ export default function Logs({ initialSource }: { initialSource?: LogSource }) {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1
+  const fileOptions = useMemo(
+    () => (
+      filteredFiles.length === 0
+        ? [{ value: '', label: '暂无日志文件', disabled: true }]
+        : filteredFiles.map(file => ({
+            value: file.name,
+            label: `${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
+          }))
+    ),
+    [filteredFiles],
+  )
 
   return (
     <div className="w-full h-full p-[24px] overflow-hidden">
@@ -190,22 +317,12 @@ export default function Logs({ initialSource }: { initialSource?: LogSource }) {
           <div className="p-[24px] h-full flex flex-col gap-[14px]">
             <div className="flex items-center gap-[12px] flex-wrap">
               <SourceTabs value={source} onChange={setSource} />
-              <select
+              <FileSelect
                 value={selectedFile}
-                onChange={e => { setSelectedFile(e.target.value); setOffset(0) }}
-                className="h-[46px] px-[16px] rounded-[23px] min-w-[360px] max-w-full outline-none"
-                style={{ ...monoFont, fontSize: 17, border: '2px solid var(--mc-border-soft)', background: 'var(--mc-control-bg)', color: 'var(--mc-text-primary)' }}
-              >
-                {filteredFiles.length === 0 ? (
-                  <option value="">暂无日志文件</option>
-                ) : (
-                  filteredFiles.map(file => (
-                    <option key={file.name} value={file.name}>
-                      {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                    </option>
-                  ))
-                )}
-              </select>
+                onChange={next => { setSelectedFile(next); setOffset(0) }}
+                options={fileOptions}
+                placeholder="请选择日志文件"
+              />
             </div>
 
             {analysis && source === 'desktop_pet' ? (
