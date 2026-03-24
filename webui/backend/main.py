@@ -68,6 +68,7 @@ from src.webui_api.pet_api_v2 import router as pet_v2_router
 from src.webui_api.auth_core import (
     account_store,
     attach_request_auth_state,
+    request_rate_limiter,
     resolve_request_auth,
     session_manager,
     token_manager,
@@ -246,6 +247,60 @@ manager = ConnectionManager()
 logger = logging.getLogger(__name__)
 
 
+SESSION_COOKIE_NAME = "webui_session"
+SESSION_MAX_AGE = 7 * 24 * 60 * 60
+
+
+def _should_use_secure_cookie(request: Request) -> bool:
+    if request.url.scheme == "https":
+        return True
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
+    return forwarded_proto == "https"
+
+
+def _set_session_cookie(response: Response, request: Request, session_id: str) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_id,
+        max_age=SESSION_MAX_AGE,
+        path="/",
+        httponly=True,
+        secure=_should_use_secure_cookie(request),
+        samesite="strict",
+    )
+
+
+def _clear_session_cookie(response: Response, request: Request) -> None:
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+        secure=_should_use_secure_cookie(request),
+        samesite="strict",
+    )
+
+
+def _enforce_rate_limit(key: str, limit: int, window_seconds: int) -> None:
+    retry_after = request_rate_limiter.check(key, limit=limit, window_seconds=window_seconds)
+    if retry_after > 0:
+        raise HTTPException(status_code=429, detail=f"请求过于频繁，请在 {retry_after} 秒后重试")
+
+
+def _is_allowed_ws_channel(channel: str, user: Dict[str, Any]) -> bool:
+    if channel.startswith("terminal_"):
+        return account_store.can_action(user, "misc.webshell.access")
+
+    page_channel_map = {
+        "deployment_progress": "deploy",
+        "process_resources": "status",
+        "logs": "logs",
+        "instance_status": "status",
+    }
+    page = page_channel_map.get(channel)
+    if not page:
+        return False
+    return account_store.can_page(user, page)
+
+
 # --- 登录验证依赖 ---
 
 def verify_session(request: Request):
@@ -257,22 +312,7 @@ def verify_session(request: Request):
     if request.method == "GET" and path in {
         "/api/preferences/bg_settings",
         "/api/settings/backgrounds",
-        "/api/settings/live2d/models",
-        "/api/settings/live2d/settings",
-        "/api/settings/live2d/runtime/status",
-        "/api/settings/live2d/face-capture/state",
-        "/api/settings/live2d/widget/tips.json",
     }:
-        return "public"
-    if request.method == "GET" and path.startswith("/api/settings/live2d/models/"):
-        return "public"
-    if request.method == "POST" and path in {
-        "/api/settings/live2d/runtime/position",
-        "/api/settings/live2d/face-capture/frame",
-        "/api/settings/live2d/chat",
-        "/api/settings/live2d/overlay/settings",
-    }:
-        attach_request_auth_state(request, None, auth_type="public", user=None)
         return "public"
 
     user = resolve_request_auth(request)
@@ -379,20 +419,16 @@ async def verify_token(request: VerifyRequest, http_request: Request):
 @app.post("/api/auth/login")
 async def login(request: LoginRequest, http_request: Request, response: Response):
     """登录验证"""
-    session_id = http_request.cookies.get("webui_session", "")
-    if not session_id:
-        session_id = secrets.token_hex(16)
+    client_host = http_request.client.host if http_request.client else "unknown"
+    _enforce_rate_limit(f"legacy-token-login:{client_host}", limit=10, window_seconds=300)
+    session_id = http_request.cookies.get(SESSION_COOKIE_NAME, "") or secrets.token_hex(16)
 
     result = session_manager.login_with_token(session_id, request.token)
     if result.get("success"):
-        response.set_cookie(
-            key="webui_session",
-            value=session_id,
-            max_age=7 * 24 * 60 * 60,
-            path="/",
-            samesite="lax",
-        )
-        result["session_id"] = session_id
+        rotated_session_id = secrets.token_hex(16)
+        session_manager.rotate_session(session_id, rotated_session_id)
+        _set_session_cookie(response, http_request, rotated_session_id)
+        result["session_id"] = rotated_session_id
     return result
 
 
@@ -415,10 +451,10 @@ async def auth_status(http_request: Request):
 @app.post("/api/auth/logout")
 async def logout(http_request: Request, response: Response):
     """登出"""
-    session_id = http_request.cookies.get("webui_session", "")
+    session_id = http_request.cookies.get(SESSION_COOKIE_NAME, "")
     if session_id:
         session_manager.logout(session_id)
-    response.delete_cookie("webui_session", path="/")
+    _clear_session_cookie(response, http_request)
     return {
         "success": True,
         "message": "已登出"
@@ -734,6 +770,10 @@ async def websocket_endpoint(websocket: WebSocket):
     if not session_id or not session_manager.is_logged_in(session_id):
         await websocket.close(code=4001)
         return
+    user = session_manager.get_current_user(session_id)
+    if not user:
+        await websocket.close(code=4001)
+        return
 
     channel = None
 
@@ -750,6 +790,25 @@ async def websocket_endpoint(websocket: WebSocket):
                     "message": "未指定订阅频道"
                 })
                 return
+
+            if not _is_allowed_ws_channel(channel, user):
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "当前账号无权订阅该频道"
+                })
+                await websocket.close(code=4003)
+                return
+
+            if channel.startswith("terminal_"):
+                terminal_id = channel.removeprefix("terminal_")
+                from src.webui_api.terminal_api import can_access_terminal_session
+                if not can_access_terminal_session(terminal_id, user):
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "当前账号无权访问该终端会话"
+                    })
+                    await websocket.close(code=4003)
+                    return
             
             # 连接频道
             await manager.connect(websocket, channel)
@@ -778,23 +837,18 @@ async def websocket_endpoint(websocket: WebSocket):
                             "type": "unsubscribed",
                             "channel": channel_to_leave
                         })
-                    elif msg_type == "publish":
-                        # 客户端发布消息到频道
-                        target_channel = message.get("channel", channel)
-                        data = message.get("data", {})
-                        await manager.broadcast(target_channel, {
-                            "type": "message",
-                            "channel": target_channel,
-                            "data": data,
-                            "timestamp": datetime.now().isoformat()
-                        })
                     elif msg_type == "terminal_input":
                         # 终端输入
                         from src.webui_api.terminal_api import handle_terminal_input
                         terminal_id = message.get("terminal_id")
                         data = message.get("data", "")
                         if terminal_id:
-                            handle_terminal_input(terminal_id, data)
+                            ok = handle_terminal_input(terminal_id, data, user)
+                            if not ok:
+                                await websocket.send_json({
+                                    "type": "error",
+                                    "message": "当前账号无权操作该终端"
+                                })
                     elif msg_type == "terminal_resize":
                         # 终端大小调整
                         from src.webui_api.terminal_api import handle_terminal_resize
@@ -802,7 +856,12 @@ async def websocket_endpoint(websocket: WebSocket):
                         rows = message.get("rows", 24)
                         cols = message.get("cols", 80)
                         if terminal_id:
-                            handle_terminal_resize(terminal_id, rows, cols)
+                            ok = handle_terminal_resize(terminal_id, rows, cols, user)
+                            if not ok:
+                                await websocket.send_json({
+                                    "type": "error",
+                                    "message": "当前账号无权操作该终端"
+                                })
                     
                 except WebSocketDisconnect:
                     break

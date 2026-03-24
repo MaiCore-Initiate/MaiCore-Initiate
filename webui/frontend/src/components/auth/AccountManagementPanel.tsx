@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import {
   ACTION_PERMISSION_LABELS,
   ACTION_PERMISSION_ORDER,
@@ -143,11 +143,26 @@ export default function AccountManagementPanel() {
   const [transferToken, setTransferToken] = useState('')
   const [transferCode, setTransferCode] = useState('')
   const [transferHint, setTransferHint] = useState('')
+  const [transferDropdownOpen, setTransferDropdownOpen] = useState(false)
+  const transferDropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setProfileName(currentUser?.name ?? '')
     setProfileAvatar(currentUser?.avatar ?? '')
   }, [currentUser])
+
+  useEffect(() => {
+    if (!transferDropdownOpen) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (transferDropdownRef.current && !transferDropdownRef.current.contains(event.target as Node)) {
+        setTransferDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [transferDropdownOpen])
 
   useEffect(() => {
     setWhitelistDraft(registerPolicy.allowedDomains.join('\n'))
@@ -156,9 +171,14 @@ export default function AccountManagementPanel() {
   const members = useMemo(() => {
     return users.filter(user => user.status === 'active' && user.role === 'member')
   }, [users])
+  const selectedTransferMember = useMemo(() => {
+    return members.find(member => member.id === transferTarget) ?? null
+  }, [members, transferTarget])
 
-  const pushResult = (result: { success: boolean; message: string }) => {
-    notify(result.message, result.success ? 'success' : 'warning')
+  const pushResult = async (result: Promise<{ success: boolean; message: string }> | { success: boolean; message: string }) => {
+    const resolved = await Promise.resolve(result)
+    notify(resolved.message, resolved.success ? 'success' : 'warning')
+    return resolved
   }
 
   if (!currentUser) {
@@ -177,13 +197,12 @@ export default function AccountManagementPanel() {
     }
   }
 
-  const handleProfileSave = () => {
-    const result = updateProfile({ name: profileName, avatar: profileAvatar })
-    notify(result.message, result.success ? 'success' : 'warning')
+  const handleProfileSave = async () => {
+    await pushResult(updateProfile({ name: profileName, avatar: profileAvatar }))
   }
 
-  const handleSendPasswordCode = () => {
-    const result = sendSensitiveCode('password')
+  const handleSendPasswordCode = async () => {
+    const result = await sendSensitiveCode('password')
     if (!result.success) {
       notify(result.message, 'warning')
       return
@@ -193,13 +212,12 @@ export default function AccountManagementPanel() {
     notify(hint, 'success')
   }
 
-  const handleChangePassword = () => {
-    const result = changePassword({
+  const handleChangePassword = async () => {
+    const result = await pushResult(changePassword({
       currentPassword,
       nextPassword,
       code: passwordCode,
-    })
-    notify(result.message, result.success ? 'success' : 'warning')
+    }))
     if (result.success) {
       setCurrentPassword('')
       setNextPassword('')
@@ -207,24 +225,22 @@ export default function AccountManagementPanel() {
     }
   }
 
-  const handleUpgradeApply = () => {
-    const result = requestMemberUpgrade(upgradeReason)
-    notify(result.message, result.success ? 'success' : 'warning')
+  const handleUpgradeApply = async () => {
+    const result = await pushResult(requestMemberUpgrade(upgradeReason))
     if (result.success) setUpgradeReason('')
   }
 
-  const handleSaveWhitelist = () => {
-    const result = updateRegisterPolicy({
+  const handleSaveWhitelist = async () => {
+    await pushResult(updateRegisterPolicy({
       allowedDomains: whitelistDraft
         .split(/[\n,]+/)
         .map(item => item.trim())
         .filter(Boolean),
-    })
-    notify(result.message, result.success ? 'success' : 'warning')
+    }))
   }
 
-  const handleTransferCode = () => {
-    const result = sendSensitiveCode('transfer-admin')
+  const handleTransferCode = async () => {
+    const result = await sendSensitiveCode('transfer-admin')
     if (!result.success) {
       notify(result.message, 'warning')
       return
@@ -234,13 +250,13 @@ export default function AccountManagementPanel() {
     notify(hint, 'success')
   }
 
-  const handleTransferAdmin = () => {
-    const result = transferAdmin(transferTarget, transferToken, transferCode)
-    notify(result.message, result.success ? 'success' : 'warning')
+  const handleTransferAdmin = async () => {
+    const result = await pushResult(transferAdmin(transferTarget, transferToken, transferCode))
     if (result.success) {
       setTransferCode('')
       setTransferToken('')
       setTransferTarget('')
+      setTransferDropdownOpen(false)
     }
   }
 
@@ -357,10 +373,10 @@ export default function AccountManagementPanel() {
                       </div>
                     </div>
                     <div className="flex gap-[8px]">
-                      <button type="button" onClick={() => pushResult(approveRequest(request.id))} className="cursor-pointer rounded-[16px] px-[14px] py-[8px]" style={{ border: '2px solid rgba(0,0,0,0.25)', background: 'rgba(74,249,51,0.18)', ...titleFont, fontSize: 18 }}>
+                      <button type="button" onClick={() => { void pushResult(approveRequest(request.id)) }} className="cursor-pointer rounded-[16px] px-[14px] py-[8px]" style={{ border: '2px solid rgba(0,0,0,0.25)', background: 'rgba(74,249,51,0.18)', ...titleFont, fontSize: 18 }}>
                         批准
                       </button>
-                      <button type="button" onClick={() => pushResult(rejectRequest(request.id))} className="cursor-pointer rounded-[16px] px-[14px] py-[8px]" style={{ border: '2px solid rgba(0,0,0,0.25)', background: 'rgba(255,140,140,0.18)', ...titleFont, fontSize: 18 }}>
+                      <button type="button" onClick={() => { void pushResult(rejectRequest(request.id)) }} className="cursor-pointer rounded-[16px] px-[14px] py-[8px]" style={{ border: '2px solid rgba(0,0,0,0.25)', background: 'rgba(255,140,140,0.18)', ...titleFont, fontSize: 18 }}>
                         驳回
                       </button>
                     </div>
@@ -379,34 +395,34 @@ export default function AccountManagementPanel() {
               <div className="space-y-[12px]">
                 <div className="flex items-center justify-between">
                   <span style={{ ...titleFont, fontSize: 21 }}>白名单模式</span>
-                  <Toggle checked={registerPolicy.whitelistMode} onChange={value => pushResult(updateRegisterPolicy({ whitelistMode: value }))} />
+                  <Toggle checked={registerPolicy.whitelistMode} onChange={value => { void pushResult(updateRegisterPolicy({ whitelistMode: value })) }} />
                 </div>
                 <div className="flex items-center justify-between">
                   <span style={{ ...titleFont, fontSize: 21 }}>允许访客直接注册</span>
-                  <Toggle checked={registerPolicy.allowGuestSelfRegister} onChange={value => pushResult(updateRegisterPolicy({ allowGuestSelfRegister: value }))} />
+                  <Toggle checked={registerPolicy.allowGuestSelfRegister} onChange={value => { void pushResult(updateRegisterPolicy({ allowGuestSelfRegister: value })) }} />
                 </div>
                 <div className="flex items-center justify-between">
                   <span style={{ ...titleFont, fontSize: 21 }}>允许访客提交申请</span>
-                  <Toggle checked={registerPolicy.allowGuestApplications} onChange={value => pushResult(updateRegisterPolicy({ allowGuestApplications: value }))} />
+                  <Toggle checked={registerPolicy.allowGuestApplications} onChange={value => { void pushResult(updateRegisterPolicy({ allowGuestApplications: value })) }} />
                 </div>
                 <div className="flex items-center justify-between">
                   <span style={{ ...titleFont, fontSize: 21 }}>允许访客申请升级成员</span>
-                  <Toggle checked={registerPolicy.allowMemberUpgradeApplications} onChange={value => pushResult(updateRegisterPolicy({ allowMemberUpgradeApplications: value }))} />
+                  <Toggle checked={registerPolicy.allowMemberUpgradeApplications} onChange={value => { void pushResult(updateRegisterPolicy({ allowMemberUpgradeApplications: value })) }} />
                 </div>
                 <div className="flex items-center justify-between">
                   <span style={{ ...titleFont, fontSize: 21 }}>注册需邮箱验证码</span>
-                  <Toggle checked={registerPolicy.requireEmailVerification} onChange={value => pushResult(updateRegisterPolicy({ requireEmailVerification: value }))} />
+                  <Toggle checked={registerPolicy.requireEmailVerification} onChange={value => { void pushResult(updateRegisterPolicy({ requireEmailVerification: value })) }} />
                 </div>
               </div>
 
               <div className="space-y-[12px]">
                 <div className="flex items-center justify-between">
                   <span style={{ ...titleFont, fontSize: 21 }}>同步管理员主题/背景</span>
-                  <Toggle checked={appearancePolicy.syncAdminAppearance} onChange={value => pushResult(updateAppearancePolicy({ syncAdminAppearance: value }))} />
+                  <Toggle checked={appearancePolicy.syncAdminAppearance} onChange={value => { void pushResult(updateAppearancePolicy({ syncAdminAppearance: value })) }} />
                 </div>
                 <div className="flex items-center justify-between">
                   <span style={{ ...titleFont, fontSize: 21 }}>允许成员/访客自定义</span>
-                  <Toggle checked={appearancePolicy.allowCustomAppearance} onChange={value => pushResult(updateAppearancePolicy({ allowCustomAppearance: value }))} />
+                  <Toggle checked={appearancePolicy.allowCustomAppearance} onChange={value => { void pushResult(updateAppearancePolicy({ allowCustomAppearance: value })) }} />
                 </div>
                 <div className="rounded-[18px] border-2 border-black/10 bg-white/20 p-[14px] text-black/45" style={{ ...monoFont, fontSize: 14, lineHeight: 1.7 }}>
                   推荐白名单：{DEFAULT_EMAIL_WHITELIST.join(', ')}
@@ -445,15 +461,15 @@ export default function AccountManagementPanel() {
                   {PAGE_PERMISSION_ORDER.map(page => (
                     <tr key={page}>
                       <td className="py-[8px]" style={{ ...titleFont, fontSize: 18 }}>{PAGE_PERMISSION_LABELS[page]}</td>
-                      <td className="py-[8px] text-center"><Toggle checked={roleTemplates.member.pages[page]} onChange={value => pushResult(setRolePagePermission('member', page, value))} /></td>
-                      <td className="py-[8px] text-center"><Toggle checked={roleTemplates.guest.pages[page]} onChange={value => pushResult(setRolePagePermission('guest', page, value))} /></td>
+                      <td className="py-[8px] text-center"><Toggle checked={roleTemplates.member.pages[page]} onChange={value => { void pushResult(setRolePagePermission('member', page, value)) }} /></td>
+                      <td className="py-[8px] text-center"><Toggle checked={roleTemplates.guest.pages[page]} onChange={value => { void pushResult(setRolePagePermission('guest', page, value)) }} /></td>
                     </tr>
                   ))}
                   {ACTION_PERMISSION_ORDER.map(action => (
                     <tr key={action}>
                       <td className="py-[8px]" style={{ ...titleFont, fontSize: 18 }}>{ACTION_PERMISSION_LABELS[action]}</td>
-                      <td className="py-[8px] text-center"><Toggle checked={roleTemplates.member.actions[action]} onChange={value => pushResult(setRoleActionPermission('member', action, value))} /></td>
-                      <td className="py-[8px] text-center"><Toggle checked={roleTemplates.guest.actions[action]} onChange={value => pushResult(setRoleActionPermission('guest', action, value))} /></td>
+                      <td className="py-[8px] text-center"><Toggle checked={roleTemplates.member.actions[action]} onChange={value => { void pushResult(setRoleActionPermission('member', action, value)) }} /></td>
+                      <td className="py-[8px] text-center"><Toggle checked={roleTemplates.guest.actions[action]} onChange={value => { void pushResult(setRoleActionPermission('guest', action, value)) }} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -479,10 +495,10 @@ export default function AccountManagementPanel() {
                     </span>
                     {user.role !== 'admin' ? (
                       <>
-                        <button type="button" onClick={() => pushResult(setUserRole(user.id, 'member'))} className="cursor-pointer rounded-[14px] px-[12px] py-[8px]" style={{ border: '2px solid rgba(0,0,0,0.2)', background: 'rgba(255,255,255,0.26)', ...titleFont, fontSize: 17 }}>
+                        <button type="button" onClick={() => { void pushResult(setUserRole(user.id, 'member')) }} className="cursor-pointer rounded-[14px] px-[12px] py-[8px]" style={{ border: '2px solid rgba(0,0,0,0.2)', background: 'rgba(255,255,255,0.26)', ...titleFont, fontSize: 17 }}>
                           设为成员
                         </button>
-                        <button type="button" onClick={() => pushResult(setUserRole(user.id, 'guest'))} className="cursor-pointer rounded-[14px] px-[12px] py-[8px]" style={{ border: '2px solid rgba(0,0,0,0.2)', background: 'rgba(255,255,255,0.26)', ...titleFont, fontSize: 17 }}>
+                        <button type="button" onClick={() => { void pushResult(setUserRole(user.id, 'guest')) }} className="cursor-pointer rounded-[14px] px-[12px] py-[8px]" style={{ border: '2px solid rgba(0,0,0,0.2)', background: 'rgba(255,255,255,0.26)', ...titleFont, fontSize: 17 }}>
                           设为访客
                         </button>
                       </>
@@ -497,16 +513,74 @@ export default function AccountManagementPanel() {
 
           <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px]">
             <SectionTitle>管理员账号转让</SectionTitle>
-            <div className="mt-[14px] grid grid-cols-1 gap-[12px] 2xl:grid-cols-[1fr,1fr,1fr,160px]">
-              <select value={transferTarget} onChange={event => setTransferTarget(event.target.value)} className="rounded-[18px] border-2 border-black/15 bg-white/35 px-[16px] outline-none" style={{ height: 50, ...titleFont, fontSize: 18 }}>
-                <option value="">选择目标成员</option>
-                {members.map(member => (
-                  <option key={member.id} value={member.id}>{member.name} · {member.email}</option>
-                ))}
-              </select>
-              <input value={transferToken} onChange={event => setTransferToken(event.target.value)} type="password" placeholder={`系统 Token${adminToken ? '（已缓存）' : ''}`} className="rounded-[18px] border-2 border-black/15 bg-white/35 px-[16px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
-              <input value={transferCode} onChange={event => setTransferCode(event.target.value)} placeholder="转让验证码" className="rounded-[18px] border-2 border-black/15 bg-white/35 px-[16px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
-              <button type="button" onClick={handleTransferCode} className="cursor-pointer rounded-[18px]" style={{ border: '2px solid rgba(0,0,0,0.25)', background: 'rgba(255,255,255,0.3)', ...titleFont, fontSize: 18 }}>
+            <div className="mt-[14px] grid grid-cols-1 gap-[12px] 2xl:grid-cols-[minmax(0,1fr),minmax(0,1fr),minmax(0,1fr),160px]">
+              <div className="relative w-full min-w-0" ref={transferDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setTransferDropdownOpen(open => !open)}
+                  className="flex w-full min-w-0 items-center gap-[10px] rounded-[18px] border-2 border-black/15 bg-white/35 px-[16px] text-left outline-none"
+                  style={{ height: 50 }}
+                >
+                  <span className="min-w-0 flex-1 truncate text-black/75" style={{ ...titleFont, fontSize: 18 }}>
+                    {selectedTransferMember ? `${selectedTransferMember.name} · ${selectedTransferMember.email}` : '选择目标成员'}
+                  </span>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    className="shrink-0"
+                    style={{ transform: transferDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
+                  >
+                    <path d="M2 4L6 8L10 4" stroke="rgba(0,0,0,0.58)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {transferDropdownOpen && (
+                  <div
+                    className="absolute left-0 top-[56px] z-20 max-h-[240px] w-full overflow-y-auto rounded-[18px] py-[6px] backdrop-blur-md"
+                    style={{ boxShadow: '2px 4px 12px rgba(0,0,0,0.12)', background: 'rgba(255,255,255,0.72)', border: '2px solid rgba(0,0,0,0.12)' }}
+                  >
+                    <button
+                      type="button"
+                      className="block w-full cursor-pointer px-[14px] py-[8px] text-left transition-colors"
+                      style={{ ...titleFont, fontSize: 17, color: 'rgba(0,0,0,0.72)', background: transferTarget ? 'transparent' : 'rgba(255,255,255,0.52)' }}
+                      onClick={() => {
+                        setTransferTarget('')
+                        setTransferDropdownOpen(false)
+                      }}
+                    >
+                      选择目标成员
+                    </button>
+                    {members.length === 0 ? (
+                      <div className="px-[14px] py-[10px] text-black/42" style={{ ...monoFont, fontSize: 14 }}>
+                        当前没有可接收管理员权限的成员。
+                      </div>
+                    ) : (
+                      members.map(member => {
+                        const active = member.id === transferTarget
+                        return (
+                          <button
+                            key={member.id}
+                            type="button"
+                            className="block w-full cursor-pointer px-[14px] py-[8px] text-left transition-colors"
+                            style={{ background: active ? 'rgba(255,255,255,0.52)' : 'transparent' }}
+                            onClick={() => {
+                              setTransferTarget(member.id)
+                              setTransferDropdownOpen(false)
+                            }}
+                          >
+                            <div className="truncate text-black/78" style={{ ...titleFont, fontSize: 17 }}>{member.name}</div>
+                            <div className="truncate text-black/45" style={{ ...monoFont, fontSize: 13 }}>{member.email}</div>
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+              <input value={transferToken} onChange={event => setTransferToken(event.target.value)} type="password" placeholder={`系统 Token${adminToken ? '（已缓存）' : ''}`} className="w-full min-w-0 rounded-[18px] border-2 border-black/15 bg-white/35 px-[16px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
+              <input value={transferCode} onChange={event => setTransferCode(event.target.value)} placeholder="转让验证码" className="w-full min-w-0 rounded-[18px] border-2 border-black/15 bg-white/35 px-[16px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
+              <button type="button" onClick={() => void handleTransferCode()} className="w-full min-w-0 cursor-pointer rounded-[18px]" style={{ border: '2px solid rgba(0,0,0,0.25)', background: 'rgba(255,255,255,0.3)', ...titleFont, fontSize: 18 }}>
                 发送验证码
               </button>
             </div>
@@ -514,7 +588,7 @@ export default function AccountManagementPanel() {
               <div className="text-black/45" style={{ ...monoFont, fontSize: 15 }}>
                 {transferHint || `当前管理员：${currentAdmin.name} · 转让后唯一管理员会切换到目标成员。`}
               </div>
-              <button type="button" onClick={handleTransferAdmin} className="cursor-pointer rounded-[18px] px-[16px] py-[10px]" style={{ border: '2px solid rgba(0,0,0,0.3)', background: 'rgba(255,255,255,0.34)', ...titleFont, fontSize: 20 }}>
+              <button type="button" onClick={() => void handleTransferAdmin()} className="cursor-pointer rounded-[18px] px-[16px] py-[10px]" style={{ border: '2px solid rgba(0,0,0,0.3)', background: 'rgba(255,255,255,0.34)', ...titleFont, fontSize: 20 }}>
                 执行转让
               </button>
             </div>

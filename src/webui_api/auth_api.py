@@ -15,6 +15,7 @@ from .auth_core import (
     get_request_user,
     require_action,
     require_admin,
+    request_rate_limiter,
     resolve_request_auth,
     session_manager,
 )
@@ -30,14 +31,39 @@ def _ensure_session_id(request: Request) -> str:
     return session_id or secrets.token_hex(16)
 
 
-def _apply_session_cookie(response: Response, session_id: str) -> None:
+def _should_use_secure_cookie(request: Request) -> bool:
+    if request.url.scheme == "https":
+        return True
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
+    return forwarded_proto == "https"
+
+
+def _set_session_cookie(response: Response, request: Request, session_id: str) -> None:
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_id,
         max_age=SESSION_MAX_AGE,
         path="/",
-        samesite="lax",
+        httponly=True,
+        secure=_should_use_secure_cookie(request),
+        samesite="strict",
     )
+
+
+def _clear_session_cookie(response: Response, request: Request) -> None:
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+        secure=_should_use_secure_cookie(request),
+        samesite="strict",
+    )
+
+
+def _enforce_rate_limit(key: str, limit: int, window_seconds: int) -> None:
+    retry_after = request_rate_limiter.check(key, limit=limit, window_seconds=window_seconds)
+    if retry_after > 0:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=429, detail=f"请求过于频繁，请在 {retry_after} 秒后重试")
 
 
 class IdentifierBody(BaseModel):
@@ -135,39 +161,55 @@ async def get_account_state(request: Request):
 
 
 @router.post("/send-login-code")
-async def send_login_code(body: IdentifierBody):
+async def send_login_code(body: IdentifierBody, request: Request):
+    client_host = request.client.host if request.client else "unknown"
+    identifier = (body.identifier or "").strip().lower()
+    _enforce_rate_limit(f"send-login-code:{client_host}:{identifier}", limit=3, window_seconds=60)
     return account_store.send_login_code(body.identifier)
 
 
 @router.post("/send-register-code")
-async def send_register_code(body: EmailBody):
+async def send_register_code(body: EmailBody, request: Request):
+    client_host = request.client.host if request.client else "unknown"
+    email = (body.email or "").strip().lower()
+    _enforce_rate_limit(f"send-register-code:{client_host}:{email}", limit=5, window_seconds=600)
     return account_store.send_register_code(body.email)
 
 
 @router.post("/send-sensitive-code")
 async def send_sensitive_code(
     body: SensitiveCodeBody,
+    request: Request,
     user: Dict[str, Any] = Depends(get_request_user),
 ):
+    client_host = request.client.host if request.client else "unknown"
+    _enforce_rate_limit(f"send-sensitive-code:{client_host}:{user['id']}:{body.purpose}", limit=5, window_seconds=600)
     return account_store.send_sensitive_code(user["id"], body.purpose)
 
 
 @router.post("/login")
 async def account_login(body: AccountLoginBody, request: Request, response: Response):
-    session_id = _ensure_session_id(request)
+    incoming_session_id = _ensure_session_id(request)
+    client_host = request.client.host if request.client else "unknown"
+    identifier = (body.identifier or "token-login").strip().lower()
+    _enforce_rate_limit(f"account-login:{client_host}:{identifier}", limit=10, window_seconds=300)
     if (body.token or "").strip():
-        result = session_manager.login_with_token(session_id, body.token)
+        result = session_manager.login_with_token(incoming_session_id, body.token)
     else:
-        result = session_manager.login_account(session_id, body.identifier, body.password, body.code)
+        result = session_manager.login_account(incoming_session_id, body.identifier, body.password, body.code)
 
     if result.get("success"):
-        _apply_session_cookie(response, session_id)
+        session_id = secrets.token_hex(16)
+        session_manager.rotate_session(incoming_session_id, session_id)
+        _set_session_cookie(response, request, session_id)
         result["session_id"] = session_id
     return result
 
 
 @router.post("/register")
-async def register_account(body: RegisterBody):
+async def register_account(body: RegisterBody, request: Request):
+    client_host = request.client.host if request.client else "unknown"
+    _enforce_rate_limit(f"account-register:{client_host}:{(body.email or '').strip().lower()}", limit=5, window_seconds=900)
     return account_store.register_account(body.model_dump())
 
 

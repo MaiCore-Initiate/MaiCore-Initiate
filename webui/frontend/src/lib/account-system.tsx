@@ -12,12 +12,26 @@ export type AccountRole = 'admin' | 'member' | 'guest'
 export type AccountStatus = 'active' | 'pending'
 export type ActionPermissionKey =
   | 'instances.control'
+  | 'deploy.manage'
+  | 'knowledge.manage'
+  | 'components.manage'
+  | 'multi-instance.manage'
+  | 'ports.manage'
   | 'settings.system'
   | 'settings.security'
   | 'accounts.manage'
   | 'appearance.customize'
   | 'quick-access.customize'
   | 'member.upgrade.request'
+  | 'misc.about.access'
+  | 'misc.author.access'
+  | 'misc.tech.access'
+  | 'misc.libs.access'
+  | 'misc.license.access'
+  | 'misc.components.access'
+  | 'misc.webshell.access'
+  | 'misc.screensaver.access'
+  | 'misc.desktop-pet.access'
 
 export interface AccountUser {
   id: string
@@ -123,6 +137,7 @@ interface PasswordPayload {
 }
 
 interface AccountSystemContextValue {
+  ready: boolean
   adminToken: string
   currentUser: AccountUser | null
   currentAdmin: AccountUser
@@ -136,30 +151,87 @@ interface AccountSystemContextValue {
   findUserByIdentifier: (identifier: string) => AccountUser | null
   canAccessPage: (page: Page, user?: AccountUser | null) => boolean
   can: (action: ActionPermissionKey, user?: AccountUser | null) => boolean
-  sendLoginCode: (identifier: string) => OperationResult
-  sendRegisterCode: (email: string) => OperationResult
-  sendSensitiveCode: (purpose: string) => OperationResult
-  activateAdminSession: (identifier: string, token: string) => OperationResult
-  loginLocal: (identifier: string, password: string, code: string) => OperationResult<{ user: AccountUser }>
+  sendLoginCode: (identifier: string) => Promise<OperationResult>
+  sendRegisterCode: (email: string) => Promise<OperationResult>
+  sendSensitiveCode: (purpose: string) => Promise<OperationResult>
+  activateAdminSession: (identifier: string, token: string) => Promise<OperationResult>
+  loginLocal: (identifier: string, password: string, code: string) => Promise<OperationResult<{ user: AccountUser }>>
   logout: () => void
-  registerAccount: (payload: RegisterPayload) => OperationResult<{ mode: 'registered' | 'applied' }>
-  updateProfile: (payload: ProfilePayload) => OperationResult
-  changePassword: (payload: PasswordPayload) => OperationResult
-  requestMemberUpgrade: (reason: string) => OperationResult
-  approveRequest: (requestId: string) => OperationResult
-  rejectRequest: (requestId: string) => OperationResult
-  setUserRole: (userId: string, role: Exclude<AccountRole, 'admin'>) => OperationResult
-  setRolePagePermission: (role: 'member' | 'guest', page: Page, allowed: boolean) => OperationResult
-  setRoleActionPermission: (role: 'member' | 'guest', action: ActionPermissionKey, allowed: boolean) => OperationResult
-  updateRegisterPolicy: (patch: Partial<RegisterPolicy>) => OperationResult
-  updateAppearancePolicy: (patch: Partial<AppearancePolicy>) => OperationResult
-  transferAdmin: (targetUserId: string, token: string, code: string) => OperationResult
+  registerAccount: (payload: RegisterPayload) => Promise<OperationResult<{ mode: 'registered' | 'applied' }>>
+  updateProfile: (payload: ProfilePayload) => Promise<OperationResult>
+  changePassword: (payload: PasswordPayload) => Promise<OperationResult>
+  requestMemberUpgrade: (reason: string) => Promise<OperationResult>
+  approveRequest: (requestId: string) => Promise<OperationResult>
+  rejectRequest: (requestId: string) => Promise<OperationResult>
+  setUserRole: (userId: string, role: Exclude<AccountRole, 'admin'>) => Promise<OperationResult>
+  setRolePagePermission: (role: 'member' | 'guest', page: Page, allowed: boolean) => Promise<OperationResult>
+  setRoleActionPermission: (role: 'member' | 'guest', action: ActionPermissionKey, allowed: boolean) => Promise<OperationResult>
+  updateRegisterPolicy: (patch: Partial<RegisterPolicy>) => Promise<OperationResult>
+  updateAppearancePolicy: (patch: Partial<AppearancePolicy>) => Promise<OperationResult>
+  transferAdmin: (targetUserId: string, token: string, code: string) => Promise<OperationResult>
+}
+
+interface BackendAccountUser {
+  id: string
+  role: AccountRole
+  status: AccountStatus
+  name: string
+  email: string
+  avatar?: string
+  created_at?: string
+  joined_via?: AccountUser['joinedVia']
+  last_login_at?: string
+  login_code_enabled?: boolean
+}
+
+interface BackendApprovalRequest {
+  id: string
+  type: ApprovalRequest['type']
+  applicant_id?: string
+  applicant_name?: string
+  applicant_email?: string
+  desired_role?: ApprovalRequest['desiredRole']
+  reason?: string
+  created_at?: string
+  status?: ApprovalRequest['status']
+}
+
+interface BackendAuditItem {
+  id: string
+  action: string
+  detail: string
+  at: string
+}
+
+interface BackendRolePermissionTemplate {
+  pages?: Partial<Record<Page, boolean>>
+  actions?: Partial<Record<ActionPermissionKey, boolean>>
+}
+
+interface BackendAccountStateResponse {
+  success: boolean
+  logged_in?: boolean
+  current_user?: BackendAccountUser | null
+  current_admin?: BackendAccountUser | null
+  users?: BackendAccountUser[]
+  requests?: BackendApprovalRequest[]
+  register_policy?: {
+    whitelist_mode?: boolean
+    allowed_domains?: string[]
+    allow_guest_self_register?: boolean
+    allow_guest_applications?: boolean
+    allow_member_upgrade_applications?: boolean
+    require_email_verification?: boolean
+  }
+  appearance_policy?: {
+    sync_admin_appearance?: boolean
+    allow_custom_appearance?: boolean
+  }
+  role_templates?: Record<'member' | 'guest', BackendRolePermissionTemplate>
+  audit_trail?: BackendAuditItem[]
 }
 
 const STORAGE_KEY = 'mcstart.account-system.v1'
-const CODE_TTL_MS = 5 * 60 * 1000
-const LOGIN_LOCK_MS = 5 * 60 * 1000
-const LOGIN_FAIL_LIMIT = 5
 
 export const DEFAULT_EMAIL_WHITELIST = [
   'qq.com',
@@ -218,22 +290,50 @@ export const PAGE_PERMISSION_LABELS: Record<Page, string> = {
 
 export const ACTION_PERMISSION_ORDER: ActionPermissionKey[] = [
   'instances.control',
+  'deploy.manage',
+  'knowledge.manage',
+  'components.manage',
+  'multi-instance.manage',
+  'ports.manage',
   'settings.system',
   'settings.security',
   'accounts.manage',
   'appearance.customize',
   'quick-access.customize',
   'member.upgrade.request',
+  'misc.about.access',
+  'misc.author.access',
+  'misc.tech.access',
+  'misc.libs.access',
+  'misc.license.access',
+  'misc.components.access',
+  'misc.webshell.access',
+  'misc.screensaver.access',
+  'misc.desktop-pet.access',
 ]
 
 export const ACTION_PERMISSION_LABELS: Record<ActionPermissionKey, string> = {
   'instances.control': '实例启停与快捷启动',
+  'deploy.manage': '实例部署与删除',
+  'knowledge.manage': '知识库上传与构建',
+  'components.manage': '组件下载与清理',
+  'multi-instance.manage': '多开克隆与端口调整',
+  'ports.manage': '端口预留与管理',
   'settings.system': '系统设置与 AI 配置',
   'settings.security': '安全配置与 Token 管理',
   'accounts.manage': '成员管理与申请审批',
   'appearance.customize': '个性化主题/背景',
   'quick-access.customize': '自定义快捷访问',
   'member.upgrade.request': '申请升级为成员',
+  'misc.about.access': '杂项 / 关于项目',
+  'misc.author.access': '杂项 / 关于作者',
+  'misc.tech.access': '杂项 / 技术栈',
+  'misc.libs.access': '杂项 / 开源库',
+  'misc.license.access': '杂项 / 开源许可',
+  'misc.components.access': '杂项 / 组件下载',
+  'misc.webshell.access': '杂项 / WebShell',
+  'misc.screensaver.access': '杂项 / 屏保',
+  'misc.desktop-pet.access': '杂项 / 桌宠',
 }
 
 const AccountSystemContext = createContext<AccountSystemContextValue | null>(null)
@@ -242,25 +342,8 @@ function nowIso() {
   return new Date().toISOString()
 }
 
-function uid(prefix: string) {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
 function normalize(value: string) {
   return value.trim().toLowerCase()
-}
-
-function getDomain(email: string) {
-  const pieces = normalize(email).split('@')
-  return pieces.length === 2 ? pieces[1] : ''
-}
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
-}
-
-function isStrongPassword(password: string) {
-  return password.length >= 8 && /[A-Za-z]/.test(password) && /\d/.test(password)
 }
 
 function createEmptyPagePermissions() {
@@ -301,13 +384,33 @@ function createDefaultRoleTemplates(): Record<'member' | 'guest', RolePermission
 
   const memberActions = createEmptyActionPermissions()
   memberActions['instances.control'] = true
+  memberActions['deploy.manage'] = true
+  memberActions['knowledge.manage'] = true
+  memberActions['multi-instance.manage'] = true
+  memberActions['ports.manage'] = true
   memberActions['appearance.customize'] = true
   memberActions['quick-access.customize'] = true
+  memberActions['misc.about.access'] = true
+  memberActions['misc.author.access'] = true
+  memberActions['misc.tech.access'] = true
+  memberActions['misc.libs.access'] = true
+  memberActions['misc.license.access'] = true
+  memberActions['misc.components.access'] = true
+  memberActions['misc.screensaver.access'] = true
+  memberActions['misc.desktop-pet.access'] = true
 
   const guestActions = createEmptyActionPermissions()
   guestActions['appearance.customize'] = true
   guestActions['quick-access.customize'] = true
   guestActions['member.upgrade.request'] = true
+  guestActions['misc.about.access'] = true
+  guestActions['misc.author.access'] = true
+  guestActions['misc.tech.access'] = true
+  guestActions['misc.libs.access'] = true
+  guestActions['misc.license.access'] = true
+  guestActions['misc.components.access'] = true
+  guestActions['misc.screensaver.access'] = true
+  guestActions['misc.desktop-pet.access'] = true
 
   return {
     member: {
@@ -366,7 +469,7 @@ function normalizeState(raw: Partial<AccountSystemState> | null | undefined): Ac
   const normalizedUsers = hasAdmin ? users : [...users, defaults.users[0]]
 
   const state: AccountSystemState = {
-    adminToken: typeof raw?.adminToken === 'string' ? raw.adminToken : defaults.adminToken,
+    adminToken: defaults.adminToken,
     users: normalizedUsers,
     currentUserId: typeof raw?.currentUserId === 'string' ? raw.currentUserId : null,
     roleTemplates: {
@@ -431,22 +534,97 @@ function pruneState(state: AccountSystemState): AccountSystemState {
   }
 }
 
-function recordAudit(state: AccountSystemState, action: string, detail: string): AccountSystemState {
-  const nextItem: AuditItem = {
-    id: uid('audit'),
-    action,
-    detail,
-    at: nowIso(),
-  }
-  return {
-    ...state,
-    auditTrail: [nextItem, ...state.auditTrail].slice(0, 60),
-  }
-}
-
 export function getAvatarFallback(name: string, email: string) {
   const base = name.trim() || email.trim() || '访客'
   return base.slice(0, 2).toUpperCase()
+}
+
+function mapBackendUser(user: BackendAccountUser | null | undefined): AccountUser | null {
+  if (!user) return null
+  return {
+    id: user.id,
+    role: user.role,
+    status: user.status,
+    name: user.name,
+    email: user.email,
+    avatar: user.avatar ?? '',
+    password: '',
+    createdAt: user.created_at ?? '',
+    joinedVia: user.joined_via ?? 'seed',
+    lastLoginAt: user.last_login_at ?? undefined,
+    loginCodeEnabled: Boolean(user.login_code_enabled),
+  }
+}
+
+function mapBackendRequest(request: BackendApprovalRequest): ApprovalRequest {
+  return {
+    id: request.id,
+    type: request.type,
+    applicantId: request.applicant_id ?? '',
+    applicantName: request.applicant_name ?? '',
+    applicantEmail: request.applicant_email ?? '',
+    desiredRole: request.desired_role ?? 'guest',
+    reason: request.reason ?? '',
+    createdAt: request.created_at ?? '',
+    status: request.status ?? 'pending',
+  }
+}
+
+function mapBackendState(payload: BackendAccountStateResponse, previousState?: AccountSystemState): AccountSystemState {
+  const defaults = createDefaultState()
+  const users = (payload.users ?? []).map(mapBackendUser).filter(Boolean) as AccountUser[]
+  const mappedCurrentUser = mapBackendUser(payload.current_user)
+  const currentUserId = mappedCurrentUser?.id ?? null
+  const roleTemplates = payload.role_templates ?? ({} as NonNullable<BackendAccountStateResponse['role_templates']>)
+
+  return normalizeState({
+    adminToken: mappedCurrentUser?.role === 'admin' ? (previousState?.adminToken ?? '') : '',
+    users: users.length ? users : defaults.users,
+    currentUserId,
+    roleTemplates: {
+      member: {
+        pages: {
+          ...defaults.roleTemplates.member.pages,
+          ...(roleTemplates.member?.pages ?? {}),
+        },
+        actions: {
+          ...defaults.roleTemplates.member.actions,
+          ...(roleTemplates.member?.actions ?? {}),
+        },
+      },
+      guest: {
+        pages: {
+          ...defaults.roleTemplates.guest.pages,
+          ...(roleTemplates.guest?.pages ?? {}),
+        },
+        actions: {
+          ...defaults.roleTemplates.guest.actions,
+          ...(roleTemplates.guest?.actions ?? {}),
+        },
+      },
+    },
+    registerPolicy: {
+      whitelistMode: payload.register_policy?.whitelist_mode ?? defaults.registerPolicy.whitelistMode,
+      allowedDomains: payload.register_policy?.allowed_domains ?? defaults.registerPolicy.allowedDomains,
+      allowGuestSelfRegister: payload.register_policy?.allow_guest_self_register ?? defaults.registerPolicy.allowGuestSelfRegister,
+      allowGuestApplications: payload.register_policy?.allow_guest_applications ?? defaults.registerPolicy.allowGuestApplications,
+      allowMemberUpgradeApplications: payload.register_policy?.allow_member_upgrade_applications ?? defaults.registerPolicy.allowMemberUpgradeApplications,
+      requireEmailVerification: payload.register_policy?.require_email_verification ?? defaults.registerPolicy.requireEmailVerification,
+    },
+    appearancePolicy: {
+      syncAdminAppearance: payload.appearance_policy?.sync_admin_appearance ?? defaults.appearancePolicy.syncAdminAppearance,
+      allowCustomAppearance: payload.appearance_policy?.allow_custom_appearance ?? defaults.appearancePolicy.allowCustomAppearance,
+    },
+    verificationCodes: {},
+    loginGuards: {},
+    requests: (payload.requests ?? []).map(mapBackendRequest),
+    auditTrail: (payload.audit_trail ?? []).map(item => ({
+      id: item.id,
+      action: item.action,
+      detail: item.detail,
+      at: item.at,
+    })),
+  })
 }
 
 export function useAccountSystem() {
@@ -467,15 +645,88 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
       return createDefaultState()
     }
   })
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(pruneState(state)))
+      window.localStorage.removeItem('webui_token')
+      const persisted = pruneState(state)
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        ...persisted,
+        adminToken: '',
+      }))
     } catch {
       // ignore persistence errors
     }
   }, [state])
+
+  const applyBackendState = (payload: BackendAccountStateResponse, options?: { adminToken?: string; clearAdminToken?: boolean }) => {
+    setState(prev => {
+      const next = mapBackendState(payload, prev)
+      return {
+        ...next,
+        adminToken: options?.clearAdminToken
+          ? ''
+          : (options?.adminToken ?? next.adminToken ?? prev.adminToken),
+      }
+    })
+  }
+
+  const requestJson = async <T,>(path: string, init?: RequestInit): Promise<T> => {
+    const response = await fetch(path, {
+      credentials: 'include',
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    })
+
+    const text = await response.text()
+    const data = text ? JSON.parse(text) as T : {} as T
+    if (!response.ok) {
+      const message = typeof (data as any)?.detail === 'string'
+        ? (data as any).detail
+        : typeof (data as any)?.message === 'string'
+          ? (data as any).message
+          : `HTTP ${response.status}`
+      throw new Error(message)
+    }
+    return data
+  }
+
+  const refreshState = async (options?: { adminToken?: string; clearAdminToken?: boolean }) => {
+    const data = await requestJson<BackendAccountStateResponse>('/api/account/state')
+    applyBackendState(data, options)
+    return data
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    const hydrate = async () => {
+      try {
+        const data = await requestJson<BackendAccountStateResponse>('/api/account/state')
+        if (cancelled) return
+        applyBackendState(data)
+      } catch {
+        if (cancelled) return
+        setState(prev => ({
+          ...prev,
+          adminToken: '',
+          currentUserId: null,
+          verificationCodes: {},
+          loginGuards: {},
+        }))
+      } finally {
+        if (!cancelled) setReady(true)
+      }
+    }
+    void hydrate()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const users = useMemo(() => state.users, [state.users])
   const currentUser = useMemo(
@@ -509,54 +760,40 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     ) ?? null
   }
 
-  const sendCode = (key: string, purpose: string): OperationResult => {
-    const code = String(Math.floor(100000 + Math.random() * 900000))
-    const expiresAt = Date.now() + CODE_TTL_MS
-
-    setState(prev => {
-      const pruned = pruneState(prev)
-      return {
-        ...pruned,
-        verificationCodes: {
-          ...pruned.verificationCodes,
-          [key]: { purpose, code, expiresAt },
-        },
-      }
-    })
-
-    return {
-      success: true,
-      message: '验证码已生成，当前为前端演示模式。',
-      code,
+  const sendLoginCode = async (identifier: string): Promise<OperationResult> => {
+    try {
+      return await requestJson<OperationResult>('/api/account/send-login-code', {
+        method: 'POST',
+        body: JSON.stringify({ identifier }),
+      })
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '发送登录验证码失败。' }
     }
   }
 
-  const sendLoginCode = (identifier: string): OperationResult => {
-    const user = findUserByIdentifier(identifier)
-    if (!user || user.status !== 'active') {
-      return { success: false, message: '未找到可登录的账号。' }
+  const sendRegisterCode = async (email: string): Promise<OperationResult> => {
+    try {
+      return await requestJson<OperationResult>('/api/account/send-register-code', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      })
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '发送注册验证码失败。' }
     }
-    if (user.role === 'admin') {
-      return { success: false, message: '管理员请直接使用系统 Token 登录。' }
-    }
-    return sendCode(`login:${user.id}`, `login:${user.email}`)
   }
 
-  const sendRegisterCode = (email: string): OperationResult => {
-    if (!isValidEmail(email)) {
-      return { success: false, message: '请输入正确的邮箱地址。' }
+  const sendSensitiveCode = async (purpose: string): Promise<OperationResult> => {
+    try {
+      return await requestJson<OperationResult>('/api/account/send-sensitive-code', {
+        method: 'POST',
+        body: JSON.stringify({ purpose }),
+      })
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '发送安全验证码失败。' }
     }
-    return sendCode(`register:${normalize(email)}`, `register:${email}`)
   }
 
-  const sendSensitiveCode = (purpose: string): OperationResult => {
-    if (!currentUser) {
-      return { success: false, message: '请先登录后再进行安全验证。' }
-    }
-    return sendCode(`sensitive:${currentUser.id}:${purpose}`, `sensitive:${purpose}`)
-  }
-
-  const activateAdminSession = (identifier: string, token: string): OperationResult => {
+  const activateAdminSession = async (identifier: string, token: string): Promise<OperationResult> => {
     const adminNeedle = normalize(identifier)
     const canMatchAdmin = (
       adminNeedle === normalize(currentAdmin.name) ||
@@ -570,473 +807,244 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
       return { success: false, message: '请输入系统 Token。' }
     }
 
-    setState(prev => recordAudit({
-      ...pruneState(prev),
-      adminToken: token.trim(),
-      currentUserId: currentAdmin.id,
-      users: prev.users.map(user => (
-        user.id === currentAdmin.id
-          ? { ...user, lastLoginAt: nowIso() }
-          : user
-      )),
-    }, 'admin-login', `${currentAdmin.name} 使用系统 Token 登录`))
-
-    return { success: true, message: '管理员登录成功。' }
+    try {
+      const result = await requestJson<OperationResult>('/api/account/login', {
+        method: 'POST',
+        body: JSON.stringify({ token: token.trim() }),
+      })
+      if (result.success) {
+        await refreshState({ adminToken: token.trim() })
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '管理员登录失败。' }
+    }
   }
 
-  const loginLocal = (identifier: string, password: string, code: string): OperationResult<{ user: AccountUser }> => {
-    const user = findUserByIdentifier(identifier)
-    if (!user || user.status !== 'active' || user.role === 'admin') {
-      return { success: false, message: '账号不存在，或当前账号必须使用管理员 Token 登录。' }
-    }
-
-    const guard = state.loginGuards[user.id]
-    if (guard && guard.lockedUntil > Date.now()) {
-      const seconds = Math.ceil((guard.lockedUntil - Date.now()) / 1000)
-      return { success: false, message: `尝试次数过多，请在 ${seconds} 秒后重试。` }
-    }
-
-    if (user.password !== password) {
-      const nextAttempts = (guard?.attempts ?? 0) + 1
-      const lockedUntil = nextAttempts >= LOGIN_FAIL_LIMIT ? Date.now() + LOGIN_LOCK_MS : 0
-      setState(prev => {
-        const pruned = pruneState(prev)
-        return {
-          ...pruned,
-          loginGuards: {
-            ...pruned.loginGuards,
-            [user.id]: { attempts: nextAttempts, lockedUntil },
-          },
-        }
+  const loginLocal = async (identifier: string, password: string, code: string): Promise<OperationResult<{ user: AccountUser }>> => {
+    try {
+      const result = await requestJson<OperationResult<{ user: BackendAccountUser }>>('/api/account/login', {
+        method: 'POST',
+        body: JSON.stringify({ identifier, password, code }),
       })
-      if (lockedUntil > 0) {
-        return { success: false, message: '密码错误次数过多，账号已被暂时锁定。' }
+      if (result.success) {
+        await refreshState({ clearAdminToken: true })
       }
-      return { success: false, message: `密码错误，还可尝试 ${Math.max(0, LOGIN_FAIL_LIMIT - nextAttempts)} 次。` }
-    }
-
-    const codeKey = `login:${user.id}`
-    if (user.loginCodeEnabled) {
-      const verify = state.verificationCodes[codeKey]
-      if (!verify || verify.code !== code.trim()) {
-        return { success: false, message: '登录验证码无效，请重新发送。' }
+      return {
+        ...result,
+        data: result.data?.user ? { user: mapBackendUser(result.data.user)! } : undefined,
       }
-    }
-
-    setState(prev => {
-      const pruned = pruneState(prev)
-      return recordAudit({
-        ...pruned,
-        currentUserId: user.id,
-        users: prev.users.map(item => (
-          item.id === user.id ? { ...item, lastLoginAt: nowIso() } : item
-        )),
-        verificationCodes: Object.fromEntries(
-          Object.entries(pruned.verificationCodes).filter(([key]) => key !== codeKey),
-        ),
-        loginGuards: Object.fromEntries(
-          Object.entries(pruned.loginGuards).filter(([key]) => key !== user.id),
-        ),
-      }, 'account-login', `${user.name} 以 ${ROLE_LABELS[user.role]} 身份登录`)
-    })
-
-    return {
-      success: true,
-      message: '登录成功。',
-      data: { user },
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '账号登录失败。' }
     }
   }
 
   const logout = () => {
     setState(prev => ({
       ...pruneState(prev),
+      adminToken: '',
       currentUserId: null,
     }))
   }
 
-  const registerAccount = (payload: RegisterPayload): OperationResult<{ mode: 'registered' | 'applied' }> => {
-    const name = payload.name.trim()
-    const email = payload.email.trim()
-    const password = payload.password
-
-    if (!name) {
-      return { success: false, message: '请填写显示名称。' }
-    }
-    if (!isValidEmail(email)) {
-      return { success: false, message: '请输入正确的邮箱地址。' }
-    }
-    if (!isStrongPassword(password)) {
-      return { success: false, message: '密码至少 8 位，且需包含字母和数字。' }
-    }
-    if (state.users.some(user => normalize(user.email) === normalize(email))) {
-      return { success: false, message: '该邮箱已经被注册。' }
-    }
-
-    const domain = getDomain(email)
-    const domainAllowed = !state.registerPolicy.whitelistMode ||
-      state.registerPolicy.allowedDomains.map(normalize).includes(domain)
-
-    if (state.registerPolicy.requireEmailVerification) {
-      const verify = state.verificationCodes[`register:${normalize(email)}`]
-      if (!verify || verify.code !== (payload.code ?? '').trim()) {
-        return { success: false, message: '邮箱验证码错误或已过期。' }
-      }
-    }
-
-    const canDirectRegister = state.registerPolicy.allowGuestSelfRegister && domainAllowed
-    if (!canDirectRegister && !state.registerPolicy.allowGuestApplications) {
-      return { success: false, message: '当前系统不开放自助注册或申请，请联系管理员。' }
-    }
-
-    const nextUser: AccountUser = {
-      id: uid('user'),
-      role: 'guest',
-      status: canDirectRegister ? 'active' : 'pending',
-      name,
-      email,
-      avatar: payload.avatar,
-      password,
-      createdAt: nowIso(),
-      joinedVia: canDirectRegister ? 'self-register' : 'admin-approve',
-      loginCodeEnabled: true,
-    }
-
-    setState(prev => {
-      const pruned = pruneState(prev)
-      let nextState: AccountSystemState = {
-        ...pruned,
-        users: [...pruned.users, nextUser],
-        verificationCodes: Object.fromEntries(
-          Object.entries(pruned.verificationCodes).filter(([key]) => key !== `register:${normalize(email)}`),
-        ),
-      }
-
-      if (!canDirectRegister) {
-        nextState = {
-          ...nextState,
-          requests: [
-            {
-              id: uid('request'),
-              type: 'guest-registration',
-              applicantId: nextUser.id,
-              applicantName: nextUser.name,
-              applicantEmail: nextUser.email,
-              desiredRole: 'guest',
-              reason: payload.reason?.trim() || '申请创建访客账号',
-              createdAt: nowIso(),
-              status: 'pending',
-            },
-            ...nextState.requests,
-          ],
-        }
-      }
-
-      return recordAudit(
-        nextState,
-        canDirectRegister ? 'register-direct' : 'register-apply',
-        `${nextUser.email} ${canDirectRegister ? '直接注册为访客' : '提交访客注册申请'}`,
-      )
-    })
-
-    return {
-      success: true,
-      message: canDirectRegister ? '访客账号已创建，请返回登录。' : '注册申请已提交，等待管理员审核。',
-      data: { mode: canDirectRegister ? 'registered' : 'applied' },
-    }
-  }
-
-  const updateProfile = (payload: ProfilePayload): OperationResult => {
-    if (!currentUser) {
-      return { success: false, message: '请先登录。' }
-    }
-    if (!payload.name.trim()) {
-      return { success: false, message: '显示名称不能为空。' }
-    }
-
-    setState(prev => recordAudit({
-      ...pruneState(prev),
-      users: prev.users.map(user => (
-        user.id === currentUser.id
-          ? {
-              ...user,
-              name: payload.name.trim(),
-              avatar: payload.avatar,
-            }
-          : user
-      )),
-    }, 'profile-update', `${currentUser.email} 更新了个人资料`))
-
-    return { success: true, message: '个人资料已更新。' }
-  }
-
-  const changePassword = (payload: PasswordPayload): OperationResult => {
-    if (!currentUser) {
-      return { success: false, message: '请先登录。' }
-    }
-    if (currentUser.role === 'admin') {
-      return { success: false, message: '管理员账号使用系统 Token 登录，不在这里修改密码。' }
-    }
-    if (currentUser.password !== payload.currentPassword) {
-      return { success: false, message: '当前密码不正确。' }
-    }
-    if (!isStrongPassword(payload.nextPassword)) {
-      return { success: false, message: '新密码至少 8 位，且需包含字母和数字。' }
-    }
-    const key = `sensitive:${currentUser.id}:password`
-    const verify = state.verificationCodes[key]
-    if (!verify || verify.code !== payload.code.trim()) {
-      return { success: false, message: '安全验证码错误或已过期。' }
-    }
-
-    setState(prev => {
-      const pruned = pruneState(prev)
-      return recordAudit({
-        ...pruned,
-        users: prev.users.map(user => (
-          user.id === currentUser.id
-            ? { ...user, password: payload.nextPassword }
-            : user
-        )),
-        verificationCodes: Object.fromEntries(
-          Object.entries(pruned.verificationCodes).filter(([codeKey]) => codeKey !== key),
-        ),
-      }, 'password-change', `${currentUser.email} 修改了登录密码`)
-    })
-
-    return { success: true, message: '登录密码已更新。' }
-  }
-
-  const requestMemberUpgrade = (reason: string): OperationResult => {
-    if (!currentUser) {
-      return { success: false, message: '请先登录。' }
-    }
-    if (currentUser.role !== 'guest') {
-      return { success: false, message: '当前账号不是访客，无需申请升级。' }
-    }
-    if (!state.registerPolicy.allowMemberUpgradeApplications) {
-      return { success: false, message: '管理员已关闭成员升级申请。' }
-    }
-    if (!reason.trim()) {
-      return { success: false, message: '请填写申请理由。' }
-    }
-    const existed = state.requests.some(request =>
-      request.type === 'member-upgrade' &&
-      request.applicantId === currentUser.id &&
-      request.status === 'pending',
-    )
-    if (existed) {
-      return { success: false, message: '你已经提交过升级申请，请等待管理员处理。' }
-    }
-
-    setState(prev => recordAudit({
-      ...pruneState(prev),
-      requests: [
-        {
-          id: uid('request'),
-          type: 'member-upgrade',
-          applicantId: currentUser.id,
-          applicantName: currentUser.name,
-          applicantEmail: currentUser.email,
-          desiredRole: 'member',
-          reason: reason.trim(),
-          createdAt: nowIso(),
-          status: 'pending',
-        },
-        ...prev.requests,
-      ],
-    }, 'member-upgrade-request', `${currentUser.email} 提交了成员升级申请`))
-
-    return { success: true, message: '升级申请已提交。' }
-  }
-
-  const approveRequest = (requestId: string): OperationResult => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      return { success: false, message: '只有管理员可以审批申请。' }
-    }
-    const request = state.requests.find(item => item.id === requestId)
-    if (!request || request.status !== 'pending') {
-      return { success: false, message: '申请不存在或已处理。' }
-    }
-
-    setState(prev => {
-      const pruned = pruneState(prev)
-      const users: AccountUser[] = pruned.users.map((user): AccountUser => {
-        if (user.id !== request.applicantId) return user
-        if (request.type === 'guest-registration') {
-          return { ...user, status: 'active', role: 'guest', joinedVia: 'admin-approve' as const }
-        }
-        return { ...user, role: 'member' }
+  const registerAccount = async (payload: RegisterPayload): Promise<OperationResult<{ mode: 'registered' | 'applied' }>> => {
+    try {
+      const result = await requestJson<OperationResult<{ mode: 'registered' | 'applied' }>>('/api/account/register', {
+        method: 'POST',
+        body: JSON.stringify(payload),
       })
-
-      return recordAudit({
-        ...pruned,
-        users,
-        requests: pruned.requests.map(item => (
-          item.id === requestId ? { ...item, status: 'approved' } : item
-        )),
-      }, 'request-approve', `${request.applicantEmail} 的 ${request.desiredRole} 申请已批准`)
-    })
-
-    return { success: true, message: '申请已批准。' }
+      if (result.success) {
+        await refreshState({ clearAdminToken: true })
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '注册失败。' }
+    }
   }
 
-  const rejectRequest = (requestId: string): OperationResult => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      return { success: false, message: '只有管理员可以驳回申请。' }
+  const updateProfile = async (payload: ProfilePayload): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/profile', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '个人资料更新失败。' }
     }
-    const request = state.requests.find(item => item.id === requestId)
-    if (!request || request.status !== 'pending') {
-      return { success: false, message: '申请不存在或已处理。' }
-    }
-
-    setState(prev => recordAudit({
-      ...pruneState(prev),
-      requests: prev.requests.map(item => (
-        item.id === requestId ? { ...item, status: 'rejected' } : item
-      )),
-    }, 'request-reject', `${request.applicantEmail} 的 ${request.desiredRole} 申请已驳回`))
-
-    return { success: true, message: '申请已驳回。' }
   }
 
-  const setUserRole = (userId: string, role: Exclude<AccountRole, 'admin'>): OperationResult => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      return { success: false, message: '只有管理员可以调整账号等级。' }
-    }
-    const target = state.users.find(user => user.id === userId)
-    if (!target) {
-      return { success: false, message: '目标账号不存在。' }
-    }
-    if (target.role === 'admin') {
-      return { success: false, message: '管理员账号请使用专用转让流程。' }
-    }
-
-    setState(prev => recordAudit({
-      ...pruneState(prev),
-      users: prev.users.map(user => (
-        user.id === userId
-          ? { ...user, role, status: 'active' }
-          : user
-      )),
-    }, 'role-change', `${target.email} 被调整为 ${ROLE_LABELS[role]}`))
-
-    return { success: true, message: `已将账号调整为${ROLE_LABELS[role]}。` }
-  }
-
-  const setRolePagePermission = (role: 'member' | 'guest', page: Page, allowed: boolean): OperationResult => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      return { success: false, message: '只有管理员可以调整权限模板。' }
-    }
-    setState(prev => recordAudit({
-      ...pruneState(prev),
-      roleTemplates: {
-        ...prev.roleTemplates,
-        [role]: {
-          ...prev.roleTemplates[role],
-          pages: {
-            ...prev.roleTemplates[role].pages,
-            [page]: allowed,
-          },
-        },
-      },
-    }, 'page-permission-update', `${ROLE_LABELS[role]} 页面权限 ${PAGE_PERMISSION_LABELS[page]} => ${allowed ? '允许' : '禁止'}`))
-    return { success: true, message: '页面权限模板已更新。' }
-  }
-
-  const setRoleActionPermission = (role: 'member' | 'guest', action: ActionPermissionKey, allowed: boolean): OperationResult => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      return { success: false, message: '只有管理员可以调整权限模板。' }
-    }
-    setState(prev => recordAudit({
-      ...pruneState(prev),
-      roleTemplates: {
-        ...prev.roleTemplates,
-        [role]: {
-          ...prev.roleTemplates[role],
-          actions: {
-            ...prev.roleTemplates[role].actions,
-            [action]: allowed,
-          },
-        },
-      },
-    }, 'action-permission-update', `${ROLE_LABELS[role]} 操作权限 ${ACTION_PERMISSION_LABELS[action]} => ${allowed ? '允许' : '禁止'}`))
-    return { success: true, message: '操作权限模板已更新。' }
-  }
-
-  const updateRegisterPolicy = (patch: Partial<RegisterPolicy>): OperationResult => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      return { success: false, message: '只有管理员可以调整注册规则。' }
-    }
-
-    const nextDomains = patch.allowedDomains
-      ? patch.allowedDomains.map(item => normalize(item)).filter(Boolean)
-      : undefined
-
-    setState(prev => recordAudit({
-      ...pruneState(prev),
-      registerPolicy: {
-        ...prev.registerPolicy,
-        ...patch,
-        ...(nextDomains ? { allowedDomains: nextDomains } : {}),
-      },
-    }, 'register-policy-update', '管理员更新了注册与申请规则'))
-
-    return { success: true, message: '注册规则已更新。' }
-  }
-
-  const updateAppearancePolicy = (patch: Partial<AppearancePolicy>): OperationResult => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      return { success: false, message: '只有管理员可以调整个性化策略。' }
-    }
-
-    setState(prev => recordAudit({
-      ...pruneState(prev),
-      appearancePolicy: {
-        ...prev.appearancePolicy,
-        ...patch,
-      },
-    }, 'appearance-policy-update', '管理员更新了外观同步策略'))
-
-    return { success: true, message: '个性化策略已更新。' }
-  }
-
-  const transferAdmin = (targetUserId: string, token: string, code: string): OperationResult => {
-    if (!currentUser || currentUser.role !== 'admin') {
-      return { success: false, message: '只有当前管理员可以转让管理员权限。' }
-    }
-    const target = state.users.find(user => user.id === targetUserId)
-    if (!target || target.status !== 'active' || target.role !== 'member') {
-      return { success: false, message: '管理员只能转让给已激活的成员账号。' }
-    }
-    if (state.adminToken !== token.trim()) {
-      return { success: false, message: '系统 Token 校验失败。' }
-    }
-    const key = `sensitive:${currentUser.id}:transfer-admin`
-    const verify = state.verificationCodes[key]
-    if (!verify || verify.code !== code.trim()) {
-      return { success: false, message: '转让验证码无效。' }
-    }
-
-    setState(prev => {
-      const pruned = pruneState(prev)
-      return recordAudit({
-        ...pruned,
-        users: prev.users.map(user => {
-          if (user.id === currentUser.id) return { ...user, role: 'member' }
-          if (user.id === targetUserId) return { ...user, role: 'admin' }
-          return user
+  const changePassword = async (payload: PasswordPayload): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          current_password: payload.currentPassword,
+          next_password: payload.nextPassword,
+          code: payload.code,
         }),
-        verificationCodes: Object.fromEntries(
-          Object.entries(pruned.verificationCodes).filter(([codeKey]) => codeKey !== key),
-        ),
-        currentUserId: targetUserId,
-      }, 'admin-transfer', `管理员权限已转让给 ${target.email}`)
-    })
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '修改密码失败。' }
+    }
+  }
 
-    return { success: true, message: '管理员权限已成功转让。' }
+  const requestMemberUpgrade = async (reason: string): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/request-upgrade', {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '提交升级申请失败。' }
+    }
+  }
+
+  const approveRequest = async (requestId: string): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>(`/api/account/requests/${requestId}/approve`, {
+        method: 'POST',
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '审批申请失败。' }
+    }
+  }
+
+  const rejectRequest = async (requestId: string): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>(`/api/account/requests/${requestId}/reject`, {
+        method: 'POST',
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '驳回申请失败。' }
+    }
+  }
+
+  const setUserRole = async (userId: string, role: Exclude<AccountRole, 'admin'>): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>(`/api/account/users/${userId}/role`, {
+        method: 'POST',
+        body: JSON.stringify({ role }),
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '调整账号等级失败。' }
+    }
+  }
+
+  const setRolePagePermission = async (role: 'member' | 'guest', page: Page, allowed: boolean): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/permissions/page', {
+        method: 'POST',
+        body: JSON.stringify({ role, page, allowed }),
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '更新页面权限失败。' }
+    }
+  }
+
+  const setRoleActionPermission = async (role: 'member' | 'guest', action: ActionPermissionKey, allowed: boolean): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/permissions/action', {
+        method: 'POST',
+        body: JSON.stringify({ role, action, allowed }),
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '更新操作权限失败。' }
+    }
+  }
+
+  const updateRegisterPolicy = async (patch: Partial<RegisterPolicy>): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/policies/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          whitelist_mode: patch.whitelistMode,
+          allowed_domains: patch.allowedDomains,
+          allow_guest_self_register: patch.allowGuestSelfRegister,
+          allow_guest_applications: patch.allowGuestApplications,
+          allow_member_upgrade_applications: patch.allowMemberUpgradeApplications,
+          require_email_verification: patch.requireEmailVerification,
+        }),
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '更新注册规则失败。' }
+    }
+  }
+
+  const updateAppearancePolicy = async (patch: Partial<AppearancePolicy>): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/policies/appearance', {
+        method: 'POST',
+        body: JSON.stringify({
+          sync_admin_appearance: patch.syncAdminAppearance,
+          allow_custom_appearance: patch.allowCustomAppearance,
+        }),
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '更新个性化策略失败。' }
+    }
+  }
+
+  const transferAdmin = async (targetUserId: string, token: string, code: string): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/transfer-admin', {
+        method: 'POST',
+        body: JSON.stringify({
+          target_user_id: targetUserId,
+          token,
+          code,
+        }),
+      })
+      if (result.success) {
+        await refreshState({ clearAdminToken: true })
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '管理员转让失败。' }
+    }
   }
 
   const value = useMemo<AccountSystemContextValue>(() => ({
+    ready,
     adminToken: state.adminToken,
     currentUser,
     currentAdmin,
@@ -1069,6 +1077,7 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     updateAppearancePolicy,
     transferAdmin,
   }), [
+    ready,
     state,
     currentAdmin,
     currentUser,

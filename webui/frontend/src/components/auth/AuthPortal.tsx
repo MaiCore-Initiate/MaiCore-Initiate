@@ -58,7 +58,6 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
     activateAdminSession,
     loginLocal,
     registerAccount,
-    adminToken,
   } = useAccountSystem()
   const { notify } = useNotification()
 
@@ -90,8 +89,8 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
     return registerPolicy.allowedDomains.slice(0, 8).join(' / ')
   }, [registerPolicy.allowedDomains])
 
-  const issueLoginCode = () => {
-    const result = sendLoginCode(identifier)
+  const issueLoginCode = async () => {
+    const result = await sendLoginCode(identifier)
     if (!result.success) {
       notify(result.message, 'warning')
       return
@@ -101,8 +100,8 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
     notify(hint, 'success')
   }
 
-  const issueRegisterCode = () => {
-    const result = sendRegisterCode(registerEmail)
+  const issueRegisterCode = async () => {
+    const result = await sendRegisterCode(registerEmail)
     if (!result.success) {
       notify(result.message, 'warning')
       return
@@ -110,27 +109,6 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
     const hint = `注册验证码：${result.code}`
     setRegisterHint(hint)
     notify(hint, 'success')
-  }
-
-  const syncBackendSession = async (token: string) => {
-    if (!token.trim()) return false
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ token }),
-      })
-      const data = await response.json()
-      if (!data?.success) return false
-      if (data.session_id) {
-        document.cookie = `webui_session=${data.session_id}; path=/; max-age=86400`
-      }
-      localStorage.setItem('webui_token', token)
-      return true
-    } catch {
-      return false
-    }
   }
 
   const handleLogin = async (event: FormEvent) => {
@@ -146,12 +124,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
     try {
       const matched = findUserByIdentifier(identifier)
       if (matched?.role === 'admin') {
-        const ok = await syncBackendSession(secret)
-        if (!ok) {
-          notify('管理员 Token 验证失败，请检查后重试。', 'error')
-          return
-        }
-        const result = activateAdminSession(identifier, secret)
+        const result = await activateAdminSession(identifier, secret)
         if (!result.success) {
           notify(result.message, 'error')
           return
@@ -161,19 +134,10 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
         return
       }
 
-      const result = loginLocal(identifier, secret, loginCode)
+      const result = await loginLocal(identifier, secret, loginCode)
       if (!result.success) {
         notify(result.message, 'warning')
         return
-      }
-
-      if (adminToken) {
-        const ok = await syncBackendSession(adminToken)
-        if (!ok) {
-          notify('本地账号已登录，但未能同步后端会话。', 'warning')
-        }
-      } else {
-        notify('本地账号已登录。若需访问实时数据，请先让管理员登录一次。', 'warning')
       }
 
       onAuthenticated()
@@ -192,7 +156,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
 
     setSubmitting(true)
     try {
-      const result = registerAccount({
+      const result = await registerAccount({
         name: registerName,
         email: registerEmail,
         password: registerPassword,
@@ -322,7 +286,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             />
             <button
               type="button"
-              onClick={issueLoginCode}
+              onClick={() => void issueLoginCode()}
               disabled={!identifier.trim() || previewUser?.role === 'admin'}
               className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               style={{
@@ -438,7 +402,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             />
             <button
               type="button"
-              onClick={issueRegisterCode}
+              onClick={() => void issueRegisterCode()}
               className="cursor-pointer"
               style={{
                 height: 68,

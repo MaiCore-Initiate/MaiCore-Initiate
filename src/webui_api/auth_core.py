@@ -6,6 +6,7 @@ import json
 import logging
 import secrets
 import threading
+import time
 from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -21,6 +22,7 @@ P_CONFIG_PATH = PROJECT_ROOT / "config" / "P-config.toml"
 
 LOGIN_FAIL_LIMIT = 5
 CODE_TTL_SECONDS = 5 * 60
+SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
 
 PAGE_ORDER = [
     "home",
@@ -39,12 +41,26 @@ PAGE_ORDER = [
 
 ACTION_ORDER = [
     "instances.control",
+    "deploy.manage",
+    "knowledge.manage",
+    "components.manage",
+    "multi-instance.manage",
+    "ports.manage",
     "settings.system",
     "settings.security",
     "accounts.manage",
     "appearance.customize",
     "quick-access.customize",
     "member.upgrade.request",
+    "misc.about.access",
+    "misc.author.access",
+    "misc.tech.access",
+    "misc.libs.access",
+    "misc.license.access",
+    "misc.components.access",
+    "misc.webshell.access",
+    "misc.screensaver.access",
+    "misc.desktop-pet.access",
 ]
 
 DEFAULT_EMAIL_WHITELIST = [
@@ -111,13 +127,33 @@ def _default_role_templates() -> Dict[str, Dict[str, Dict[str, bool]]]:
 
     member_actions = _empty_action_permissions()
     member_actions["instances.control"] = True
+    member_actions["deploy.manage"] = True
+    member_actions["knowledge.manage"] = True
+    member_actions["multi-instance.manage"] = True
+    member_actions["ports.manage"] = True
     member_actions["appearance.customize"] = True
     member_actions["quick-access.customize"] = True
+    member_actions["misc.about.access"] = True
+    member_actions["misc.author.access"] = True
+    member_actions["misc.tech.access"] = True
+    member_actions["misc.libs.access"] = True
+    member_actions["misc.license.access"] = True
+    member_actions["misc.components.access"] = True
+    member_actions["misc.screensaver.access"] = True
+    member_actions["misc.desktop-pet.access"] = True
 
     guest_actions = _empty_action_permissions()
     guest_actions["appearance.customize"] = True
     guest_actions["quick-access.customize"] = True
     guest_actions["member.upgrade.request"] = True
+    guest_actions["misc.about.access"] = True
+    guest_actions["misc.author.access"] = True
+    guest_actions["misc.tech.access"] = True
+    guest_actions["misc.libs.access"] = True
+    guest_actions["misc.license.access"] = True
+    guest_actions["misc.components.access"] = True
+    guest_actions["misc.screensaver.access"] = True
+    guest_actions["misc.desktop-pet.access"] = True
 
     return {
         "member": {"pages": member_pages, "actions": member_actions},
@@ -663,6 +699,13 @@ class AccountStore:
 
         return self._mutate(mutator)
 
+    def record_audit_event(self, action: str, detail: str) -> None:
+        def mutator(state: Dict[str, Any]):
+            self._record_audit(state, action, detail)
+            return None
+
+        self._mutate(mutator)
+
     def transfer_admin(self, admin_id: str, target_user_id: str, token: str, code: str) -> Dict[str, Any]:
         def mutator(state: Dict[str, Any]):
             admin = self._find_user(state, admin_id)
@@ -742,6 +785,22 @@ class SessionManager:
         session["user_id"] = user_id
         session["auth_type"] = auth_type
 
+    def _is_session_expired(self, session: Dict[str, Any]) -> bool:
+        login_time = session.get("login_time")
+        if not login_time:
+            return False
+        try:
+            return (datetime.now() - datetime.fromisoformat(login_time)).total_seconds() > SESSION_TTL_SECONDS
+        except Exception:
+            return True
+
+    def rotate_session(self, old_session_id: Optional[str], new_session_id: str) -> Dict[str, Any]:
+        old_session = self.get_session(old_session_id) if old_session_id else self.create_session(new_session_id)
+        self.sessions[new_session_id] = dict(old_session)
+        if old_session_id and old_session_id != new_session_id:
+            self.sessions.pop(old_session_id, None)
+        return self.sessions[new_session_id]
+
     def login_with_token(self, session_id: str, token: str) -> Dict[str, Any]:
         session = self.get_session(session_id)
         self._check_unlock(session)
@@ -781,6 +840,9 @@ class SessionManager:
     def is_logged_in(self, session_id: str) -> bool:
         session = self.get_session(session_id)
         self._check_unlock(session)
+        if self._is_session_expired(session):
+            self.logout(session_id)
+            return False
         user_id = session.get("user_id")
         if not user_id or session.get("locked_until"):
             return False
@@ -800,9 +862,30 @@ class SessionManager:
             del self.sessions[session_id]
 
 
+class RequestRateLimiter:
+    """简单的内存限流器。"""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._hits: Dict[str, list[float]] = {}
+
+    def check(self, key: str, limit: int, window_seconds: int) -> int:
+        now = time.time()
+        with self._lock:
+            hits = [ts for ts in self._hits.get(key, []) if now - ts < window_seconds]
+            if len(hits) >= limit:
+                retry_after = max(1, int(window_seconds - (now - hits[0])))
+                self._hits[key] = hits
+                return retry_after
+            hits.append(now)
+            self._hits[key] = hits
+        return 0
+
+
 token_manager = TokenManager(P_CONFIG_PATH)
 account_store = AccountStore(ACCOUNT_DATA_FILE, token_manager)
 session_manager = SessionManager(token_manager, account_store)
+request_rate_limiter = RequestRateLimiter()
 
 
 def attach_request_auth_state(

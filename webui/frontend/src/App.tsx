@@ -142,37 +142,10 @@ function AppShell() {
   const zoom = useZoom()
   const baseBgUrl = useBaseBgUrl()
   const { resolvedTheme } = useTheme()
-  const { currentUser, adminToken, canAccessPage, logout } = useAccountSystem()
-  const [isLoading, setIsLoading] = useState(true)
+  const { ready, currentUser, canAccessPage, logout } = useAccountSystem()
   const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
   const [tabs, setTabs] = useState<Tab[]>([makeTab('home')])
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
-
-  useEffect(() => {
-    const restoreSession = async () => {
-      if (!currentUser || !adminToken) {
-        setIsLoading(false)
-        return
-      }
-      try {
-        const res = await fetch('/api/auth/status', { credentials: 'include' })
-        const data = await res.json()
-        if (!data?.logged_in) {
-          await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ token: adminToken }),
-          })
-        }
-      } catch {
-        // ignore restore failures in frontend prototype
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    void restoreSession()
-  }, [adminToken, currentUser])
 
   const activeTab = tabs.find(tab => tab.id === activeTabId) || tabs[0]
 
@@ -241,7 +214,7 @@ function AppShell() {
     logout()
   }
 
-  if (isLoading) {
+  if (!ready) {
     return (
       <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
         <BaseBackgroundLayer url={baseBgUrl} />
