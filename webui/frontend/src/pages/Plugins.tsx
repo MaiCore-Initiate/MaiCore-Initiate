@@ -62,6 +62,14 @@ interface LocalPlugin {
   host_application?: { min_version?: string; max_version?: string }
 }
 
+type DirectoryUploadFile = File & { webkitRelativePath?: string }
+
+const normalizeBotType = (botType: string) => {
+  if (botType === 'Neo-MoFox') return 'Neo-MoFox'
+  if (botType === 'MoFox-Core' || botType === 'MoFox_bot') return 'MoFox-Core'
+  return 'MaiBot'
+}
+
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
@@ -523,15 +531,48 @@ function PluginComposer({ instanceSerial, onDone }: { instanceSerial: string, on
   )
 }
 
-function LocalPluginDetailModal({ plugin, open, onClose }: { plugin: LocalPlugin | null, open: boolean, onClose: () => void }) {
+function LocalPluginDetailModal({
+  plugin,
+  open,
+  onClose,
+  botType,
+}: {
+  plugin: LocalPlugin | null
+  open: boolean
+  onClose: () => void
+  botType: string
+}) {
   if (!plugin) return null
 
+  const normalizedBotType = normalizeBotType(botType)
+  const isMaiBotInstance = normalizedBotType === 'MaiBot'
   const labelStyle = { fontSize: 23, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
   const valStyle = { fontSize: 22, ...monoFont, color: 'var(--mc-text-secondary)' }
   const installedAt = plugin.installed_at ? new Date(plugin.installed_at).toLocaleString() : '-'
   const compat = plugin.host_application
     ? `${plugin.host_application.min_version || '?'} ~ ${plugin.host_application.max_version || '最新'}`
     : '-'
+  const detailRows: [string, string][] = [
+    ['名称', plugin.name],
+    ['ID', plugin.id],
+    ['文件夹', plugin.folder_name],
+    ['版本', plugin.version || '?'],
+    ['作者', plugin.author || '-'],
+    ['简介', plugin.description || '-'],
+  ]
+
+  if (isMaiBotInstance) {
+    detailRows.push(
+      ['许可', plugin.license || '-'],
+      ['关键词', (plugin.keywords || []).join(', ') || '-'],
+      ['兼容版本', compat],
+      ['注册状态', plugin.registered ? '已注册' : '未注册'],
+      ['注册时间', installedAt],
+      ['manifest', plugin.has_manifest ? '存在' : '缺失'],
+    )
+  }
+
+  detailRows.push(['plugin.py', plugin.has_plugin_py ? '存在' : '缺失'])
 
   return (
     <Modal open={open} onClose={onClose} width={760}>
@@ -540,21 +581,7 @@ function LocalPluginDetailModal({ plugin, open, onClose }: { plugin: LocalPlugin
           {plugin.name}
         </h2>
         <div className="flex flex-col gap-[6px]">
-          {([
-            ['名称', plugin.name],
-            ['ID', plugin.id],
-            ['文件夹', plugin.folder_name],
-            ['版本', plugin.version || '?'],
-            ['作者', plugin.author || '-'],
-            ['简介', plugin.description || '-'],
-            ['许可', plugin.license || '-'],
-            ['关键词', (plugin.keywords || []).join(', ') || '-'],
-            ['兼容版本', compat],
-            ['注册状态', plugin.registered ? '已注册' : '未注册'],
-            ['注册时间', installedAt],
-            ['manifest', plugin.has_manifest ? '存在' : '缺失'],
-            ['plugin.py', plugin.has_plugin_py ? '存在' : '缺失'],
-          ] as [string, string][]).map(([label, val]) => (
+          {detailRows.map(([label, val]) => (
             <div key={label} className="flex items-baseline gap-[12px]">
               <span className="shrink-0" style={{ ...labelStyle, color: 'var(--mc-text-primary)' }}>{label}</span>
               <span className="break-all" style={valStyle}>{val}</span>
@@ -603,13 +630,25 @@ function LocalPluginDetailModal({ plugin, open, onClose }: { plugin: LocalPlugin
   )
 }
 
-function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: string, instanceName: string }) {
+function LocalPluginManager({
+  instanceSerial,
+  instanceName,
+  botType,
+}: {
+  instanceSerial: string
+  instanceName: string
+  botType: string
+}) {
   const { notify } = useNotification()
+  const normalizedBotType = normalizeBotType(botType)
+  const isMaiBotInstance = normalizedBotType === 'MaiBot'
+  const isNeoMoFoxInstance = normalizedBotType === 'Neo-MoFox'
   const [localPlugins, setLocalPlugins] = useState<LocalPlugin[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const archiveInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   const [composing, setComposing] = useState(false)
   const [detailPlugin, setDetailPlugin] = useState<LocalPlugin | null>(null)
 
@@ -687,10 +726,41 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
     } catch { notify('压缩包上传失败', 'error') }
   }
 
+  const doFolderUpload = async (files: FileList | File[]) => {
+    const entries = Array.from(files as ArrayLike<DirectoryUploadFile>)
+      .map(file => ({ file, relativePath: file.webkitRelativePath || file.name }))
+      .filter(entry => !!entry.relativePath)
+
+    if (entries.length === 0) {
+      notify('未读取到可导入的文件夹内容', 'error')
+      return
+    }
+
+    const fd = new FormData()
+    fd.append('instance_serial', instanceSerial)
+    entries.forEach(({ file, relativePath }) => {
+      fd.append('files', file)
+      fd.append('relative_paths', relativePath)
+    })
+
+    try {
+      notify('正在导入插件文件夹...', 'info')
+      const res = await fetch('/api/plugins/local/upload-folder', { method: 'POST', body: fd })
+      const d = await res.json()
+      if (d.success) { notify(`导入成功: ${d.plugin_name}`, 'success'); fetchLocal() }
+      else notify(`导入失败: ${d.detail}`, 'error')
+    } catch { notify('插件文件夹上传失败', 'error') }
+  }
+
   const handleArchiveChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) doArchiveUpload(file)
     if (archiveInputRef.current) archiveInputRef.current.value = ''
+  }
+
+  const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) doFolderUpload(e.target.files)
+    if (folderInputRef.current) folderInputRef.current.value = ''
   }
 
   const onDrop = (e: React.DragEvent) => {
@@ -698,10 +768,23 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
     const file = e.dataTransfer.files?.[0]
     if (!file) return
     const ext = file.name.toLowerCase()
-    if (ext.endsWith('.zip') || ext.endsWith('.tar') || ext.endsWith('.tar.gz') || ext.endsWith('.tgz') || ext.endsWith('.7z')) {
+    const allowMfp = isNeoMoFoxInstance
+    if (
+      ext.endsWith('.zip') ||
+      ext.endsWith('.tar') ||
+      ext.endsWith('.tar.gz') ||
+      ext.endsWith('.tgz') ||
+      ext.endsWith('.7z') ||
+      (allowMfp && ext.endsWith('.mfp'))
+    ) {
       doArchiveUpload(file)
     } else {
-      notify('仅支持 .zip / .tar / .tar.gz / .7z 压缩包', 'error')
+      notify(
+        isNeoMoFoxInstance
+          ? '仅支持 .zip / .7z / .tar / .mfp 压缩包'
+          : '仅支持 .zip / .7z / .tar 压缩包',
+        'error'
+      )
     }
   }
 
@@ -713,6 +796,31 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
 
   return (
     <div className="h-full flex flex-col relative animate-fade-slide-up overflow-visible">
+      {isNeoMoFoxInstance && (
+        <div
+          className="mb-[16px] rounded-[24px] px-[20px] py-[16px] flex items-center gap-[16px]"
+          style={{ border: '2px solid var(--mc-border-soft)', background: 'var(--mc-panel-bg-soft)' }}
+        >
+          <div className="flex-1 min-w-0">
+            <div style={{ fontSize: 24, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-primary)' }}>
+              Neo-MoFox 仅支持本地导入插件
+            </div>
+            <div style={{ fontSize: 16, ...monoFont, color: 'var(--mc-text-muted)' }}>
+              可导入文件夹、*.zip、*.7z、*.tar、*.mfp，系统会自动解压到当前实例的 plugins 目录，并优先提取包含 plugin.py 的最内层文件夹
+            </div>
+          </div>
+          <a
+            href="https://kook.vip/NmrFgn"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="h-[46px] px-[20px] rounded-[23px] flex items-center shrink-0 cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative"
+          >
+            <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23 }} />
+            <span style={localBtnStyle}>Neo-MoFox 插件市场</span>
+          </a>
+        </div>
+      )}
+
       {/* 拖拽导入区 */}
       <div
         className="min-h-[120px] rounded-[30px] flex flex-col items-center justify-center cursor-pointer transition-all duration-200 mb-[16px]"
@@ -732,33 +840,69 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
         <span style={{ fontSize: 22, fontFamily: "'问藏书房','HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
           点击或拖拽压缩包导入插件{'  '}
           <span style={{ ...monoFont, fontStyle: 'italic' }}>|  *.zip</span>、
-          <span style={{ ...monoFont, fontStyle: 'italic' }}>*.tar.gz</span>、
-          <span style={{ ...monoFont, fontStyle: 'italic' }}>*.7z</span>
+          <span style={{ ...monoFont, fontStyle: 'italic' }}>*.7z</span>、
+          <span style={{ ...monoFont, fontStyle: 'italic' }}>*.tar</span>
+          {isNeoMoFoxInstance && (
+            <>
+              、<span style={{ ...monoFont, fontStyle: 'italic' }}>*.mfp</span>
+            </>
+          )}
         </span>
-        <input ref={archiveInputRef} type="file" accept=".zip,.tar,.gz,.tgz,.bz2,.7z" className="hidden" title="导入插件压缩包" onChange={handleArchiveChange} />
+        {isNeoMoFoxInstance && (
+          <span style={{ fontSize: 16, ...monoFont, color: 'var(--mc-text-muted)' }}>
+            文件夹导入请使用下方“导入文件夹”按钮
+          </span>
+        )}
+        <input
+          ref={archiveInputRef}
+          type="file"
+          accept={isNeoMoFoxInstance ? '.zip,.tar,.gz,.tgz,.bz2,.7z,.mfp' : '.zip,.tar,.gz,.tgz,.bz2,.7z'}
+          className="hidden"
+          title="导入插件压缩包"
+          onChange={handleArchiveChange}
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          title="导入插件文件夹"
+          onChange={handleFolderChange}
+          {...({ webkitdirectory: '', directory: '' } as any)}
+        />
       </div>
 
       {/* 工具栏 */}
       <div className="flex items-center gap-[12px] mb-[12px] overflow-visible px-[8px]">
-        <button onClick={handleScan} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative">
-          <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23 }} />
-          <span style={localBtnStyle}>扫描并注册</span>
-        </button>
-        <button onClick={() => setComposing(true)} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative">
-          <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23 }} />
-          <span style={localBtnStyle}>组装插件</span>
-        </button>
-        {selectedIds.size > 0 && (
+        {isMaiBotInstance && (
           <>
-            <button onClick={handleBatchUnregister} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative animate-fade-slide-up">
-              <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23, borderColor: 'rgba(245,158,11,0.45)' }} />
-              <span style={{ ...localBtnStyle, color: '#f59e0b' }}>批量注销 ({selectedIds.size})</span>
+            <button onClick={handleScan} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative">
+              <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23 }} />
+              <span style={localBtnStyle}>扫描并注册</span>
             </button>
-            <button onClick={handleBatchUninstall} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative animate-fade-slide-up">
-              <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23, borderColor: 'rgba(255,120,120,0.45)' }} />
-              <span style={{ ...localBtnStyle, color: '#ff8a8a' }}>批量卸载 ({selectedIds.size})</span>
+            <button onClick={() => setComposing(true)} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative">
+              <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23 }} />
+              <span style={localBtnStyle}>组装插件</span>
             </button>
           </>
+        )}
+        {isNeoMoFoxInstance && (
+          <button onClick={() => folderInputRef.current?.click()} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative">
+            <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23 }} />
+            <span style={localBtnStyle}>导入文件夹</span>
+          </button>
+        )}
+        {selectedIds.size > 0 && isMaiBotInstance && (
+          <button onClick={handleBatchUnregister} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative animate-fade-slide-up">
+            <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23, borderColor: 'rgba(245,158,11,0.45)' }} />
+            <span style={{ ...localBtnStyle, color: '#f59e0b' }}>批量注销 ({selectedIds.size})</span>
+          </button>
+        )}
+        {selectedIds.size > 0 && (
+          <button onClick={handleBatchUninstall} className="h-[46px] px-[20px] rounded-[23px] flex items-center cursor-pointer transition-all duration-200 hover:scale-[1.02] active:scale-95 relative animate-fade-slide-up">
+            <div className={pillShadow} style={{ ...pillShadowStyle, borderRadius: 23, borderColor: 'rgba(255,120,120,0.45)' }} />
+            <span style={{ ...localBtnStyle, color: '#ff8a8a' }}>批量卸载 ({selectedIds.size})</span>
+          </button>
         )}
       </div>
 
@@ -811,12 +955,18 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
                       <span style={{ ...monoFont, fontSize: 13, position: 'relative' }}>详情</span>
                     </button>
                     {/* 状态标签 */}
-                    {p.registered ? (
-                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: 'var(--mc-text-secondary)', background: 'var(--mc-control-bg-soft)', border: '1px solid var(--mc-border-soft)' }}>已注册</span>
+                    {isMaiBotInstance ? (
+                      p.registered ? (
+                        <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: 'var(--mc-text-secondary)', background: 'var(--mc-control-bg-soft)', border: '1px solid var(--mc-border-soft)' }}>已注册</span>
+                      ) : (
+                        <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: '#ffb4b4', background: 'rgba(180,0,0,0.12)', border: '1px solid rgba(255,120,120,0.28)' }}>未注册</span>
+                      )
+                    ) : p.has_plugin_py ? (
+                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: 'var(--mc-text-secondary)', background: 'var(--mc-control-bg-soft)', border: '1px solid var(--mc-border-soft)' }}>plugin.py 就绪</span>
                     ) : (
-                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: '#ffb4b4', background: 'rgba(180,0,0,0.12)', border: '1px solid rgba(255,120,120,0.28)' }}>未注册</span>
+                      <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: '#ff8a8a', background: 'rgba(180,0,0,0.14)', border: '1px solid rgba(255,120,120,0.30)' }}>缺少 plugin.py</span>
                     )}
-                    {(!p.has_manifest || !p.has_plugin_py) && (
+                    {isMaiBotInstance && (!p.has_manifest || !p.has_plugin_py) && (
                       <span className="px-[8px] py-[1px] rounded-[8px] shrink-0" style={{ fontSize: 12, ...monoFont, color: '#ff8a8a', background: 'rgba(180,0,0,0.14)', border: '1px solid rgba(255,120,120,0.30)' }}>缺少关键文件</span>
                     )}
                   </div>
@@ -829,7 +979,7 @@ function LocalPluginManager({ instanceSerial, instanceName }: { instanceSerial: 
           </div>
         )}
       </div>
-      <LocalPluginDetailModal plugin={detailPlugin} open={!!detailPlugin} onClose={() => setDetailPlugin(null)} />
+      <LocalPluginDetailModal plugin={detailPlugin} open={!!detailPlugin} onClose={() => setDetailPlugin(null)} botType={botType} />
     </div>
   )
 }
@@ -897,7 +1047,8 @@ export default function Plugins() {
   })
 
   const selectedInstance = instances.find(i => i.serial === selected)
-  const selectedName = selectedInstance ? instances.find(i => i.serial === selected)?.name || '' : ''
+  const selectedName = selectedInstance?.name || ''
+  const selectedBotType = selectedInstance ? normalizeBotType(selectedInstance.botType) : null
 
   // 实例搜索
   const [instSearch, setInstSearch] = useState('')
@@ -971,18 +1122,31 @@ export default function Plugins() {
         {/* 右侧：插件列表 / 本地管理面板 */}
         <div className="flex-1 min-w-0 h-full min-h-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
           {selectedInstance ? (
-            selectedInstance.botType === 'MoFox_bot' ? (
+            selectedBotType === 'MoFox-Core' ? (
               <div className="flex items-center justify-center h-full">
                 <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
                   当前实例类型不支持自动安装插件
                 </span>
               </div>
-            ) : selectedInstance.version === 'classical' ? (
+            ) : selectedBotType === 'MaiBot' && selectedInstance.version === 'classical' ? (
               <div className="flex items-center justify-center h-full">
                 <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
                   Classical 版本不支持插件功能
                 </span>
               </div>
+            ) : selectedBotType === 'Neo-MoFox' ? (
+              <GlassCard>
+                <div className="p-[28px] flex flex-col h-full">
+                  <div className="flex items-center gap-[16px] mb-[16px]">
+                    <h2 className="flex-1" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>
+                      Neo-MoFox 插件
+                    </h2>
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar relative px-[12px] pb-[8px]">
+                    <LocalPluginManager instanceSerial={selected!} instanceName={selectedName} botType={selectedBotType} />
+                  </div>
+                </div>
+              </GlassCard>
             ) : (
               <GlassCard>
                 <div className="p-[28px] flex flex-col h-full">
@@ -1046,7 +1210,7 @@ export default function Plugins() {
                   {/* 核心内容区：按状态渲染网格或管理面板 */}
                   <div className="flex-1 overflow-y-auto custom-scrollbar relative px-[12px] pb-[8px]">
                     {isLocalMode ? (
-                      <LocalPluginManager instanceSerial={selected!} instanceName={selectedName} />
+                      <LocalPluginManager instanceSerial={selected!} instanceName={selectedName} botType="MaiBot" />
                     ) : (
                       filtered.length === 0 ? (
                         <div className="flex items-center justify-center h-[200px]">
