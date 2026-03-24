@@ -180,6 +180,11 @@ function ProgressPanel({ taskId, onDone }: { taskId: string; onDone?: () => void
   const [fallback, setFallback] = useState<DeployProgress | null>(null)
   const [logsOpen, setLogsOpen] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
+  const [stepStatuses, setStepStatuses] = useState<Record<number, string>>({})
+
+  useEffect(() => {
+    setStepStatuses({})
+  }, [taskId])
 
   // 轮询备用
   useEffect(() => {
@@ -192,6 +197,23 @@ function ProgressPanel({ taskId, onDone }: { taskId: string; onDone?: () => void
 
   const p = progress || fallback
   const done = p?.status === 'completed' || p?.status === 'failed'
+
+  useEffect(() => {
+    if (!p?.step) return
+    setStepStatuses(prev => {
+      const current = prev[p.step]
+      const next = p.status
+      const priority = (status?: string) => {
+        if (status === 'failed') return 4
+        if (status === 'warning') return 3
+        if (status === 'completed') return 2
+        if (status === 'running') return 1
+        return 0
+      }
+      if (priority(current) >= priority(next)) return prev
+      return { ...prev, [p.step]: next }
+    })
+  }, [p?.step, p?.status])
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
@@ -216,13 +238,24 @@ function ProgressPanel({ taskId, onDone }: { taskId: string; onDone?: () => void
         {stepNames.map((name, i) => {
           const step = i + 1
           const isCurrent = p?.step === step && p?.status === 'running'
-          const isDone = p ? p.step > step || (p.step === step && p.status === 'completed') : false
-          const isFailed = p?.step === step && p?.status === 'failed'
+          const recordedStatus = stepStatuses[step]
+          const isDone = recordedStatus === 'completed' || (!recordedStatus && !!p && p.step > step)
+          const isWarning = recordedStatus === 'warning'
+          const isFailed = recordedStatus === 'failed'
+          const bg = isFailed
+            ? '#ef4444'
+            : isWarning
+              ? '#f59e0b'
+              : isDone
+                ? '#22c55e'
+                : isCurrent
+                  ? '#3b82f6'
+                  : 'var(--mc-control-solid)'
           return (
             <div key={i} className="flex items-center gap-[4px]">
               <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center text-white text-sm font-bold transition-all"
-                style={{ background: isFailed ? '#ef4444' : isDone ? '#22c55e' : isCurrent ? '#3b82f6' : 'var(--mc-control-solid)', fontSize: 14 }}>
-                {isDone ? '✓' : step}
+                style={{ background: bg, fontSize: 14 }}>
+                {isFailed ? '×' : isWarning ? '!' : isDone ? '✓' : step}
               </div>
               <span style={{ ...monoFont, fontSize: 16, color: isCurrent ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }}>{name}</span>
               {i < stepNames.length - 1 && <div className="w-[20px] h-[2px] mx-[2px]" style={{ background: 'var(--mc-border-soft)' }} />}
@@ -277,8 +310,6 @@ function DeployNewTab() {
   const [installAdapter, setInstallAdapter] = useState(false)
   const [installNapcat, setInstallNapcat] = useState(false)
   const [installMongodb, setInstallMongodb] = useState(false)
-  const [installWebui, setInstallWebui] = useState(false)
-  const [installMofoxWebui, setInstallMofoxWebui] = useState(false)
   const [napcatVersions, setNapcatVersions] = useState<any[]>([])
   const [selectedNapcatVer, setSelectedNapcatVer] = useState('')
 
@@ -311,6 +342,7 @@ function DeployNewTab() {
 
   const canStep2 = botType && selectedVersion && nickname && installDir
   const serialNumber = nickname // 简化：用昵称作为序列号
+  const hasBuiltinWebUI = !!botType
 
   const handleDeploy = async () => {
     try {
@@ -318,10 +350,10 @@ function DeployNewTab() {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          bot_type: botType, version: versionObj, install_adapter: installAdapter,
+          bot_type: botType, version: versionObj, install_adapter: botType === 'MaiBot' ? installAdapter : true,
           install_napcat: installNapcat, napcat_version: napcatObj || null,
-          install_mongodb: installMongodb, install_webui: installWebui,
-          install_mofox_admin_ui: false, install_mofox_webui: installMofoxWebui,
+          install_mongodb: installMongodb, install_webui: hasBuiltinWebUI,
+          install_mofox_admin_ui: false, install_mofox_webui: false,
           install_dir: installDir, nickname, qq_account: qqAccount,
           serial_number: serialNumber,
         })
@@ -332,7 +364,7 @@ function DeployNewTab() {
     } catch { notify('请求失败', 'error') }
   }
 
-  const reset = () => { setStep(1); setTaskId(null); setBotType(''); setSelectedVersion(''); setNickname(''); setQqAccount(''); setInstallDir(''); setInstallAdapter(false); setInstallNapcat(false); setInstallMongodb(false); setInstallWebui(false); setInstallMofoxWebui(false) }
+  const reset = () => { setStep(1); setTaskId(null); setBotType(''); setSelectedVersion(''); setNickname(''); setQqAccount(''); setInstallDir(''); setInstallAdapter(false); setInstallNapcat(false); setInstallMongodb(false); setSelectedNapcatVer('') }
 
   const d = (i: number) => ({ animationDelay: `${i * 60}ms` })
 
@@ -406,7 +438,7 @@ function DeployNewTab() {
           <h3 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>组件选择</h3>
           <div className="flex flex-col gap-[12px]">
             {botType === 'MaiBot' && <ToggleItem label="适配器" checked={installAdapter} onChange={setInstallAdapter} />}
-            {botType !== 'Neo-MoFox' && <ToggleItem label="NapCat" checked={installNapcat} onChange={setInstallNapcat} />}
+            <ToggleItem label="NapCat" checked={installNapcat} onChange={setInstallNapcat} />
             {installNapcat && (
               <div className="ml-[40px]">
                 <CustomSelect value={selectedNapcatVer} onChange={setSelectedNapcatVer}
@@ -414,8 +446,11 @@ function DeployNewTab() {
               </div>
             )}
             {botType === 'MaiBot' && <ToggleItem label="MongoDB" checked={installMongodb} onChange={setInstallMongodb} />}
-            {botType === 'MaiBot' && <ToggleItem label="WebUI" checked={installWebui} onChange={setInstallWebui} />}
-            {botType === 'MoFox-Core' && <ToggleItem label="MoFox WebUI" checked={installMofoxWebui} onChange={setInstallMofoxWebui} />}
+            <div className="ml-[56px]">
+              <span style={{ ...monoFont, fontSize: 18, color: 'var(--mc-text-muted)' }}>
+                WebUI 已内置，无需单独勾选
+              </span>
+            </div>
           </div>
           <div className="flex gap-[12px]">
             <button onClick={() => setStep(1)} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95"
@@ -438,11 +473,10 @@ function DeployNewTab() {
               ['Bot 类型', botType], ['版本', versionObj?.display_name || selectedVersion],
               ['实例昵称', nickname], ['安装目录', installDir],
               ...(qqAccount ? [['QQ 账号', qqAccount]] : []),
-              ...(botType === 'MaiBot' ? [['适配器', installAdapter ? '是' : '否']] : []),
-              ...(botType !== 'Neo-MoFox' ? [['NapCat', installNapcat ? (selectedNapcatVer || '是') : '否']] : []),
+              ['适配器', botType === 'MaiBot' ? (installAdapter ? '外置适配器' : '使用内置/不安装') : '内置适配器'],
+              ['NapCat', installNapcat ? (selectedNapcatVer || '是') : '否'],
               ...(botType === 'MaiBot' ? [['MongoDB', installMongodb ? '是' : '否']] : []),
-              ...(botType === 'MaiBot' ? [['WebUI', installWebui ? '是' : '否']] : []),
-              ...(botType === 'MoFox-Core' ? [['MoFox WebUI', installMofoxWebui ? '是' : '否']] : []),
+              ['WebUI', '内置'],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k} className="flex gap-[16px]">
                 <span className="shrink-0 w-[120px]" style={{ ...labelFont, color: 'var(--mc-text-primary)' }}>{k}</span>
