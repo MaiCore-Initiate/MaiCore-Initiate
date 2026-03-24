@@ -908,12 +908,12 @@ export default function Plugins() {
   })
 
   return (
-    <div className="flex flex-col p-12 h-full">
+    <div className="flex flex-col p-12 h-full overflow-hidden">
       <h1 className="shrink-0 mb-[16px] animate-card-enter" style={{ ...pageTitleStyle, color: 'var(--mc-text-primary)' }}>插件管理</h1>
 
-      <div className="flex gap-6 flex-1 min-h-0">
+      <div className="flex gap-6 flex-1 min-h-0 overflow-hidden">
         {/* 左侧：实例选择 (无改动) */}
-        <div className="w-[425px] shrink-0 animate-card-enter">
+        <div className="w-[425px] h-full min-h-0 shrink-0 animate-card-enter">
           <GlassCard>
             <div className="p-[24px] flex flex-col h-full">
               <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
@@ -969,7 +969,7 @@ export default function Plugins() {
         </div>
 
         {/* 右侧：插件列表 / 本地管理面板 */}
-        <div className="flex-1 min-w-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
+        <div className="flex-1 min-w-0 h-full min-h-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
           {selectedInstance ? (
             selectedInstance.botType === 'MoFox_bot' ? (
               <div className="flex items-center justify-center h-full">

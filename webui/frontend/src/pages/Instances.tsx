@@ -363,14 +363,14 @@ export default function Instances() {
   const canControlInstances = can('instances.control')
 
   return (
-    <div className="flex flex-col p-6 h-full">
+    <div className="flex flex-col p-6 h-full overflow-hidden">
       {/* 页面标题 */}
       <h1 className="text-black shrink-0 mb-[16px] animate-card-enter" style={pageTitleStyle}>实例启动/多开</h1>
 
       {/* 卡片区域 */}
-      <div className="flex gap-6 flex-1 min-h-0">
+      <div className="flex gap-6 flex-1 min-h-0 overflow-hidden">
         {/* 左侧：实例选择卡片 */}
-        <div className="w-[425px] shrink-0 animate-card-enter">
+        <div className="w-[425px] h-full min-h-0 shrink-0 animate-card-enter">
           <GlassCard bgOpacity={0.62}>
             <div className="p-[24px] flex flex-col h-full">
               <h2 className="text-black pb-[12px]" style={sectionTitle}>选择实例</h2>
@@ -433,7 +433,7 @@ export default function Instances() {
         </div>
 
         {/* 右侧：操作面板 */}
-        <div className="flex-1 min-w-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
+        <div className="flex-1 min-w-0 h-full min-h-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
           <AccessGuard
             allowed={canControlInstances}
             className="h-full"

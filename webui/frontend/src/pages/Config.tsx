@@ -463,12 +463,12 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
   const showEditPanel = action === 'edit' && selectedInstance
 
   return (
-    <div className="flex flex-col p-6 h-full">
+    <div className="flex flex-col p-6 h-full overflow-hidden">
       <h1 className="text-black shrink-0 mb-[16px] animate-card-enter" style={pageTitleStyle}>配置管理</h1>
 
-      <div className="flex gap-6 flex-1 min-h-0">
+      <div className="flex gap-6 flex-1 min-h-0 overflow-hidden">
         {/* 左侧：功能按钮 */}
-        <div className="shrink-0 animate-card-enter">
+        <div className="h-full min-h-0 shrink-0 animate-card-enter">
           <GlassCard>
             <div className="p-[24px] flex flex-col gap-[10px]">
               <h2 className="text-black pb-[8px]" style={sectionTitle}>操作</h2>
@@ -481,7 +481,7 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
         </div>
 
         {/* 右侧 */}
-        <div className="flex-1 min-w-0 flex flex-col gap-6 overflow-y-auto px-[12px]">
+        <div className="flex-1 min-w-0 h-full min-h-0 flex flex-col gap-6 overflow-y-auto px-[12px]">
           {/* 编辑面板：选中实例后替换卡片 */}
           {showEditPanel ? (
             <div className="flex-1 min-h-0 animate-card-enter">

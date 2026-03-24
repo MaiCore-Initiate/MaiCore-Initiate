@@ -341,7 +341,7 @@ function DeployNewTab() {
   }
 
   return (
-    <div className="flex flex-col gap-[20px]">
+    <div className="flex flex-col gap-[20px] h-full min-h-0 overflow-y-auto custom-scrollbar pr-[4px]">
       {/* 步骤指示 */}
       <div className="flex gap-[12px] items-center animate-fade-slide-up" style={d(0)}>
         {['基础配置', '组件选择', '确认部署'].map((name, i) => (
@@ -542,8 +542,8 @@ function UpdateTab() {
   const filtered = instances.filter(i => !search || i.nickname.toLowerCase().includes(search.toLowerCase()) || i.serial_number.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className="flex gap-[24px] flex-1 min-h-0">
-      <div className="w-[380px] shrink-0">
+    <div className="flex gap-[24px] flex-1 min-h-0 overflow-hidden">
+      <div className="w-[380px] h-full min-h-0 shrink-0">
         <GlassCard>
           <div className="p-[24px] flex flex-col h-full">
             <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
@@ -577,7 +577,7 @@ function UpdateTab() {
         </GlassCard>
       </div>
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 h-full min-h-0">
         {inst ? (
           <GlassCard key={`update-${inst.serial_number}`}>
             <div className="p-[28px] flex flex-col gap-[16px]">
@@ -673,8 +673,8 @@ function DeleteTab() {
   const filtered = instances.filter(i => !search || i.nickname.toLowerCase().includes(search.toLowerCase()) || i.serial_number.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className="flex gap-[24px] flex-1 min-h-0">
-      <div className="w-[380px] shrink-0">
+    <div className="flex gap-[24px] flex-1 min-h-0 overflow-hidden">
+      <div className="w-[380px] h-full min-h-0 shrink-0">
         <GlassCard>
           <div className="p-[24px] flex flex-col h-full">
             <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
@@ -708,7 +708,7 @@ function DeleteTab() {
         </GlassCard>
       </div>
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 h-full min-h-0">
         {inst ? (
           <GlassCard key={`delete-${inst.serial_number}`}>
             <div className="p-[28px] flex flex-col gap-[16px]">
@@ -757,7 +757,7 @@ export default function Deployment() {
   const [tab, setTab] = useState<'deploy' | 'update' | 'delete'>('deploy')
 
   return (
-    <div className="flex flex-col p-6 h-full">
+    <div className="flex flex-col p-6 h-full overflow-hidden">
       <h1 className="shrink-0 mb-[16px] animate-card-enter" style={{ ...pageTitleStyle, color: 'var(--mc-text-primary)' }}>部署管理</h1>
 
       <div className="flex gap-[10px] mb-[20px] animate-card-enter" style={{ animationDelay: '60ms' }}>
@@ -768,7 +768,7 @@ export default function Deployment() {
 
       <div className="flex-1 min-h-0 animate-card-enter" style={{ animationDelay: '120ms' }}>
         <GlassCard>
-          <div className="p-[28px] flex flex-col h-full overflow-y-auto custom-scrollbar">
+          <div className="p-[28px] flex flex-col h-full overflow-hidden">
             {tab === 'deploy' && <DeployNewTab />}
             {tab === 'update' && <UpdateTab />}
             {tab === 'delete' && <DeleteTab />}
