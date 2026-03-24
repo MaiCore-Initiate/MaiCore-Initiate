@@ -410,7 +410,7 @@ export default function AccountManagementPanel() {
                   <Toggle checked={registerPolicy.allowMemberUpgradeApplications} onChange={value => { void pushResult(updateRegisterPolicy({ allowMemberUpgradeApplications: value })) }} />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span style={{ ...titleFont, fontSize: 21 }}>注册需邮箱验证码</span>
+                  <span style={{ ...titleFont, fontSize: 21 }}>注册需验证码</span>
                   <Toggle checked={registerPolicy.requireEmailVerification} onChange={value => { void pushResult(updateRegisterPolicy({ requireEmailVerification: value })) }} />
                 </div>
               </div>

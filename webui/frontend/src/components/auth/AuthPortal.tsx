@@ -321,7 +321,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             <div className="mt-[10px] text-black/45" style={{ ...monoFont, fontSize: 16 }}>
               {loginHint || (previewUser?.role === 'admin'
                 ? '管理员需要使用系统初始化时生成的 Token。'
-                : '当前是演示模式，验证码会直接显示在这里，不会真的发送到邮箱或短信。')}
+                : '验证码将直接显示')}
             </div>
           </div>
 
@@ -396,7 +396,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             <input
               value={registerCode}
               onChange={(event) => setRegisterCode(event.target.value)}
-              placeholder="邮箱验证码"
+              placeholder="验证码"
               className="bg-white/15 border-[3px] border-black/40 text-black/80 placeholder-black/30 focus:outline-none"
               style={{ height: 68, borderRadius: 28, padding: '0 24px', ...monoFont, fontSize: 24 }}
             />
@@ -432,13 +432,10 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
             <div className="mt-[8px] text-black/50" style={{ ...monoFont, fontSize: 15, lineHeight: 1.7 }}>
               {registerPolicy.allowGuestSelfRegister ? '允许访客自助注册；' : '不允许访客直接注册；'}
               {registerPolicy.allowGuestApplications ? '允许提交访客申请；' : '已关闭访客申请；'}
-              {registerPolicy.requireEmailVerification ? '注册必须经过邮箱验证码校验。' : '当前未开启邮箱验证码。'}
+              {registerPolicy.requireEmailVerification ? '注册必须经过验证码校验。' : '当前未开启验证码。'}
             </div>
             <div className="mt-[8px] text-black/42" style={{ ...monoFont, fontSize: 15 }}>
               {registerHint || `白名单模式：${registerPolicy.whitelistMode ? '开启' : '关闭'} · 常见域名：${whitelistPreview}`}
-            </div>
-            <div className="mt-[8px] text-black/38" style={{ ...monoFont, fontSize: 14, lineHeight: 1.6 }}>
-              当前版本仅做本地演示校验，验证码会直接显示，不会真正发到邮箱。要做真实邮箱验证，还需要接 SMTP 或邮件服务。
             </div>
           </div>
 
