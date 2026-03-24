@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from PIL import Image, ImageOps
 
-from .auth_core import require_admin
+from .auth_core import require_action, require_admin
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1111,7 +1111,7 @@ async def get_live2d_widget_tips():
     return _build_widget_tips_payload(settings, models)
 
 
-@router.get("/live2d/models")
+@router.get("/live2d/models", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def list_live2d_models():
     models = _refresh_desktop_pet_models_cache()
     return {"success": True, "models": models}
@@ -1244,7 +1244,7 @@ class DesktopPetSettingsBody(BaseModel):
     value: Dict[str, Any]
 
 
-@router.get("/live2d/settings")
+@router.get("/live2d/settings", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def get_desktop_pet_settings():
     return {"success": True, "value": _read_desktop_pet_settings()}
 
@@ -1266,7 +1266,7 @@ class DesktopPetOverlaySettingsBody(BaseModel):
     scale: float | None = None
 
 
-@router.post("/live2d/overlay/settings")
+@router.post("/live2d/overlay/settings", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def update_desktop_pet_overlay_settings(body: DesktopPetOverlaySettingsBody):
     if _desktop_pet_settings_owned_by_electron():
         raise HTTPException(409, "桌宠运行中，请在桌宠内置面板中修改配置")
@@ -1323,7 +1323,7 @@ def _build_persona_reply(message: str, settings: Dict[str, Any]) -> str:
     return f"{prefix}：我收到了\u300c{msg}\u300d。如果你愿意，我可以把它拆成可执行步骤。"
 
 
-@router.post("/live2d/chat")
+@router.post("/live2d/chat", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def desktop_pet_chat(body: DesktopPetChatBody):
     settings = _read_desktop_pet_settings()
     if not settings.get("ai_enabled", True):
@@ -1362,7 +1362,7 @@ class FaceCaptureFrameBody(BaseModel):
     mouth_open: float = 0.0
 
 
-@router.post("/live2d/face-capture/frame")
+@router.post("/live2d/face-capture/frame", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def push_face_capture_frame(body: FaceCaptureFrameBody):
     _face_capture_state.update(
         {
@@ -1378,7 +1378,7 @@ async def push_face_capture_frame(body: FaceCaptureFrameBody):
     return {"success": True}
 
 
-@router.get("/live2d/face-capture/state")
+@router.get("/live2d/face-capture/state", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def get_face_capture_state():
     return {"success": True, "state": _face_capture_state}
 
@@ -1388,7 +1388,7 @@ class RuntimePositionBody(BaseModel):
     y: int
 
 
-@router.post("/live2d/runtime/position")
+@router.post("/live2d/runtime/position", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def update_runtime_position(body: RuntimePositionBody):
     settings = _read_stored_desktop_pet_settings()
     settings["position"]["x"] = int(body.x)
@@ -1397,7 +1397,7 @@ async def update_runtime_position(body: RuntimePositionBody):
     return {"success": True, "position": normalized["position"]}
 
 
-@router.get("/live2d/runtime/status")
+@router.get("/live2d/runtime/status", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def desktop_pet_runtime_status():
     runtime = _refresh_desktop_pet_runtime()
     return {"success": True, **runtime}
@@ -1529,7 +1529,7 @@ async def stop_desktop_pet_runtime():
     return {"success": True}
 
 
-@router.get("/live2d/electron/status")
+@router.get("/live2d/electron/status", dependencies=[Depends(require_admin)])
 async def get_electron_build_status():
     """检查Electron应用是否已构建（兼容旧端点）"""
     exe = _find_electron_exe()
@@ -1541,7 +1541,7 @@ async def get_electron_build_status():
     }
 
 
-@router.get("/live2d/electron/find")
+@router.get("/live2d/electron/find", dependencies=[Depends(require_admin)])
 async def find_electron_exe_endpoint():
     """智能查找 Electron exe 路径"""
     exe = _find_electron_exe()
@@ -1568,7 +1568,7 @@ async def set_electron_exe_path(body: ElectronExePathBody):
     return {"success": True, "path": str(p)}
 
 
-@router.get("/live2d/usage-stats")
+@router.get("/live2d/usage-stats", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def get_usage_stats():
     """获取桌宠使用时长统计"""
     from datetime import datetime, timezone, timedelta

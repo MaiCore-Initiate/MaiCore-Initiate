@@ -8,7 +8,7 @@ import asyncio
 import threading
 import uuid
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -20,6 +20,7 @@ from ..modules.deployment_core import (
     NapCatDeployer
 )
 from ..core.config import config_manager
+from .auth_core import require_action
 
 router = APIRouter()
 
@@ -149,7 +150,7 @@ async def get_napcat_versions(force_refresh: bool = False):
         raise HTTPException(status_code=500, detail=f"获取NapCat版本列表失败: {str(e)}")
 
 
-@router.post("/instances", summary="部署新实例")
+@router.post("/instances", summary="部署新实例", dependencies=[Depends(require_action("deploy.manage"))])
 async def deploy_instance(
     request: DeployInstanceRequest,
     background_tasks: BackgroundTasks
@@ -237,7 +238,7 @@ async def deploy_instance(
         raise HTTPException(status_code=500, detail=f"部署失败: {str(e)}")
 
 
-@router.post("/execute-update", summary="执行实例更新")
+@router.post("/execute-update", summary="执行实例更新", dependencies=[Depends(require_action("deploy.manage"))])
 async def execute_update(request: UpdateInstanceRequest):
     """后台线程执行实例更新，通过WebSocket推送进度"""
     try:
@@ -366,7 +367,7 @@ async def get_instance_detail(serial_number: str):
         raise HTTPException(status_code=500, detail=f"获取实例详情失败: {str(e)}")
 
 
-@router.put("/instances/{serial_number}", summary="更新实例配置")
+@router.put("/instances/{serial_number}", summary="更新实例配置", dependencies=[Depends(require_action("deploy.manage"))])
 async def update_instance(serial_number: str, updates: Dict[str, Any]):
     """更新指定实例的配置"""
     try:
@@ -407,7 +408,7 @@ async def update_instance(serial_number: str, updates: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=f"更新实例失败: {str(e)}")
 
 
-@router.delete("/instances/{serial_number}", summary="删除实例")
+@router.delete("/instances/{serial_number}", summary="删除实例", dependencies=[Depends(require_action("deploy.manage"))])
 async def delete_instance(serial_number: str):
     """
     删除指定实例
@@ -445,7 +446,7 @@ async def delete_instance(serial_number: str):
         raise HTTPException(status_code=500, detail=f"删除实例失败: {str(e)}")
 
 
-@router.post("/instances/{serial_number}/confirm-delete", summary="确认删除实例")
+@router.post("/instances/{serial_number}/confirm-delete", summary="确认删除实例", dependencies=[Depends(require_action("deploy.manage"))])
 async def confirm_delete_instance(serial_number: str, request: DeleteInstanceRequest):
     """确认删除实例 — 调用非交互式删除"""
     try:

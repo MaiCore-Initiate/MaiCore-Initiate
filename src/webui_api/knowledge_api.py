@@ -20,7 +20,7 @@ import time
 import re
 from typing import Dict, Any, Optional, List
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
 try:
@@ -38,6 +38,8 @@ except ImportError:
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+from .auth_core import require_action
 
 # --- 全局任务状态追踪 ---
 # key: "{serial_number}:{task_type}", value: dict with status/log/pid
@@ -214,7 +216,7 @@ async def get_knowledge_info(serial_number: str):
     }
 
 
-@router.post("/knowledge/{serial_number}/upload/txt", summary="上传txt文件到lpmm_raw_data")
+@router.post("/knowledge/{serial_number}/upload/txt", summary="上传txt文件到lpmm_raw_data", dependencies=[Depends(require_action("knowledge.manage"))])
 async def upload_txt_files(
     serial_number: str,
     files: List[UploadFile] = File(...),
@@ -263,7 +265,7 @@ async def upload_txt_files(
     }
 
 
-@router.post("/knowledge/{serial_number}/upload/openie", summary="上传OpenIE JSON文件到openie目录")
+@router.post("/knowledge/{serial_number}/upload/openie", summary="上传OpenIE JSON文件到openie目录", dependencies=[Depends(require_action("knowledge.manage"))])
 async def upload_openie_files(
     serial_number: str,
     files: List[UploadFile] = File(...),
@@ -316,7 +318,7 @@ class DeleteFileRequest(BaseModel):
     folder: str
     filename: str
 
-@router.post("/knowledge/{serial_number}/delete_file", summary="删除指定文件")
+@router.post("/knowledge/{serial_number}/delete_file", summary="删除指定文件", dependencies=[Depends(require_action("knowledge.manage"))])
 async def delete_file(serial_number: str, req: DeleteFileRequest):
     """删除 lpmm_raw_data 或 openie 目录中的单个文件。"""
     if req.folder not in ("raw_data", "openie"):
@@ -345,7 +347,7 @@ async def delete_file(serial_number: str, req: DeleteFileRequest):
     return {"success": True, "deleted": safe_name}
 
 
-@router.post("/knowledge/{serial_number}/clear/{folder}", summary="清空指定目录")
+@router.post("/knowledge/{serial_number}/clear/{folder}", summary="清空指定目录", dependencies=[Depends(require_action("knowledge.manage"))])
 async def clear_folder(serial_number: str, folder: str):
     """
     清空 lpmm_raw_data 或 openie 目录。
@@ -376,7 +378,7 @@ async def clear_folder(serial_number: str, folder: str):
     return {"success": True, "removed_count": removed}
 
 
-@router.post("/knowledge/{serial_number}/run/extraction", summary="运行文本分割 & 实体提取")
+@router.post("/knowledge/{serial_number}/run/extraction", summary="运行文本分割 & 实体提取", dependencies=[Depends(require_action("knowledge.manage"))])
 async def run_extraction(serial_number: str):
     """
     >= 0.10.0: 运行 scripts/info_extraction.py（文本分割+实体提取合并）
@@ -422,7 +424,7 @@ async def run_extraction(serial_number: str):
     }
 
 
-@router.post("/knowledge/{serial_number}/run/import", summary="运行知识图谱导入")
+@router.post("/knowledge/{serial_number}/run/import", summary="运行知识图谱导入", dependencies=[Depends(require_action("knowledge.manage"))])
 async def run_import(serial_number: str):
     """
     运行 scripts/import_openie.py 进行知识图谱导入。
@@ -458,7 +460,7 @@ async def run_import(serial_number: str):
     }
 
 
-@router.post("/knowledge/{serial_number}/run/pipeline", summary="一条龙：提取 → 导入")
+@router.post("/knowledge/{serial_number}/run/pipeline", summary="一条龙：提取 → 导入", dependencies=[Depends(require_action("knowledge.manage"))])
 async def run_pipeline(serial_number: str):
     """
     >= 0.10.0: info_extraction.py → import_openie.py（顺序执行）
@@ -549,7 +551,7 @@ async def get_task_log(task_key: str, offset: int = 0):
     }
 
 
-@router.post("/knowledge/{serial_number}/stop", summary="终止知识库构建任务")
+@router.post("/knowledge/{serial_number}/stop", summary="终止知识库构建任务", dependencies=[Depends(require_action("knowledge.manage"))])
 async def stop_knowledge_task(serial_number: str):
     """终止该实例所有正在运行的知识库构建任务（杀死 CMD 窗口及其子进程）"""
     stopped = []
@@ -759,7 +761,7 @@ async def get_knowledge_settings(serial_number: str):
 class LpmmSettingsRequest(BaseModel):
     settings: Dict[str, Any]
 
-@router.post("/knowledge/{serial_number}/settings", summary="保存知识库设置")
+@router.post("/knowledge/{serial_number}/settings", summary="保存知识库设置", dependencies=[Depends(require_action("knowledge.manage"))])
 async def save_knowledge_settings(serial_number: str, req: LpmmSettingsRequest):
     config = _get_instance_config(serial_number)
     if not config:

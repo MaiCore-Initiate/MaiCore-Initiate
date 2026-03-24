@@ -7,7 +7,8 @@ import {
 } from '../icons/SidebarIcons'
 import type { Page, SubPageParams } from '../../types'
 import { useTheme } from '../theme/ThemeProvider'
-import { useAccountSystem } from '../../lib/account-system'
+import { useAccountSystem, type ActionPermissionKey } from '../../lib/account-system'
+import { getMiscTabPermission } from '../../lib/misc-permissions'
 
 const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
 
@@ -31,6 +32,17 @@ interface PageOption {
   label: string
   params?: SubPageParams
   group: string
+}
+
+function isOptionAccessible(
+  page: Page,
+  params: SubPageParams | undefined,
+  canAccessPage: (page: Page) => boolean,
+  can: (action: ActionPermissionKey) => boolean,
+) {
+  if (!canAccessPage(page)) return false
+  const miscPermission = getMiscTabPermission(params?.miscTab)
+  return miscPermission ? can(miscPermission) : true
 }
 
 const PAGE_OPTIONS: PageOption[] = [
@@ -237,8 +249,8 @@ export default function QuickAccessCard({
   const itemBorder = isDark ? 'rgba(255,255,255,0.26)' : 'rgba(112,112,112,0.45)'
   const itemText = isDark ? 'rgba(255,255,255,0.82)' : '#707070'
   const canCustomize = can('quick-access.customize')
-  const availableOptions = PAGE_OPTIONS.filter(option => canAccessPage(option.page))
-  const displayItems = items.filter(item => canAccessPage(item.page))
+  const availableOptions = PAGE_OPTIONS.filter(option => isOptionAccessible(option.page, option.params, canAccessPage, can))
+  const displayItems = items.filter(item => isOptionAccessible(item.page, item.params, canAccessPage, can))
 
   return (
     <>

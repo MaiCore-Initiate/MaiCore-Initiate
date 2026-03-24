@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import GlassCard from '../components/ui/GlassCard'
+import AccessGuard from '../components/ui/AccessGuard'
 import ComponentDownload from './ComponentDownload'
 import WebShell from './WebShell'
 import { cn } from '../lib/utils'
@@ -9,6 +10,9 @@ import remarkGfm from 'remark-gfm'
 import { parseMiscContent, type MiscContent, type Contributor, type Library } from '../lib/misc-parser'
 import { useBgContext } from '../components/background/DynamicBackground'
 import { DesktopPetManager } from '../components/live2d/DesktopPet'
+import { useAccountSystem } from '../lib/account-system'
+import { MISC_TAB_PERMISSION_MAP } from '../lib/misc-permissions'
+import type { MiscTab } from '../types'
 
 const pageTitleStyle = {
   fontSize: 60,
@@ -36,8 +40,6 @@ const monoFont = {
 }
 
 const d = (i: number) => ({ animationDelay: `${i * 80}ms` })
-
-type MiscTab = 'about' | 'author' | 'tech' | 'libs' | 'license' | 'components' | 'webshell' | 'screensaver' | 'desktop-pet'
 
 type DailyQuote = {
   text: string
@@ -85,12 +87,46 @@ interface MiscProps {
 }
 
 export default function Misc({ initialTab }: MiscProps) {
+  const { can } = useAccountSystem()
   const [activeTab, setActiveTab] = useState<MiscTab>(initialTab ?? 'about')
   const [content, setContent] = useState<MiscContent | null>(null)
   const [loading, setLoading] = useState(true)
   const compactMode = activeTab === 'webshell' || activeTab === 'screensaver' || activeTab === 'desktop-pet'
+  const tabs = useMemo(() => ([
+    { key: 'about', label: '关于项目', icon: Package },
+    { key: 'author', label: '关于作者', icon: User },
+    { key: 'tech', label: '技术栈', icon: Cpu },
+    { key: 'libs', label: '开源库', icon: BookOpen },
+    { key: 'license', label: '开源许可', icon: FileText },
+    { key: 'components', label: '组件下载', icon: Download },
+    { key: 'webshell', label: 'WebShell', icon: Terminal },
+    { key: 'screensaver', label: '屏保', icon: Monitor },
+    { key: 'desktop-pet', label: '桌宠', icon: Monitor },
+  ] as const).map(tab => ({
+    ...tab,
+    allowed: can(MISC_TAB_PERMISSION_MAP[tab.key]),
+  })), [can])
+  const visibleTabs = useMemo(() => tabs.filter(tab => tab.allowed), [tabs])
+  const activeTabAllowed = tabs.some(tab => tab.key === activeTab && tab.allowed)
+
+  useEffect(() => {
+    const preferredTab = initialTab && tabs.some(tab => tab.key === initialTab && tab.allowed)
+      ? initialTab
+      : undefined
+    const fallbackTab = visibleTabs[0]?.key
+    const currentStillAllowed = tabs.some(tab => tab.key === activeTab && tab.allowed)
+    if (currentStillAllowed) return
+    if (preferredTab) {
+      setActiveTab(preferredTab)
+      return
+    }
+    if (fallbackTab) {
+      setActiveTab(fallbackTab)
+    }
+  }, [activeTab, initialTab, tabs, visibleTabs])
 
   const startScreenSaver = useCallback(async () => {
+    if (!can('misc.screensaver.access')) return
     setActiveTab('screensaver')
     try {
       if (!document.fullscreenElement) {
@@ -99,7 +135,7 @@ export default function Misc({ initialTab }: MiscProps) {
     } catch {
       // 某些浏览器会拒绝非激活态全屏，屏保层仍会显示并允许手动重试
     }
-  }, [])
+  }, [can])
 
   useEffect(() => {
     parseMiscContent()
@@ -141,7 +177,12 @@ export default function Misc({ initialTab }: MiscProps) {
           {/* WebShell/屏保激活时显示的小标签 */}
           {compactMode && (
             <button
-              onClick={() => setActiveTab('about')}
+              onClick={() => {
+                const fallbackTab = visibleTabs[0]?.key
+                if (fallbackTab) {
+                  setActiveTab(fallbackTab)
+                }
+              }}
               className="px-6 py-3 rounded-2xl border-2 bg-white/60 border-black/50 text-black/80 flex items-center gap-2 shadow-md hover:bg-white/70 transition-all animate-scale-in"
               style={labelFont}
             >
@@ -157,17 +198,7 @@ export default function Misc({ initialTab }: MiscProps) {
             <GlassCard>
               <div className="p-[14px]">
                 <div className="flex gap-[10px] overflow-x-auto whitespace-nowrap pb-[2px] [scrollbar-width:thin]">
-                {[
-                  { key: 'about', label: '关于项目', icon: Package },
-                  { key: 'author', label: '关于作者', icon: User },
-                  { key: 'tech', label: '技术栈', icon: Cpu },
-                  { key: 'libs', label: '开源库', icon: BookOpen },
-                  { key: 'license', label: '开源许可', icon: FileText },
-                  { key: 'components', label: '组件下载', icon: Download },
-                  { key: 'webshell', label: 'WebShell', icon: Terminal },
-                  { key: 'screensaver', label: '屏保', icon: Monitor },
-                  { key: 'desktop-pet', label: '桌宠', icon: Monitor },
-                ].map(tab => {
+                {visibleTabs.map(tab => {
                   const Icon = tab.icon
                   return (
                     <button
@@ -201,49 +232,74 @@ export default function Misc({ initialTab }: MiscProps) {
 
       {/* 内容区域 */}
       <div className={`flex-1 overflow-auto transition-all duration-500 ${compactMode ? 'px-4 pb-4' : 'px-6 pb-6'}`}>
-        {activeTab === 'about' && (
+        {!visibleTabs.length && (
+          <AccessGuard
+            allowed={false}
+            className="h-full min-h-full"
+            message="当前无权限访问杂项子页"
+            detail="请在设置页的账号管理面板中，为当前角色开启对应的杂项子页权限。"
+          >
+            <div className="h-full" />
+          </AccessGuard>
+        )}
+        {visibleTabs.length > 0 && !activeTabAllowed && (
+          <AccessGuard
+            allowed={false}
+            className="h-full min-h-full"
+            message="当前无权限访问该子页"
+            detail="你打开的杂项子页未对当前账号开放，系统已自动回退到可访问页面。"
+          >
+            <div className="h-full" />
+          </AccessGuard>
+        )}
+        {activeTabAllowed && activeTab === 'about' && (
           <div className="animate-fade-slide-up" style={d(2)}>
             <AboutProject content={content.about} />
           </div>
         )}
-        {activeTab === 'author' && (
+        {activeTabAllowed && activeTab === 'author' && (
           <div className="animate-fade-slide-up" style={d(2)}>
             <AboutAuthor contributors={content.author.contributors} footer={content.author.footer} />
           </div>
         )}
-        {activeTab === 'tech' && (
+        {activeTabAllowed && activeTab === 'tech' && (
           <div className="animate-fade-slide-up" style={d(2)}>
             <TechStack tech={content.tech} />
           </div>
         )}
-        {activeTab === 'libs' && (
+        {activeTabAllowed && activeTab === 'libs' && (
           <div className="animate-fade-slide-up" style={d(2)}>
             <OpenSourceLibs libraries={content.libs.libraries} footer={content.libs.footer} />
           </div>
         )}
-        {activeTab === 'license' && (
+        {activeTabAllowed && activeTab === 'license' && (
           <div className="animate-fade-slide-up" style={d(2)}>
             <License content={content.license} />
           </div>
         )}
-        {activeTab === 'components' && (
+        {activeTabAllowed && activeTab === 'components' && (
           <div className="animate-fade-slide-up" style={d(2)}>
             <ComponentDownloadTab />
           </div>
         )}
-        {activeTab === 'webshell' && (
+        {activeTabAllowed && activeTab === 'webshell' && (
           <div className="h-full animate-fade-in">
             <WebShellTab />
           </div>
         )}
-        {activeTab === 'desktop-pet' && (
+        {activeTabAllowed && activeTab === 'desktop-pet' && (
           <div className="animate-fade-slide-up" style={d(2)}>
             <DesktopPetTab />
           </div>
         )}
-        {activeTab === 'screensaver' && (
+        {activeTabAllowed && activeTab === 'screensaver' && (
           <div className="h-full animate-fade-in">
-            <ScreenSaverTab onExit={() => setActiveTab('about')} />
+            <ScreenSaverTab onExit={() => {
+              const fallbackTab = visibleTabs.find(tab => tab.key !== 'screensaver')?.key ?? visibleTabs[0]?.key
+              if (fallbackTab) {
+                setActiveTab(fallbackTab)
+              }
+            }} />
           </div>
         )}
       </div>

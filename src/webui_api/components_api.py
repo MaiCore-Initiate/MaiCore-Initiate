@@ -3,7 +3,7 @@
 组件下载API
 提供组件列表、下载、状态查询等功能
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import structlog
@@ -13,6 +13,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 logger = structlog.get_logger(__name__)
+
+from .auth_core import require_action
 
 router = APIRouter(prefix="/api/components", tags=["components"])
 
@@ -259,7 +261,7 @@ def _run_download_task(task_id: str, component_key: str, install_path: Optional[
         logger.error("下载组件异常", error=str(e), component_key=component_key, task_id=task_id)
 
 
-@router.post("/download", response_model=DownloadTaskResponse, summary="下载组件（返回任务ID）")
+@router.post("/download", response_model=DownloadTaskResponse, summary="下载组件（返回任务ID）", dependencies=[Depends(require_action("components.manage"))])
 def download_component(request: DownloadRequest):
     """
     下载指定的组件（异步执行）
@@ -298,7 +300,7 @@ def get_download_progress(task_id: str):
     return task
 
 
-@router.post("/cancel/{task_id}", summary="取消下载任务")
+@router.post("/cancel/{task_id}", summary="取消下载任务", dependencies=[Depends(require_action("components.manage"))])
 def cancel_download_task(task_id: str):
     """取消正在进行的下载任务"""
     task = _get_task(task_id)
@@ -316,7 +318,7 @@ def cancel_download_task(task_id: str):
     return {"message": "任务已取消", "task": updated_task}
 
 
-@router.post("/cleanup", summary="清理临时安装包")
+@router.post("/cleanup", summary="清理临时安装包", dependencies=[Depends(require_action("components.manage"))])
 def cleanup_installers():
     """清理临时文件夹中的所有安装包"""
     try:
