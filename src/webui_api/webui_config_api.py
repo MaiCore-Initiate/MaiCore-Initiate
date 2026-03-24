@@ -40,6 +40,16 @@ def _get_bot_root_path(cfg: Dict[str, Any]) -> str:
     return os.path.realpath(cfg.get(_get_bot_path_key(cfg.get("bot_type", "MaiBot")), ""))
 
 
+def _get_adapter_config_path(cfg: Dict[str, Any], bot_path: str) -> str:
+    normalized = _normalize_bot_type(cfg.get("bot_type", "MaiBot"))
+    if normalized in {"MoFox-Core", "Neo-MoFox"}:
+        return os.path.realpath(os.path.join(bot_path, "config", "plugins", "napcat_adapter", "config.toml"))
+    adapter_path = cfg.get("adapter_path", "")
+    if not adapter_path:
+        return ""
+    return os.path.realpath(os.path.join(adapter_path, "config.toml"))
+
+
 class UpdateConfigRequest(BaseModel):
     key: str
     value: Any
@@ -176,12 +186,27 @@ def open_instance_config(name: str):
         raise HTTPException(400, "Bot路径无效或不是目录")
 
     files_to_open = []
-    for f in [".env", os.path.join("config", "bot_config.toml"),
-              os.path.join("config", "model_config.toml")]:
+    normalized_bot_type = _normalize_bot_type(cfg.get("bot_type", "MaiBot"))
+    default_files = [
+        ".env",
+        os.path.join("config", "bot_config.toml"),
+        os.path.join("config", "model_config.toml"),
+    ]
+    if normalized_bot_type == "Neo-MoFox":
+        default_files = [
+            os.path.join("config", "core.toml"),
+            os.path.join("config", "model.toml"),
+        ]
+
+    for f in default_files:
         fp = os.path.realpath(os.path.join(bot_path, f))
         # 确保文件在 bot_path 内，防止路径遍历
         if fp.startswith(bot_path) and os.path.isfile(fp):
             files_to_open.append(fp)
+
+    adapter_config = _get_adapter_config_path(cfg, bot_path)
+    if adapter_config and adapter_config.startswith(bot_path) and os.path.isfile(adapter_config):
+        files_to_open.append(adapter_config)
 
     if not files_to_open:
         raise HTTPException(404, "未找到可打开的配置文件")

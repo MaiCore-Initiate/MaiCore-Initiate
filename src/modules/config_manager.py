@@ -674,7 +674,13 @@ class ConfigManager:
         import os
 
         bot_type = config.get("bot_type", "MaiBot")
-        bot_path_key = "mai_path" if bot_type == "MaiBot" else "mofox_path"
+        if bot_type == "MaiBot":
+            bot_path_key = "mai_path"
+        elif bot_type in {"MoFox_bot", "MoFox-Core"}:
+            bot_path_key = "mofox_path"
+            bot_type = "MoFox-Core"
+        else:
+            bot_path_key = "neo_mofox_path"
         bot_path = config.get(bot_path_key)
 
         if not bot_path or not os.path.exists(bot_path):
@@ -686,10 +692,10 @@ class ConfigManager:
 
         files_to_open = []
         
-        # 始终打开.env文件（墨狐和麦麦都要打开）
-        env_file = os.path.join(bot_path, ".env")
-        if os.path.exists(env_file):
-            files_to_open.append(env_file)
+        if bot_type != "Neo-MoFox":
+            env_file = os.path.join(bot_path, ".env")
+            if os.path.exists(env_file):
+                files_to_open.append(env_file)
         
         # 确定要打开的配置文件
         if is_modern_config and bot_type == "MaiBot":
@@ -702,9 +708,15 @@ class ConfigManager:
             if os.path.exists(plugin_config):
                 files_to_open.append(plugin_config)
         
-        bot_config_file = os.path.join(bot_path, "config", "bot_config.toml")
-        if os.path.exists(bot_config_file):
-            files_to_open.append(bot_config_file)
+        if bot_type == "Neo-MoFox":
+            for config_name in ["model.toml", "core.toml"]:
+                config_file = os.path.join(bot_path, "config", config_name)
+                if os.path.exists(config_file):
+                    files_to_open.append(config_file)
+        else:
+            bot_config_file = os.path.join(bot_path, "config", "bot_config.toml")
+            if os.path.exists(bot_config_file):
+                files_to_open.append(bot_config_file)
         
         # 新增逻辑：为特定版本的MaiBot添加lpmm_config.toml
         if bot_type == "MaiBot" and \
@@ -714,23 +726,10 @@ class ConfigManager:
             if os.path.exists(lpmm_config_file):
                 files_to_open.append(lpmm_config_file)
 
-        # MoFox_bot 特有的 model_config.toml
-        if bot_type == "MoFox_bot":
-            mofox_model_config = os.path.join(bot_path, "config", "model_config.toml")
-            if os.path.exists(mofox_model_config) and mofox_model_config not in files_to_open:
-                files_to_open.append(mofox_model_config)
-            
-            # MoFox_bot 内置适配器的配置文件
-            # 尝试查找 napcat_adapter_plugin 的 config.toml
-            import os
-            plugins_folder = os.path.join(bot_path, "config", "plugins")
-            if os.path.exists(plugins_folder):
-                # 查找 napcat_adapter_plugin 目录
-                napcat_plugin_path = os.path.join(plugins_folder, "napcat_adapter_plugin")
-                if os.path.exists(napcat_plugin_path):
-                    adapter_config = os.path.join(napcat_plugin_path, "config.toml")
-                    if os.path.exists(adapter_config):
-                        files_to_open.append(adapter_config)
+        if bot_type in {"MoFox-Core", "Neo-MoFox"}:
+            adapter_config = os.path.join(bot_path, "config", "plugins", "napcat_adapter", "config.toml")
+            if os.path.exists(adapter_config):
+                files_to_open.append(adapter_config)
 
         if files_to_open:
             open_files_in_editor(files_to_open)
@@ -743,7 +742,12 @@ class ConfigManager:
         import os
 
         bot_type = config.get("bot_type", "MaiBot")
-        bot_path_key = "mai_path" if bot_type == "MaiBot" else "mofox_path"
+        if bot_type == "MaiBot":
+            bot_path_key = "mai_path"
+        elif bot_type in {"MoFox_bot", "MoFox-Core"}:
+            bot_path_key = "mofox_path"
+        else:
+            bot_path_key = "neo_mofox_path"
         bot_path = config.get(bot_path_key)
 
         if not bot_path or not os.path.exists(bot_path):
