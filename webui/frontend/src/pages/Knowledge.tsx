@@ -27,6 +27,12 @@ interface FileEntry {
   progress: number // 0~1，仅用于上传中的视觉效果
 }
 
+const normalizeBotType = (botType: string) => {
+  if (botType === 'Neo-MoFox') return 'Neo-MoFox'
+  if (botType === 'MoFox-Core' || botType === 'MoFox_bot') return 'MoFox-Core'
+  return 'MaiBot'
+}
+
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const valueFont = { fontSize: 25, ...monoFont, color: 'var(--mc-text-secondary)' }
@@ -678,6 +684,7 @@ export default function Knowledge() {
   })
 
   const selectedInstance = instances.find(i => i.serial === selected)
+  const selectedBotType = selectedInstance ? normalizeBotType(selectedInstance.botType) : null
 
   return (
     <div className="flex flex-col p-6 h-full overflow-hidden">
@@ -745,10 +752,12 @@ export default function Knowledge() {
         {/* 右侧：操作面板 */}
         <div className="flex-1 min-w-0 h-full min-h-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
           {selectedInstance ? (
-            selectedInstance.botType === 'MoFox_bot' ? (
+            selectedBotType !== 'MaiBot' ? (
               <div className="flex items-center justify-center h-full">
                 <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
-                  MoFox_bot 暂不支持 LPMM 知识库功能
+                  {selectedBotType === 'Neo-MoFox'
+                    ? 'Neo-MoFox 暂不支持知识库构建功能，仅 MaiBot 可用'
+                    : '当前实例类型暂不支持知识库构建功能，仅 MaiBot 可用'}
                 </span>
               </div>
             ) : (
