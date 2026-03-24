@@ -14,36 +14,49 @@ interface Instance {
   qqAccount: string
 }
 
+type BotType = 'MaiBot' | 'MoFox-Core' | 'Neo-MoFox'
+
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const valueFont = { fontSize: 25, ...monoFont, color: 'var(--mc-text-secondary)' }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
 
-const PRESETS: Record<string, { label: string; components: string[] }[]> = {
-  MoFox_bot: [
-    { label: '主程序（内置适配器）+WebUI', components: ['mai', 'webui'] },
-    { label: '主程序（内置适配器）+NapCatQQ+WebUI', components: ['mai', 'napcat', 'webui'] },
-    { label: '主程序+适配器+WebUI', components: ['mai', 'adapter', 'webui'] },
-    { label: '主程序+适配器+NapCatQQ+WebUI', components: ['mai', 'adapter', 'napcat', 'webui'] },
-  ],
+const PRESETS: Record<BotType, { label: string; components: string[] }[]> = {
   MaiBot: [
     { label: '主程序+适配器+控制面板', components: ['mai','adapter', 'webui'] },
     { label: '主程序+适配器+NapCat+控制面板', components: ['mai', 'adapter', 'napcat', 'webui'] },
-    ],
+  ],
+  'MoFox-Core': [
+    { label: '主程序（内置适配器）+WebUI', components: ['mai'] },
+    { label: '主程序（内置适配器）+NapCatQQ+WebUI', components: ['mai', 'napcat'] },
+  ],
+  'Neo-MoFox': [
+    { label: '主程序（内置适配器）+WebUI', components: ['mai'] },
+    { label: '主程序（内置适配器）+NapCatQQ+WebUI', components: ['mai', 'napcat'] },
+  ],
 }
 
-const ADVANCED_ITEMS: Record<string, { label: string; components: string[] }[]> = {
-  MoFox_bot: [
-    { label: '主程序+WebUI', components: ['mai', 'webui'] },
-    { label: '适配器', components: ['adapter'] },
-    { label: 'NapCatQQ', components: ['napcat'] },
-  ],
+const ADVANCED_ITEMS: Record<BotType, { label: string; components: string[] }[]> = {
   MaiBot: [
     { label: '主程序+WebUI', components: ['mai', 'webui'] },
     { label: '适配器', components: ['adapter'] },
     { label: 'NapCatQQ', components: ['napcat'] },
   ],
+  'MoFox-Core': [
+    { label: '主程序（内置适配器）+WebUI', components: ['mai'] },
+    { label: 'NapCatQQ', components: ['napcat'] },
+  ],
+  'Neo-MoFox': [
+    { label: '主程序（内置适配器）+WebUI', components: ['mai'] },
+    { label: 'NapCatQQ', components: ['napcat'] },
+  ],
+}
+
+function normalizeBotType(botType: string): BotType {
+  if (botType === 'MoFox_bot' || botType === 'MoFox-Core') return 'MoFox-Core'
+  if (botType === 'Neo-MoFox') return 'Neo-MoFox'
+  return 'MaiBot'
 }
 
 function formatUptime(seconds: number): string {
@@ -80,8 +93,9 @@ function LaunchPanel({ instance }: { instance: Instance }) {
   const [pendingComponents, setPendingComponents] = useState<string[]>([])
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const presets = PRESETS[instance.botType] ?? PRESETS.MaiBot
-  const advancedItems = ADVANCED_ITEMS[instance.botType] ?? ADVANCED_ITEMS.MaiBot
+  const normalizedBotType = normalizeBotType(instance.botType)
+  const presets = PRESETS[normalizedBotType]
+  const advancedItems = ADVANCED_ITEMS[normalizedBotType]
 
   useEffect(() => {
     setPresetIdx(null)
@@ -196,7 +210,7 @@ function LaunchPanel({ instance }: { instance: Instance }) {
   }
 
   const leftData = [
-    ['实例类型', instance.botType],
+    ['实例类型', normalizedBotType],
     ['实例昵称', instance.nickname],
     ['实例序列号', instance.serial],
     ['实例绝对序列号', String(instance.absoluteSerial)],
@@ -343,7 +357,7 @@ export default function Instances() {
           serial: cfg.serial_number,
           nickname: cfg.nickname || cfg.serial_number,
           absoluteSerial: cfg.absolute_serial ?? 0,
-          botType: cfg.bot_type || 'MaiBot',
+          botType: normalizeBotType(cfg.bot_type || 'MaiBot'),
           version: cfg.version || '',
           qqAccount: cfg.qq_account || '',
         }))

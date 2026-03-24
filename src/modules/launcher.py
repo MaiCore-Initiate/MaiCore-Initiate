@@ -20,6 +20,31 @@ from ..utils.version_detector import is_legacy_version, is_legacy_version_with_b
 logger = structlog.get_logger(__name__)
 
 
+_LEGACY_MOFOX_TYPE = "MoFox_bot"
+_SUPPORTED_MODERN_TYPES = {"MaiBot", "MoFox-Core", "Neo-MoFox", _LEGACY_MOFOX_TYPE}
+
+
+def _normalize_bot_type(bot_type: str) -> str:
+    if bot_type in {"MoFox-Core", _LEGACY_MOFOX_TYPE}:
+        return "MoFox-Core"
+    if bot_type == "Neo-MoFox":
+        return "Neo-MoFox"
+    return "MaiBot"
+
+
+def _get_bot_path_key(bot_type: str) -> str:
+    normalized = _normalize_bot_type(bot_type)
+    if normalized == "MoFox-Core":
+        return "mofox_path"
+    if normalized == "Neo-MoFox":
+        return "neo_mofox_path"
+    return "mai_path"
+
+
+def _get_main_entry_file(bot_type: str) -> str:
+    return "main.py" if _normalize_bot_type(bot_type) == "Neo-MoFox" else "bot.py"
+
+
 # --- 内部辅助类 ---
 
 class _ProcessManager:
@@ -563,8 +588,13 @@ class _AdapterComponent(_LaunchComponent):
     def check_enabled(self):
         opts = self.config.get("install_options", {})
         version = self.config.get("version_path", "")
-        bot_type = self.config.get("bot_type", "MaiBot")
-        self.is_enabled = opts.get("install_adapter", False) and not is_legacy_version_with_bot_type(version, bot_type)
+        bot_type = _normalize_bot_type(self.config.get("bot_type", "MaiBot"))
+        # MoFox-Core 与 Neo-MoFox 均内置适配器，不应作为独立进程启动。
+        self.is_enabled = (
+            bot_type == "MaiBot"
+            and opts.get("install_adapter", False)
+            and not is_legacy_version_with_bot_type(version, bot_type)
+        )
 
     def get_launch_details(self) -> Optional[Tuple[str, str, str]]:
         adapter_path = self.config.get("adapter_path", "")
@@ -583,17 +613,7 @@ class _AdapterComponent(_LaunchComponent):
     def start(self, process_manager: _ProcessManager) -> bool:
         if not self.is_enabled:
             return True
-        
-        # 获取bot类型以检查是否为MoFox_bot
-        bot_type = self.config.get("bot_type", "MaiBot")
-        adapter_path = self.config.get("adapter_path", "")
-        
-        # 对于MoFox_bot类型，如果适配器目录不存在，仅提醒用户并跳过启动
-        if bot_type == "MoFox_bot" and adapter_path and not os.path.exists(adapter_path):
-            ui.print_warning("MoFox_bot启动时检测到适配器目录不存在，将跳过适配器启动")
-            ui.print_info("适配器目录路径: " + adapter_path)
-            return True
-        
+
         ui.print_info("尝试启动适配器...")
         if super().start(process_manager):
             time.sleep(2)  # 等待适配器启动
@@ -607,16 +627,14 @@ class _WebUIComponent(_LaunchComponent):
         self.check_enabled()
 
     def check_enabled(self):
-        # 检查是否安装了独立WebUI
+        bot_type = _normalize_bot_type(self.config.get("bot_type", "MaiBot"))
         has_external_webui = self.config.get("install_options", {}).get("install_webui", False)
-        
-        # 检查版本是否内置WebUI
         version = self.config.get("version_path", "")
         has_builtin = has_builtin_webui(version)
-        
-        # 对于MaiBot，内置WebUI版本总是启用（通过主程序代理）
-        # 非内置版本需要用户独立安装
-        if self.config.get("bot_type") == "MaiBot" and has_builtin:
+
+        if bot_type in {"MoFox-Core", "Neo-MoFox"}:
+            self.is_enabled = True
+        elif bot_type == "MaiBot" and has_builtin:
             self.is_enabled = True
         else:
             self.is_enabled = has_external_webui
@@ -648,11 +666,14 @@ class _WebUIComponent(_LaunchComponent):
     def start(self, process_manager: _ProcessManager) -> bool:
         if not self.is_enabled:
             return True
-        
+
         version = self.config.get('version_path', 'N/A')
-        bot_type = self.config.get("bot_type", "MaiBot")
-        
-        # 检查是否为内置WebUI版本
+        bot_type = _normalize_bot_type(self.config.get("bot_type", "MaiBot"))
+
+        if bot_type in {"MoFox-Core", "Neo-MoFox"}:
+            ui.print_info(f"检测到 {bot_type} 内置 WebUI，随主程序启动后即可使用。")
+            return True
+
         if bot_type == "MaiBot" and has_builtin_webui(version):
             ui.print_info("检测到内置WebUI版本，主程序将代理控制面板")
             ui.print_info("请在浏览器中访问: http://localhost:8001")
@@ -702,46 +723,40 @@ class _WebUIComponent(_LaunchComponent):
 
 class _MaiComponent(_LaunchComponent):
     def __init__(self, config: Dict[str, Any]):
-        bot_type = config.get("bot_type", "MaiBot")
-        component_name = "MoFox本体" if bot_type == "MoFox_bot" else "麦麦本体"
+        bot_type = _normalize_bot_type(config.get("bot_type", "MaiBot"))
+        component_name = {
+            "MaiBot": "麦麦本体",
+            "MoFox-Core": "MoFox-Core本体",
+            "Neo-MoFox": "Neo-MoFox本体",
+        }.get(bot_type, "麦麦本体")
         super().__init__(component_name, config)
         self.is_enabled = True  # 本体总是启用
 
     def get_launch_details(self) -> Optional[Tuple[str, str, str]]:
-        # 根据bot_type字段选择正确的路径字段
-        bot_type = self.config.get("bot_type", "MaiBot")  # 获取bot类型，默认为MaiBot
-        if bot_type == "MoFox_bot":
-            mai_path = self.config.get("mofox_path", "")
-        else:
-            mai_path = self.config.get("mai_path", "")
-        
+        bot_type = _normalize_bot_type(self.config.get("bot_type", "MaiBot"))
+        bot_path = self.config.get(_get_bot_path_key(bot_type), "")
         version = self.config.get("version_path", "")
-        
+
         if is_legacy_version_with_bot_type(version, bot_type):
-            run_bat = os.path.join(mai_path, "run.bat")
+            run_bat = os.path.join(bot_path, "run.bat")
             if not os.path.exists(run_bat):
                 logger.error("旧版本麦麦缺少run.bat", path=run_bat)
                 return None
             command = f'"{run_bat}"'
         else:
-            python_cmd = MaiLauncher._get_python_command(self.config, mai_path)
-            # 根据bot类型确定启动文件
-            if bot_type == "MoFox_bot":
-                start_file = "bot.py"
-            else:
-                start_file = "bot.py"
+            python_cmd = MaiLauncher._get_python_command(self.config, bot_path)
+            start_file = _get_main_entry_file(bot_type)
             command = f"{python_cmd} {start_file}"
-            
+
         bot_nickname = self.config.get('nickname_path', bot_type)
         title = f"{bot_nickname} - {self.name} v{version}"
-        return command, mai_path, title
-    
+        return command, bot_path, title
+
     def start(self, process_manager: _ProcessManager) -> bool:
         ui.print_info(f"尝试启动{self.name}...")
         success = super().start(process_manager)
-        
-        # 如果是MoFox_bot且安装了WebUI，启动后自动打开浏览器
-        if success and self.config.get("bot_type") == "MoFox_bot":
+
+        if success and _normalize_bot_type(self.config.get("bot_type")) == "MoFox-Core":
             has_webui = self.config.get("install_options", {}).get("install_mofox_webui", False)
             if has_webui and not self._skip_browser:
                 ui.print_info("检测到MoFox WebUI已安装，WebUI将随主程序自动启动")
@@ -798,50 +813,36 @@ class MaiLauncher:
             "mai": _MaiComponent(config),
         }
 
-    def validate_configuration(self, config: Dict[str, Any]) -> list:
+    def validate_configuration(self, config: Dict[str, Any], components_to_validate: Optional[List[str]] = None) -> list:
         """验证配置的有效性。"""
         errors = []
-        
-        # 根据bot_type字段选择正确的路径字段
-        bot_type = config.get("bot_type", "MaiBot")  # 获取bot类型，默认为MaiBot
-        if bot_type == "MoFox_bot":
-            mai_path = config.get("mofox_path", "")
-        else:
-            mai_path = config.get("mai_path", "")
-        
-        valid, msg = validate_path(mai_path, check_file="bot.py")
-        if not valid:
-            errors.append(f"麦麦本体路径: {msg}")
+
+        bot_type = _normalize_bot_type(config.get("bot_type", "MaiBot"))
+        selected_components = set(components_to_validate or self._components.keys() or ["mai", "adapter", "napcat", "mongodb", "webui"])
+        bot_path = config.get(_get_bot_path_key(bot_type), "")
+        main_entry = _get_main_entry_file(bot_type)
+
+        if "mai" in selected_components:
+            valid, msg = validate_path(bot_path, check_file=main_entry)
+            if not valid:
+                errors.append(f"{bot_type}本体路径: {msg}")
 
         version = config.get("version_path", "")
-        if is_legacy_version_with_bot_type(version, bot_type):
-            valid, msg = validate_path(mai_path, check_file="run.bat")
+        if "mai" in selected_components and is_legacy_version_with_bot_type(version, bot_type):
+            valid, msg = validate_path(bot_path, check_file="run.bat")
             if not valid:
                 errors.append(f"旧版麦麦本体路径缺少run.bat: {msg}")
 
         # 注册组件以进行后续检查
         self._register_components(config)
 
-        if self._components['adapter'].is_enabled:
-            # 对于MoFox_bot类型，适配器目录可以不存在，仅提醒用户
-            if bot_type == "MoFox_bot":
-                adapter_path = config.get("adapter_path", "")
-                if adapter_path and not os.path.exists(adapter_path):
-                    # MoFox_bot可以不存在适配器目录，仅记录警告而非错误
-                    logger.warning("MoFox_bot启动时检测到适配器目录不存在，将跳过适配器启动", path=adapter_path)
-                elif adapter_path and os.path.exists(adapter_path):
-                    # 如果适配器目录存在，则验证main.py文件
-                    main_file = os.path.join(adapter_path, "main.py")
-                    if not os.path.exists(main_file):
-                        errors.append(f"适配器路径: 缺少必需文件: main.py")
-            else:
-                # 对于其他bot类型，严格验证适配器路径
-                adapter_path = config.get("adapter_path", "")
-                valid, msg = validate_path(adapter_path, check_file="main.py")
-                if not valid:
-                    errors.append(f"适配器路径: {msg}")
+        if "adapter" in selected_components and self._components['adapter'].is_enabled:
+            adapter_path = config.get("adapter_path", "")
+            valid, msg = validate_path(adapter_path, check_file="main.py")
+            if not valid:
+                errors.append(f"适配器路径: {msg}")
 
-        if self._components['napcat'].is_enabled:
+        if "napcat" in selected_components and self._components['napcat'].is_enabled:
             napcat_path = config.get("napcat_path", "")
             if not (napcat_path and os.path.exists(napcat_path) and napcat_path.lower().endswith('.exe')):
                 errors.append("NapCat路径: 无效或文件不存在。")
@@ -851,7 +852,7 @@ class MaiLauncher:
     def show_launch_menu(self, config: Dict[str, Any]) -> bool:
         """根据bot类型显示不同的启动菜单并处理用户选择。"""
         self._register_components(config)
-        bot_type = config.get("bot_type", "MaiBot")
+        bot_type = _normalize_bot_type(config.get("bot_type", "MaiBot"))
 
         ui.clear_screen()
         ui.console.print("[🚀 启动选择菜单]", style=ui.colors["primary"])
@@ -893,24 +894,11 @@ class MaiLauncher:
                     # 独立版本显示为"控制面板"
                     menu_options["5"] = ("主程序+适配器+控制面板", ["mai", "adapter", "webui"])
                     menu_options["6"] = ("主程序+适配器+NapCat+控制面板", ["mai", "adapter", "napcat", "webui"])
-        elif bot_type == "MoFox_bot":
-            # 检查是否安装了MoFox WebUI
-            has_mofox_webui = config.get("install_options", {}).get("install_mofox_webui", False)
-            
-            if has_mofox_webui:
-                menu_options = {
-                    "1": ("主程序+WebUI", ["mai"]),
-                    "2": ("主程序+适配器+WebUI", ["mai", "adapter"]),
-                    "3": ("主程序+NapCatQQ+WebUI", ["mai", "napcat"]),
-                    "4": ("主程序+适配器+NapCatQQ+WebUI", ["mai", "adapter", "napcat"]),
-                }
-            else:
-                menu_options = {
-                    "1": ("主程序", ["mai"]),
-                    "2": ("主程序+适配器", ["mai", "adapter"]),
-                    "3": ("主程序+NapCatQQ", ["mai", "napcat"]),
-                    "4": ("主程序+适配器+NapCatQQ", ["mai", "adapter", "napcat"]),
-                }
+        elif bot_type in {"MoFox-Core", "Neo-MoFox"}:
+            menu_options = {
+                "1": ("主程序（内置适配器）+WebUI", ["mai"]),
+                "2": ("主程序（内置适配器）+NapCatQQ+WebUI", ["mai", "napcat"]),
+            }
         else:
             # 默认或未知bot类型的菜单
             menu_options = {

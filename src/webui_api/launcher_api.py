@@ -157,7 +157,7 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
             raise HTTPException(status_code=500, detail="创建启动器失败")
         
         # 验证配置
-        errors = instance_launcher.validate_configuration(config)
+        errors = instance_launcher.validate_configuration(config, request.components)
         if errors:
             return {
                 "success": False,
