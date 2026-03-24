@@ -28,7 +28,10 @@ export default function AccessGuard({
 }) {
   return (
     <div className={`relative ${className}`}>
-      <div style={!allowed ? { filter: 'grayscale(0.75)', opacity: 0.38 } : undefined}>
+      <div
+        className="h-full min-h-0"
+        style={!allowed ? { filter: 'grayscale(0.75)', opacity: 0.38 } : undefined}
+      >
         {children}
       </div>
 
