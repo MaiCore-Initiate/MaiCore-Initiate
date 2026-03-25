@@ -62,7 +62,8 @@ from src.webui_api import (
     settings_router,
     components_router,
     terminal_router,
-    pet_router
+    pet_router,
+    deployment_mod_router,
 )
 from src.webui_api.pet_api_v2 import router as pet_v2_router
 from src.webui_api.auth_core import (
@@ -331,6 +332,9 @@ app.include_router(auth_router, prefix="/api/account", tags=["账号系统"])
 
 # 部署管理API
 app.include_router(deploy_router, prefix="/api/deploy", tags=["部署管理"], dependencies=auth_dep)
+
+# MOD 模板部署 API
+app.include_router(deployment_mod_router, prefix="/api/deployment-mod", tags=["模板部署"], dependencies=auth_dep)
 
 # 启动器管理API
 app.include_router(launcher_router, prefix="/api/launcher", tags=["启动器"], dependencies=auth_dep)

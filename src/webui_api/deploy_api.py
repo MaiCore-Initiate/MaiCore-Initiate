@@ -318,7 +318,11 @@ async def get_all_instances():
                 "venv_path": config.get("venv_path", ""),
                 "mongodb_path": config.get("mongodb_path", ""),
                 "webui_path": config.get("webui_path", ""),
-                "install_options": config.get("install_options", {})
+                "install_options": config.get("install_options", {}),
+                "mod_binding": config.get("mod_binding", {}),
+                "deployment_profile": config.get("deployment_profile", {}),
+                "component_bindings": config.get("component_bindings", []),
+                "template_inputs": config.get("template_inputs", {}),
             })
         
         return {
@@ -356,7 +360,11 @@ async def get_instance_detail(serial_number: str):
                         "venv_path": config.get("venv_path", ""),
                         "mongodb_path": config.get("mongodb_path", ""),
                         "webui_path": config.get("webui_path", ""),
-                        "install_options": config.get("install_options", {})
+                        "install_options": config.get("install_options", {}),
+                        "mod_binding": config.get("mod_binding", {}),
+                        "deployment_profile": config.get("deployment_profile", {}),
+                        "component_bindings": config.get("component_bindings", []),
+                        "template_inputs": config.get("template_inputs", {})
                     }
                 }
         

@@ -99,6 +99,10 @@ def get_instances():
                 "webui_path": cfg.get("webui_path", ""),
                 "venv_path": cfg.get("venv_path", ""),
                 "install_options": cfg.get("install_options", {}),
+                "mod_binding": cfg.get("mod_binding", {}),
+                "deployment_profile": cfg.get("deployment_profile", {}),
+                "component_bindings": cfg.get("component_bindings", []),
+                "template_inputs": cfg.get("template_inputs", {}),
             }
             for name, cfg in configs.items()
         },
@@ -155,6 +159,7 @@ _UPDATABLE_FIELDS = {
     "serial_number", "nickname_path", "version_path", "bot_type",
     "qq_account", "mai_path", "mofox_path", "neo_mofox_path",
     "adapter_path", "napcat_path", "venv_path", "mongodb_path", "webui_path",
+    "mod_binding", "deployment_profile", "component_bindings", "template_inputs",
 }
 
 

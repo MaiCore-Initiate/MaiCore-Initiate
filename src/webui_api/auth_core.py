@@ -61,6 +61,8 @@ ACTION_ORDER = [
     "misc.webshell.access",
     "misc.screensaver.access",
     "misc.desktop-pet.access",
+    "misc.custom-console.access",
+    "misc.template-market.access",
 ]
 
 DEFAULT_EMAIL_WHITELIST = [
@@ -141,6 +143,8 @@ def _default_role_templates() -> Dict[str, Dict[str, Dict[str, bool]]]:
     member_actions["misc.components.access"] = True
     member_actions["misc.screensaver.access"] = True
     member_actions["misc.desktop-pet.access"] = True
+    member_actions["misc.custom-console.access"] = True
+    member_actions["misc.template-market.access"] = True
 
     guest_actions = _empty_action_permissions()
     guest_actions["appearance.customize"] = True
@@ -154,6 +158,8 @@ def _default_role_templates() -> Dict[str, Dict[str, Dict[str, bool]]]:
     guest_actions["misc.components.access"] = True
     guest_actions["misc.screensaver.access"] = True
     guest_actions["misc.desktop-pet.access"] = True
+    guest_actions["misc.custom-console.access"] = True
+    guest_actions["misc.template-market.access"] = True
 
     return {
         "member": {"pages": member_pages, "actions": member_actions},
