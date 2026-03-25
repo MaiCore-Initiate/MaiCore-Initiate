@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useCallback,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
@@ -42,6 +43,20 @@ interface TimelineItem {
 interface SlotItem {
   starts: number
   uptime_m: number
+}
+
+interface SeriesSlotData {
+  id: string
+  slots: SlotItem[]
+  colorIdx: number
+}
+
+interface ShareSlice {
+  id: string
+  label: string
+  uptime_m: number
+  percent: number
+  color: (typeof INSTANCE_COLORS)[number]
 }
 
 // ─── 工具函数 ──────────────────────────────────────────────
@@ -178,6 +193,26 @@ function formatUptime(minutes: number, granularity: Granularity): string {
     return m > 0 ? `${h}h ${m}m` : `${h}h`
   }
   return `${minutes.toFixed(1)} min`
+}
+
+function getInstanceDisplayName(
+  id: string,
+  instanceInfo: Record<string, { nickname: string; serial: string; abs: number }>,
+) {
+  if (id === '_all') return '全部'
+  const info = instanceInfo[id]
+  return info ? info.nickname || info.serial || id : `实例 ${id}`
+}
+
+function getGranularityRangeLabel(granularity: Granularity) {
+  if (granularity === '日') return '今日'
+  if (granularity === '周') return '近 7 天'
+  return '近 30 天'
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(100, value))
 }
 
 // ─── 平滑跟随 Hook ─────────────────────────────────────────
@@ -469,6 +504,697 @@ function InstancePickerPopover({
   )
 }
 
+function FullscreenIcon({ color }: { color: string }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 3H4.5A1.5 1.5 0 0 0 3 4.5V8" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M16 3H19.5A1.5 1.5 0 0 1 21 4.5V8" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 21H4.5A1.5 1.5 0 0 1 3 19.5V16" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M16 21H19.5A1.5 1.5 0 0 0 21 19.5V16" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 9 4 4" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="m15 9 5-5" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="m9 15-5 5" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="m15 15 5 5" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function DashboardTimelineChart({
+  series,
+  timeLabels,
+  labelInterval,
+  splitByInstance,
+  selectedInstance,
+  granularity,
+  isDark,
+  chartW,
+  chartH,
+  padL,
+  padR,
+  padT,
+  padB,
+}: {
+  series: SeriesSlotData[]
+  timeLabels: string[]
+  labelInterval: number
+  splitByInstance: boolean
+  selectedInstance: string
+  granularity: Granularity
+  isDark: boolean
+  chartW: number
+  chartH: number
+  padL: number
+  padR: number
+  padT: number
+  padB: number
+}) {
+  const slotCount = timeLabels.length
+  const plotW = chartW - padL - padR
+  const plotH = chartH - padT - padB
+
+  const rawMaxStarts = Math.max(1, ...series.flatMap((s) => s.slots.map((d) => d.starts)))
+  const rawMaxUptime = Math.max(1, ...series.flatMap((s) => s.slots.map((d) => d.uptime_m)))
+  const maxStarts = niceMax(rawMaxStarts)
+  const maxUptime = niceMax(rawMaxUptime)
+
+  const timeUnit = granularity === '日' ? 'min' : granularity === '周' ? 'h' : 'd'
+  const timeDivisor = granularity === '日' ? 1 : granularity === '周' ? 60 : 1440
+  const yTicks = 4
+  const yLabels = Array.from({ length: yTicks }, (_, i) => {
+    const s = Math.round((maxStarts / (yTicks - 1)) * (yTicks - 1 - i))
+    const t = Math.round((maxUptime / timeDivisor / (yTicks - 1)) * (yTicks - 1 - i))
+    return `${s}/${t}${timeUnit}`
+  })
+
+  const seriesCount = series.length
+  const totalBarWidth = Math.max(6, Math.min(26, (plotW / Math.max(slotCount, 1)) * 0.6))
+  const singleBarWidth = seriesCount > 1 ? totalBarWidth / seriesCount : totalBarWidth
+
+  const seriesData = useMemo(() => {
+    return series.map((s, si) => {
+      const offset = seriesCount > 1 ? (si - (seriesCount - 1) / 2) * singleBarWidth : 0
+      const positions = s.slots.map((d, i) => {
+        const x = padL + (i + 0.5) * (plotW / Math.max(slotCount, 1)) + offset
+        const barH = maxStarts > 0 ? (d.starts / maxStarts) * plotH : 0
+        const lineY = maxUptime > 0 ? padT + plotH - (d.uptime_m / maxUptime) * plotH : padT + plotH
+        return { x, barH, barY: padT + plotH - barH, lineY }
+      })
+      return {
+        ...s,
+        positions,
+        curvePath: catmullRomPath(positions.map((p) => ({ x: p.x, y: p.lineY })), 0.3, padT + plotH),
+        color: INSTANCE_COLORS[s.colorIdx],
+      }
+    })
+  }, [series, seriesCount, singleBarWidth, padL, plotW, slotCount, maxStarts, plotH, maxUptime, padT, granularity])
+
+  const hasData = series.some((s) => s.slots.some((d) => d.starts > 0 || d.uptime_m > 0))
+  const [hoverSlot, setHoverSlot] = useState<{
+    slotIdx: number
+    svgX: number
+    mouseX: number
+    mouseY: number
+  } | null>(null)
+  const chartWrapRef = useRef<HTMLDivElement | null>(null)
+
+  const smoothTarget = useMemo<SmoothPos | null>(
+    () => (hoverSlot ? { x: hoverSlot.mouseX, y: hoverSlot.mouseY } : null),
+    [hoverSlot],
+  )
+  const smoothPos = useSmoothFollow(smoothTarget, 0.18)
+
+  const handleMouseMove = useCallback(
+    (evt: ReactMouseEvent<SVGSVGElement>) => {
+      const svg = evt.currentTarget
+      const svgRect = svg.getBoundingClientRect()
+      const wrapRect = chartWrapRef.current?.getBoundingClientRect()
+      if (svgRect.width <= 0 || !wrapRect) return
+
+      const svgX = ((evt.clientX - svgRect.left) / svgRect.width) * chartW
+      const plotX = svgX - padL
+      if (plotX < 0 || plotX > plotW) {
+        setHoverSlot(null)
+        return
+      }
+
+      const slotIdx = Math.floor((plotX / plotW) * slotCount)
+      if (slotIdx >= 0 && slotIdx < slotCount) {
+        const centerSvgX = padL + (slotIdx + 0.5) * (plotW / slotCount)
+        setHoverSlot({
+          slotIdx,
+          svgX: centerSvgX,
+          mouseX: evt.clientX - wrapRect.left,
+          mouseY: evt.clientY - wrapRect.top,
+        })
+      }
+    },
+    [chartW, padL, plotW, slotCount],
+  )
+
+  const handleMouseLeave = useCallback(() => setHoverSlot(null), [])
+
+  const tooltipData = useMemo<TooltipData | null>(() => {
+    if (hoverSlot == null) return null
+    const { slotIdx } = hoverSlot
+    return {
+      timeLabel: timeLabels[slotIdx] || '',
+      entries: seriesData.map((s) => ({
+        id: s.id,
+        starts: s.slots[slotIdx]?.starts ?? 0,
+        uptime_m: s.slots[slotIdx]?.uptime_m ?? 0,
+        color: s.color,
+      })),
+    }
+  }, [hoverSlot, seriesData, timeLabels])
+
+  return (
+    <div ref={chartWrapRef} className="flex-1 min-h-0 relative" style={{ overflow: 'hidden' }}>
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${chartW} ${chartH}`}
+        preserveAspectRatio="xMidYMid meet"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        <defs>
+          {seriesData.map((s, si) => (
+            <linearGradient key={`bg${si}`} id={`barGrad-${chartW}-${chartH}-${si}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={s.color.bar} stopOpacity={0.9} />
+              <stop offset="100%" stopColor={s.color.barEnd} stopOpacity={0.7} />
+            </linearGradient>
+          ))}
+        </defs>
+
+        {Array.from({ length: yTicks }, (_, i) => {
+          const y = padT + (i / (yTicks - 1)) * plotH
+          return (
+            <line
+              key={`g${i}`}
+              x1={padL}
+              y1={y}
+              x2={padL + plotW}
+              y2={y}
+              stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'}
+              strokeWidth={1}
+            />
+          )
+        })}
+
+        <line x1={padL} y1={padT} x2={padL} y2={padT + plotH} stroke={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} strokeWidth={2} />
+        <polygon points={`${padL},${padT - 6} ${padL - 4},${padT + 2} ${padL + 4},${padT + 2}`} fill={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} />
+        <line x1={padL} y1={padT + plotH} x2={padL + plotW + 8} y2={padT + plotH} stroke={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} strokeWidth={2} />
+        <polygon points={`${padL + plotW + 14},${padT + plotH} ${padL + plotW + 6},${padT + plotH - 4} ${padL + plotW + 6},${padT + plotH + 4}`} fill={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} />
+
+        {yLabels.map((label, i) => (
+          <text
+            key={`yl${i}`}
+            x={padL - 6}
+            y={padT + (i / (yTicks - 1)) * plotH + 4}
+            textAnchor="end"
+            fontSize={10}
+            fontFamily="'Ubuntu','HarmonyOS Sans SC','Cascadia Code', monospace"
+            fill={isDark ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.45)'}
+          >
+            {label}
+          </text>
+        ))}
+
+        {timeLabels.map((label, i) => {
+          if (!label || i % labelInterval !== 0) return null
+          return (
+            <text
+              key={`xl${i}`}
+              x={padL + (i + 0.5) * (plotW / slotCount)}
+              y={padT + plotH + 18}
+              textAnchor="middle"
+              fontSize={10}
+              fontFamily="'Ubuntu','HarmonyOS Sans SC','Cascadia Code', monospace"
+              fill={isDark ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.45)'}
+            >
+              {label}
+            </text>
+          )
+        })}
+
+        {hoverSlot && (
+          <rect
+            x={padL + hoverSlot.slotIdx * (plotW / slotCount)}
+            y={padT}
+            width={plotW / slotCount}
+            height={plotH}
+            fill={isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)'}
+            rx={2}
+          />
+        )}
+
+        {seriesData.map((s, si) => {
+          const dimmed = splitByInstance && !!selectedInstance && s.id !== selectedInstance
+          return s.positions.map((p, i) => (
+            <rect
+              key={`b${si}-${i}`}
+              x={p.x - singleBarWidth / 2}
+              y={p.barY}
+              width={singleBarWidth}
+              height={p.barH}
+              fill={`url(#barGrad-${chartW}-${chartH}-${si})`}
+              rx={2}
+              opacity={dimmed ? 0.2 : 1}
+              style={{ transition: 'all 0.4s ease' }}
+            />
+          ))
+        })}
+
+        {seriesData.map((s, si) => {
+          if (!s.curvePath) return null
+          const dimmed = splitByInstance && !!selectedInstance && s.id !== selectedInstance
+          return (
+            <g key={`c${si}`} opacity={dimmed ? 0.2 : 1} style={{ transition: 'opacity 0.4s ease' }}>
+              <path d={s.curvePath} fill="none" stroke={s.color.line} strokeWidth={2} strokeLinecap="round" style={{ transition: 'all 0.4s ease' }} />
+              {s.positions.map((p, i) => (
+                <circle
+                  key={`d${si}-${i}`}
+                  cx={p.x}
+                  cy={p.lineY}
+                  r={hoverSlot?.slotIdx === i ? 4 : 2.5}
+                  fill="#fff"
+                  stroke={s.color.line}
+                  strokeWidth={hoverSlot?.slotIdx === i ? 2.5 : 1.5}
+                  style={{ transition: 'r 0.15s ease, stroke-width 0.15s ease' }}
+                />
+              ))}
+            </g>
+          )
+        })}
+
+        {hoverSlot && (
+          <line
+            x1={hoverSlot.svgX}
+            y1={padT}
+            x2={hoverSlot.svgX}
+            y2={padT + plotH}
+            stroke={isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.35)'}
+            strokeWidth={1}
+            strokeDasharray="4 3"
+          />
+        )}
+
+        {!hasData && (
+          <text
+            x={padL + plotW / 2}
+            y={padT + plotH / 2}
+            textAnchor="middle"
+            fontSize={14}
+            fill={isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'}
+            style={labelFont}
+          >
+            暂无数据
+          </text>
+        )}
+      </svg>
+
+      {tooltipData && smoothPos && chartWrapRef.current && (
+        <ChartTooltip
+          data={tooltipData}
+          pos={smoothPos}
+          containerW={chartWrapRef.current.offsetWidth}
+          containerH={chartWrapRef.current.offsetHeight}
+          granularity={granularity}
+        />
+      )}
+    </div>
+  )
+}
+
+function UsageShareDonut({
+  slices,
+  granularity,
+  isDark,
+}: {
+  slices: ShareSlice[]
+  granularity: Granularity
+  isDark: boolean
+}) {
+  const [revealed, setRevealed] = useState(false)
+
+  useEffect(() => {
+    setRevealed(false)
+    const raf = requestAnimationFrame(() => setRevealed(true))
+    return () => cancelAnimationFrame(raf)
+  }, [slices, granularity])
+
+  const total = slices.reduce((sum, item) => sum + item.uptime_m, 0)
+  const center = 132
+  const radius = 82
+  const strokeWidth = 28
+  const circumference = 2 * Math.PI * radius
+  let segmentOffset = 0
+
+  return (
+    <div
+      className="rounded-[28px] animate-scale-in flex flex-col h-full min-h-0 overflow-hidden"
+      style={{
+        padding: '22px 22px 18px',
+        border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'}`,
+        background: isDark
+          ? 'linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03))'
+          : 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.28))',
+        boxShadow: isDark ? 'inset 0 1px 0 rgba(255,255,255,0.05)' : 'inset 0 1px 0 rgba(255,255,255,0.65)',
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div style={{ ...labelFont, fontSize: 26, fontWeight: 700, color: isDark ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.86)' }}>
+            使用时间占比
+          </div>
+          <div style={{ ...monoFont, fontSize: 13, color: isDark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.42)' }}>
+            范围: {getGranularityRangeLabel(granularity)}
+          </div>
+        </div>
+        <div style={{ ...monoFont, fontSize: 13, color: isDark ? 'rgba(255,255,255,0.56)' : 'rgba(0,0,0,0.45)', textAlign: 'right' }}>
+          <div>总时长</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: isDark ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.78)' }}>
+            {formatUptime(total, granularity)}
+          </div>
+        </div>
+      </div>
+
+      {total <= 0 || slices.length === 0 ? (
+        <div className="flex-1 min-h-0 flex items-center justify-center" style={{ ...labelFont, fontSize: 18, color: isDark ? 'rgba(255,255,255,0.32)' : 'rgba(0,0,0,0.28)' }}>
+          当前粒度下暂无实例使用数据
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col gap-[18px] pt-[14px] overflow-hidden">
+          <div className="relative flex items-center justify-center shrink-0" style={{ minHeight: 280 }}>
+            <svg width="264" height="264" viewBox="0 0 264 264" aria-label="实例使用时间环状图">
+              <circle
+                cx={center}
+                cy={center}
+                r={radius}
+                fill="none"
+                stroke={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}
+                strokeWidth={strokeWidth}
+              />
+              {slices.map((slice, idx) => {
+                const normalizedPercent = clampPercent(slice.percent)
+                const segment = circumference * (normalizedPercent / 100)
+                const isFullCircle = normalizedPercent >= 99.95
+                const dashArray = isFullCircle ? `${circumference} 0` : `${segment} ${circumference - segment}`
+                const dashOffset = -segmentOffset
+                segmentOffset += segment
+                return (
+                  <circle
+                    key={slice.id}
+                    cx={center}
+                    cy={center}
+                    r={radius}
+                    fill="none"
+                    stroke={slice.color.bar}
+                    strokeWidth={strokeWidth}
+                    strokeLinecap={isFullCircle ? 'butt' : 'round'}
+                    transform={`rotate(-90 ${center} ${center})`}
+                    strokeDasharray={revealed ? dashArray : `0 ${circumference}`}
+                    strokeDashoffset={dashOffset}
+                    style={{
+                      transition: `stroke-dasharray 0.9s cubic-bezier(0.22, 1, 0.36, 1) ${idx * 0.08}s`,
+                      filter: isDark ? 'drop-shadow(0 6px 12px rgba(0,0,0,0.22))' : 'drop-shadow(0 5px 10px rgba(0,0,0,0.12))',
+                    }}
+                  />
+                )
+              })}
+            </svg>
+
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <div style={{ ...monoFont, fontSize: 13, color: isDark ? 'rgba(255,255,255,0.46)' : 'rgba(0,0,0,0.38)', letterSpacing: '0.08em' }}>
+                最高占比
+              </div>
+              <div style={{ ...monoFont, fontSize: 38, fontWeight: 700, color: isDark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.88)' }}>
+                {Math.round(clampPercent(slices[0]?.percent ?? 0))}%
+              </div>
+              <div style={{ ...labelFont, fontSize: 16, color: isDark ? 'rgba(255,255,255,0.62)' : 'rgba(0,0,0,0.52)' }}>
+                {slices[0]?.label ?? '暂无'}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto pr-[4px]">
+            <div className="flex flex-col gap-[10px]">
+            {slices.map((slice, idx) => (
+              <div
+                key={slice.id}
+                className="rounded-[20px]"
+                style={{
+                  padding: '12px 14px 11px',
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
+                  background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.38)',
+                  opacity: revealed ? 1 : 0,
+                  transform: revealed ? 'translateX(0px)' : 'translateX(18px)',
+                  transition: `opacity 0.45s ease ${idx * 0.08 + 0.16}s, transform 0.45s ease ${idx * 0.08 + 0.16}s`,
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-[10px] min-w-0">
+                    <span
+                      className="inline-block w-[12px] h-[12px] rounded-full shrink-0"
+                      style={{ background: slice.color.bar, boxShadow: `0 0 0 4px ${isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.5)'}` }}
+                    />
+                    <span className="truncate" style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.86)' : 'rgba(0,0,0,0.76)' }}>
+                      {slice.label}
+                    </span>
+                  </div>
+                  <span style={{ ...monoFont, fontSize: 24, fontWeight: 700, color: slice.color.bar }}>
+                    {clampPercent(slice.percent).toFixed(slice.percent >= 10 ? 0 : 1)}%
+                  </span>
+                </div>
+                <div className="mt-[8px] flex items-center justify-between gap-3" style={{ ...monoFont, fontSize: 12, color: isDark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.42)' }}>
+                  <span>{slice.id}</span>
+                  <span>{formatUptime(slice.uptime_m, granularity)}</span>
+                </div>
+              </div>
+            ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DashboardFullscreenModal({
+  open,
+  onClose,
+  granularity,
+  setGranularity,
+  isDark,
+  timeUnit,
+  series,
+  timeLabels,
+  labelInterval,
+  splitByInstance,
+  setSplitByInstance,
+  selectedInstance,
+  selectedInstanceLabel,
+  onTogglePicker,
+  pickerBtnRef,
+  pillBtn,
+  shareSlices,
+}: {
+  open: boolean
+  onClose: () => void
+  granularity: Granularity
+  setGranularity: (value: Granularity) => void
+  isDark: boolean
+  timeUnit: string
+  series: SeriesSlotData[]
+  timeLabels: string[]
+  labelInterval: number
+  splitByInstance: boolean
+  setSplitByInstance: (value: boolean) => void
+  selectedInstance: string
+  selectedInstanceLabel: string
+  onTogglePicker: () => void
+  pickerBtnRef: React.RefObject<HTMLButtonElement | null>
+  pillBtn: (active: boolean) => CSSProperties
+  shareSlices: ShareSlice[]
+}) {
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (evt: KeyboardEvent) => {
+      if (evt.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[120] flex items-center justify-center animate-fade-in" onClick={onClose}>
+      <div className="absolute inset-0" style={{ background: isDark ? 'rgba(5,8,12,0.66)' : 'rgba(18, 24, 32, 0.28)', backdropFilter: 'blur(10px)' }} />
+      <div
+        className="relative animate-scale-fade-in"
+        onClick={(evt) => evt.stopPropagation()}
+        style={{
+          width: 'min(1460px, calc(100vw - 28px))',
+          height: 'min(840px, calc(100vh - 28px))',
+          borderRadius: 34,
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)'}`,
+          background: isDark
+            ? 'linear-gradient(135deg, rgba(14,18,24,0.96), rgba(18,24,32,0.9) 52%, rgba(8,14,22,0.94))'
+            : 'linear-gradient(135deg, rgba(255,255,255,0.9), rgba(247,251,255,0.82) 48%, rgba(232,240,248,0.78))',
+          boxShadow: isDark ? '0 28px 60px rgba(0,0,0,0.42)' : '0 24px 48px rgba(23, 34, 46, 0.22)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: isDark
+              ? 'radial-gradient(circle at 18% 18%, rgba(116,255,181,0.12), transparent 28%), radial-gradient(circle at 84% 18%, rgba(125,211,252,0.12), transparent 24%)'
+              : 'radial-gradient(circle at 18% 18%, rgba(116,255,181,0.18), transparent 30%), radial-gradient(circle at 84% 18%, rgba(56,189,248,0.14), transparent 26%)',
+          }}
+        />
+        <div className="relative h-full px-[28px] py-[24px] flex flex-col">
+          <div className="flex items-start justify-between gap-4 mb-[16px]">
+            <div>
+              <div style={{ ...titleStyle, fontSize: 34, color: isDark ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.92)' }}>仪表盘全屏视图</div>
+              <div style={{ ...monoFont, fontSize: 14, color: isDark ? 'rgba(255,255,255,0.54)' : 'rgba(0,0,0,0.45)' }}>
+                启动次数 / 启动时间({timeUnit}) · 当前粒度 {getGranularityRangeLabel(granularity)}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="cursor-pointer transition-all hover:scale-[1.04]"
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 21,
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.14)'}`,
+                background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.48)',
+                color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.75)',
+                fontSize: 20,
+                lineHeight: 1,
+              }}
+              aria-label="关闭全屏图表"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-[240px_minmax(0,1.95fr)_minmax(360px,420px)] gap-[20px] flex-1 min-h-0 overflow-hidden items-stretch">
+            <div
+              className="rounded-[30px] flex flex-col self-start xl:self-stretch"
+              style={{
+                padding: '18px 18px 16px',
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'}`,
+                background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.34)',
+                minHeight: 0,
+              }}
+            >
+              <div className="flex flex-col gap-[16px]">
+                <div className="flex flex-col gap-[6px]">
+                  <span style={{ ...labelFont, fontSize: 18, color: isDark ? 'rgba(255,255,255,0.66)' : '#707070' }}>时间粒度</span>
+                  <div
+                    className="flex rounded-full overflow-hidden"
+                    style={{
+                      border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`,
+                      width: 'fit-content',
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent',
+                    }}
+                  >
+                    {granularities.map((g) => (
+                      <button
+                        key={g}
+                        onClick={() => setGranularity(g)}
+                        className="transition-all cursor-pointer flex items-center justify-center"
+                        style={pillBtn(granularity === g)}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-[6px]">
+                  <span style={{ ...labelFont, fontSize: 18, color: isDark ? 'rgba(255,255,255,0.66)' : '#707070' }}>区分实例</span>
+                  <div
+                    className="flex rounded-full overflow-hidden"
+                    style={{
+                      border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`,
+                      width: 'fit-content',
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent',
+                    }}
+                  >
+                    {(['关', '开'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        onClick={() => setSplitByInstance(opt === '开')}
+                        className="transition-all cursor-pointer flex items-center justify-center"
+                        style={pillBtn((opt === '开') === splitByInstance)}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-[6px]">
+                  <span style={{ ...labelFont, fontSize: 18, color: isDark ? 'rgba(255,255,255,0.66)' : '#707070' }}>筛选实例</span>
+                  <button
+                    ref={pickerBtnRef}
+                    onClick={onTogglePicker}
+                    className="cursor-pointer text-center truncate"
+                    style={{
+                      ...labelFont,
+                      fontSize: 16,
+                      color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.7)',
+                      border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`,
+                      borderRadius: 30,
+                      padding: '8px 14px',
+                      background: isDark ? 'rgba(255,255,255,0.08)' : '#ffffff36',
+                      width: '100%',
+                      filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))',
+                    }}
+                  >
+                    {selectedInstanceLabel}
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className="mt-[18px] pt-[14px] flex flex-col gap-[8px]"
+                style={{ borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}` }}
+              >
+                <span style={{ ...monoFont, fontSize: 12, color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.38)' }}>
+                  {splitByInstance ? '当前按实例拆分显示' : '当前显示全部汇总'}
+                </span>
+                <span style={{ ...monoFont, fontSize: 12, color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.38)' }}>
+                  {selectedInstance ? `已筛选: ${selectedInstanceLabel}` : '当前未筛选具体实例'}
+                </span>
+              </div>
+            </div>
+
+            <div
+              className="rounded-[30px] flex flex-col min-h-0"
+              style={{
+                padding: '18px 18px 16px',
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'}`,
+                background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.36)',
+              }}
+            >
+              <div className="mb-[8px]" style={{ paddingLeft: 68 }}>
+                <span style={{ ...labelFont, fontSize: 20, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)' }}>
+                  启动次数/启动时间({timeUnit})
+                </span>
+              </div>
+              <DashboardTimelineChart
+                series={series}
+                timeLabels={timeLabels}
+                labelInterval={labelInterval}
+                splitByInstance={splitByInstance}
+                selectedInstance={selectedInstance}
+                granularity={granularity}
+                isDark={isDark}
+                chartW={860}
+                chartH={420}
+                padL={68}
+                padR={24}
+                padT={18}
+                padB={38}
+              />
+            </div>
+
+            <div className="min-h-0 h-full">
+              <UsageShareDonut slices={shareSlices} granularity={granularity} isDark={isDark} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 // ─── 主组件 ────────────────────────────────────────────────
 
 export default function DashboardChartCard() {
@@ -479,11 +1205,13 @@ export default function DashboardChartCard() {
   const [showInstancePicker, setShowInstancePicker] = useState(false)
   const [instanceSearch, setInstanceSearch] = useState('')
   const pickerBtnRef = useRef<HTMLButtonElement>(null)
+  const fullscreenPickerBtnRef = useRef<HTMLButtonElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
   const [instanceIds, setInstanceIds] = useState<string[]>([])
   const [instanceInfo, setInstanceInfo] = useState<Record<string, { nickname: string; serial: string; abs: number }>>({})
   const [instanceTimelines, setInstanceTimelines] = useState<Record<string, TimelineItem[]>>({})
+  const [fullscreenOpen, setFullscreenOpen] = useState(false)
 
   const apiGranularity = granularity === '月' ? 'day' : 'hour'
   const apiLimit = granularity === '月' ? 30 : granularity === '周' ? 168 : 24
@@ -521,7 +1249,10 @@ export default function DashboardChartCard() {
   }, [apiGranularity, apiLimit, selectedInstance])
 
   useEffect(() => {
-    if (!splitByInstance || instanceIds.length === 0) return
+    if (instanceIds.length === 0) {
+      setInstanceTimelines({})
+      return
+    }
     Promise.all(
       instanceIds.map((id) =>
         fetch(`/api/stats/timeline?granularity=${apiGranularity}&limit=${apiLimit}&instance_id=${id}`, { credentials: 'include' })
@@ -531,18 +1262,19 @@ export default function DashboardChartCard() {
       ),
     ).then((results) => {
       const map: Record<string, TimelineItem[]> = {}
-      results.forEach(([id, data]) => { map[id] = data })
+      results.forEach(([id, data]) => {
+        map[id] = data
+      })
       setInstanceTimelines(map)
     })
-  }, [splitByInstance, instanceIds, apiGranularity, apiLimit])
+  }, [instanceIds, apiGranularity, apiLimit])
 
   // ── 图表计算 ──
 
   const { keys: slotKeys, labels: timeLabels } = useMemo(() => buildSlots(granularity), [granularity])
-  const slotCount = slotKeys.length
   const labelInterval = getXLabelInterval(granularity)
 
-  const series = useMemo(() => {
+  const series = useMemo<SeriesSlotData[]>(() => {
     if (!splitByInstance) return [{ id: '_all', slots: timelineToSlots(timeline, slotKeys, granularity), colorIdx: 0 }]
     return instanceIds.map((id, idx) => ({
       id,
@@ -551,107 +1283,31 @@ export default function DashboardChartCard() {
     }))
   }, [splitByInstance, timeline, instanceIds, instanceTimelines, slotKeys, granularity])
 
-  const rawMaxStarts = Math.max(1, ...series.flatMap((s) => s.slots.map((d) => d.starts)))
-  const rawMaxUptime = Math.max(1, ...series.flatMap((s) => s.slots.map((d) => d.uptime_m)))
-  const maxStarts = niceMax(rawMaxStarts)
-  const maxUptime = niceMax(rawMaxUptime)
-
-  const chartW = 480, chartH = 220
-  const padL = 55, padR = 16, padT = 12, padB = 28
-  const plotW = chartW - padL - padR, plotH = chartH - padT - padB
-
   const timeUnit = granularity === '日' ? 'min' : granularity === '周' ? 'h' : 'd'
-  const timeDivisor = granularity === '日' ? 1 : granularity === '周' ? 60 : 1440
+  const selectedInstanceLabel = selectedInstance ? getInstanceDisplayName(selectedInstance, instanceInfo) : '全部'
+  const activePickerAnchor = fullscreenOpen ? fullscreenPickerBtnRef.current : pickerBtnRef.current
 
-  const yTicks = 4
-  const yLabels = Array.from({ length: yTicks }, (_, i) => {
-    const s = Math.round((maxStarts / (yTicks - 1)) * (yTicks - 1 - i))
-    const t = Math.round((maxUptime / timeDivisor / (yTicks - 1)) * (yTicks - 1 - i))
-    return `${s}/${t}${timeUnit}`
-  })
-
-  const seriesCount = series.length
-  const totalBarWidth = Math.max(6, Math.min(26, (plotW / slotCount) * 0.6))
-  const singleBarWidth = seriesCount > 1 ? totalBarWidth / seriesCount : totalBarWidth
-
-  const seriesData = series.map((s, si) => {
-    const offset = seriesCount > 1 ? (si - (seriesCount - 1) / 2) * singleBarWidth : 0
-    const positions = s.slots.map((d, i) => {
-      const x = padL + (i + 0.5) * (plotW / slotCount) + offset
-      const barH = maxStarts > 0 ? (d.starts / maxStarts) * plotH : 0
-      const lineY = maxUptime > 0 ? padT + plotH - (d.uptime_m / maxUptime) * plotH : padT + plotH
-      return { x, barH, barY: padT + plotH - barH, lineY }
-    })
-    return {
-      ...s,
-      positions,
-      curvePath: catmullRomPath(positions.map((p) => ({ x: p.x, y: p.lineY })), 0.3, padT + plotH),
-      color: INSTANCE_COLORS[s.colorIdx],
-    }
-  })
-
-  const hasData = series.some((s) => s.slots.some((d) => d.starts > 0 || d.uptime_m > 0))
-
-  // ── Hover 状态 ──
-
-  const [hoverSlot, setHoverSlot] = useState<{
-    slotIdx: number
-    svgX: number
-    mouseX: number
-    mouseY: number
-  } | null>(null)
-  const chartWrapRef = useRef<HTMLDivElement | null>(null)
-
-  // 平滑跟随：把目标位置传给 hook，拿到插值后的位置
-  const smoothTarget = useMemo<SmoothPos | null>(
-    () => (hoverSlot ? { x: hoverSlot.mouseX, y: hoverSlot.mouseY } : null),
-    [hoverSlot],
-  )
-  const smoothPos = useSmoothFollow(smoothTarget, 0.18)
-
-  const handleMouseMove = useCallback(
-    (evt: ReactMouseEvent<SVGSVGElement>) => {
-      const svg = evt.currentTarget
-      const svgRect = svg.getBoundingClientRect()
-      const wrapRect = chartWrapRef.current?.getBoundingClientRect()
-      if (svgRect.width <= 0 || !wrapRect) return
-
-      const svgX = ((evt.clientX - svgRect.left) / svgRect.width) * chartW
-      const plotX = svgX - padL
-      if (plotX < 0 || plotX > plotW) {
-        setHoverSlot(null)
-        return
+  const shareSlices = useMemo<ShareSlice[]>(() => {
+    const slices = instanceIds.map((id, idx) => {
+      const slots = timelineToSlots(instanceTimelines[id] ?? [], slotKeys, granularity)
+      const uptime_m = slots.reduce((sum, slot) => sum + slot.uptime_m, 0)
+      return {
+        id,
+        label: getInstanceDisplayName(id, instanceInfo),
+        uptime_m,
+        percent: 0,
+        color: INSTANCE_COLORS[idx % INSTANCE_COLORS.length],
       }
+    }).filter((item) => item.uptime_m > 0)
 
-      const slotIdx = Math.floor((plotX / plotW) * slotCount)
-      if (slotIdx >= 0 && slotIdx < slotCount) {
-        const centerSvgX = padL + (slotIdx + 0.5) * (plotW / slotCount)
-        setHoverSlot({
-          slotIdx,
-          svgX: centerSvgX,
-          mouseX: evt.clientX - wrapRect.left,
-          mouseY: evt.clientY - wrapRect.top,
-        })
-      }
-    },
-    [slotCount, chartW, padL, plotW],
-  )
-
-  const handleMouseLeave = useCallback(() => setHoverSlot(null), [])
-
-  const tooltipData = useMemo<TooltipData | null>(() => {
-    if (hoverSlot == null) return null
-    const { slotIdx } = hoverSlot
-    return {
-      timeLabel: timeLabels[slotIdx] || '',
-      entries: seriesData.map((s) => ({
-        id: s.id,
-        starts: s.slots[slotIdx]?.starts ?? 0,
-        uptime_m: s.slots[slotIdx]?.uptime_m ?? 0,
-        color: s.color,
-      })),
-    }
-  }, [hoverSlot, seriesData, timeLabels])
+    const total = slices.reduce((sum, item) => sum + item.uptime_m, 0)
+    return slices
+      .map((item) => ({
+        ...item,
+        percent: total > 0 ? (item.uptime_m / total) * 100 : 0,
+      }))
+      .sort((a, b) => b.uptime_m - a.uptime_m)
+  }, [instanceIds, instanceTimelines, slotKeys, granularity, instanceInfo])
 
   // ── UI ──
 
@@ -705,18 +1361,24 @@ export default function DashboardChartCard() {
                 padding: '5px 14px', background: isDark ? 'rgba(255,255,255,0.08)' : '#ffffff36', width: 145,
                 filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))',
               }}
-            >{selectedInstance || '全部'}</button>
+            >{selectedInstanceLabel}</button>
           </div>
 
           <div className="mt-auto flex flex-col gap-[4px] pt-[12px]">
-            {seriesData.map((s, si) => (
+            {series.map((s, si) => (
               <div key={`leg${si}`} className="flex items-center gap-[4px]">
-                <div className="w-[10px] h-[10px] rounded-[2px]" style={{ background: s.color.bar, border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}` }} />
+                <div
+                  className="w-[10px] h-[10px] rounded-[2px]"
+                  style={{
+                    background: INSTANCE_COLORS[s.colorIdx].bar,
+                    border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}`,
+                  }}
+                />
                 <svg width="14" height="7" viewBox="0 0 14 7">
-                  <path d="M0,5 C3,5 4,2 7,2 C10,2 11,5 14,5" fill="none" stroke={s.color.line} strokeWidth={1.5} />
+                  <path d="M0,5 C3,5 4,2 7,2 C10,2 11,5 14,5" fill="none" stroke={INSTANCE_COLORS[s.colorIdx].line} strokeWidth={1.5} />
                 </svg>
                 <span style={{ ...labelFont, fontSize: 11, color: isDark ? 'rgba(255,255,255,0.52)' : 'rgba(0,0,0,0.45)' }}>
-                  {s.id === '_all' ? '全部' : `实例${s.id}`}
+                  {getInstanceDisplayName(s.id, instanceInfo)}
                 </span>
               </div>
             ))}
@@ -725,123 +1387,54 @@ export default function DashboardChartCard() {
 
         {/* 右侧图表 */}
         <div className="flex-1 min-w-0 flex flex-col">
-          <div className="mb-[2px]" style={{ paddingLeft: padL }}>
+          <div className="mb-[2px] flex items-center justify-between gap-3" style={{ paddingLeft: 55 }}>
             <span style={{ ...labelFont, fontSize: 20, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)' }}>
               启动次数/启动时间({timeUnit})
             </span>
-          </div>
-
-          <div ref={chartWrapRef} className="flex-1 min-h-0 relative" style={{ overflow: 'hidden' }}>
-            <svg
-              width="100%" height="100%"
-              viewBox={`0 0 ${chartW} ${chartH}`}
-              preserveAspectRatio="xMidYMid meet"
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
+            <button
+              type="button"
+              onClick={() => setFullscreenOpen(true)}
+              className="cursor-pointer transition-all hover:scale-[1.04]"
+              style={{
+                width: 34,
+                height: 34,
+                marginRight: 8,
+                borderRadius: 17,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.16)'}`,
+                background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.4)',
+                boxShadow: isDark ? '0 6px 14px rgba(0,0,0,0.18)' : '0 6px 12px rgba(0,0,0,0.08)',
+              }}
+              aria-label="全屏查看仪表盘"
+              title="全屏查看"
             >
-              <defs>
-                {seriesData.map((s, si) => (
-                  <linearGradient key={`bg${si}`} id={`barGrad${si}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={s.color.bar} stopOpacity={0.9} />
-                    <stop offset="100%" stopColor={s.color.barEnd} stopOpacity={0.7} />
-                  </linearGradient>
-                ))}
-              </defs>
-
-              {/* 网格线 */}
-              {Array.from({ length: yTicks }, (_, i) => {
-                const y = padT + (i / (yTicks - 1)) * plotH
-                return <line key={`g${i}`} x1={padL} y1={y} x2={padL + plotW} y2={y} stroke={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'} strokeWidth={1} />
-              })}
-
-              {/* 坐标轴 */}
-              <line x1={padL} y1={padT} x2={padL} y2={padT + plotH} stroke={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} strokeWidth={2} />
-              <polygon points={`${padL},${padT - 6} ${padL - 4},${padT + 2} ${padL + 4},${padT + 2}`} fill={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} />
-              <line x1={padL} y1={padT + plotH} x2={padL + plotW + 8} y2={padT + plotH} stroke={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} strokeWidth={2} />
-              <polygon points={`${padL + plotW + 14},${padT + plotH} ${padL + plotW + 6},${padT + plotH - 4} ${padL + plotW + 6},${padT + plotH + 4}`} fill={isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.5)'} />
-
-              {/* Y轴标签 */}
-              {yLabels.map((label, i) => (
-                <text key={`yl${i}`} x={padL - 6} y={padT + (i / (yTicks - 1)) * plotH + 4} textAnchor="end"
-                  fontSize={10} fontFamily="'Ubuntu','HarmonyOS Sans SC','Cascadia Code', monospace" fill={isDark ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.45)'}>{label}</text>
-              ))}
-
-              {/* X轴标签 */}
-              {timeLabels.map((label, i) => {
-                if (!label || i % labelInterval !== 0) return null
-                return (
-                  <text key={`xl${i}`} x={padL + (i + 0.5) * (plotW / slotCount)} y={padT + plotH + 18} textAnchor="middle"
-                    fontSize={10} fontFamily="'Ubuntu','HarmonyOS Sans SC','Cascadia Code', monospace" fill={isDark ? 'rgba(255,255,255,0.58)' : 'rgba(0,0,0,0.45)'}>{label}</text>
-                )
-              })}
-
-              {/* Hover 高亮背景 */}
-              {hoverSlot && (
-                <rect
-                  x={padL + hoverSlot.slotIdx * (plotW / slotCount)}
-                  y={padT} width={plotW / slotCount} height={plotH}
-                  fill={isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)'} rx={2}
-                />
-              )}
-
-              {/* 柱状图 */}
-              {seriesData.map((s, si) => {
-                const dimmed = splitByInstance && !!selectedInstance && s.id !== selectedInstance
-                return s.positions.map((p, i) => (
-                  <rect key={`b${si}-${i}`} x={p.x - singleBarWidth / 2} y={p.barY} width={singleBarWidth} height={p.barH}
-                    fill={`url(#barGrad${si})`} rx={2} opacity={dimmed ? 0.2 : 1} style={{ transition: 'all 0.4s ease' }} />
-                ))
-              })}
-
-              {/* 平滑曲线 */}
-              {seriesData.map((s, si) => {
-                if (!s.curvePath) return null
-                const dimmed = splitByInstance && !!selectedInstance && s.id !== selectedInstance
-                return (
-                  <g key={`c${si}`} opacity={dimmed ? 0.2 : 1} style={{ transition: 'opacity 0.4s ease' }}>
-                    <path d={s.curvePath} fill="none" stroke={s.color.line} strokeWidth={2}
-                      strokeLinecap="round" style={{ transition: 'all 0.4s ease' }} />
-                    {s.positions.map((p, i) => (
-                      <circle key={`d${si}-${i}`} cx={p.x} cy={p.lineY}
-                        r={hoverSlot?.slotIdx === i ? 4 : 2.5}
-                        fill="#fff" stroke={s.color.line}
-                        strokeWidth={hoverSlot?.slotIdx === i ? 2.5 : 1.5}
-                        style={{ transition: 'r 0.15s ease, stroke-width 0.15s ease' }}
-                      />
-                    ))}
-                  </g>
-                )
-              })}
-
-              {/* Hover 虚线 */}
-              {hoverSlot && (
-                <line x1={hoverSlot.svgX} y1={padT} x2={hoverSlot.svgX} y2={padT + plotH}
-                  stroke={isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.35)'} strokeWidth={1} strokeDasharray="4 3" />
-              )}
-
-              {!hasData && (
-                <text x={padL + plotW / 2} y={padT + plotH / 2} textAnchor="middle"
-                  fontSize={14} fill={isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'} style={labelFont}>暂无数据</text>
-              )}
-            </svg>
-
-            {/* Tooltip —— 使用平滑插值后的位置 */}
-            {tooltipData && smoothPos && chartWrapRef.current && (
-              <ChartTooltip
-                data={tooltipData}
-                pos={smoothPos}
-                containerW={chartWrapRef.current.offsetWidth}
-                containerH={chartWrapRef.current.offsetHeight}
-                granularity={granularity}
-              />
-            )}
+              <FullscreenIcon color={isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.68)'} />
+            </button>
           </div>
+
+          <DashboardTimelineChart
+            series={series}
+            timeLabels={timeLabels}
+            labelInterval={labelInterval}
+            splitByInstance={splitByInstance}
+            selectedInstance={selectedInstance}
+            granularity={granularity}
+            isDark={isDark}
+            chartW={480}
+            chartH={220}
+            padL={55}
+            padR={16}
+            padT={12}
+            padB={28}
+          />
         </div>
       </div>
 
-      {showInstancePicker && pickerBtnRef.current && createPortal(
+      {showInstancePicker && activePickerAnchor && createPortal(
         <InstancePickerPopover
-          anchorEl={pickerBtnRef.current} pickerRef={pickerRef}
+          anchorEl={activePickerAnchor} pickerRef={pickerRef}
           search={instanceSearch} onSearchChange={setInstanceSearch}
           instanceIds={instanceIds} instanceInfo={instanceInfo}
           selectedInstance={selectedInstance}
@@ -850,6 +1443,26 @@ export default function DashboardChartCard() {
         />,
         document.body,
       )}
+
+      <DashboardFullscreenModal
+        open={fullscreenOpen}
+        onClose={() => { setFullscreenOpen(false); setShowInstancePicker(false) }}
+        granularity={granularity}
+        setGranularity={setGranularity}
+        isDark={isDark}
+        timeUnit={timeUnit}
+        series={series}
+        timeLabels={timeLabels}
+        labelInterval={labelInterval}
+        splitByInstance={splitByInstance}
+        setSplitByInstance={setSplitByInstance}
+        selectedInstance={selectedInstance}
+        selectedInstanceLabel={selectedInstanceLabel}
+        onTogglePicker={() => { setShowInstancePicker((v) => !v); setInstanceSearch('') }}
+        pickerBtnRef={fullscreenPickerBtnRef}
+        pillBtn={pillBtn}
+        shareSlices={shareSlices}
+      />
     </GlassCard>
   )
 }

@@ -55,6 +55,43 @@ class _ProcessManager:
     def __init__(self):
         self.running_processes: List[Dict[str, Any]] = []
 
+    def _record_stop_stats(self, process_info: Dict[str, Any], detail: Optional[str] = None) -> None:
+        """为已结束的托管进程补记 stop 统计，避免异常退出丢失使用时长。"""
+        if process_info.get("_stats_stop_recorded"):
+            return
+
+        try:
+            from ..core.stats import stats_db
+
+            duration = max(0, time.time() - process_info.get("start_time", time.time()))
+            stats_db.record_event(
+                instance_id=process_info.get("_instance_id", "unknown"),
+                event_type="stop",
+                component=process_info.get("_component", process_info.get("title", "unknown")),
+                duration_s=round(duration, 1),
+                detail=detail,
+            )
+            process_info["_stats_stop_recorded"] = True
+        except Exception:
+            pass
+
+    def _finalize_exited_processes(self) -> None:
+        """
+        回收已经退出的托管进程。
+
+        对于异常退出的进程，这里补写 stop 统计，避免首页和实例统计丢失本次使用时长。
+        """
+        alive_processes: List[Dict[str, Any]] = []
+        for process_info in self.running_processes:
+            pid = process_info.get("pid") or getattr(process_info.get("process"), "pid", 0)
+            if pid and self._is_process_alive(pid):
+                alive_processes.append(process_info)
+                continue
+
+            self._record_stop_stats(process_info, detail="进程异常退出")
+
+        self.running_processes = alive_processes
+
     def _is_process_alive(self, pid: int) -> bool:
         """检查进程是否仍在运行且不是僵尸进程"""
         try:
@@ -165,7 +202,7 @@ class _ProcessManager:
     def stop_all(self):
         """停止所有由该管理器启动的进程。"""
         # 首先清理已结束的进程
-        self.running_processes = [p for p in self.running_processes if self._is_process_alive(p.get("pid", 0))]
+        self._finalize_exited_processes()
         
         if not self.running_processes:
             ui.print_info("当前没有正在运行的进程。")
@@ -183,7 +220,7 @@ class _ProcessManager:
             
             # 检查进程是否还在运行
             if not self._is_process_alive(pid):
-                # 进程已结束，从列表中移除
+                self._record_stop_stats(process_info, detail="停止前进程已退出")
                 if process_info in self.running_processes:
                     self.running_processes.remove(process_info)
                 continue
@@ -196,11 +233,12 @@ class _ProcessManager:
                 failed_count += 1
                 # 再次检查，如果进程已结束则移除
                 if not self._is_process_alive(pid):
+                    self._record_stop_stats(process_info, detail="停止过程中进程已退出")
                     if process_info in self.running_processes:
                         self.running_processes.remove(process_info)
         
         # 再次清理已结束的进程
-        self.running_processes = [p for p in self.running_processes if self._is_process_alive(p.get("pid", 0))]
+        self._finalize_exited_processes()
         
         if stopped_count > 0:
             ui.print_success(f"已成功停止 {stopped_count} 个进程。")
@@ -212,12 +250,15 @@ class _ProcessManager:
     def get_running_processes_info(self) -> List[Dict]:
         """获取当前仍在运行的进程信息，包括资源占用。"""
         active_processes = []
+        stale_processes: List[Dict[str, Any]] = []
         # 过滤掉已经结束的进程
-        self.running_processes = [p for p in self.running_processes if self._is_process_alive(p.get("pid", 0))]
+        self._finalize_exited_processes()
         for info in self.running_processes:
             try:
                 pid = info.get("pid") or info["process"].pid
                 if not self._is_process_alive(pid):
+                    self._record_stop_stats(info, detail="探测过程中进程已退出")
+                    stale_processes.append(info)
                     continue
                 p = psutil.Process(pid)
                 info["pid"] = p.pid
@@ -228,20 +269,27 @@ class _ProcessManager:
             except psutil.NoSuchProcess:
                 # 获取pid用于日志记录，如果process对象不存在则返回None
                 pid = getattr(info.get("process"), 'pid', None)
+                self._record_stop_stats(info, detail="探测过程中进程消失")
+                stale_processes.append(info)
                 logger.warning("进程已消失，无法获取信息", pid=pid)
             except Exception as e:
                 logger.error("获取进程信息失败", error=str(e))
+        if stale_processes:
+            self.running_processes = [info for info in self.running_processes if info not in stale_processes]
         return active_processes
 
     def stop_process(self, pid: int) -> bool:
         """通过PID停止单个进程及其所有子进程。"""
+        process_info = next((info for info in self.running_processes if info.get("process") and (info.get("pid") or info["process"].pid) == pid), None)
         # 首先验证进程是否存在
         if not self._is_process_alive(pid):
             logger.info("进程已不存在，跳过停止", pid=pid)
+            if process_info:
+                self._record_stop_stats(process_info, detail="停止请求到达前进程已退出")
+                if process_info in self.running_processes:
+                    self.running_processes.remove(process_info)
             return True
-        
-        process_info = next((info for info in self.running_processes if info.get("process") and (info.get("pid") or info["process"].pid) == pid), None)
-        
+
         if not process_info:
             logger.warning("尝试停止一个非托管进程", pid=pid)
             return False
@@ -281,20 +329,11 @@ class _ProcessManager:
                 return False
             
             ui.print_success(f"进程 '{title}' (PID: {pid}) 已成功停止。")
-            try:
-                from ..core.stats import stats_db
-                duration = max(0, time.time() - process_info.get("start_time", time.time()))
-                stats_db.record_event(
-                    instance_id=process_info.get("_instance_id", "unknown"),
-                    event_type="stop",
-                    component=process_info.get("_component", title),
-                    duration_s=round(duration, 1),
-                )
-            except Exception:
-                pass
+            self._record_stop_stats(process_info)
 
         except psutil.NoSuchProcess:
             logger.info("进程已不存在", pid=pid, title=title)
+            self._record_stop_stats(process_info, detail="停止完成前进程已消失")
             # 进程已不存在，视为成功
         except Exception as e:
             logger.error("终止进程时发生未知错误", pid=pid, title=title, error=str(e))

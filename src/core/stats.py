@@ -6,6 +6,7 @@
 import os
 import sqlite3
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -95,31 +96,40 @@ class StatsDB:
         return {"launch_count": launch_count, "total_uptime_s": round(stopped_uptime + live_uptime, 1), "error_count": error_count}
 
     def _calc_live_uptime(self, instance_id: Optional[str] = None) -> float:
-        """计算还在运行中（有 start 但没有对应 stop）的实例的累计时长"""
-        conn = self._get_conn()
-        where = "WHERE instance_id = ?" if instance_id else ""
-        params: tuple = (instance_id,) if instance_id else ()
-        # 找出每个 (instance_id, component) 最后一个事件，如果是 start 则说明还在运行
-        rows = conn.execute(
-            f"SELECT instance_id, component, event_type, timestamp FROM instance_events "
-            f"{where} ORDER BY id DESC",
-            params,
-        ).fetchall()
-        now = datetime.now(timezone.utc)
-        seen: set = set()
+        """
+        计算当前仍在运行的麦麦本体累计时长。
+
+        这里不能仅凭统计库中“最后一条事件是 start”来推断运行态，
+        因为启动器异常退出或 stop 事件丢失时会留下脏数据，首页图表就会一直出现幽灵运行时长。
+        因此实时运行态统一以 launcher 当前托管的活跃进程为准。
+        """
+        try:
+            from ..modules.launcher import launcher
+        except Exception:
+            return 0.0
+
+        now_ts = time.time()
         total = 0.0
-        for r in rows:
-            key = (r["instance_id"], r["component"])
+        seen: set[tuple[str, str]] = set()
+
+        for proc in launcher._process_manager.get_running_processes_info():
+            comp_name = str(proc.get("_component") or "").strip()
+            inst_id = str(proc.get("_instance_id") or "").strip()
+            if comp_name != "mai":
+                continue
+            if instance_id and inst_id != instance_id:
+                continue
+
+            key = (inst_id, comp_name)
             if key in seen:
                 continue
+
+            start_ts = proc.get("start_time")
+            if not isinstance(start_ts, (int, float)):
+                continue
+
             seen.add(key)
-            # 只统计 mai 组件（游戏本体）的运行时间，忽略 webui、adapter、napcat 等辅助组件
-            if r["event_type"] == "start" and r["component"] == "mai":
-                try:
-                    start_time = datetime.fromisoformat(r["timestamp"])
-                    total += (now - start_time).total_seconds()
-                except Exception:
-                    pass
+            total += max(0.0, now_ts - float(start_ts))
         return total
 
     def get_timeline(
