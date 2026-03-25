@@ -4,6 +4,8 @@ import { useTheme, type ResolvedTheme } from '../theme/ThemeProvider'
 const FALLBACK_BG_URL = '/default_backgrounds/default.jpg'
 const BASE_BG_STORAGE_KEY = 'mcstart.base_bg_url'
 const BASE_BG_CHANGE_EVENT = 'mcstart:base-bg-change'
+const BG_SETTINGS_STORAGE_KEY = 'mcstart.bg_settings'
+const BG_SETTINGS_CHANGE_EVENT = 'mcstart:bg-settings-change'
 
 let baseBgUrlCache = FALLBACK_BG_URL
 
@@ -73,12 +75,56 @@ const DEFAULT_SETTINGS: BgSettings = {
   use_custom_background: false,
 }
 
+let bgSettingsCache = DEFAULT_SETTINGS
+
 function mergeBgSettings(patch?: Partial<BgSettings> | null): BgSettings {
   const merged = { ...DEFAULT_SETTINGS, ...(patch || {}) }
   if (patch && !Object.prototype.hasOwnProperty.call(patch, 'overlay_color_auto')) {
     merged.overlay_color_auto = !patch.overlay_color || patch.overlay_color === DEFAULT_SETTINGS.overlay_color
   }
   return merged
+}
+
+function writeBgSettings(settings: BgSettings) {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(BG_SETTINGS_STORAGE_KEY, JSON.stringify(settings)) } catch {}
+}
+
+function readBgSettings() {
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS
+  try {
+    const raw = window.localStorage.getItem(BG_SETTINGS_STORAGE_KEY)
+    return mergeBgSettings(raw ? JSON.parse(raw) : null)
+  } catch {
+    return DEFAULT_SETTINGS
+  }
+}
+
+function setCachedBgSettings(settings?: Partial<BgSettings> | null) {
+  const next = mergeBgSettings(settings)
+  bgSettingsCache = next
+  writeBgSettings(next)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<BgSettings>(BG_SETTINGS_CHANGE_EVENT, { detail: next }))
+  }
+}
+
+export function getCachedBgSettings() {
+  return bgSettingsCache
+}
+
+export function useCachedBgSettings() {
+  const [settings, setSettings] = useState(() => getCachedBgSettings())
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onChange = (event: Event) => {
+      const customEvent = event as CustomEvent<BgSettings>
+      setSettings(mergeBgSettings(customEvent.detail))
+    }
+    window.addEventListener(BG_SETTINGS_CHANGE_EVENT, onChange as EventListener)
+    return () => window.removeEventListener(BG_SETTINGS_CHANGE_EVENT, onChange as EventListener)
+  }, [])
+  return settings
 }
 
 function extractBackgroundFileName(url: string | null | undefined) {
@@ -119,6 +165,9 @@ export function resolveOverlayStyle(settings: BgSettings, theme: ResolvedTheme) 
   }
 }
 
+bgSettingsCache = readBgSettings()
+writeBgSettings(bgSettingsCache)
+
 interface BgContextValue {
   currentBgUrl: string | null
   nextBgUrl: string | null
@@ -141,7 +190,7 @@ export const useBgContext = () => useContext(BgContext)
 
 export function BgProvider({ children }: { children: ReactNode }) {
   const [files, setFiles] = useState<string[]>([])
-  const [settings, setSettings] = useState<BgSettings>(DEFAULT_SETTINGS)
+  const [settings, setSettings] = useState<BgSettings>(() => getCachedBgSettings())
   const [currentBgUrl, setCurrentBgUrl] = useState<string | null>(() => getBaseBgUrl())
   const [nextBgUrl, setNextBgUrl] = useState<string | null>(() => getBaseBgUrl())
   const [isTransitioning, setIsTransitioning] = useState(false)
@@ -170,7 +219,13 @@ export function BgProvider({ children }: { children: ReactNode }) {
     setSettingsLoaded(false)
     fetch('/api/preferences/bg_settings', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.value) setSettings(mergeBgSettings(d.value)) })
+      .then(d => {
+        if (d?.value) {
+          const next = mergeBgSettings(d.value)
+          setSettings(next)
+          setCachedBgSettings(next)
+        }
+      })
       .catch(() => {})
       .finally(() => setSettingsLoaded(true))
   }, [])

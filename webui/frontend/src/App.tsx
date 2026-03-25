@@ -15,7 +15,7 @@ import ComponentDownload from './pages/ComponentDownload'
 import AuthPortal from './components/auth/AuthPortal'
 import AccessGuard from './components/ui/AccessGuard'
 import { NotificationProvider } from './components/ui/Notification'
-import DynamicBackground, { BgProvider, resolveOverlayStyle, useBaseBgUrl, useBgContext } from './components/background/DynamicBackground'
+import DynamicBackground, { BgProvider, resolveOverlayStyle, useBaseBgUrl, useBgContext, useCachedBgSettings } from './components/background/DynamicBackground'
 import { useTheme } from './components/theme/ThemeProvider'
 import { AccountSystemProvider, PAGE_PERMISSION_LABELS, useAccountSystem } from './lib/account-system'
 import type { Page, SubPageParams, Tab } from './types'
@@ -141,6 +141,7 @@ function LoginTransitionOverlay({ loginTransition }: { loginTransition: 'cover-i
 function AppShell() {
   const zoom = useZoom()
   const baseBgUrl = useBaseBgUrl()
+  const cachedBgSettings = useCachedBgSettings()
   const { resolvedTheme } = useTheme()
   const { ready, currentUser, canAccessPage, logout } = useAccountSystem()
   const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
@@ -237,6 +238,7 @@ function AppShell() {
       {showLogin ? (
         <NotificationProvider>
           <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
+          <div className="absolute inset-0 z-10" style={resolveOverlayStyle(cachedBgSettings, resolvedTheme)} />
           <div className="absolute inset-0 z-20 flex items-center justify-center">
             <AuthPortal
               onAuthenticated={() => {
