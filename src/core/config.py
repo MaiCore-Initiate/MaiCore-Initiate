@@ -25,9 +25,18 @@ class Config:
                 "bot_type": "MaiBot",  # 新增字段，标识bot类型 ("MaiBot" 或 "MoFox_bot")
                 "mai_path": "",
                 "mofox_path": "",  # 新增字段，墨狐本体路径
+                "neo_mofox_path": "",
                 "adapter_path": "",
                 "napcat_path": "",
                 "napcat_version": "",  # 新增字段，标识NapCatQQ版本 (如 "NapCat.Shell")
+                "venv_path": "",
+                "mongodb_path": "",
+                "webui_path": "",
+                "install_options": {},
+                "mod_binding": {},
+                "deployment_profile": {},
+                "component_bindings": [],
+                "template_inputs": {},
                 "qq_account": ""
             }
         }
@@ -64,7 +73,9 @@ class Config:
             # 验证并修复序列号
             if self._validate_and_repair_serials():
                 self.save()
-                
+
+            self._ensure_configuration_defaults()
+
             return self.config
             
         except Exception as e:
@@ -152,6 +163,18 @@ class Config:
         existing_serials = {cfg.get("absolute_serial_number", 0) for cfg in configurations.values()}
         return max(existing_serials) + 1 if existing_serials else 1
 
+    def _ensure_configuration_defaults(self) -> None:
+        """确保每个实例配置都包含新字段默认值。"""
+        defaults = self.CONFIG_TEMPLATE["configurations"]["default"]
+        for name, cfg in self.get_all_configurations().items():
+            updated = False
+            for key, value in defaults.items():
+                if key not in cfg:
+                    cfg[key] = value.copy() if isinstance(value, (dict, list)) else value
+                    updated = True
+            if updated:
+                logger.info("已为实例补齐默认配置字段", name=name)
+
     def _validate_and_repair_serials(self) -> bool:
         """验证并修复绝对序列号，确保其唯一且升序"""
         repaired = False
@@ -176,7 +199,7 @@ class Config:
             # 按原始顺序重新分配序列号
             for i, (name, config) in enumerate(config_items):
                 self.config["configurations"][name]["absolute_serial_number"] = i + 1
-            
+
             logger.info("绝对序列号修复完成。")
 
         return repaired

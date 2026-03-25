@@ -21,9 +21,7 @@ from ..utils.common import validate_path, open_files_in_editor
 from ..utils.version_detector import compare_versions
 from ..utils.notifier import windows_notifier, NotificationLogHandler
 from .mongodb_installer import mongodb_installer
-from .webui_installer import webui_installer
-
-# 导入模块化的部署器
+from .deployment_mod import deployment_mod_executor
 from .deployment_core import (
     MaiBotDeployer,
     MoFoxBotDeployer,
@@ -82,7 +80,11 @@ class DeploymentManager:
         if bot_type == "Neo-MoFox":
             return os.path.join(instance_dir, "Neo-MoFox", "config", "plugins", "napcat_adapter")
         return ""
-        
+
+    def deploy_instance_from_template_webui(self, template_id: str, user_inputs: Dict[str, Any], progress_callback: Optional[Callable] = None) -> bool:
+        """基于 MOD 模板执行 WebUI 部署。"""
+        return deployment_mod_executor.deploy(self, template_id, user_inputs, progress_callback=progress_callback)
+
     def deploy_instance(self) -> bool:
         """部署新实例 - 重构版本"""
         set_console_log_level("WARNING")
@@ -699,7 +701,12 @@ class DeploymentManager:
             "install_mofox_admin_ui": deploy_config.get("install_mofox_admin_ui", False),
             "install_mofox_webui": deploy_config.get("install_mofox_webui", False)
         }
-        
+        mod_plan = deploy_config.get("mod_plan", {}) or {}
+        mod_binding = mod_plan.get("mod_binding", {})
+        deployment_profile = mod_plan.get("deployment_profile", {})
+        component_bindings = mod_plan.get("component_bindings", [])
+        template_inputs = mod_plan.get("template_inputs", {})
+
         new_config = {
             "serial_number": deploy_config["serial_number"],
             "absolute_serial_number": config_manager.generate_unique_serial(),
@@ -713,7 +720,11 @@ class DeploymentManager:
             "venv_path": venv_path,
             "mongodb_path": mongodb_path,
             "webui_path": webui_path,
-            "install_options": install_options
+            "install_options": install_options,
+            "mod_binding": mod_binding,
+            "deployment_profile": deployment_profile,
+            "component_bindings": component_bindings,
+            "template_inputs": template_inputs,
         }
         
         # 保存配置
