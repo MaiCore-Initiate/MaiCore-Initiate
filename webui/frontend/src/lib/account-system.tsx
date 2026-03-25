@@ -32,6 +32,8 @@ export type ActionPermissionKey =
   | 'misc.webshell.access'
   | 'misc.screensaver.access'
   | 'misc.desktop-pet.access'
+  | 'misc.custom-console.access'
+  | 'misc.template-market.access'
 
 export interface AccountUser {
   id: string
@@ -310,6 +312,8 @@ export const ACTION_PERMISSION_ORDER: ActionPermissionKey[] = [
   'misc.webshell.access',
   'misc.screensaver.access',
   'misc.desktop-pet.access',
+  'misc.custom-console.access',
+  'misc.template-market.access',
 ]
 
 export const ACTION_PERMISSION_LABELS: Record<ActionPermissionKey, string> = {
@@ -334,6 +338,8 @@ export const ACTION_PERMISSION_LABELS: Record<ActionPermissionKey, string> = {
   'misc.webshell.access': '杂项 / WebShell',
   'misc.screensaver.access': '杂项 / 屏保',
   'misc.desktop-pet.access': '杂项 / 桌宠',
+  'misc.custom-console.access': '杂项 / 自定义控制台',
+  'misc.template-market.access': '杂项 / 模版市场',
 }
 
 const AccountSystemContext = createContext<AccountSystemContextValue | null>(null)

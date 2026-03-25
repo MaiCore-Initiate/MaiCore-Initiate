@@ -3,10 +3,12 @@ import GlassCard from '../components/ui/GlassCard'
 import AccessGuard from '../components/ui/AccessGuard'
 import ComponentDownload from './ComponentDownload'
 import WebShell from './WebShell'
+import { useNotification } from '../components/ui/Notification'
 import { cn } from '../lib/utils'
-import { Package, User, Cpu, BookOpen, FileText, Download, Terminal, Monitor, RefreshCw, X } from 'lucide-react'
+import { Package, User, Cpu, BookOpen, FileText, Download, Terminal, Monitor, RefreshCw, X, Store, PanelsTopLeft } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { fetchDeploymentModTemplateDetail, fetchDeploymentModTemplateForm, fetchDeploymentModTemplates, type DeploymentModTemplateDetail, type DeploymentModTemplateSummary } from '../lib/deployment-mod-api'
 import { parseMiscContent, type MiscContent, type Contributor, type Library } from '../lib/misc-parser'
 import { useBgContext } from '../components/background/DynamicBackground'
 import { DesktopPetManager } from '../components/live2d/DesktopPet'
@@ -99,6 +101,8 @@ export default function Misc({ initialTab }: MiscProps) {
     { key: 'libs', label: '开源库', icon: BookOpen },
     { key: 'license', label: '开源许可', icon: FileText },
     { key: 'components', label: '组件下载', icon: Download },
+    { key: 'template-market', label: '模版市场', icon: Store },
+    { key: 'custom-console', label: '自定义控制台', icon: PanelsTopLeft },
     { key: 'webshell', label: 'WebShell', icon: Terminal },
     { key: 'screensaver', label: '屏保', icon: Monitor },
     { key: 'desktop-pet', label: '桌宠', icon: Monitor },
@@ -280,6 +284,16 @@ export default function Misc({ initialTab }: MiscProps) {
         {activeTabAllowed && activeTab === 'components' && (
           <div className="animate-fade-slide-up" style={d(2)}>
             <ComponentDownloadTab />
+          </div>
+        )}
+        {activeTabAllowed && activeTab === 'template-market' && (
+          <div className="animate-fade-slide-up" style={d(2)}>
+            <TemplateMarketTab />
+          </div>
+        )}
+        {activeTabAllowed && activeTab === 'custom-console' && (
+          <div className="animate-fade-slide-up" style={d(2)}>
+            <CustomConsoleTab />
           </div>
         )}
         {activeTabAllowed && activeTab === 'webshell' && (
@@ -571,6 +585,160 @@ function ComponentDownloadTab() {
     <div className="-m-6">
       <ComponentDownload />
     </div>
+  )
+}
+
+function TemplateMarketTab() {
+  const { notify } = useNotification()
+  const [loading, setLoading] = useState(true)
+  const [templates, setTemplates] = useState<DeploymentModTemplateSummary[]>([])
+  const [selected, setSelected] = useState<DeploymentModTemplateDetail | null>(null)
+  const [selectedId, setSelectedId] = useState('')
+
+  useEffect(() => {
+    fetchDeploymentModTemplates()
+      .then(setTemplates)
+      .catch((error) => {
+        console.error(error)
+        notify('获取模版列表失败', 'error')
+      })
+      .finally(() => setLoading(false))
+  }, [notify])
+
+  const openDetail = async (templateId: string) => {
+    try {
+      setSelectedId(templateId)
+      const detail = await fetchDeploymentModTemplateDetail(templateId)
+      setSelected(detail)
+    } catch (error) {
+      console.error(error)
+      notify('获取模版详情失败', 'error')
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <GlassCard>
+        <div className="p-[28px] flex items-center justify-between gap-[16px]">
+          <div>
+            <h2 className="text-black/80" style={sectionTitle}>模版市场</h2>
+            <p className="text-black/50 mt-[6px]" style={textFont}>当前展示本地 Deployment MOD 模版，为未来模版市场与可视化编排器预留入口。</p>
+          </div>
+          <button
+            onClick={() => {
+              setLoading(true)
+              fetchDeploymentModTemplates()
+                .then(setTemplates)
+                .catch((error) => {
+                  console.error(error)
+                  notify('刷新模版列表失败', 'error')
+                })
+                .finally(() => setLoading(false))
+            }}
+            className="px-[18px] py-[10px] rounded-[16px] border-2 bg-white/40 border-black/20 hover:bg-white/60 transition-all flex items-center gap-[8px]"
+            style={labelFont}
+          >
+            <RefreshCw size={18} /> 刷新
+          </button>
+        </div>
+      </GlassCard>
+
+      {loading ? (
+        <GlassCard><div className="p-[32px] text-center text-black/50" style={textFont}>模版列表加载中...</div></GlassCard>
+      ) : templates.length === 0 ? (
+        <GlassCard><div className="p-[32px] text-center text-black/50" style={textFont}>当前没有可用的本地模版哦~</div></GlassCard>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
+          <GlassCard>
+            <div className="p-[24px] grid grid-cols-1 md:grid-cols-2 gap-[16px]">
+              {templates.map(template => (
+                <button
+                  key={template.template_id}
+                  onClick={() => void openDetail(template.template_id)}
+                  className="text-left rounded-[20px] p-[20px] border-2 transition-all hover:scale-[1.01]"
+                  style={{
+                    borderColor: selectedId === template.template_id ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.12)',
+                    background: selectedId === template.template_id ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.28)',
+                    boxShadow: '2px 3px 6px rgba(0,0,0,0.12)',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-[12px]">
+                    <div className="text-black/80" style={{ ...labelFont, fontSize: 26 }}>{template.name}</div>
+                    <div className="text-black/45" style={{ fontSize: 16 }}>{template.version}</div>
+                  </div>
+                  <div className="mt-[6px] text-black/55" style={textFont}>{template.description || '暂无描述'}</div>
+                  <div className="mt-[10px] flex flex-wrap gap-[8px]">
+                    <span className="px-[8px] py-[2px] rounded-[10px] bg-white/40 border border-black/10" style={{ fontSize: 15 }}>{template.author || '未知作者'}</span>
+                    <span className="px-[8px] py-[2px] rounded-[10px] bg-white/40 border border-black/10" style={{ fontSize: 15 }}>{template.source || 'local'}</span>
+                    {(template.tags || []).slice(0, 4).map(tag => (
+                      <span key={tag} className="px-[8px] py-[2px] rounded-[10px] bg-white/30 border border-black/10" style={{ fontSize: 15 }}>{tag}</span>
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </GlassCard>
+
+          <GlassCard>
+            <div className="p-[24px]">
+              {!selected ? (
+                <div className="text-black/50" style={textFont}>点击左侧模版卡片查看详情呀~</div>
+              ) : (
+                <div className="space-y-[12px]">
+                  <h3 className="text-black/80" style={{ ...sectionTitle, fontSize: 32 }}>{selected.metadata?.mod_name || '模板详情'}</h3>
+                  <p className="text-black/55" style={textFont}>{selected.metadata?.description || '暂无描述'}</p>
+                  <div className="text-black/60" style={textFont}>模板 ID：{selected.metadata?.mod_id}</div>
+                  <div className="text-black/60" style={textFont}>作者：{selected.metadata?.author || '未知'}</div>
+                  <div className="text-black/60" style={textFont}>部署画像：{selected.builtin_profile}</div>
+                  <div className="text-black/60" style={textFont}>组件数：{selected.components?.length || 0} / 部署项：{selected.deployments?.length || 0}</div>
+                  <div className="text-black/60" style={textFont}>启动项：{selected.launches?.length || 0} / 配置项：{selected.configs?.length || 0}</div>
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CustomConsoleTab() {
+  const { notify } = useNotification()
+  const [launches, setLaunches] = useState<Array<Record<string, any>>>([])
+
+  useEffect(() => {
+    fetchDeploymentModTemplates()
+      .then(async templates => {
+        if (!templates.length) return []
+        const form = await fetchDeploymentModTemplateForm(templates[0].template_id)
+        return form.launches ?? []
+      })
+      .then(setLaunches)
+      .catch((error) => {
+        console.error(error)
+        notify('读取启动定义失败', 'warning')
+      })
+  }, [notify])
+
+  return (
+    <GlassCard>
+      <div className="p-[32px] space-y-[14px]">
+        <h2 className="text-black/80" style={sectionTitle}>自定义控制台</h2>
+        <p className="text-black/55" style={textFont}>这里将来会基于模板启动定义接入 WebShell / 托管启动能力。当前版本先展示后端已预留的启动定义数据。</p>
+        {launches.length === 0 ? (
+          <div className="text-black/45" style={textFont}>暂未读取到启动定义，可能当前没有可用模板哦~</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px]">
+            {launches.map((launch, index) => (
+              <div key={`${String(launch.name)}-${index}`} className="rounded-[18px] border-2 border-black/10 bg-white/25 p-[18px]">
+                <div className="text-black/80" style={{ ...labelFont, fontSize: 24 }}>{String(launch.name || '未命名启动项')}</div>
+                <div className="text-black/55 mt-[6px]" style={textFont}>可选择：{launch.choose ? '是' : '否'} / 默认启动：{launch.launch ? '是' : '否'}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </GlassCard>
   )
 }
 
