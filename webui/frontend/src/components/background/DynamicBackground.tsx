@@ -81,6 +81,26 @@ function mergeBgSettings(patch?: Partial<BgSettings> | null): BgSettings {
   return merged
 }
 
+function extractBackgroundFileName(url: string | null | undefined) {
+  if (!url || !url.startsWith('/backgrounds/')) return ''
+  return decodeURIComponent(url.slice('/backgrounds/'.length))
+}
+
+function isValidBackgroundUrl(url: string | null | undefined, settings: BgSettings, files: string[]) {
+  const normalized = normalizeBgUrl(url)
+  if (!settings.use_custom_background) {
+    return normalized === FALLBACK_BG_URL
+  }
+  if (settings.pinned_file && files.includes(settings.pinned_file)) {
+    return normalized === `/backgrounds/${settings.pinned_file}`
+  }
+  if (files.length === 0) {
+    return normalized === FALLBACK_BG_URL
+  }
+  const currentFile = extractBackgroundFileName(normalized)
+  return currentFile !== '' && files.includes(currentFile)
+}
+
 export function getThemeDefaultOverlayColor(theme: ResolvedTheme) {
   return theme === 'dark' ? '0,0,0' : '255,255,255'
 }
@@ -172,26 +192,38 @@ export function BgProvider({ children }: { children: ReactNode }) {
 
   const selectionKey = `${settings.use_custom_background ? '1' : '0'}|${settings.pinned_file}|${files.join('|')}`
 
+  const resolvePreferredUrl = useCallback(() => {
+    const cached = getBaseBgUrl()
+    if (isValidBackgroundUrl(cached, settings, filesRef.current)) {
+      return cached
+    }
+    const current = prevUrlRef.current
+    if (isValidBackgroundUrl(current, settings, filesRef.current)) {
+      return current
+    }
+    return pickUrl()
+  }, [pickUrl, settings])
+
   // Initialize background once startup fetches are done
   const [initialized, setInitialized] = useState(false)
   useEffect(() => {
     if (!initialized && filesLoaded && settingsLoaded) {
-      const url = pickUrl()
+      const url = resolvePreferredUrl()
       setCurrentBgUrl(url)
       setNextBgUrl(url)
       prevUrlRef.current = url
       selectionKeyRef.current = selectionKey
       setInitialized(true)
     }
-  }, [filesLoaded, settingsLoaded, initialized, pickUrl, selectionKey])
+  }, [filesLoaded, settingsLoaded, initialized, resolvePreferredUrl, selectionKey])
 
   // Apply background immediately when custom mode/pinned file/library changes
   useEffect(() => {
     if (!initialized) return
     if (selectionKeyRef.current === selectionKey) return
     selectionKeyRef.current = selectionKey
-    setCurrentBgUrl(pickUrl())
-  }, [initialized, selectionKey, pickUrl])
+    setCurrentBgUrl(resolvePreferredUrl())
+  }, [initialized, selectionKey, resolvePreferredUrl])
 
   // Handle background transition
   useEffect(() => {

@@ -234,59 +234,62 @@ function AppShell() {
     <div className={`relative overflow-hidden theme-shell theme-${resolvedTheme}`} style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
       <BaseBackgroundLayer url={baseBgUrl} />
 
-      <BgProvider key={currentUser?.id ?? 'auth-guest'}>
+      {showLogin ? (
         <NotificationProvider>
-          <DynamicBackground />
           <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
-
-          {showLogin && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center">
-              <AuthPortal
-                onAuthenticated={() => {
-                  setLoginTransition('cover-in')
-                  window.setTimeout(() => {
-                    setLoginTransition('cover-out')
-                    window.setTimeout(() => setLoginTransition('none'), 900)
-                  }, 560)
-                }}
-              />
-            </div>
-          )}
-
-          {!showLogin && currentUser && (
-            <div className="relative z-10 flex h-full">
-              <Sidebar currentPage={activeTab.page} onNavigate={handleNavigate} isPageAccessible={canAccessPage} />
-              <div className="flex-1 flex flex-col overflow-hidden">
-                <Header
-                  tabs={tabs}
-                  activeTabId={activeTabId}
-                  onSelectTab={setActiveTabId}
-                  onCloseTab={handleCloseTab}
-                  onCloseOtherTabs={handleCloseOtherTabs}
-                  onCloseRightTabs={handleCloseRightTabs}
-                  onReorderTabs={handleReorderTabs}
-                  onAddTab={handleAddTab}
-                  onLogout={handleLogout}
-                  currentUser={currentUser}
-                />
-                <main className="flex-1 overflow-auto relative">
-                  <PageTransition tabId={activeTabId}>
-                    <AccessGuard
-                      allowed={canAccessPage(activeTab.page)}
-                      className="h-full min-h-full"
-                      detail={pageDetail}
-                    >
-                      <PageContent page={activeTab.page} params={activeTab.params} onNavigate={handleNavigate} />
-                    </AccessGuard>
-                  </PageTransition>
-                </main>
-              </div>
-            </div>
-          )}
-
-          {loginTransition !== 'none' && <LoginTransitionOverlay loginTransition={loginTransition} />}
+          <div className="absolute inset-0 z-20 flex items-center justify-center">
+            <AuthPortal
+              onAuthenticated={() => {
+                setLoginTransition('cover-in')
+                window.setTimeout(() => {
+                  setLoginTransition('cover-out')
+                  window.setTimeout(() => setLoginTransition('none'), 900)
+                }, 560)
+              }}
+            />
+          </div>
         </NotificationProvider>
-      </BgProvider>
+      ) : (
+        <BgProvider key={currentUser?.id ?? 'auth-guest'}>
+          <NotificationProvider>
+            <DynamicBackground />
+            <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
+
+            {currentUser && (
+              <div className="relative z-10 flex h-full">
+                <Sidebar currentPage={activeTab.page} onNavigate={handleNavigate} isPageAccessible={canAccessPage} />
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <Header
+                    tabs={tabs}
+                    activeTabId={activeTabId}
+                    onSelectTab={setActiveTabId}
+                    onCloseTab={handleCloseTab}
+                    onCloseOtherTabs={handleCloseOtherTabs}
+                    onCloseRightTabs={handleCloseRightTabs}
+                    onReorderTabs={handleReorderTabs}
+                    onAddTab={handleAddTab}
+                    onLogout={handleLogout}
+                    currentUser={currentUser}
+                  />
+                  <main className="flex-1 overflow-auto relative">
+                    <PageTransition tabId={activeTabId}>
+                      <AccessGuard
+                        allowed={canAccessPage(activeTab.page)}
+                        className="h-full min-h-full"
+                        detail={pageDetail}
+                      >
+                        <PageContent page={activeTab.page} params={activeTab.params} onNavigate={handleNavigate} />
+                      </AccessGuard>
+                    </PageTransition>
+                  </main>
+                </div>
+              </div>
+            )}
+
+            {loginTransition !== 'none' && <LoginTransitionOverlay loginTransition={loginTransition} />}
+          </NotificationProvider>
+        </BgProvider>
+      )}
     </div>
   )
 }
