@@ -389,7 +389,8 @@ class MaiMaiLauncher:
         ui.console.print("麦麦核心启动器控制台 MaiCore Start", style=ui.colors["primary"])
         ui.console.print("=================================")
         
-        ui.console.print("版本：V5.0.0-beta", style=ui.colors["info"])
+        launcher_version = p_config_manager.get("launcher.version", "5.0.0-beta")
+        ui.console.print(f"版本：V{launcher_version}", style=ui.colors["info"])
         ui.console.print("新增亮点：", style=ui.colors["success"])
         ui.console.print("  • WebUI", style="white")
         ui.console.print("  • Neo-MoFox支持", style="white")

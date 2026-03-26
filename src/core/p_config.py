@@ -19,6 +19,10 @@ class PConfig:
     # 定义默认配置，特别是UI主题
     DEFAULT_CONFIG = {
         "first_run": True,  # 新增首次运行标志
+        "launcher": {
+            "name": "MaiCoreStart",
+            "version": "5.1.0"
+        },
         "theme": {
             "primary": "#BADFFA",
             "success": "#4AF933",
