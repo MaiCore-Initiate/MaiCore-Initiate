@@ -1250,12 +1250,31 @@ class DeploymentModRuntime:
         return temp_extract
 
     def _flatten_single_root(self, source_root: str, final_root: str) -> None:
-        if os.path.abspath(source_root) == os.path.abspath(final_root):
+        source_abs = os.path.abspath(source_root)
+        final_abs = os.path.abspath(final_root)
+        if source_abs == final_abs:
             return
-        if os.path.isdir(final_root):
-            self._safe_rmtree(final_root)
-        os.makedirs(os.path.dirname(final_root), exist_ok=True)
-        shutil.move(source_root, final_root)
+        source_parent_abs = os.path.abspath(os.path.dirname(source_abs))
+
+        if source_parent_abs.startswith(final_abs + os.sep):
+            for entry in os.listdir(source_abs):
+                source_path = os.path.join(source_abs, entry)
+                target_path = os.path.join(final_abs, entry)
+                if os.path.exists(target_path):
+                    if os.path.isdir(target_path):
+                        self._safe_rmtree(target_path)
+                    else:
+                        os.remove(target_path)
+                shutil.move(source_path, target_path)
+            extract_root = os.path.join(final_abs, "__extract__")
+            if os.path.isdir(extract_root):
+                self._safe_rmtree(extract_root)
+            return
+
+        if os.path.isdir(final_abs):
+            self._safe_rmtree(final_abs)
+        os.makedirs(os.path.dirname(final_abs), exist_ok=True)
+        shutil.move(source_abs, final_abs)
 
     def _git_clone(self, repo_url: str, target_dir: str, ref_name: Optional[str]) -> bool:
         if os.path.isdir(target_dir):
