@@ -31,10 +31,12 @@ function Show-Usage {
     Write-Host "       mcsb -l <DeploymentMOD path>"
     Write-Host "       mcsb -c <DeploymentMOD path>"
     Write-Host "       mcsb -com <DeploymentMOD path>"
+    Write-Host "       mcsb -u <DeploymentMOD path>"
     Write-Host "       mcsb deploy <DeploymentMOD path>"
     Write-Host "       mcsb launch <DeploymentMOD path>"
     Write-Host "       mcsb config <DeploymentMOD path>"
     Write-Host "       mcsb component <DeploymentMOD path>"
+    Write-Host "       mcsb uninstall <DeploymentMOD path>"
     Write-Host ""
     Write-Host "You can pass either a template directory or a DeploymentMOD.toml file path."
 }
@@ -51,10 +53,12 @@ function Show-Version {
     Write-Host "  mcsb -l PATH            - Execute template launch stage"
     Write-Host "  mcsb -c PATH            - Execute template config stage"
     Write-Host "  mcsb -com PATH          - Execute template component stage"
+    Write-Host "  mcsb -u PATH            - Execute template uninstall stage"
     Write-Host "  mcsb deploy PATH        - Execute full template deployment"
     Write-Host "  mcsb launch PATH        - Execute template launch stage"
     Write-Host "  mcsb config PATH        - Execute template config stage"
     Write-Host "  mcsb component PATH     - Execute template component stage"
+    Write-Host "  mcsb uninstall PATH     - Execute template uninstall stage"
     Write-Host "  mcsb -v|version         - Show version"
     Write-Host ""
 }
@@ -86,10 +90,12 @@ if ($args.Count -gt 0) {
         '^-l$' { Invoke-TemplateMode $first $args[1] }
         '^-c$' { Invoke-TemplateMode $first $args[1] }
         '^-com$' { Invoke-TemplateMode $first $args[1] }
+        '^-u$' { Invoke-TemplateMode $first $args[1] }
         '^deploy$' { Invoke-TemplateMode $first $args[1] }
         '^launch$' { Invoke-TemplateMode $first $args[1] }
         '^config$' { Invoke-TemplateMode $first $args[1] }
         '^component$' { Invoke-TemplateMode $first $args[1] }
+        '^uninstall$' { Invoke-TemplateMode $first $args[1] }
         '^--version$' {
             Write-Host "$($meta["APP_NAME"]) version $($meta["APP_VERSION"])"
             exit 0

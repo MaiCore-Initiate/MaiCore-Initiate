@@ -40,10 +40,12 @@ static int is_template_mode(const char *arg) {
            _stricmp(arg, "-l") == 0 ||
            _stricmp(arg, "-c") == 0 ||
            _stricmp(arg, "-com") == 0 ||
+           _stricmp(arg, "-u") == 0 ||
            _stricmp(arg, "deploy") == 0 ||
            _stricmp(arg, "launch") == 0 ||
            _stricmp(arg, "config") == 0 ||
-           _stricmp(arg, "component") == 0;
+           _stricmp(arg, "component") == 0 ||
+           _stricmp(arg, "uninstall") == 0;
 }
 
 static int is_version_mode(const char *arg) {
@@ -136,10 +138,12 @@ static void show_usage(const MetaInfo *meta) {
     puts("       mcsb -l <DeploymentMOD path>");
     puts("       mcsb -c <DeploymentMOD path>");
     puts("       mcsb -com <DeploymentMOD path>");
+    puts("       mcsb -u <DeploymentMOD path>");
     puts("       mcsb deploy <DeploymentMOD path>");
     puts("       mcsb launch <DeploymentMOD path>");
     puts("       mcsb config <DeploymentMOD path>");
     puts("       mcsb component <DeploymentMOD path>");
+    puts("       mcsb uninstall <DeploymentMOD path>");
     puts("");
     puts("You can pass either a template directory or a DeploymentMOD.toml file path.");
 }

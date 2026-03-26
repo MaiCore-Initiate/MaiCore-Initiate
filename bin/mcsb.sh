@@ -32,10 +32,12 @@ Usage: mcsb -d <DeploymentMOD path>
        mcsb -l <DeploymentMOD path>
        mcsb -c <DeploymentMOD path>
        mcsb -com <DeploymentMOD path>
+       mcsb -u <DeploymentMOD path>
        mcsb deploy <DeploymentMOD path>
        mcsb launch <DeploymentMOD path>
        mcsb config <DeploymentMOD path>
        mcsb component <DeploymentMOD path>
+       mcsb uninstall <DeploymentMOD path>
 
 You can pass either a template directory or a DeploymentMOD.toml file path.
 EOF
@@ -74,7 +76,7 @@ run_template_mode() {
 
 first_arg="${1:-}"
 case "${first_arg}" in
-  -d|-l|-c|-com|deploy|launch|config|component)
+  -d|-l|-c|-com|-u|deploy|launch|config|component|uninstall)
     run_template_mode "${first_arg}" "${2:-}"
     ;;
   -v|version|--version|Version)

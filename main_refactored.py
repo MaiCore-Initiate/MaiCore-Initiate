@@ -1465,10 +1465,17 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="执行模板组件阶段，可传模板目录或 DeploymentMOD.toml 文件路径。",
     )
+    action_group.add_argument(
+        "-u",
+        dest="uninstall_template",
+        default="",
+        metavar="PATH",
+        help="针对已部署实例执行模板卸载阶段，可传模板目录或 DeploymentMOD.toml 文件路径。",
+    )
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["deploy", "launch", "config", "component"],
+        choices=["deploy", "launch", "config", "component", "uninstall"],
         help="模板命令别名，可配合模板路径使用。",
     )
     parser.add_argument(
@@ -1488,6 +1495,7 @@ def _run_cli_mode(args: argparse.Namespace) -> int | None:
         ("launch", str(getattr(args, "launch_template", "") or "").strip()),
         ("config", str(getattr(args, "config_template", "") or "").strip()),
         ("component", str(getattr(args, "component_template", "") or "").strip()),
+        ("uninstall", str(getattr(args, "uninstall_template", "") or "").strip()),
     ]
 
     for mode, template_path in cli_actions:

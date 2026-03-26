@@ -24,6 +24,7 @@ from .models import (
     TemplateFormField,
     TemplateFormSchema,
     TemplateMetadata,
+    UninstallDefinition,
     VersionFormattingRule,
 )
 
@@ -67,11 +68,13 @@ class DeploymentModParser:
         deployments_section = self._parse_stage_section(raw.get("DEPLOY", {}))
         launches_section = self._parse_stage_section(raw.get("LAUNCH", {}))
         configs_section = self._parse_stage_section(raw.get("CONFIG", {}))
+        uninstalls_section = self._parse_stage_section(raw.get("UNINSTALL", {}))
 
         components = [self._parse_component(item) for item in raw.get("Component", [])]
         deployments = [self._parse_deployment(item) for item in raw.get("Deployment", [])]
         launches = [self._parse_launch(item) for item in raw.get("LaunchItem", [])]
         configs = [self._parse_config(item) for item in raw.get("ConfigItem", [])]
+        uninstalls = [self._parse_uninstall(item) for item in raw.get("UninstallItem", [])]
 
         self._validate_stage_ids("COMPONENTS.list", components_section.list, [item.id for item in components])
         self._validate_stage_ids("DEPLOY.list", deployments_section.list, [item.id for item in deployments])
@@ -81,6 +84,7 @@ class DeploymentModParser:
             configs_section.list,
             [item.id or item.name for item in configs],
         )
+        self._validate_stage_ids("UNINSTALL.list", uninstalls_section.list, [item.id for item in uninstalls])
 
         builtin_profile = self._infer_builtin_profile(deployments, launches)
         form_schema = self._build_form_schema(
@@ -89,6 +93,7 @@ class DeploymentModParser:
             deployments,
             launches,
             configs,
+            uninstalls,
             builtin_profile,
         )
 
@@ -98,10 +103,12 @@ class DeploymentModParser:
             deployments_section=deployments_section,
             launches_section=launches_section,
             configs_section=configs_section,
+            uninstalls_section=uninstalls_section,
             components=components,
             deployments=deployments,
             launches=launches,
             configs=configs,
+            uninstalls=uninstalls,
             form_schema=form_schema,
             builtin_profile=builtin_profile,
             raw=raw,
@@ -135,6 +142,11 @@ class DeploymentModParser:
             for item in self._ordered_items(template.configs_section.list, template.configs)
             if bool(inputs.get(f"config::{item.id or item.name}", True if item.choose else True))
         ]
+        selected_uninstalls = [
+            item.id
+            for item in self._ordered_items(template.uninstalls_section.list, template.uninstalls)
+            if bool(inputs.get(f"uninstall::{item.id}", item.uninstall if item.choose else item.uninstall))
+        ]
 
         summary = {
             "template_name": template.metadata.mod_name,
@@ -143,6 +155,7 @@ class DeploymentModParser:
             "selected_deployments": selected_deployments,
             "selected_launches": selected_launches,
             "selected_configs": selected_configs,
+            "selected_uninstalls": selected_uninstalls,
             "launcher_version": p_config_manager.get("launcher.version", ""),
         }
 
@@ -150,6 +163,7 @@ class DeploymentModParser:
             deployment_id=",".join(selected_deployments),
             launch_id=",".join(selected_launches),
             config_id=",".join(selected_configs),
+            uninstall_id=",".join(selected_uninstalls),
         )
 
         return DeploymentPlan(
@@ -168,6 +182,7 @@ class DeploymentModParser:
             summary=summary,
             launches=template.launches,
             configs=template.configs,
+            uninstalls=template.uninstalls,
         )
 
     def validate_runtime_constraints(self, template: TemplateDefinition) -> None:
@@ -293,6 +308,31 @@ class DeploymentModParser:
             raw=item,
         )
 
+    def _parse_uninstall(self, item: Dict[str, Any]) -> UninstallDefinition:
+        return UninstallDefinition(
+            id=self._required_str(item, "id"),
+            name=self._optional_name(item),
+            choose=bool(item.get("choose", False)),
+            uninstall=bool(item.get("uninstall", True)),
+            stop_before_uninstall=bool(item.get("stop_before_uninstall", False)),
+            stop_command_list=self._ensure_str_list(item.get("stop_command_list")),
+            remove_instance_config=bool(item.get("remove_instance_config", True)),
+            remove_runtime_files=bool(item.get("remove_runtime_files", True)),
+            remove_deploy_root=bool(item.get("remove_deploy_root", True)),
+            remove_component=bool(item.get("remove_component", False)),
+            deployment_targets=self._ensure_str_list(item.get("deployment_targets")),
+            component_targets=self._ensure_str_list(item.get("component_targets")),
+            before_command=bool(item.get("before_command", False)),
+            before_command_list=self._ensure_str_list(item.get("before_command_list")),
+            after_command=bool(item.get("after_command", False)),
+            after_command_list=self._ensure_str_list(item.get("after_command_list")),
+            env_input=bool(item.get("env_input", False)),
+            env_input_list=self._parse_env_bindings(item.get("env_input_list")),
+            env_output=bool(item.get("env_output", False)),
+            env_output_list=self._parse_env_bindings(item.get("env_output_list")),
+            raw=item,
+        )
+
     def _build_form_schema(
         self,
         metadata: TemplateMetadata,
@@ -300,6 +340,7 @@ class DeploymentModParser:
         deployments: List[DeploymentDefinition],
         launches: List[LaunchDefinition],
         configs: List[ConfigDefinition],
+        uninstalls: List[UninstallDefinition],
         builtin_profile: str,
     ) -> TemplateFormSchema:
         fields: List[TemplateFormField] = [
@@ -398,6 +439,18 @@ class DeploymentModParser:
                         field_type="boolean",
                         default=True,
                         description="配置文件打开开关。",
+                    )
+                )
+
+        for item in uninstalls:
+            if item.choose:
+                fields.append(
+                    TemplateFormField(
+                        key=f"uninstall::{item.id}",
+                        label=f"卸载 {item.name}",
+                        field_type="boolean",
+                        default=item.uninstall,
+                        description="卸载项级可选开关。",
                     )
                 )
 

@@ -46,6 +46,9 @@
   - [4.6 \[CONFIG\] 与 \[\[ConfigItem\]\] — 配置管理](#46-config-与-configitem--配置管理)
     - [4.6.1 \[CONFIG\] 区块字段](#461-config-区块字段)
     - [4.6.2 \[\[ConfigItem\]\] 字段](#462-configitem-字段)
+  - [4.7 \[UNINSTALL\] 与 \[\[UninstallItem\]\] — 卸载管理](#47-uninstall-与-uninstallitem--卸载管理)
+    - [4.7.1 \[UNINSTALL\] 区块字段](#471-uninstall-区块字段)
+    - [4.7.2 \[\[UninstallItem\]\] 字段](#472-uninstallitem-字段)
 - [5. 占位符系统](#5-占位符系统)
   - [5.1 静态引用 `{{key|路径}}`](#51-静态引用-key路径)
     - [5.1.1 路径语法](#511-路径语法)
@@ -72,6 +75,7 @@
   - [9.3 部署流程](#93-部署流程)
   - [9.4 启动流程](#94-启动流程)
   - [9.5 配置流程](#95-配置流程)
+  - [9.6 卸载流程](#96-卸载流程)
 - [10. 完整字段速查表](#10-完整字段速查表)
 - [11. FAQ](#11-faq)
 
@@ -83,7 +87,7 @@
 
 MCStart 部署模版是一个基于 **TOML** 格式编写的声明式配置文件，用于描述一个软件项目从「组件安装 → 源码/物料部署 → 启动运行 → 配置编辑」的完整生命周期。模版文件的扩展名为 `.toml`。
 
-MCStart 引擎读取该模版后，会按照模版中声明的流程自动或半自动地完成所有步骤，实现「一键部署」。
+MCStart 引擎读取该模版后，会按照模版中声明的流程自动或半自动地完成所有步骤，实现「一键部署」，并在需要时按实例安全卸载。
 
 ### 1.2 模版能做什么
 
@@ -95,15 +99,16 @@ MCStart 引擎读取该模版后，会按照模版中声明的流程自动或半
 | **环境搭建** | 自动创建虚拟环境、安装依赖、复制配置文件模板 |
 | **启动管理** | 按顺序启动多个服务，支持用户选择性启动 |
 | **配置编辑** | 自动打开配置文件供用户编辑，优先使用 VSCode |
+| **安全卸载** | 按实例恢复上下文，删除部署目录、运行时状态和模板托管组件 |
 | **变量传递** | 通过环境变量导入/导出机制实现跨阶段的数据传递 |
 
 ### 1.3 模版生命周期
 
 ```
-注册 → 解析 → 组件安装 → 部署 → 启动 → 配置
+注册 → 解析 → 组件安装 → 部署 → 启动 → 配置 → 卸载
 ```
 
-每个阶段都可以独立存在，也可以组合使用。模版至少需要包含 `[MCStart]` 和 `[MODINFO]` 区块才能被 MCStart 识别和注册。
+每个阶段都可以独立存在，也可以组合使用。模版至少需要包含 `[MCStart]` 和 `[MODINFO]` 区块才能被 MCStart 识别和注册。卸载阶段始终基于已存在的实例运行，用于回收部署结果而不是参与完整部署流程。
 
 ---
 
@@ -169,6 +174,10 @@ my-mod/
 [CONFIG]               ← 配置管理区块级配置（可选）
   [[ConfigItem]]       ← 配置项定义（可重复，可选）
   [[ConfigItem]]
+  ...
+[UNINSTALL]            ← 卸载管理区块级配置（可选）
+  [[UninstallItem]]    ← 卸载项定义（可重复，可选）
+  [[UninstallItem]]
   ...
 ```
 
@@ -917,6 +926,89 @@ env_input_list = [
 
 ---
 
+### 4.7 [UNINSTALL] 与 [[UninstallItem]] — 卸载管理
+
+卸载管理用于对已部署实例执行安全回收。它不会参与完整部署流程，而是单独通过实例序列号进入，恢复该实例的运行时状态后再执行停止、清理和解绑动作。
+
+#### 4.7.1 [UNINSTALL] 区块字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `env_output` | Boolean | **是** | 是否启用卸载模块的环境变量导出功能 |
+| `env_input` | Boolean | **是** | 是否启用卸载模块的环境变量导入功能 |
+| `list` | Array\[String\] | **是** | 卸载项 ID 列表，决定卸载顺序 |
+
+```toml
+[UNINSTALL]
+env_output = false
+env_input = true
+list = ["OpenClaw"]
+```
+
+#### 4.7.2 [[UninstallItem]] 字段
+
+| 字段 | 类型 | 必填 | 条件 | 说明 |
+|------|------|------|------|------|
+| `id` | String | ✅ | — | 卸载项 ID |
+| `name` | String | ✅ | — | 卸载项显示名称 |
+| `choose` | Boolean | ✅ | — | 是否让用户选择执行该卸载项 |
+| `uninstall` | Boolean | ✅ | — | 默认是否执行该卸载项 |
+| `stop_before_uninstall` | Boolean | ❌ | — | 是否在清理前执行停止命令 |
+| `stop_command_list` | Array\[String\] | 📎 | `stop_before_uninstall=true` | 卸载前停止命令列表 |
+| `remove_instance_config` | Boolean | ❌ | — | 是否在卸载结束后删除实例配置 |
+| `remove_runtime_files` | Boolean | ❌ | — | 是否删除 `.mcstart-template.env` 与 `.mcstart-template-state.toml` |
+| `remove_deploy_root` | Boolean | ❌ | — | 是否删除部署目录 |
+| `remove_component` | Boolean | ❌ | — | 是否删除组件安装目录 |
+| `deployment_targets` | Array\[String\] | ❌ | — | 要删除的部署项 ID 列表；为空时默认清理当前实例全部部署目录 |
+| `component_targets` | Array\[String\] | ❌ | — | 要删除的组件 ID 列表；为空时默认清理当前实例全部模板托管组件 |
+| `before_command` | Boolean | ✅ | — | 卸载前命令开关 |
+| `before_command_list` | Array\[String\] | 📎 | `before_command=true` | 卸载前命令列表 |
+| `after_command` | Boolean | ✅ | — | 卸载后命令开关 |
+| `after_command_list` | Array\[String\] | 📎 | `after_command=true` | 卸载后命令列表 |
+| `env_output` | Boolean | ❌ | — | 导出环境变量 |
+| `env_output_list` | Array\[InlineTable\] | 📎 | `env_output=true` | 导出变量列表 |
+| `env_input` | Boolean | ❌ | — | 导入环境变量 |
+| `env_input_list` | Array\[InlineTable\] | 📎 | `env_input=true` | 导入变量列表 |
+
+**重要行为约定**：
+
+- `remove_component = true` 仅会删除模板运行时记录为“由模板托管安装”的组件目录；如果组件是在部署时检查到系统已存在而被跳过安装，则不会被删除。
+- `remove_instance_config = true` 会在所有卸载项执行结束后删除 `config/config.toml` 中对应的 `instance_xxx` 配置。
+- 卸载阶段依赖实例目录中的 `.mcstart-template.env` 和 `.mcstart-template-state.toml` 恢复上下文，因此建议只有在最后一个卸载项中才启用 `remove_runtime_files = true`。
+
+**示例**：
+
+```toml
+[UNINSTALL]
+env_output = false
+env_input = true
+list = ["OpenClaw"]
+
+[[UninstallItem]]
+id = "OpenClaw"
+name = "卸载 OpenClaw"
+choose = false
+uninstall = true
+stop_before_uninstall = true
+stop_command_list = [
+    "taskkill /f /im node.exe >nul 2>nul",
+]
+remove_instance_config = true
+remove_runtime_files = true
+remove_deploy_root = true
+remove_component = false
+deployment_targets = ["OpenClaw"]
+component_targets = []
+before_command = false
+after_command = false
+env_input = true
+env_input_list = [
+    {name = "OPENCLAW_PROJECT", value = "{{env|OPENCLAW_PROJECT}}"},
+]
+```
+
+---
+
 ## 5. 占位符系统
 
 MCStart 模版中存在两套占位符机制，分别用于不同的场景。
@@ -1513,6 +1605,47 @@ version_formatting_formula = [
    └─ 兜底: 系统默认编辑器 (notepad 等)
 ```
 
+### 9.6 卸载流程
+
+```
+根据实例序列号恢复上下文：
+│
+├─ 读取 config/config.toml 中的实例绑定信息
+├─ 读取实例目录下的 .mcstart-template.env
+└─ 读取实例目录下的 .mcstart-template-state.toml
+   → 恢复 env_pool / install_paths / deployment_roots / managed_components
+
+对于 list 中的每个卸载项 ID：
+│
+├─ 查找对应的 [[UninstallItem]] 块
+│
+├─ choose = true ?
+│  └─ 是 → 询问用户是否执行 → 用户拒绝则跳过
+│
+├─ env_input = true → 从变量池导入环境变量
+│
+├─ stop_before_uninstall = true ?
+│  └─ 是 → 执行 stop_command_list
+│
+├─ before_command = true → 执行 before_command_list
+│
+├─ remove_deploy_root = true ?
+│  └─ 是 → 删除 deployment_targets 指定的部署目录
+│         （为空时默认删除该实例全部部署目录）
+│
+├─ remove_component = true ?
+│  └─ 是 → 删除 component_targets 指定的组件目录
+│         （仅限模板托管安装的组件）
+│
+├─ remove_runtime_files = true ?
+│  └─ 是 → 删除 .mcstart-template.env / .mcstart-template-state.toml
+│
+├─ after_command = true → 执行 after_command_list
+│
+└─ remove_instance_config = true ?
+   └─ 所有卸载项结束后删除 instance_xxx 配置
+```
+
 ---
 
 ## 10. 完整字段速查表
@@ -1667,6 +1800,39 @@ version_formatting_formula = [
 | `name` | String | ✅ | — | 配置项名称 |
 | `file_path` | String | ✅ | — | 配置文件完整路径（支持占位符） |
 | `choose` | Boolean | ✅ | — | 用户可选配置 |
+| `env_input` | Boolean | ❌ | — | 导入环境变量 |
+| `env_input_list` | Array\[InlineTable\] | 📎 | `env_input=true` | 导入变量列表 |
+
+### [UNINSTALL]
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `env_output` | Boolean | ✅ | 环境变量导出 |
+| `env_input` | Boolean | ✅ | 环境变量导入 |
+| `list` | Array\[String\] | ✅ | 卸载项 ID 列表 |
+
+### [[UninstallItem]]
+
+| 字段 | 类型 | 必填 | 条件 | 说明 |
+|------|------|------|------|------|
+| `id` | String | ✅ | — | 卸载项 ID |
+| `name` | String | ✅ | — | 卸载项名称 |
+| `choose` | Boolean | ✅ | — | 用户可选卸载 |
+| `uninstall` | Boolean | ✅ | — | 默认是否执行 |
+| `stop_before_uninstall` | Boolean | ❌ | — | 是否先执行停止命令 |
+| `stop_command_list` | Array\[String\] | 📎 | `stop_before_uninstall=true` | 停止命令列表 |
+| `remove_instance_config` | Boolean | ❌ | — | 是否删除实例配置 |
+| `remove_runtime_files` | Boolean | ❌ | — | 是否删除运行时状态文件 |
+| `remove_deploy_root` | Boolean | ❌ | — | 是否删除部署目录 |
+| `remove_component` | Boolean | ❌ | — | 是否删除组件目录 |
+| `deployment_targets` | Array\[String\] | ❌ | — | 要删除的部署项 ID 列表 |
+| `component_targets` | Array\[String\] | ❌ | — | 要删除的组件项 ID 列表 |
+| `before_command` | Boolean | ✅ | — | 卸载前操作 |
+| `before_command_list` | Array\[String\] | 📎 | `before_command=true` | 卸载前命令 |
+| `after_command` | Boolean | ✅ | — | 卸载后操作 |
+| `after_command_list` | Array\[String\] | 📎 | `after_command=true` | 卸载后命令 |
+| `env_output` | Boolean | ❌ | — | 导出环境变量 |
+| `env_output_list` | Array\[InlineTable\] | 📎 | `env_output=true` | 导出变量列表 |
 | `env_input` | Boolean | ❌ | — | 导入环境变量 |
 | `env_input_list` | Array\[InlineTable\] | 📎 | `env_input=true` | 导入变量列表 |
 
@@ -1901,3 +2067,7 @@ env_output = false   # 个体开关关闭 → ❌ 不生效
 ### Q20: `schema_version` 的作用是什么？
 
 **A**: `schema_version` 标识当前模版使用的模版格式版本。MCStart 会根据此版本号选择对应的解析器来处理模版。当 MCStart 未来升级模版格式时，旧版本的模版仍然可以通过此字段被正确识别和兼容处理。当前版本为 `"1.0"`。
+
+### Q21: 卸载阶段会删除系统里已经存在的共享组件吗？
+
+**A**: 默认不会。MCStart 会根据实例运行时状态判断组件是否由模板托管安装。只有模板实际安装过的组件目录，且卸载项显式设置了 `remove_component = true`，才会尝试删除；如果组件是在部署时检查到系统中已存在而被跳过安装，则卸载阶段只会跳过，不会删除共享组件。

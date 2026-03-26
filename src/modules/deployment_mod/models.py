@@ -158,6 +158,23 @@ class ConfigDefinition(BaseTaskDefinition):
 
 
 @dataclass
+class UninstallDefinition(BaseTaskDefinition):
+    uninstall: bool = True
+    stop_before_uninstall: bool = False
+    stop_command_list: List[str] = field(default_factory=list)
+    remove_instance_config: bool = True
+    remove_runtime_files: bool = True
+    remove_deploy_root: bool = True
+    remove_component: bool = False
+    deployment_targets: List[str] = field(default_factory=list)
+    component_targets: List[str] = field(default_factory=list)
+    before_command: bool = False
+    before_command_list: List[str] = field(default_factory=list)
+    after_command: bool = False
+    after_command_list: List[str] = field(default_factory=list)
+
+
+@dataclass
 class TemplateFormField:
     key: str
     label: str
@@ -186,10 +203,12 @@ class TemplateDefinition:
     deployments_section: StageSection = field(default_factory=StageSection)
     launches_section: StageSection = field(default_factory=StageSection)
     configs_section: StageSection = field(default_factory=StageSection)
+    uninstalls_section: StageSection = field(default_factory=StageSection)
     components: List[ComponentDefinition] = field(default_factory=list)
     deployments: List[DeploymentDefinition] = field(default_factory=list)
     launches: List[LaunchDefinition] = field(default_factory=list)
     configs: List[ConfigDefinition] = field(default_factory=list)
+    uninstalls: List[UninstallDefinition] = field(default_factory=list)
     form_schema: TemplateFormSchema = field(default_factory=TemplateFormSchema)
     builtin_profile: BuiltinProfile = "custom"
     raw: Dict[str, Any] = field(default_factory=dict)
@@ -214,6 +233,7 @@ class DeploymentProfileBinding:
     deployment_id: str
     launch_id: str
     config_id: str = ""
+    uninstall_id: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return _to_plain(self)
@@ -242,6 +262,7 @@ class DeploymentPlan:
     summary: Dict[str, Any] = field(default_factory=dict)
     launches: List[LaunchDefinition] = field(default_factory=list)
     configs: List[ConfigDefinition] = field(default_factory=list)
+    uninstalls: List[UninstallDefinition] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return _to_plain(self)
@@ -261,6 +282,7 @@ class RuntimeResult:
     deployment_roots: Dict[str, str] = field(default_factory=dict)
     opened_files: List[str] = field(default_factory=list)
     launched_items: List[str] = field(default_factory=list)
+    removed_paths: List[str] = field(default_factory=list)
     runtime_env_file: str = ""
     runtime_state_file: str = ""
 

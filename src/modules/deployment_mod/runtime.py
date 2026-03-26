@@ -34,6 +34,7 @@ from .models import (
     LaunchDefinition,
     RuntimeResult,
     TemplateDefinition,
+    UninstallDefinition,
 )
 
 logger = structlog.get_logger(__name__)
@@ -65,8 +66,10 @@ class RuntimeState:
     install_paths: Dict[str, str] = field(default_factory=dict)
     deploy_paths: Dict[str, str] = field(default_factory=dict)
     deployment_roots: Dict[str, str] = field(default_factory=dict)
+    managed_components: Dict[str, bool] = field(default_factory=dict)
     opened_files: List[str] = field(default_factory=list)
     launched_items: List[str] = field(default_factory=list)
+    removed_paths: List[str] = field(default_factory=list)
 
 
 class DeploymentModRuntime:
@@ -108,6 +111,33 @@ class DeploymentModRuntime:
         "script_path",
     )
 
+    @staticmethod
+    def _build_runtime_result(
+        state: RuntimeState,
+        success: bool,
+        message: str,
+        stage: str,
+        instance_config_name: str = "",
+        instance_config: Optional[Dict[str, Any]] = None,
+    ) -> RuntimeResult:
+        return RuntimeResult(
+            success=success,
+            message=message,
+            stage=stage,
+            instance_config_name=instance_config_name,
+            instance_config=instance_config or {},
+            exported_env=dict(state.env_pool),
+            selected_versions=dict(state.versions),
+            install_paths=dict(state.install_paths),
+            deploy_paths=dict(state.deploy_paths),
+            deployment_roots=dict(state.deployment_roots),
+            opened_files=list(state.opened_files),
+            launched_items=list(state.launched_items),
+            removed_paths=list(state.removed_paths),
+            runtime_env_file=state.runtime_env_file,
+            runtime_state_file=state.runtime_state_file,
+        )
+
     def execute(
         self,
         template: TemplateDefinition,
@@ -148,39 +178,18 @@ class DeploymentModRuntime:
 
             instance_config_name, instance_config = self._persist_instance_config(state)
             self._notify(state, 6, 6, "模板运行完成", "completed", "模板部署流程执行成功")
-            return RuntimeResult(
+            return self._build_runtime_result(
+                state,
                 success=True,
                 message="模板部署成功",
                 stage="full",
                 instance_config_name=instance_config_name,
                 instance_config=instance_config,
-                exported_env=dict(state.env_pool),
-                selected_versions=dict(state.versions),
-                install_paths=dict(state.install_paths),
-                deploy_paths=dict(state.deploy_paths),
-                deployment_roots=dict(state.deployment_roots),
-                opened_files=list(state.opened_files),
-                launched_items=list(state.launched_items),
-                runtime_env_file=state.runtime_env_file,
-                runtime_state_file=state.runtime_state_file,
             )
         except Exception as exc:
             logger.error("模板运行失败", template_id=template.metadata.mod_id, error=str(exc))
             self._notify(state, 6, 6, "模板运行失败", "failed", str(exc))
-            return RuntimeResult(
-                success=False,
-                message=str(exc),
-                stage="full",
-                exported_env=dict(state.env_pool),
-                selected_versions=dict(state.versions),
-                install_paths=dict(state.install_paths),
-                deploy_paths=dict(state.deploy_paths),
-                deployment_roots=dict(state.deployment_roots),
-                opened_files=list(state.opened_files),
-                launched_items=list(state.launched_items),
-                runtime_env_file=state.runtime_env_file,
-                runtime_state_file=state.runtime_state_file,
-            )
+            return self._build_runtime_result(state, success=False, message=str(exc), stage="full")
 
     def execute_stage(
         self,
@@ -229,41 +238,17 @@ class DeploymentModRuntime:
             elif normalized_stage == "configs":
                 self._execute_configs(state)
                 self._persist_runtime_files_for_existing_instance(state)
+            elif normalized_stage == "uninstalls":
+                self._execute_uninstalls(state)
             else:
                 raise RuntimeError(f"未知阶段: {normalized_stage}")
 
             self._notify(state, 1, 1, f"{normalized_stage} 阶段完成", "completed", "阶段执行成功")
-            return RuntimeResult(
-                success=True,
-                message="阶段执行成功",
-                stage=normalized_stage,
-                exported_env=dict(state.env_pool),
-                selected_versions=dict(state.versions),
-                install_paths=dict(state.install_paths),
-                deploy_paths=dict(state.deploy_paths),
-                deployment_roots=dict(state.deployment_roots),
-                opened_files=list(state.opened_files),
-                launched_items=list(state.launched_items),
-                runtime_env_file=state.runtime_env_file,
-                runtime_state_file=state.runtime_state_file,
-            )
+            return self._build_runtime_result(state, success=True, message="阶段执行成功", stage=normalized_stage)
         except Exception as exc:
             logger.error("模板阶段执行失败", template_id=template.metadata.mod_id, stage=normalized_stage, error=str(exc))
             self._notify(state, 1, 1, f"{normalized_stage} 阶段失败", "failed", str(exc))
-            return RuntimeResult(
-                success=False,
-                message=str(exc),
-                stage=normalized_stage,
-                exported_env=dict(state.env_pool),
-                selected_versions=dict(state.versions),
-                install_paths=dict(state.install_paths),
-                deploy_paths=dict(state.deploy_paths),
-                deployment_roots=dict(state.deployment_roots),
-                opened_files=list(state.opened_files),
-                launched_items=list(state.launched_items),
-                runtime_env_file=state.runtime_env_file,
-                runtime_state_file=state.runtime_state_file,
-            )
+            return self._build_runtime_result(state, success=False, message=str(exc), stage=normalized_stage)
 
     def _execute_components(self, state: RuntimeState) -> None:
         ordered_components = self._ordered_items(
@@ -291,10 +276,12 @@ class DeploymentModRuntime:
         )
         os.makedirs(install_path, exist_ok=True)
         state.install_paths[component.id] = install_path
+        state.managed_components.setdefault(component.id, False)
 
         self._notify(state, 2, 6, f"组件 {component.name}", "running", f"安装路径: {install_path}")
 
         if component.check and self._check_component_installed(state, component, install_path, scope):
+            state.managed_components[component.id] = False
             self._notify(state, 2, 6, f"组件 {component.name}", "completed", "检测到组件已存在，跳过安装")
             self._export_env_bindings(state, state.template.components_section.env_output, component.env_output, component.env_output_list, scope)
             return
@@ -315,6 +302,7 @@ class DeploymentModRuntime:
         if component.after_command:
             self._run_command_list(state, component.after_command_list, install_path, scope, f"组件 {component.name} 安装后命令")
 
+        state.managed_components[component.id] = True
         self._export_env_bindings(state, state.template.components_section.env_output, component.env_output, component.env_output_list, scope)
 
     def _check_component_installed(
@@ -502,6 +490,119 @@ class DeploymentModRuntime:
         if files_to_open:
             open_files_in_editor(files_to_open)
 
+    def _execute_uninstalls(self, state: RuntimeState) -> None:
+        ordered_uninstalls = self._ordered_items(state.template.uninstalls_section.list, state.template.uninstalls)
+        if not ordered_uninstalls:
+            raise RuntimeError("模板未声明任何卸载项")
+
+        remove_instance_config = False
+
+        for uninstall in ordered_uninstalls:
+            enabled = bool(
+                state.plan.template_inputs.get(
+                    f"uninstall::{uninstall.id}",
+                    uninstall.uninstall if uninstall.choose else uninstall.uninstall,
+                )
+            )
+            if not enabled:
+                self._notify(state, 1, 1, f"跳过卸载 {uninstall.name}", "skipped", "用户未选择该卸载项")
+                continue
+
+            self._execute_uninstall(state, uninstall)
+            remove_instance_config = remove_instance_config or uninstall.remove_instance_config
+        self._finalize_uninstall_cleanup(state, remove_instance_config=remove_instance_config)
+
+    def _execute_uninstall(self, state: RuntimeState, uninstall: UninstallDefinition) -> None:
+        scope = self._build_scope(
+            state,
+            state.template.uninstalls_section.env_input,
+            uninstall.env_input,
+            uninstall.env_input_list,
+        )
+        workdir = self._guess_uninstall_workdir(state, uninstall)
+        self._notify(state, 1, 1, f"卸载 {uninstall.name}", "running", f"工作目录: {workdir}")
+
+        if uninstall.stop_before_uninstall and uninstall.stop_command_list:
+            self._run_command_list(state, uninstall.stop_command_list, workdir, scope, f"卸载 {uninstall.name} 停止命令")
+
+        if uninstall.before_command:
+            self._run_command_list(state, uninstall.before_command_list, workdir, scope, f"卸载 {uninstall.name} 前置命令")
+
+        for deployment_id in self._resolve_uninstall_deployment_targets(state, uninstall):
+            root = str(state.deployment_roots.get(deployment_id, "") or "")
+            if not root:
+                continue
+            if self._remove_path(state, root, label=f"部署目录 {deployment_id}"):
+                state.deployment_roots.pop(deployment_id, None)
+                state.deploy_paths.pop(deployment_id, None)
+                state.removed_paths.append(root)
+
+        for component_id in self._resolve_uninstall_component_targets(state, uninstall):
+            if not state.managed_components.get(component_id, False):
+                self._notify(state, 1, 1, f"组件 {component_id}", "skipped", "组件未由模板托管安装，跳过删除")
+                continue
+            install_path = str(state.install_paths.get(component_id, "") or "")
+            if not install_path:
+                continue
+            if self._remove_path(state, install_path, label=f"组件目录 {component_id}"):
+                state.install_paths.pop(component_id, None)
+                state.managed_components.pop(component_id, None)
+                state.removed_paths.append(install_path)
+
+        if uninstall.remove_runtime_files:
+            self._remove_runtime_persistence_files(state)
+
+        if uninstall.after_command:
+            after_workdir = workdir if os.path.isdir(workdir) else (state.instance_root if os.path.isdir(state.instance_root) else os.getcwd())
+            self._run_command_list(state, uninstall.after_command_list, after_workdir, scope, f"卸载 {uninstall.name} 后置命令")
+
+        self._export_env_bindings(
+            state,
+            state.template.uninstalls_section.env_output,
+            uninstall.env_output,
+            uninstall.env_output_list,
+            scope,
+        )
+
+    def _finalize_uninstall_cleanup(
+        self,
+        state: RuntimeState,
+        *,
+        remove_instance_config: bool,
+    ) -> None:
+        if remove_instance_config:
+            removed_config = self._remove_instance_config(state.instance_serial_number)
+            self._notify(state, 1, 1, "实例配置", "completed", f"已删除: {removed_config}")
+
+    def _resolve_uninstall_deployment_targets(self, state: RuntimeState, uninstall: UninstallDefinition) -> List[str]:
+        if not uninstall.remove_deploy_root:
+            return []
+        targets = list(uninstall.deployment_targets or [])
+        if targets:
+            return targets
+        return list(state.deployment_roots.keys())
+
+    def _resolve_uninstall_component_targets(self, state: RuntimeState, uninstall: UninstallDefinition) -> List[str]:
+        if not uninstall.remove_component:
+            return []
+        targets = list(uninstall.component_targets or [])
+        if targets:
+            return targets
+        return list(state.install_paths.keys())
+
+    def _guess_uninstall_workdir(self, state: RuntimeState, uninstall: UninstallDefinition) -> str:
+        for deployment_id in uninstall.deployment_targets:
+            root = str(state.deployment_roots.get(deployment_id, "") or "")
+            if root and os.path.isdir(root):
+                return root
+        primary_id = self._first_selected_deployment_id(state)
+        primary_root = str(state.deployment_roots.get(primary_id, "") or "")
+        if primary_root and os.path.isdir(primary_root):
+            return primary_root
+        if state.instance_root and os.path.isdir(state.instance_root):
+            return state.instance_root
+        return os.getcwd()
+
     def _persist_instance_config(self, state: RuntimeState) -> tuple[str, Dict[str, Any]]:
         serial_number = str(state.plan.template_inputs.get("serial_number", "") or "").strip()
         nickname = str(state.plan.template_inputs.get("nickname", "") or "").strip()
@@ -605,6 +706,7 @@ class DeploymentModRuntime:
             "deployment_roots": runtime_info.get("deployment_roots", {}),
             "versions": runtime_info.get("versions", {}),
             "version_meta": runtime_info.get("version_meta", {}),
+            "managed_components": runtime_info.get("managed_components", {}),
             "opened_files": runtime_info.get("opened_files", []),
             "launched_items": runtime_info.get("launched_items", []),
         }
@@ -615,6 +717,7 @@ class DeploymentModRuntime:
         state.deployment_roots.update({str(k): str(v) for k, v in dict(merged_state.get("deployment_roots", {}) or {}).items()})
         state.versions.update({str(k): str(v) for k, v in dict(merged_state.get("versions", {}) or {}).items()})
         state.version_meta.update({str(k): dict(v) for k, v in dict(merged_state.get("version_meta", {}) or {}).items()})
+        state.managed_components.update({str(k): bool(v) for k, v in dict(merged_state.get("managed_components", {}) or {}).items()})
         state.opened_files = [str(item) for item in list(merged_state.get("opened_files", []) or [])]
         state.launched_items = [str(item) for item in list(merged_state.get("launched_items", []) or [])]
 
@@ -659,6 +762,7 @@ class DeploymentModRuntime:
                         "deployment_roots": dict(state.deployment_roots),
                         "versions": dict(state.versions),
                         "version_meta": dict(state.version_meta),
+                        "managed_components": dict(state.managed_components),
                         "opened_files": list(state.opened_files),
                         "launched_items": list(state.launched_items),
                     }
@@ -714,6 +818,8 @@ class DeploymentModRuntime:
             "launches": "launches",
             "config": "configs",
             "configs": "configs",
+            "uninstall": "uninstalls",
+            "uninstalls": "uninstalls",
         }
         normalized = mapping.get(str(stage or "").strip().lower())
         if not normalized:
@@ -1049,7 +1155,7 @@ class DeploymentModRuntime:
         if current is None:
             raise RuntimeError(f"模板键路径不存在: {path}")
         index = 1
-        if segments[0] in {"Component", "Deployment", "LaunchItem", "ConfigItem"}:
+        if segments[0] in {"Component", "Deployment", "LaunchItem", "ConfigItem", "UninstallItem"}:
             if index >= len(segments):
                 raise RuntimeError(f"不允许直接引用整个表: {path}")
             selector = segments[index]
@@ -1546,6 +1652,80 @@ class DeploymentModRuntime:
         if bot_type == "Neo-MoFox":
             return "neo_mofox_path"
         return "mai_path"
+
+    @staticmethod
+    def _deduplicate_strings(values: Sequence[str]) -> List[str]:
+        result: List[str] = []
+        seen = set()
+        for value in values:
+            normalized = str(value or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            result.append(normalized)
+        return result
+
+    def _remove_runtime_persistence_files(self, state: RuntimeState) -> None:
+        for file_path, label in (
+            (state.runtime_env_file, "运行时环境文件"),
+            (state.runtime_state_file, "运行时状态文件"),
+        ):
+            normalized = str(file_path or "").strip()
+            if not normalized:
+                continue
+            if os.path.isfile(normalized):
+                os.remove(normalized)
+                state.removed_paths.append(normalized)
+                self._notify(state, 1, 1, label, "completed", normalized)
+
+    def _remove_instance_config(self, serial_number: str) -> str:
+        config_name, _ = self._find_instance_config(serial_number)
+        if not config_manager.delete_configuration(config_name):
+            raise RuntimeError(f"删除实例配置失败: {config_name}")
+
+        current_config = str(config_manager.get("current_config", "") or "")
+        if current_config == config_name:
+            configurations = config_manager.get_all_configurations()
+            if "default" in configurations:
+                config_manager.set("current_config", "default")
+            elif configurations:
+                config_manager.set("current_config", next(iter(configurations.keys())))
+            else:
+                config_manager.set("current_config", "default")
+        config_manager.save()
+        return config_name
+
+    def _remove_path(self, state: RuntimeState, target_path: str, label: str) -> bool:
+        normalized = os.path.abspath(str(target_path or "").strip())
+        if not normalized:
+            return False
+        if not os.path.exists(normalized):
+            self._notify(state, 1, 1, label, "skipped", f"路径不存在: {normalized}")
+            return False
+        if not self._is_safe_removal_target(normalized):
+            raise RuntimeError(f"拒绝删除高风险路径: {normalized}")
+
+        if os.path.isdir(normalized):
+            self._safe_rmtree(normalized)
+        else:
+            os.remove(normalized)
+        self._notify(state, 1, 1, label, "completed", normalized)
+        return True
+
+    @staticmethod
+    def _is_safe_removal_target(target_path: str) -> bool:
+        normalized = os.path.abspath(target_path)
+        anchor = os.path.abspath(Path(normalized).anchor)
+        protected_roots = {
+            os.path.normcase(anchor),
+            os.path.normcase(os.path.abspath(os.getcwd())),
+            os.path.normcase(os.path.abspath(str(Path.home()))),
+        }
+        if os.path.normcase(normalized) in protected_roots:
+            return False
+        if normalized == anchor:
+            return False
+        return True
 
     @staticmethod
     def _safe_rmtree(target_path: str) -> None:

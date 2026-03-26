@@ -278,6 +278,7 @@ class DeploymentModCliRunner:
         "component": "components",
         "launch": "launches",
         "config": "configs",
+        "uninstall": "uninstalls",
     }
 
     def __init__(self) -> None:
@@ -301,7 +302,7 @@ class DeploymentModCliRunner:
             return self._run_full_deploy(template)
         if normalized_mode == "component":
             return self._run_component_stage(template)
-        if normalized_mode in {"launch", "config"}:
+        if normalized_mode in {"launch", "config", "uninstall"}:
             return self._run_existing_instance_stage(template, normalized_mode)
         raise ValueError(f"不支持的命令行模板模式: {mode}")
 
@@ -345,9 +346,12 @@ class DeploymentModCliRunner:
         if mode == "launch":
             field_filter = self._is_launch_field
             stage_label = "启动阶段"
-        else:
+        elif mode == "config":
             field_filter = self._is_config_field
             stage_label = "配置阶段"
+        else:
+            field_filter = self._is_uninstall_field
+            stage_label = "卸载阶段"
 
         inputs = self._collect_inputs(template, field_filter=field_filter, initial_values=stored_inputs)
         inputs["serial_number"] = serial_number
@@ -451,7 +455,12 @@ class DeploymentModCliRunner:
             ui.print_warning(f"{label} 请输入 y 或 n。")
 
     def _prompt_existing_instance_serial(self, mode: str) -> str:
-        label = "启动" if mode == "launch" else "配置"
+        if mode == "launch":
+            label = "启动"
+        elif mode == "config":
+            label = "配置"
+        else:
+            label = "卸载"
         while True:
             serial_number = ui.get_input(f"请输入要执行{label}阶段的实例序列号").strip()
             if not serial_number:
@@ -475,6 +484,7 @@ class DeploymentModCliRunner:
         table.add_row("部署项", ", ".join(plan.summary.get("selected_deployments", [])) or "-")
         table.add_row("启动项", ", ".join(plan.summary.get("selected_launches", [])) or "-")
         table.add_row("配置项", ", ".join(plan.summary.get("selected_configs", [])) or "-")
+        table.add_row("卸载项", ", ".join(plan.summary.get("selected_uninstalls", [])) or "-")
         table.add_row("启动器版本", str(plan.summary.get("launcher_version", "") or "-"))
         ui.console.print()
         ui.console.print(table)
@@ -486,6 +496,10 @@ class DeploymentModCliRunner:
             return 1
 
         ui.print_success(f"{action_name}执行完成。")
+        if getattr(result, "removed_paths", None):
+            ui.print_info("已移除路径:")
+            for path in result.removed_paths:
+                ui.console.print(f"  - {path}")
         if result.instance_config_name:
             ui.print_success(f"实例配置已写入: {result.instance_config_name}")
         if result.runtime_env_file:
@@ -572,13 +586,13 @@ class DeploymentModCliRunner:
     @staticmethod
     def _normalize_mode(mode: str) -> str:
         normalized = str(mode or "").strip().lower()
-        if normalized not in {"deploy", "launch", "config", "component"}:
+        if normalized not in {"deploy", "launch", "config", "component", "uninstall"}:
             raise ValueError(f"不支持的命令行模板模式: {mode}")
         return normalized
 
     @staticmethod
     def _is_full_deploy_field(field: TemplateFormField) -> bool:
-        return field.key != "launcher_version"
+        return field.key != "launcher_version" and not field.key.startswith("uninstall::")
 
     @staticmethod
     def _has_prefix(key: str, prefixes: Iterable[str]) -> bool:
@@ -592,6 +606,9 @@ class DeploymentModCliRunner:
 
     def _is_config_field(self, field: TemplateFormField) -> bool:
         return field.key.startswith("config::")
+
+    def _is_uninstall_field(self, field: TemplateFormField) -> bool:
+        return field.key.startswith("uninstall::")
 
 
 deployment_mod_cli_runner = DeploymentModCliRunner()
