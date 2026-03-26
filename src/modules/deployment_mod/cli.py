@@ -250,7 +250,13 @@ class DeploymentModCliRunner:
         if not raw_path:
             raise ValueError("缺少部署模板路径")
 
-        resolved_path = os.path.abspath(os.path.expandvars(raw_path))
+        expanded_path = os.path.expanduser(os.path.expandvars(raw_path))
+        caller_cwd = str(os.environ.get("MCSB_CALLER_CWD", "") or "").strip()
+        base_dir = caller_cwd if caller_cwd else os.getcwd()
+        if os.path.isabs(expanded_path):
+            resolved_path = os.path.abspath(expanded_path)
+        else:
+            resolved_path = os.path.abspath(os.path.join(base_dir, expanded_path))
         if os.path.isdir(resolved_path):
             resolved_path = os.path.join(resolved_path, "DeploymentMOD.toml")
 

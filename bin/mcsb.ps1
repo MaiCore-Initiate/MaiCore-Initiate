@@ -73,6 +73,7 @@ function Invoke-TemplateMode([string]$mode, [string]$templatePath) {
     }
 
     $pythonExe = Resolve-Python
+    $env:MCSB_CALLER_CWD = (Get-Location).Path
     Write-Host "Starting template action $mode..."
     & $pythonExe $mainScript $mode $templatePath
     exit $LASTEXITCODE

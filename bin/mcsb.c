@@ -10,6 +10,8 @@ typedef struct MetaInfo {
     char app_version[256];
     char app_exe[512];
     char build_date[256];
+    char app_description[1024];
+    char app_authors[512];
 } MetaInfo;
 
 static void strip_last_segment(char *path) {
@@ -51,11 +53,20 @@ static int is_version_mode(const char *arg) {
            _stricmp(arg, "Version") == 0;
 }
 
+static int is_help_mode(const char *arg) {
+    return _stricmp(arg, "-h") == 0 ||
+           _stricmp(arg, "--help") == 0 ||
+           _stricmp(arg, "help") == 0 ||
+           _stricmp(arg, "/?") == 0;
+}
+
 static void init_meta_defaults(MetaInfo *meta) {
     strcpy_s(meta->app_name, sizeof(meta->app_name), "MaiCoreStart");
     strcpy_s(meta->app_version, sizeof(meta->app_version), "v5.0.0-beta");
     strcpy_s(meta->app_exe, sizeof(meta->app_exe), "MaiCoreStart-v5.0.0-beta.exe");
     strcpy_s(meta->build_date, sizeof(meta->build_date), "2025-12-13");
+    strcpy_s(meta->app_description, sizeof(meta->app_description), "MaiCoreStart launcher wrapper");
+    strcpy_s(meta->app_authors, sizeof(meta->app_authors), "xiaoCZX、一闪、Lui");
 }
 
 static void trim_right(char *text) {
@@ -105,13 +116,22 @@ static void load_meta_file(const char *meta_file, MetaInfo *meta) {
             strcpy_s(meta->app_exe, sizeof(meta->app_exe), value);
         } else if (_stricmp(key, "BUILD_DATE") == 0) {
             strcpy_s(meta->build_date, sizeof(meta->build_date), value);
+        } else if (_stricmp(key, "APP_DESCRIPTION") == 0) {
+            strcpy_s(meta->app_description, sizeof(meta->app_description), value);
+        } else if (_stricmp(key, "APP_AUTHORS") == 0) {
+            strcpy_s(meta->app_authors, sizeof(meta->app_authors), value);
         }
     }
 
     fclose(fp);
 }
 
-static void show_usage(void) {
+static void show_usage(const MetaInfo *meta) {
+    printf("%s %s\n", meta->app_name, meta->app_version);
+    printf("%s\n", meta->app_description);
+    printf("构建时间: %s\n", meta->build_date);
+    printf("开发者: %s\n", meta->app_authors);
+    puts("");
     puts("Usage: mcsb -d <DeploymentMOD path>");
     puts("       mcsb -l <DeploymentMOD path>");
     puts("       mcsb -c <DeploymentMOD path>");
@@ -122,6 +142,51 @@ static void show_usage(void) {
     puts("       mcsb component <DeploymentMOD path>");
     puts("");
     puts("You can pass either a template directory or a DeploymentMOD.toml file path.");
+}
+
+static void show_version_detail(const MetaInfo *meta) {
+    printf("%s version %s\n", meta->app_name, meta->app_version);
+    printf("build date: %s\n", meta->build_date);
+    printf("authors: %s\n", meta->app_authors);
+}
+
+static int needs_quotes(const char *text) {
+    return strchr(text, ' ') != NULL || strchr(text, '\t') != NULL;
+}
+
+static void append_argument(char *buffer, size_t buffer_size, const char *arg) {
+    size_t length = strlen(buffer);
+    if (length + 1 >= buffer_size) {
+        return;
+    }
+    if (length > 0) {
+        strcat_s(buffer, buffer_size, " ");
+    }
+    if (needs_quotes(arg)) {
+        strcat_s(buffer, buffer_size, "\"");
+        strcat_s(buffer, buffer_size, arg);
+        strcat_s(buffer, buffer_size, "\"");
+    } else {
+        strcat_s(buffer, buffer_size, arg);
+    }
+}
+
+static void build_python_command(
+    char *buffer,
+    size_t buffer_size,
+    const char *python_exe,
+    const char *main_script,
+    int argc,
+    char *argv[],
+    int start_index
+) {
+    int index;
+    buffer[0] = '\0';
+    append_argument(buffer, buffer_size, python_exe);
+    append_argument(buffer, buffer_size, main_script);
+    for (index = start_index; index < argc; ++index) {
+        append_argument(buffer, buffer_size, argv[index]);
+    }
 }
 
 static int run_process(const char *command_line, const char *working_dir) {
@@ -152,6 +217,7 @@ int main(int argc, char *argv[]) {
     char module_path[PATH_BUF_SIZE];
     char script_dir[PATH_BUF_SIZE];
     char parent_dir[PATH_BUF_SIZE];
+    char caller_cwd[PATH_BUF_SIZE];
     char meta_file[PATH_BUF_SIZE];
     char app_exe[PATH_BUF_SIZE];
     char main_script[PATH_BUF_SIZE];
@@ -180,25 +246,25 @@ int main(int argc, char *argv[]) {
         python_exe = venv_python;
     }
 
+    if (argc > 1 && is_help_mode(argv[1])) {
+        show_usage(&meta);
+        return 0;
+    }
+
     if (argc > 1 && is_version_mode(argv[1])) {
-        printf("%s version %s\n", meta.app_name, meta.app_version);
+        show_version_detail(&meta);
         return 0;
     }
 
     if (argc > 1 && is_template_mode(argv[1])) {
         if (argc < 3) {
-            show_usage();
+            show_usage(&meta);
             return 1;
         }
-        sprintf_s(
-            command_line,
-            sizeof(command_line),
-            "\"%s\" \"%s\" %s \"%s\"",
-            python_exe,
-            main_script,
-            argv[1],
-            argv[2]
-        );
+        if (GetCurrentDirectoryA(sizeof(caller_cwd), caller_cwd) > 0) {
+            SetEnvironmentVariableA("MCSB_CALLER_CWD", caller_cwd);
+        }
+        build_python_command(command_line, sizeof(command_line), python_exe, main_script, argc, argv, 1);
         return run_process(command_line, parent_dir);
     }
 

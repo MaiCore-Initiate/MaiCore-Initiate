@@ -70,6 +70,7 @@ if "%~2"=="" (
 
 set "TEMPLATE_MODE=%~1"
 set "TEMPLATE_PATH=%~2"
+set "MCSB_CALLER_CWD=%cd%"
 set "PYTHON_EXE=%PARENT_DIR%\venv\Scripts\python.exe"
 if not exist "%PYTHON_EXE%" set "PYTHON_EXE=python"
 

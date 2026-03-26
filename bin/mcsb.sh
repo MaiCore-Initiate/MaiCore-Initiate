@@ -67,6 +67,7 @@ run_template_mode() {
 
   local python_exe
   python_exe="$(resolve_python)"
+  export MCSB_CALLER_CWD="${PWD}"
   echo "Starting template action ${mode}..."
   "${python_exe}" "${MAIN_SCRIPT}" "${mode}" "${template_path}"
 }
