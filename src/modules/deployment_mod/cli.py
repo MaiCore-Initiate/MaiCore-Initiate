@@ -64,7 +64,6 @@ class _TemplateExecutionDisplay:
     def start(self) -> None:
         if self._started:
             return
-        self.progress.start()
         self.live.start()
         self._started = True
 
@@ -72,7 +71,6 @@ class _TemplateExecutionDisplay:
         if not self._started:
             return
         self.live.stop()
-        self.progress.stop()
         self._started = False
 
     def __rich__(self) -> Group:
