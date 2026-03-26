@@ -27,6 +27,13 @@ class TemplateDeployRequest(BaseModel):
     user_inputs: Dict[str, Any]
 
 
+class TemplateStageRequest(BaseModel):
+    template_id: str
+    stage: str
+    user_inputs: Dict[str, Any] = {}
+    serial_number: str = ""
+
+
 @router.get("/templates", summary="列出本地模板")
 async def list_templates():
     templates = deployment_mod_registry.get_all(refresh=True)
@@ -123,6 +130,72 @@ async def deploy_from_template(request: TemplateDeployRequest):
 
     threading.Thread(target=_run_deploy, daemon=True).start()
     return {"success": True, "task_id": task_id, "message": "模板部署任务已启动"}
+
+
+@router.post("/stage", summary="执行模板单独阶段", dependencies=[Depends(require_action("deploy.manage"))])
+async def run_template_stage(request: TemplateStageRequest):
+    task_id = f"deployment_mod_stage_{uuid.uuid4().hex[:8]}"
+    serial_number = request.serial_number or (request.user_inputs or {}).get("serial_number", task_id)
+    _deploy_tasks[task_id] = {
+        "status": "running",
+        "step": 0,
+        "total_steps": 1,
+        "logs": [],
+        "template_id": request.template_id,
+        "stage": request.stage,
+    }
+    _remember_main_event_loop()
+
+    def _run_stage():
+        def progress_cb(**kwargs):
+            _deploy_tasks[task_id].update(kwargs)
+            msg = kwargs.get("message", "")
+            step_name = kwargs.get("step_name", "")
+            status = kwargs.get("status", "running")
+            if msg:
+                prefix = f"[{datetime.now().strftime('%H:%M:%S')}]"
+                if step_name:
+                    prefix += f" [{step_name}]"
+                if status:
+                    prefix += f" [{status}]"
+                logs = _deploy_tasks[task_id].setdefault("logs", [])
+                logs.append(f"{prefix} {msg}")
+                if len(logs) > 2000:
+                    _deploy_tasks[task_id]["logs"] = logs[-2000:]
+            _dispatch_progress(serial_number, {"task_id": task_id, **kwargs, "logs": _deploy_tasks[task_id].get("logs", [])[-500:]})
+
+        try:
+            if request.serial_number:
+                result = deployment_mod_executor.execute_stage_for_instance(
+                    request.template_id,
+                    request.serial_number,
+                    request.stage,
+                    user_inputs=request.user_inputs,
+                    progress_callback=progress_cb,
+                )
+            else:
+                result = deployment_mod_executor.execute_stage(
+                    request.template_id,
+                    request.stage,
+                    request.user_inputs,
+                    progress_callback=progress_cb,
+                    serial_number=serial_number,
+                )
+            _deploy_tasks[task_id]["status"] = "completed" if result.success else "failed"
+            _deploy_tasks[task_id]["result"] = result.to_dict()
+            progress_cb(
+                step=1,
+                total_steps=1,
+                step_name=f"{request.stage} 阶段完成" if result.success else f"{request.stage} 阶段失败",
+                status="completed" if result.success else "failed",
+                message=result.message,
+            )
+        except Exception as exc:
+            _deploy_tasks[task_id]["status"] = "failed"
+            progress_cb(step=1, total_steps=1, step_name=f"{request.stage} 阶段失败", status="failed", message=str(exc))
+
+    threading.Thread(target=_run_stage, daemon=True).start()
+    return {"success": True, "task_id": task_id, "message": "模板阶段任务已启动"}
 
 
 @router.get("/progress/{task_id}", summary="查询模板部署进度")

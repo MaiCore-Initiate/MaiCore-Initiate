@@ -251,6 +251,7 @@ class DeploymentPlan:
 class RuntimeResult:
     success: bool
     message: str = ""
+    stage: str = "full"
     instance_config_name: str = ""
     instance_config: Dict[str, Any] = field(default_factory=dict)
     exported_env: Dict[str, str] = field(default_factory=dict)
@@ -260,6 +261,8 @@ class RuntimeResult:
     deployment_roots: Dict[str, str] = field(default_factory=dict)
     opened_files: List[str] = field(default_factory=list)
     launched_items: List[str] = field(default_factory=list)
+    runtime_env_file: str = ""
+    runtime_state_file: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return _to_plain(self)

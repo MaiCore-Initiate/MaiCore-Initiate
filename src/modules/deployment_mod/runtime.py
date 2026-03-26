@@ -50,6 +50,10 @@ class RuntimeState:
     plan: DeploymentPlan
     progress_callback: Optional[Callable] = None
     runtime_root: str = ""
+    instance_serial_number: str = ""
+    instance_root: str = ""
+    runtime_env_file: str = ""
+    runtime_state_file: str = ""
     env_pool: Dict[str, str] = field(default_factory=dict)
     file_paths: Dict[str, str] = field(default_factory=dict)
     file_trees: Dict[str, Any] = field(default_factory=dict)
@@ -64,6 +68,9 @@ class RuntimeState:
 
 class DeploymentModRuntime:
     """真正执行部署模板的运行时引擎。"""
+
+    RUNTIME_ENV_FILENAME = ".mcstart-template.env"
+    RUNTIME_STATE_FILENAME = ".mcstart-template-state.toml"
 
     SPECIAL_PATHS = {
         "$Temporary": lambda: os.path.join(os.getcwd(), "Temporary"),
@@ -117,6 +124,7 @@ class DeploymentModRuntime:
             plan=plan,
             progress_callback=progress_callback,
             runtime_root=runtime_root,
+            instance_serial_number=str(plan.template_inputs.get("serial_number", "") or ""),
         )
 
         try:
@@ -140,6 +148,7 @@ class DeploymentModRuntime:
             return RuntimeResult(
                 success=True,
                 message="模板部署成功",
+                stage="full",
                 instance_config_name=instance_config_name,
                 instance_config=instance_config,
                 exported_env=dict(state.env_pool),
@@ -149,6 +158,8 @@ class DeploymentModRuntime:
                 deployment_roots=dict(state.deployment_roots),
                 opened_files=list(state.opened_files),
                 launched_items=list(state.launched_items),
+                runtime_env_file=state.runtime_env_file,
+                runtime_state_file=state.runtime_state_file,
             )
         except Exception as exc:
             logger.error("模板运行失败", template_id=template.metadata.mod_id, error=str(exc))
@@ -156,6 +167,7 @@ class DeploymentModRuntime:
             return RuntimeResult(
                 success=False,
                 message=str(exc),
+                stage="full",
                 exported_env=dict(state.env_pool),
                 selected_versions=dict(state.versions),
                 install_paths=dict(state.install_paths),
@@ -163,6 +175,91 @@ class DeploymentModRuntime:
                 deployment_roots=dict(state.deployment_roots),
                 opened_files=list(state.opened_files),
                 launched_items=list(state.launched_items),
+                runtime_env_file=state.runtime_env_file,
+                runtime_state_file=state.runtime_state_file,
+            )
+
+    def execute_stage(
+        self,
+        template: TemplateDefinition,
+        plan: DeploymentPlan,
+        stage: str,
+        progress_callback: Optional[Callable] = None,
+        serial_number: str = "",
+    ) -> RuntimeResult:
+        normalized_stage = self._normalize_stage(stage)
+        if normalized_stage == "full":
+            return self.execute(template, plan, progress_callback=progress_callback)
+
+        runtime_root = os.path.join(
+            os.getcwd(),
+            "data",
+            "template_runtime",
+            f"{template.metadata.mod_id.replace('.', '_')}_{normalized_stage}_{int(time.time())}",
+        )
+        os.makedirs(runtime_root, exist_ok=True)
+
+        state = RuntimeState(
+            template=template,
+            plan=plan,
+            progress_callback=progress_callback,
+            runtime_root=runtime_root,
+            instance_serial_number=serial_number or str(plan.template_inputs.get("serial_number", "") or ""),
+        )
+
+        try:
+            self._prepare_file_imports(state)
+            if normalized_stage in {"components", "deployments"}:
+                self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"模板: {template.metadata.mod_name}")
+            else:
+                self._restore_runtime_state_for_instance(state, state.instance_serial_number)
+                self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"实例序列号: {state.instance_serial_number}")
+
+            if normalized_stage == "components":
+                self._execute_components(state)
+            elif normalized_stage == "deployments":
+                self._execute_deployments(state)
+                self._persist_runtime_files_for_existing_instance(state)
+            elif normalized_stage == "launches":
+                self._execute_launches(state)
+                self._persist_runtime_files_for_existing_instance(state)
+            elif normalized_stage == "configs":
+                self._execute_configs(state)
+                self._persist_runtime_files_for_existing_instance(state)
+            else:
+                raise RuntimeError(f"未知阶段: {normalized_stage}")
+
+            self._notify(state, 1, 1, f"{normalized_stage} 阶段完成", "completed", "阶段执行成功")
+            return RuntimeResult(
+                success=True,
+                message="阶段执行成功",
+                stage=normalized_stage,
+                exported_env=dict(state.env_pool),
+                selected_versions=dict(state.versions),
+                install_paths=dict(state.install_paths),
+                deploy_paths=dict(state.deploy_paths),
+                deployment_roots=dict(state.deployment_roots),
+                opened_files=list(state.opened_files),
+                launched_items=list(state.launched_items),
+                runtime_env_file=state.runtime_env_file,
+                runtime_state_file=state.runtime_state_file,
+            )
+        except Exception as exc:
+            logger.error("模板阶段执行失败", template_id=template.metadata.mod_id, stage=normalized_stage, error=str(exc))
+            self._notify(state, 1, 1, f"{normalized_stage} 阶段失败", "failed", str(exc))
+            return RuntimeResult(
+                success=False,
+                message=str(exc),
+                stage=normalized_stage,
+                exported_env=dict(state.env_pool),
+                selected_versions=dict(state.versions),
+                install_paths=dict(state.install_paths),
+                deploy_paths=dict(state.deploy_paths),
+                deployment_roots=dict(state.deployment_roots),
+                opened_files=list(state.opened_files),
+                launched_items=list(state.launched_items),
+                runtime_env_file=state.runtime_env_file,
+                runtime_state_file=state.runtime_state_file,
             )
 
     def _execute_components(self, state: RuntimeState) -> None:
@@ -459,6 +556,8 @@ class DeploymentModRuntime:
                 "install_paths": dict(state.install_paths),
                 "deploy_paths": dict(state.deploy_paths),
                 "deployment_roots": dict(state.deployment_roots),
+                "versions": dict(state.versions),
+                "version_meta": dict(state.version_meta),
                 "opened_files": list(state.opened_files),
                 "launched_items": list(state.launched_items),
                 "launcher_version": str(p_config_manager.get("launcher.version", "") or ""),
@@ -468,9 +567,180 @@ class DeploymentModRuntime:
         config_name = f"instance_{serial_number}"
         if not config_manager.add_configuration(config_name, new_config):
             raise RuntimeError("实例配置写入失败")
+        self._prepare_runtime_file_locations(state, primary_root or state.runtime_root)
+        self._write_runtime_persistence_files(state)
+        new_config["template_runtime"].update(
+            {
+                "instance_root": state.instance_root,
+                "env_file": state.runtime_env_file,
+                "state_file": state.runtime_state_file,
+            }
+        )
         config_manager.set("current_config", config_name)
         config_manager.save()
         return config_name, new_config
+
+    def _persist_runtime_files_for_existing_instance(self, state: RuntimeState) -> None:
+        if not state.instance_serial_number:
+            return
+        config_name, config = self._find_instance_config(state.instance_serial_number)
+        runtime_info = dict(config.get("template_runtime", {}) or {})
+        instance_root = str(runtime_info.get("instance_root", "") or self._primary_instance_root_from_config(config))
+        self._prepare_runtime_file_locations(state, instance_root or state.runtime_root)
+        self._write_runtime_persistence_files(state)
+        runtime_info.update(
+            {
+                "exported_env": dict(state.env_pool),
+                "install_paths": dict(state.install_paths),
+                "deploy_paths": dict(state.deploy_paths),
+                "deployment_roots": dict(state.deployment_roots),
+                "opened_files": list(state.opened_files),
+                "launched_items": list(state.launched_items),
+                "launcher_version": str(p_config_manager.get("launcher.version", "") or ""),
+                "instance_root": state.instance_root,
+                "env_file": state.runtime_env_file,
+                "state_file": state.runtime_state_file,
+            }
+        )
+        config["template_runtime"] = runtime_info
+        config_manager.get_all_configurations()[config_name] = config
+        config_manager.save()
+
+    def _restore_runtime_state_for_instance(self, state: RuntimeState, serial_number: str) -> None:
+        if not serial_number:
+            raise RuntimeError("单独运行启动或配置阶段时必须提供实例序列号")
+        _, config = self._find_instance_config(serial_number)
+        mod_binding = dict(config.get("mod_binding", {}) or {})
+        bound_template_id = str(mod_binding.get("template_id", "") or "")
+        if bound_template_id and bound_template_id != state.template.metadata.mod_id:
+            raise RuntimeError(f"实例 {serial_number} 绑定的模板不是 {state.template.metadata.mod_id}")
+
+        runtime_info = dict(config.get("template_runtime", {}) or {})
+        state.instance_serial_number = serial_number
+        state.instance_root = str(runtime_info.get("instance_root", "") or self._primary_instance_root_from_config(config))
+        state.runtime_env_file = str(runtime_info.get("env_file", "") or "")
+        state.runtime_state_file = str(runtime_info.get("state_file", "") or "")
+
+        self._prepare_file_imports(state)
+        state.env_pool.update(self._read_runtime_env_file(state.runtime_env_file))
+        if not state.env_pool:
+            state.env_pool.update({str(k): str(v) for k, v in dict(runtime_info.get("exported_env", {}) or {}).items()})
+
+        persisted_state = self._read_runtime_state_file(state.runtime_state_file)
+        merged_state = {
+            "install_paths": runtime_info.get("install_paths", {}),
+            "deploy_paths": runtime_info.get("deploy_paths", {}),
+            "deployment_roots": runtime_info.get("deployment_roots", {}),
+            "versions": runtime_info.get("versions", {}),
+            "version_meta": runtime_info.get("version_meta", {}),
+            "opened_files": runtime_info.get("opened_files", []),
+            "launched_items": runtime_info.get("launched_items", []),
+        }
+        merged_state.update({key: value for key, value in persisted_state.items() if value})
+
+        state.install_paths.update({str(k): str(v) for k, v in dict(merged_state.get("install_paths", {}) or {}).items()})
+        state.deploy_paths.update({str(k): str(v) for k, v in dict(merged_state.get("deploy_paths", {}) or {}).items()})
+        state.deployment_roots.update({str(k): str(v) for k, v in dict(merged_state.get("deployment_roots", {}) or {}).items()})
+        state.versions.update({str(k): str(v) for k, v in dict(merged_state.get("versions", {}) or {}).items()})
+        state.version_meta.update({str(k): dict(v) for k, v in dict(merged_state.get("version_meta", {}) or {}).items()})
+        state.opened_files = [str(item) for item in list(merged_state.get("opened_files", []) or [])]
+        state.launched_items = [str(item) for item in list(merged_state.get("launched_items", []) or [])]
+
+        primary_root = self._primary_instance_root_from_config(config)
+        primary_id = self._first_selected_deployment_id(state)
+        if primary_root and primary_id and primary_id not in state.deployment_roots:
+            state.deployment_roots[primary_id] = primary_root
+
+    def _prepare_runtime_file_locations(self, state: RuntimeState, instance_root: str) -> None:
+        root = os.path.abspath(instance_root)
+        os.makedirs(root, exist_ok=True)
+        state.instance_root = root
+        state.runtime_env_file = os.path.join(root, self.RUNTIME_ENV_FILENAME)
+        state.runtime_state_file = os.path.join(root, self.RUNTIME_STATE_FILENAME)
+
+    def _write_runtime_persistence_files(self, state: RuntimeState) -> None:
+        if not state.instance_root:
+            return
+        os.makedirs(state.instance_root, exist_ok=True)
+        with open(state.runtime_env_file, "w", encoding="utf-8") as handle:
+            for key in sorted(state.env_pool.keys()):
+                handle.write(f"{key}={self._dotenv_escape(state.env_pool[key])}\n")
+
+        with open(state.runtime_state_file, "w", encoding="utf-8") as handle:
+            toml.dump(
+                {
+                "template_id": state.template.metadata.mod_id,
+                "serial_number": state.instance_serial_number,
+                "install_paths": dict(state.install_paths),
+                "deploy_paths": dict(state.deploy_paths),
+                "deployment_roots": dict(state.deployment_roots),
+                "versions": dict(state.versions),
+                "version_meta": dict(state.version_meta),
+                "opened_files": list(state.opened_files),
+                "launched_items": list(state.launched_items),
+                },
+                handle,
+            )
+
+    def _read_runtime_env_file(self, file_path: str) -> Dict[str, str]:
+        if not file_path or not os.path.isfile(file_path):
+            return {}
+        env_values: Dict[str, str] = {}
+        with open(file_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                value = value.strip()
+                if value.startswith("\"") and value.endswith("\""):
+                    value = json.loads(value)
+                env_values[key.strip()] = str(value)
+        return env_values
+
+    def _read_runtime_state_file(self, file_path: str) -> Dict[str, Any]:
+        if not file_path or not os.path.isfile(file_path):
+            return {}
+        with open(file_path, "r", encoding="utf-8") as handle:
+            return toml.load(handle)
+
+    def _find_instance_config(self, serial_number: str) -> tuple[str, Dict[str, Any]]:
+        for config_name, config in config_manager.get_all_configurations().items():
+            if str(config.get("serial_number", "") or "") == str(serial_number):
+                return config_name, config
+        raise RuntimeError(f"未找到实例序列号: {serial_number}")
+
+    def _primary_instance_root_from_config(self, config: Dict[str, Any]) -> str:
+        for key in ("mai_path", "mofox_path", "neo_mofox_path"):
+            path = str(config.get(key, "") or "").strip()
+            if path:
+                return path
+        return ""
+
+    @staticmethod
+    def _normalize_stage(stage: str) -> str:
+        mapping = {
+            "full": "full",
+            "component": "components",
+            "components": "components",
+            "deploy": "deployments",
+            "deployment": "deployments",
+            "deployments": "deployments",
+            "launch": "launches",
+            "launches": "launches",
+            "config": "configs",
+            "configs": "configs",
+        }
+        normalized = mapping.get(str(stage or "").strip().lower())
+        if not normalized:
+            raise RuntimeError(f"未知阶段: {stage}")
+        return normalized
+
+    @staticmethod
+    def _dotenv_escape(value: Any) -> str:
+        raw = str(value or "")
+        escaped = raw.replace("\\", "\\\\").replace("\"", "\\\"")
+        return f"\"{escaped}\""
 
     def _prepare_file_imports(self, state: RuntimeState) -> None:
         if not state.template.metadata.file_import:
