@@ -1185,7 +1185,9 @@ class DeploymentModRuntime:
     def _operate_asset(self, asset_path: str, target_dir: str, is_deployment: bool) -> None:
         extension = self._normalize_extension(asset_path)
         if extension in {".zip", ".tar", ".gz", ".tgz", ".xz", ".tar.gz", ".tar.xz"}:
-            self._extract_archive(asset_path, target_dir)
+            extracted_root = self._extract_archive(asset_path, target_dir)
+            if not is_deployment:
+                self._merge_component_archive_payload(target_dir, extracted_root)
             return
         if extension in {".exe", ".msi"}:
             subprocess.run([asset_path], cwd=target_dir, check=True)
@@ -1204,6 +1206,27 @@ class DeploymentModRuntime:
             return
         if is_deployment:
             shutil.copy2(asset_path, os.path.join(target_dir, os.path.basename(asset_path)))
+
+    def _merge_component_archive_payload(self, target_dir: str, extracted_root: str) -> None:
+        if not extracted_root or not os.path.isdir(extracted_root):
+            return
+
+        if os.path.abspath(extracted_root) == os.path.abspath(target_dir):
+            return
+
+        for entry in os.listdir(extracted_root):
+            source_path = os.path.join(extracted_root, entry)
+            target_path = os.path.join(target_dir, entry)
+            if os.path.exists(target_path):
+                if os.path.isdir(target_path):
+                    self._safe_rmtree(target_path)
+                else:
+                    os.remove(target_path)
+            shutil.move(source_path, target_path)
+
+        extract_root = os.path.join(target_dir, "__extract__")
+        if os.path.isdir(extract_root):
+            self._safe_rmtree(extract_root)
 
     def _extract_archive(self, archive_path: str, target_dir: str) -> str:
         temp_extract = os.path.join(target_dir, "__extract__")
