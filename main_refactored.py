@@ -2,6 +2,7 @@
 MCStart主程序
 重构版本，使用结构化日志和模块化设计
 """
+import argparse
 import sys
 import os
 import time
@@ -1433,15 +1434,96 @@ class MaiMaiLauncher:
             ui.pause()
 
 
-def main():
+def _build_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(add_help=True)
+    action_group = parser.add_mutually_exclusive_group()
+    action_group.add_argument(
+        "-d",
+        dest="deploy_template",
+        default="",
+        metavar="PATH",
+        help="执行完整模板部署，可传模板目录或 DeploymentMOD.toml 文件路径。",
+    )
+    action_group.add_argument(
+        "-l",
+        dest="launch_template",
+        default="",
+        metavar="PATH",
+        help="针对已部署实例执行模板启动阶段，可传模板目录或 DeploymentMOD.toml 文件路径。",
+    )
+    action_group.add_argument(
+        "-c",
+        dest="config_template",
+        default="",
+        metavar="PATH",
+        help="针对已部署实例执行模板配置阶段，可传模板目录或 DeploymentMOD.toml 文件路径。",
+    )
+    action_group.add_argument(
+        "-com",
+        dest="component_template",
+        default="",
+        metavar="PATH",
+        help="执行模板组件阶段，可传模板目录或 DeploymentMOD.toml 文件路径。",
+    )
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=["deploy", "launch", "config", "component"],
+        help="模板命令别名，可配合模板路径使用。",
+    )
+    parser.add_argument(
+        "command_template",
+        nargs="?",
+        default="",
+        help="command 模式下的模板路径。",
+    )
+    return parser
+
+
+def _run_cli_mode(args: argparse.Namespace) -> int | None:
+    from src.modules.deployment_mod import deployment_mod_cli_runner
+
+    cli_actions = [
+        ("deploy", str(getattr(args, "deploy_template", "") or "").strip()),
+        ("launch", str(getattr(args, "launch_template", "") or "").strip()),
+        ("config", str(getattr(args, "config_template", "") or "").strip()),
+        ("component", str(getattr(args, "component_template", "") or "").strip()),
+    ]
+
+    for mode, template_path in cli_actions:
+        if not template_path:
+            continue
+        logger.info("进入命令行模板模式", mode=mode, template_path=template_path)
+        return deployment_mod_cli_runner.run(template_path, mode=mode)
+
+    command = str(getattr(args, "command", "") or "").strip().lower()
+    command_template = str(getattr(args, "command_template", "") or "").strip()
+    if command:
+        if not command_template:
+            raise ValueError(f"命令 {command} 需要提供部署模板路径")
+        logger.info("进入命令行模板模式", mode=command, template_path=command_template)
+        return deployment_mod_cli_runner.run(command_template, mode=command)
+
+    return None
+
+
+def main(argv: list[str] | None = None) -> int:
     """主函数"""
     try:
+        parser = _build_cli_parser()
+        args = parser.parse_args(argv if argv is not None else sys.argv[1:])
+        cli_result = _run_cli_mode(args)
+        if cli_result is not None:
+            return cli_result
+
         app = MaiMaiLauncher()
         app.run()
+        return 0
     except Exception as e:
         print(f"启动失败：{str(e)}")
         logger.error("启动失败", error=str(e))
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,5 +1,6 @@
 """Deployment MOD 支持模块。"""
 
+from .cli import DeploymentModCliRunner, deployment_mod_cli_runner
 from .executor import DeploymentModExecutor, deployment_mod_executor
 from .models import (
     ComponentBinding,
@@ -25,6 +26,7 @@ __all__ = [
     "ComponentBinding",
     "ComponentDefinition",
     "ConfigDefinition",
+    "DeploymentModCliRunner",
     "DeploymentDefinition",
     "DeploymentModExecutor",
     "DeploymentModParser",
@@ -40,6 +42,7 @@ __all__ = [
     "TemplateMetadata",
     "RuntimeResult",
     "DeploymentModRuntime",
+    "deployment_mod_cli_runner",
     "deployment_mod_executor",
     "deployment_mod_registry",
 ]
