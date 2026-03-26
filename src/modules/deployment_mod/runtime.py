@@ -19,6 +19,8 @@ from xml.etree import ElementTree
 import requests
 import structlog
 import toml
+import urllib3
+from urllib3.exceptions import InsecureRequestWarning
 
 from ...core.config import config_manager
 from ...core.p_config import p_config_manager
@@ -35,6 +37,7 @@ from .models import (
 )
 
 logger = structlog.get_logger(__name__)
+urllib3.disable_warnings(InsecureRequestWarning)
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{(key|env|install_path|deploy_path|version|file_path|file_key)\|([^{}]+)}}")
 
@@ -1173,13 +1176,95 @@ class DeploymentModRuntime:
         filename = os.path.basename(parsed.path) or f"{item_id}.bin"
         target_path = os.path.join(download_dir, filename)
 
-        self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"下载资源: {url}")
-        with requests.get(url, stream=True, timeout=60, verify=False) as response:
-            response.raise_for_status()
-            with open(target_path, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=1024 * 64):
-                    if chunk:
+        step_name = f"{stage_name}:{item_id}"
+        self._notify(state, 0, 0, step_name, "running", f"下载资源: {url}")
+        try:
+            with requests.get(url, stream=True, timeout=60, verify=False) as response:
+                response.raise_for_status()
+                total_bytes = int(response.headers.get("content-length") or 0)
+                download_meta = {
+                    "download_id": f"{stage_name}:{item_id}:{filename}",
+                    "stage_name": stage_name,
+                    "item_id": item_id,
+                    "filename": filename,
+                    "url": url,
+                    "total_bytes": total_bytes,
+                }
+                self._notify(
+                    state,
+                    0,
+                    0,
+                    step_name,
+                    "running",
+                    f"开始下载: {filename}",
+                    event="download",
+                    data={**download_meta, "download_status": "started", "downloaded_bytes": 0},
+                )
+
+                downloaded_bytes = 0
+                last_report_bytes = 0
+                last_report_time = time.monotonic()
+                with open(target_path, "wb") as handle:
+                    for chunk in response.iter_content(chunk_size=1024 * 64):
+                        if not chunk:
+                            continue
                         handle.write(chunk)
+                        downloaded_bytes += len(chunk)
+
+                        now = time.monotonic()
+                        if downloaded_bytes - last_report_bytes >= 1024 * 256 or now - last_report_time >= 0.12:
+                            self._notify(
+                                state,
+                                0,
+                                0,
+                                step_name,
+                                "running",
+                                f"下载中: {filename}",
+                                event="download",
+                                data={
+                                    **download_meta,
+                                    "download_status": "progress",
+                                    "downloaded_bytes": downloaded_bytes,
+                                },
+                            )
+                            last_report_bytes = downloaded_bytes
+                            last_report_time = now
+
+                self._notify(
+                    state,
+                    0,
+                    0,
+                    step_name,
+                    "completed",
+                    f"下载完成: {filename}",
+                    event="download",
+                    data={
+                        **download_meta,
+                        "download_status": "completed",
+                        "downloaded_bytes": downloaded_bytes,
+                    },
+                )
+        except Exception as exc:
+            self._notify(
+                state,
+                0,
+                0,
+                step_name,
+                "failed",
+                f"下载失败: {filename}",
+                event="download",
+                data={
+                    "download_id": f"{stage_name}:{item_id}:{filename}",
+                    "stage_name": stage_name,
+                    "item_id": item_id,
+                    "filename": filename,
+                    "url": url,
+                    "download_status": "failed",
+                    "downloaded_bytes": 0,
+                    "error": str(exc),
+                },
+            )
+            raise
         return target_path
 
     def _operate_asset(self, asset_path: str, target_dir: str, is_deployment: bool) -> None:
@@ -1326,9 +1411,27 @@ class DeploymentModRuntime:
         return [item_map[item_id] for item_id in order if item_id in item_map]
 
     @staticmethod
-    def _notify(state: RuntimeState, step: int, total_steps: int, step_name: str, status: str, message: str) -> None:
+    def _notify(
+        state: RuntimeState,
+        step: int,
+        total_steps: int,
+        step_name: str,
+        status: str,
+        message: str,
+        event: str = "stage",
+        data: Optional[Dict[str, Any]] = None,
+    ) -> None:
         if state.progress_callback:
-            state.progress_callback(step=step, total_steps=total_steps, step_name=step_name, status=status, message=message)
+            payload = data or {}
+            state.progress_callback(
+                step=step,
+                total_steps=total_steps,
+                step_name=step_name,
+                status=status,
+                message=message,
+                event=event,
+                **payload,
+            )
 
     @staticmethod
     def _script_extension(runtime: str) -> str:

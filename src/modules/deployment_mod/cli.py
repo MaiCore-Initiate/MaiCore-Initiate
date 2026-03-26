@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Iterable
+import time
+from collections import deque
+from typing import Any, Callable, Deque, Dict, Iterable, Optional
 
+from rich.console import Group
+from rich.live import Live
+from rich.panel import Panel
+from rich.progress import BarColumn, DownloadColumn, Progress, TaskID, TextColumn, TimeRemainingColumn, TransferSpeedColumn
 from rich.table import Table
+from rich.text import Text
 
 from ...ui.interface import ui
 from ...utils.common import setup_console
@@ -11,6 +18,257 @@ from .models import DeploymentPlan, TemplateDefinition, TemplateFormField
 from .parser import DeploymentModParser
 from .planner import DeploymentModPlanner
 from .runtime import DeploymentModRuntime
+
+
+class _TemplateExecutionDisplay:
+    """命令行模板执行期的 Rich 动画与进度条展示器。"""
+
+    HISTORY_LIMIT = 8
+    DOT_FRAMES = (
+        "●○○○○○",
+        "○●○○○○",
+        "○○●○○○",
+        "○○○●○○",
+        "○○○○●○",
+        "○○○○○●",
+    )
+
+    def __init__(self, title: str) -> None:
+        self.title = title
+        self.current_step = 0
+        self.total_steps = 0
+        self.current_stage = "等待执行"
+        self.current_message = "准备开始..."
+        self.history: Deque[tuple[str, str]] = deque(maxlen=self.HISTORY_LIMIT)
+        self.download_tasks: Dict[str, TaskID] = {}
+        self.progress = Progress(
+            TextColumn("[bold cyan]{task.fields[prefix]}", justify="right"),
+            TextColumn("{task.description}", style="bold"),
+            BarColumn(bar_width=None),
+            DownloadColumn(),
+            TransferSpeedColumn(),
+            TimeRemainingColumn(),
+            console=ui.console,
+            expand=True,
+        )
+        self.live = Live(self, console=ui.console, refresh_per_second=12, transient=False)
+        self._started = False
+
+    def __enter__(self) -> "_TemplateExecutionDisplay":
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.stop()
+
+    def start(self) -> None:
+        if self._started:
+            return
+        self.progress.start()
+        self.live.start()
+        self._started = True
+
+    def stop(self) -> None:
+        if not self._started:
+            return
+        self.live.stop()
+        self.progress.stop()
+        self._started = False
+
+    def __rich__(self) -> Group:
+        renderables = [self._render_status_panel()]
+        if self.download_tasks:
+            renderables.append(
+                Panel(
+                    self.progress,
+                    title="[bold]下载进度[/bold]",
+                    title_align="left",
+                    border_style=ui.colors["border"],
+                )
+            )
+        if self.history:
+            renderables.append(
+                Panel(
+                    self._render_history(),
+                    title="[bold]最近事件[/bold]",
+                    title_align="left",
+                    border_style=ui.colors["border"],
+                )
+            )
+        return Group(*renderables)
+
+    def update(
+        self,
+        *,
+        step: int,
+        total_steps: int,
+        step_name: str,
+        status: str,
+        message: str,
+        event: str = "stage",
+        **payload: Any,
+    ) -> None:
+        if event == "download":
+            self._update_download(step_name=step_name, status=status, message=message, **payload)
+        else:
+            self._update_stage(step=step, total_steps=total_steps, step_name=step_name, status=status, message=message)
+        self._refresh()
+
+    def _update_stage(self, *, step: int, total_steps: int, step_name: str, status: str, message: str) -> None:
+        detail = self._format_detail(step, total_steps, step_name, message)
+        compact_message = self._compact_message(message)
+
+        if status == "running":
+            if step and total_steps:
+                self.current_step = step
+                self.total_steps = total_steps
+            if step_name:
+                self.current_stage = step_name
+            if compact_message:
+                self.current_message = compact_message
+            return
+
+        self._append_history(status, detail)
+        if step and total_steps:
+            self.current_step = step
+            self.total_steps = total_steps
+        if step_name:
+            self.current_stage = step_name
+        if compact_message:
+            self.current_message = compact_message
+        if status == "failed":
+            self.current_message = compact_message or detail
+
+    def _update_download(self, *, step_name: str, status: str, message: str, **payload: Any) -> None:
+        download_id = str(payload.get("download_id") or step_name)
+        filename = str(payload.get("filename") or download_id)
+        download_status = str(payload.get("download_status") or status or "progress")
+        total_bytes = self._safe_int(payload.get("total_bytes"))
+        downloaded_bytes = self._safe_int(payload.get("downloaded_bytes"))
+        task_id = self.download_tasks.get(download_id)
+
+        if task_id is None and download_status in {"started", "progress", "completed"}:
+            task_id = self.progress.add_task(
+                filename,
+                total=total_bytes or None,
+                completed=downloaded_bytes,
+                prefix="[下载]",
+            )
+            self.download_tasks[download_id] = task_id
+
+        if task_id is not None:
+            update_kwargs: Dict[str, Any] = {"description": filename, "completed": downloaded_bytes}
+            if total_bytes > 0:
+                update_kwargs["total"] = total_bytes
+            elif download_status == "completed":
+                update_kwargs["total"] = max(downloaded_bytes, 1)
+                update_kwargs["completed"] = max(downloaded_bytes, 1)
+            self.progress.update(task_id, **update_kwargs)
+
+        self.current_stage = step_name or self.current_stage
+        self.current_message = self._compact_message(message) or f"{filename} 正在下载"
+
+        if download_status == "completed":
+            self._append_history("completed", f"{step_name}: {self.current_message}")
+            self._remove_download_task(download_id)
+            return
+
+        if download_status == "failed":
+            error_message = self._compact_message(str(payload.get("error", "") or ""))
+            if error_message:
+                self.current_message = f"{self.current_message} ({error_message})"
+            self._append_history("failed", f"{step_name}: {self.current_message}")
+            self._remove_download_task(download_id)
+
+    def _render_status_panel(self) -> Panel:
+        headline = Text()
+        headline.append(f"{self._frame()} ", style=ui.colors["primary"])
+        prefix = f"[{self.current_step}/{self.total_steps}] " if self.current_step and self.total_steps else ""
+        headline.append(f"{prefix}{self.current_stage}", style=f"bold {ui.colors['primary']}")
+
+        body = Text()
+        if self.current_message:
+            body.append(self.current_message, style="white")
+        if self.download_tasks:
+            if body:
+                body.append("\n")
+            body.append(f"活跃下载: {len(self.download_tasks)}", style="dim")
+
+        content = Text()
+        content.append_text(headline)
+        if body:
+            content.append("\n")
+            content.append_text(body)
+
+        return Panel(
+            content,
+            title=f"[bold]{self.title}[/bold]",
+            title_align="left",
+            border_style=ui.colors["primary"],
+        )
+
+    def _render_history(self) -> Text:
+        result = Text()
+        for index, (status, detail) in enumerate(self.history):
+            if index:
+                result.append("\n")
+            prefix, style = self._history_style(status)
+            result.append(f"{prefix} ", style=style)
+            result.append(detail, style=style)
+        return result
+
+    def _append_history(self, status: str, detail: str) -> None:
+        compact_detail = self._compact_message(detail)
+        if not compact_detail:
+            return
+        self.history.append((status, compact_detail))
+
+    def _remove_download_task(self, download_id: str) -> None:
+        task_id = self.download_tasks.pop(download_id, None)
+        if task_id is not None:
+            self.progress.remove_task(task_id)
+
+    def _refresh(self) -> None:
+        if self._started:
+            self.live.refresh()
+
+    def _frame(self) -> str:
+        frame_index = int(time.monotonic() * 8) % len(self.DOT_FRAMES)
+        return self.DOT_FRAMES[frame_index]
+
+    @staticmethod
+    def _format_detail(step: int, total_steps: int, step_name: str, message: str) -> str:
+        prefix = f"[{step}/{total_steps}] " if step and total_steps else ""
+        detail = f"{prefix}{step_name}"
+        compact_message = _TemplateExecutionDisplay._compact_message(message)
+        if compact_message:
+            return f"{detail}: {compact_message}"
+        return detail
+
+    @staticmethod
+    def _compact_message(message: str, limit: int = 220) -> str:
+        lines = [line.strip() for line in str(message or "").splitlines() if line.strip()]
+        if not lines:
+            return ""
+        compact = " | ".join(lines[-3:])
+        if len(compact) > limit:
+            return f"{compact[: limit - 3]}..."
+        return compact
+
+    @staticmethod
+    def _history_style(status: str) -> tuple[str, str]:
+        return {
+            "completed": ("[OK]", ui.colors["success"]),
+            "failed": ("[ERR]", ui.colors["error"]),
+            "skipped": ("[SKIP]", ui.colors["warning"]),
+        }.get(status, ("[INFO]", ui.colors["info"]))
+
+    @staticmethod
+    def _safe_int(value: Any) -> int:
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
 
 
 class DeploymentModCliRunner:
@@ -28,6 +286,7 @@ class DeploymentModCliRunner:
         self.parser = DeploymentModParser()
         self.planner = DeploymentModPlanner()
         self.runtime = DeploymentModRuntime()
+        self._display: Optional[_TemplateExecutionDisplay] = None
 
     def run(self, template_path: str, mode: str = "deploy") -> int:
         setup_console()
@@ -55,7 +314,10 @@ class DeploymentModCliRunner:
         if not self._prompt_boolean("确认开始完整部署", True):
             ui.print_warning("已取消模板部署。")
             return 1
-        result = self.runtime.execute(template, plan, progress_callback=self._progress_callback)
+        result = self._execute_with_display(
+            f"{template.metadata.mod_name} / 完整部署",
+            lambda: self.runtime.execute(template, plan, progress_callback=self._progress_callback),
+        )
         return self._finalize_result(result, "完整部署")
 
     def _run_component_stage(self, template: TemplateDefinition) -> int:
@@ -65,11 +327,14 @@ class DeploymentModCliRunner:
         if not self._prompt_boolean("确认执行组件阶段", True):
             ui.print_warning("已取消组件阶段执行。")
             return 1
-        result = self.runtime.execute_stage(
-            template,
-            plan,
-            stage=self.MODE_TO_STAGE["component"],
-            progress_callback=self._progress_callback,
+        result = self._execute_with_display(
+            f"{template.metadata.mod_name} / 组件阶段",
+            lambda: self.runtime.execute_stage(
+                template,
+                plan,
+                stage=self.MODE_TO_STAGE["component"],
+                progress_callback=self._progress_callback,
+            ),
         )
         return self._finalize_result(result, "组件阶段")
 
@@ -96,12 +361,15 @@ class DeploymentModCliRunner:
             ui.print_warning(f"已取消{stage_label}执行。")
             return 1
 
-        result = self.runtime.execute_stage(
-            template,
-            plan,
-            stage=self.MODE_TO_STAGE[mode],
-            progress_callback=self._progress_callback,
-            serial_number=serial_number,
+        result = self._execute_with_display(
+            f"{template.metadata.mod_name} / {stage_label}",
+            lambda: self.runtime.execute_stage(
+                template,
+                plan,
+                stage=self.MODE_TO_STAGE[mode],
+                progress_callback=self._progress_callback,
+                serial_number=serial_number,
+            ),
         )
         return self._finalize_result(result, stage_label)
 
@@ -228,7 +496,46 @@ class DeploymentModCliRunner:
             ui.print_info(f"运行时状态文件: {result.runtime_state_file}")
         return 0
 
-    def _progress_callback(self, step: int, total_steps: int, step_name: str, status: str, message: str) -> None:
+    def _execute_with_display(self, title: str, action: Callable[[], Any]) -> Any:
+        ui.console.print()
+        with _TemplateExecutionDisplay(title) as display:
+            self._display = display
+            try:
+                return action()
+            finally:
+                self._display = None
+
+    def _progress_callback(
+        self,
+        step: int,
+        total_steps: int,
+        step_name: str,
+        status: str,
+        message: str,
+        event: str = "stage",
+        **payload: Any,
+    ) -> None:
+        if self._display is not None:
+            self._display.update(
+                step=step,
+                total_steps=total_steps,
+                step_name=step_name,
+                status=status,
+                message=message,
+                event=event,
+                **payload,
+            )
+            return
+
+        if event == "download":
+            if status == "completed":
+                ui.print_success(f"{step_name}: {message}")
+            elif status == "failed":
+                ui.print_error(f"{step_name}: {message}")
+            elif str(payload.get("download_status") or "") == "started":
+                ui.print_info(f"{step_name}: {message}")
+            return
+
         prefix = f"[{step}/{total_steps}] " if step and total_steps else ""
         detail = f"{prefix}{step_name}"
         if message:
