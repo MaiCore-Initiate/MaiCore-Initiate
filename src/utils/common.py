@@ -8,9 +8,10 @@ import ctypes
 import subprocess
 import re
 import structlog
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 logger = structlog.get_logger(__name__)
+WINDOWS_PATH_PATTERN = re.compile(r"^[A-Za-z]:\\|^\\\\")
 
 
 def setup_console():
@@ -213,3 +214,16 @@ def open_files_in_editor(files_to_open: list):
                 ui.print_success("已在记事本中打开。")
             except Exception as ne:
                 ui.print_error(f"无法使用记事本打开文件: {ne}")
+
+
+def make_toml_safe(value: Any) -> Any:
+    """将包含 Windows 反斜杠路径的数据转换为 TOML 安全形式。"""
+    if isinstance(value, dict):
+        return {key: make_toml_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [make_toml_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [make_toml_safe(item) for item in value]
+    if isinstance(value, str) and WINDOWS_PATH_PATTERN.match(value):
+        return value.replace("\\", "/")
+    return value

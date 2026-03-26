@@ -7,6 +7,8 @@ import toml
 import structlog
 from typing import Dict, Any, Optional
 
+from ..utils.common import make_toml_safe
+
 logger = structlog.get_logger(__name__)
 
 
@@ -87,7 +89,7 @@ class Config:
         """保存配置文件"""
         try:
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
-                toml.dump(self.config, f)
+                toml.dump(make_toml_safe(self.config), f)
             self._mtime = os.path.getmtime(self.CONFIG_FILE)
             logger.info("配置文件保存成功")
             return True

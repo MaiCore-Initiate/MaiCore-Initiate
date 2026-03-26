@@ -24,7 +24,7 @@ from urllib3.exceptions import InsecureRequestWarning
 
 from ...core.config import config_manager
 from ...core.p_config import p_config_manager
-from ...utils.common import open_files_in_editor
+from ...utils.common import make_toml_safe, open_files_in_editor
 from .models import (
     ComponentDefinition,
     ConfigDefinition,
@@ -533,6 +533,8 @@ class DeploymentModRuntime:
 
         version_path = state.versions.get(primary_deployment_id, state.template.metadata.version)
         bot_path_key = self._bot_path_key(bot_type)
+        self._prepare_runtime_file_locations(state, primary_root or state.runtime_root)
+        self._write_runtime_persistence_files(state)
         new_config = {
             "serial_number": serial_number,
             "absolute_serial_number": config_manager.generate_unique_serial(),
@@ -554,31 +556,12 @@ class DeploymentModRuntime:
             "deployment_profile": state.plan.deployment_profile.to_dict(),
             "component_bindings": [item.to_dict() for item in state.plan.component_bindings],
             "template_inputs": dict(state.plan.template_inputs),
-            "template_runtime": {
-                "exported_env": dict(state.env_pool),
-                "install_paths": dict(state.install_paths),
-                "deploy_paths": dict(state.deploy_paths),
-                "deployment_roots": dict(state.deployment_roots),
-                "versions": dict(state.versions),
-                "version_meta": dict(state.version_meta),
-                "opened_files": list(state.opened_files),
-                "launched_items": list(state.launched_items),
-                "launcher_version": str(p_config_manager.get("launcher.version", "") or ""),
-            },
+            "template_runtime": self._build_runtime_index(state),
         }
 
         config_name = f"instance_{serial_number}"
         if not config_manager.add_configuration(config_name, new_config):
             raise RuntimeError("实例配置写入失败")
-        self._prepare_runtime_file_locations(state, primary_root or state.runtime_root)
-        self._write_runtime_persistence_files(state)
-        new_config["template_runtime"].update(
-            {
-                "instance_root": state.instance_root,
-                "env_file": state.runtime_env_file,
-                "state_file": state.runtime_state_file,
-            }
-        )
         config_manager.set("current_config", config_name)
         config_manager.save()
         return config_name, new_config
@@ -591,21 +574,7 @@ class DeploymentModRuntime:
         instance_root = str(runtime_info.get("instance_root", "") or self._primary_instance_root_from_config(config))
         self._prepare_runtime_file_locations(state, instance_root or state.runtime_root)
         self._write_runtime_persistence_files(state)
-        runtime_info.update(
-            {
-                "exported_env": dict(state.env_pool),
-                "install_paths": dict(state.install_paths),
-                "deploy_paths": dict(state.deploy_paths),
-                "deployment_roots": dict(state.deployment_roots),
-                "opened_files": list(state.opened_files),
-                "launched_items": list(state.launched_items),
-                "launcher_version": str(p_config_manager.get("launcher.version", "") or ""),
-                "instance_root": state.instance_root,
-                "env_file": state.runtime_env_file,
-                "state_file": state.runtime_state_file,
-            }
-        )
-        config["template_runtime"] = runtime_info
+        config["template_runtime"] = self._build_runtime_index(state)
         config_manager.get_all_configurations()[config_name] = config
         config_manager.save()
 
@@ -661,6 +630,16 @@ class DeploymentModRuntime:
         state.runtime_env_file = os.path.join(root, self.RUNTIME_ENV_FILENAME)
         state.runtime_state_file = os.path.join(root, self.RUNTIME_STATE_FILENAME)
 
+    def _build_runtime_index(self, state: RuntimeState) -> Dict[str, Any]:
+        return make_toml_safe(
+            {
+                "launcher_version": str(p_config_manager.get("launcher.version", "") or ""),
+                "instance_root": state.instance_root,
+                "env_file": state.runtime_env_file,
+                "state_file": state.runtime_state_file,
+            }
+        )
+
     def _write_runtime_persistence_files(self, state: RuntimeState) -> None:
         if not state.instance_root:
             return
@@ -671,17 +650,19 @@ class DeploymentModRuntime:
 
         with open(state.runtime_state_file, "w", encoding="utf-8") as handle:
             toml.dump(
-                {
-                "template_id": state.template.metadata.mod_id,
-                "serial_number": state.instance_serial_number,
-                "install_paths": dict(state.install_paths),
-                "deploy_paths": dict(state.deploy_paths),
-                "deployment_roots": dict(state.deployment_roots),
-                "versions": dict(state.versions),
-                "version_meta": dict(state.version_meta),
-                "opened_files": list(state.opened_files),
-                "launched_items": list(state.launched_items),
-                },
+                make_toml_safe(
+                    {
+                        "template_id": state.template.metadata.mod_id,
+                        "serial_number": state.instance_serial_number,
+                        "install_paths": dict(state.install_paths),
+                        "deploy_paths": dict(state.deploy_paths),
+                        "deployment_roots": dict(state.deployment_roots),
+                        "versions": dict(state.versions),
+                        "version_meta": dict(state.version_meta),
+                        "opened_files": list(state.opened_files),
+                        "launched_items": list(state.launched_items),
+                    }
+                ),
                 handle,
             )
 
