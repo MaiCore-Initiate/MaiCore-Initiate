@@ -88,7 +88,7 @@ release/
 
 backgrounds/
 
-MOD/
+
 #保留模版开发文档，忽略其他模版文件
 !MOD/MCStart 部署模版开发文档.md  
 #保留部署模版，忽略其他模版文件
