@@ -5,6 +5,7 @@ import time
 from collections import deque
 from typing import Any, Callable, Deque, Dict, Iterable, Optional
 
+from rich.box import Box
 from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
@@ -41,6 +42,8 @@ class _TemplateExecutionDisplay:
         self.current_message = "准备开始..."
         self.history: Deque[tuple[str, str]] = deque(maxlen=self.HISTORY_LIMIT)
         self.download_tasks: Dict[str, TaskID] = {}
+        self.command_output_label = ""
+        self.command_output_lines: Deque[str] = deque(maxlen=12)
         self.progress = Progress(
             TextColumn("[bold cyan]{task.fields[prefix]}", justify="right"),
             TextColumn("{task.description}", style="bold"),
@@ -84,6 +87,16 @@ class _TemplateExecutionDisplay:
                     border_style=ui.colors["border"],
                 )
             )
+        if self.command_output_lines:
+            renderables.append(
+                Panel(
+                    self._render_command_output(),
+                    title=f"[bold]命令输出: {self.command_output_label}[/bold]" if self.command_output_label else "[bold]命令输出[/bold]",
+                    title_align="left",
+                    border_style=ui.colors["border"],
+                    box=Box.ASCII,
+                )
+            )
         if self.history:
             renderables.append(
                 Panel(
@@ -108,9 +121,22 @@ class _TemplateExecutionDisplay:
     ) -> None:
         if event == "download":
             self._update_download(step_name=step_name, status=status, message=message, **payload)
+        elif event == "command_output":
+            self._update_command_output(step_name=step_name, message=message, **payload)
         else:
             self._update_stage(step=step, total_steps=total_steps, step_name=step_name, status=status, message=message)
         self._refresh()
+
+    def _update_command_output(self, *, step_name: str, message: str, **payload: Any) -> None:
+        """处理命令输出的流式更新。"""
+        if step_name:
+            self.command_output_label = step_name
+        if message:
+            lines = message.splitlines()
+            for line in lines:
+                stripped = line.strip()
+                if stripped:
+                    self.command_output_lines.append(stripped)
 
     def _update_stage(self, *, step: int, total_steps: int, step_name: str, status: str, message: str) -> None:
         detail = self._format_detail(step, total_steps, step_name, message)
@@ -215,6 +241,17 @@ class _TemplateExecutionDisplay:
             result.append(detail, style=style)
         return result
 
+    def _render_command_output(self) -> Text:
+        """渲染命令输出区域。"""
+        result = Text()
+        for index, line in enumerate(self.command_output_lines):
+            if index:
+                result.append("\n")
+            result.append(f"│ {line}", style="dim")
+        if not self.command_output_lines:
+            result.append("[dim]等待输出...[/dim]", style="dim")
+        return result
+
     def _append_history(self, status: str, detail: str) -> None:
         compact_detail = self._compact_message(detail)
         if not compact_detail:
@@ -308,6 +345,7 @@ class DeploymentModCliRunner:
 
     def _run_full_deploy(self, template: TemplateDefinition) -> int:
         inputs = self._collect_inputs(template, field_filter=self._is_full_deploy_field)
+        inputs = self._resolve_version_selections(template, inputs)
         plan = self.planner.build_plan(template, inputs)
         self._show_plan_summary(template, plan, "完整部署")
         if not self._prompt_boolean("确认开始完整部署", True):
@@ -321,6 +359,7 @@ class DeploymentModCliRunner:
 
     def _run_component_stage(self, template: TemplateDefinition) -> int:
         inputs = self._collect_inputs(template, field_filter=self._is_component_field)
+        inputs = self._resolve_version_selections(template, inputs)
         plan = self.planner.build_plan(template, inputs)
         self._show_plan_summary(template, plan, "组件阶段")
         if not self._prompt_boolean("确认执行组件阶段", True):
@@ -339,7 +378,7 @@ class DeploymentModCliRunner:
 
     def _run_existing_instance_stage(self, template: TemplateDefinition, mode: str) -> int:
         serial_number = self._prompt_existing_instance_serial(mode)
-        config_name, config = self.runtime._find_instance_config(serial_number)
+        config_name, config = self.runtime.find_instance_config(serial_number)
         stored_inputs = dict(config.get("template_inputs", {}) or {})
         stored_inputs["serial_number"] = serial_number
 
@@ -398,6 +437,10 @@ class DeploymentModCliRunner:
         return inputs
 
     def _prompt_field(self, field: TemplateFormField, default_value: Any) -> Any:
+        # hidden 字段不参与交互式表单填写，由 CLI 在 _resolve_version_selections 中单独处理
+        if field.field_type == "hidden":
+            return default_value if default_value is not None else ""
+
         if field.description:
             ui.print_info(f"{field.label}: {field.description}")
 
@@ -609,6 +652,110 @@ class DeploymentModCliRunner:
 
     def _is_uninstall_field(self, field: TemplateFormField) -> bool:
         return field.key.startswith("uninstall::")
+
+    def _resolve_version_selections(
+        self,
+        template: TemplateDefinition,
+        inputs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """对需要动态获取版本的字段，从 GitHub 等源获取版本列表并让用户选择。"""
+        result = dict(inputs)
+        items_to_resolve: List[tuple[str, str, Any]] = []
+
+        for component in template.components:
+            if component.user_choose and any(isinstance(item, int) for item in component.choose_list):
+                items_to_resolve.append(("component", component.id, component))
+
+        for deployment in template.deployments:
+            if deployment.user_choose and any(isinstance(item, int) for item in deployment.choose_list):
+                items_to_resolve.append(("deployment", deployment.id, deployment))
+
+        if not items_to_resolve:
+            return result
+
+        ui.console.print()
+        ui.print_info("正在获取版本信息，请稍候...")
+
+        for stage_name, item_id, definition in items_to_resolve:
+            version_key = f"version::{stage_name}::{item_id}"
+            try:
+                candidates = self.runtime.fetch_version_candidates(template, stage_name, item_id, definition)
+                if not candidates:
+                    ui.print_warning(f"无法获取 {item_id} 的版本列表，将使用最新版本")
+                    result[version_key] = ""
+                    continue
+
+                filtered = self._filter_version_candidates(definition, candidates)
+
+                ui.console.print()
+                ui.console.print(f"[bold cyan]请选择 {item_id} 的版本[/bold cyan]")
+                for idx, item in enumerate(filtered, 1):
+                    type_label = {"release": "Release", "tag": "Tag", "branch": "Branch", "file": "文件", "custom": "自定义"}.get(
+                        item.get("type", ""), item.get("type", "")
+                    )
+                    ui.console.print(f"  [{idx}] {item['name']} [{type_label}]")
+
+                default_idx = 1
+                while True:
+                    choice = ui.get_input(f"选择版本 (1-{len(filtered)}, 默认 1)", default="1").strip()
+                    if not choice:
+                        choice = "1"
+                    if choice.isdigit():
+                        idx = int(choice) - 1
+                        if 0 <= idx < len(filtered):
+                            selected = filtered[idx]
+                            result[version_key] = selected.get("raw_name") or selected.get("name", "")
+                            ui.print_success(f"已选择版本: {result[version_key]}")
+                            break
+                    ui.print_warning(f"请输入 1 到 {len(filtered)} 之间的数字")
+
+            except Exception as exc:
+                ui.print_error(f"获取 {item_id} 版本列表失败: {exc}")
+                ui.print_warning(f"将跳过 {item_id} 的版本选择，使用默认版本")
+                result[version_key] = ""
+
+        return result
+
+    def _filter_version_candidates(
+        self,
+        definition: Any,
+        candidates: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """应用模板的 choose_list 过滤规则到版本候选列表。"""
+        choose_list = list(getattr(definition, "choose_list", []) or [])
+        if not choose_list:
+            return candidates
+
+        results: List[Dict[str, Any]] = []
+        explicit = [str(item) for item in choose_list if isinstance(item, str)]
+        integers = [int(item) for item in choose_list if isinstance(item, int)]
+
+        if explicit:
+            explicit_set = {item.lower() for item in explicit}
+            for item in candidates:
+                if str(item.get("name", "")).lower() in explicit_set:
+                    results.append(item)
+            seen_names = {str(item.get("name", "")).lower() for item in results}
+            for item in explicit:
+                if item.lower() not in seen_names:
+                    results.append({"name": item, "raw_name": item, "type": "explicit"})
+
+        if integers:
+            max_items = max(integers)
+            results.extend(candidates if max_items == 0 else candidates[:max_items])
+
+        if not results:
+            return candidates
+
+        unique: List[Dict[str, Any]] = []
+        seen = set()
+        for item in results:
+            key = (str(item.get("name", "")).lower(), str(item.get("type", "")).lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        return unique
 
 
 deployment_mod_cli_runner = DeploymentModCliRunner()

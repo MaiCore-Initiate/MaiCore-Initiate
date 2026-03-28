@@ -608,10 +608,11 @@ class DeploymentModParser:
         return str(item.get("name", item.get("id", "")) or "").strip()
 
     @staticmethod
-    def _validate_enum_field(self, field_name: str, value: str, valid_options: List[str]) -> None:
+    def _validate_enum_field(field_name: str, value: str, valid_options: List[str]) -> None:
         if value not in valid_options:
             raise ValueError(f"字段 {field_name} 的值 '{value}' 非法，可选值: {', '.join(repr(v) for v in valid_options)}")
 
+    @staticmethod
     def _ensure_list(value: Any) -> List[Any]:
         if value is None:
             return []

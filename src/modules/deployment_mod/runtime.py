@@ -25,6 +25,7 @@ from urllib3.exceptions import InsecureRequestWarning
 from ...core.config import config_manager
 from ...core.p_config import p_config_manager
 from ...utils.common import make_toml_safe, open_files_in_editor
+from ...ui.interface import ui
 from .models import (
     ComponentDefinition,
     ConfigDefinition,
@@ -77,6 +78,23 @@ class DeploymentModRuntime:
 
     RUNTIME_ENV_FILENAME = ".mcstart-template.env"
     RUNTIME_STATE_FILENAME = ".mcstart-template-state.toml"
+
+    def _get_request_kwargs(self) -> Dict[str, Any]:
+        """生成网络请求的统一参数，包含代理和 SSL 配置。"""
+        kwargs: Dict[str, Any] = {"verify": False}
+        if p_config_manager.is_proxy_enabled():
+            proxy_config = p_config_manager.get_proxy_config()
+            proxy_type = str(proxy_config.get("type", "http") or "http").lower()
+            host = str(proxy_config.get("host", "") or "").strip()
+            port = str(proxy_config.get("port", "") or "").strip()
+            username = str(proxy_config.get("username", "") or "").strip()
+            password = str(proxy_config.get("password", "") or "").strip()
+            if host and port:
+                proxy_url = f"{proxy_type}://{host}:{port}"
+                if username and password:
+                    proxy_url = f"{proxy_type}://{username}:{password}@{host}:{port}"
+                kwargs["proxies"] = {"http": proxy_url, "https": proxy_url}
+        return kwargs
 
     SPECIAL_PATHS = {
         "$Temporary": lambda: os.path.join(os.getcwd(), "Temporary"),
@@ -280,15 +298,38 @@ class DeploymentModRuntime:
 
         self._notify(state, 2, 6, f"组件 {component.name}", "running", f"安装路径: {install_path}")
 
-        if component.check and self._check_component_installed(state, component, install_path, scope):
-            state.managed_components[component.id] = False
-            self._notify(state, 2, 6, f"组件 {component.name}", "completed", "检测到组件已存在，跳过安装")
-            self._export_env_bindings(state, state.template.components_section.env_output, component.env_output, component.env_output_list, scope)
-            return
+        # Step 1: 执行检查命令，展示结果
+        check_result = self._perform_component_check(state, component, install_path, scope)
 
+        # Step 2: 根据检查结果和 choose 值决定后续行为
+        if check_result["installed"]:
+            if not component.choose:
+                # choose=false：强制安装，检测到已存在则跳过
+                state.managed_components[component.id] = False
+                self._notify(
+                    state, 2, 6, f"组件 {component.name}", "completed",
+                    f"检测到组件已存在于系统，版本: {check_result['detected_version']}，跳过安装",
+                )
+                self._export_env_bindings(
+                    state, state.template.components_section.env_output,
+                    component.env_output, component.env_output_list, scope,
+                )
+                return
+            else:
+                # choose=true：已安装则跳过（保守策略）
+                self._notify(state, 2, 6, f"组件 {component.name}", "skipped", f"检测到组件已安装，跳过重装")
+                state.managed_components[component.id] = False
+                self._export_env_bindings(
+                    state, state.template.components_section.env_output,
+                    component.env_output, component.env_output_list, scope,
+                )
+                return
+
+        # Step 3: 执行安装前命令
         if component.before_command:
             self._run_command_list(state, component.before_command_list, install_path, scope, f"组件 {component.name} 安装前命令")
 
+        # Step 4: 执行安装
         if component.command_install:
             self._resolve_version_and_link(state, "component", component.id, component, scope)
             self._run_command_list(state, component.install_command_list, install_path, scope, f"组件 {component.name} 安装命令")
@@ -299,11 +340,62 @@ class DeploymentModRuntime:
             asset_path = self._download_asset(state, component.id, download_url, install_path, "component")
             self._install_component_asset(component, asset_path, install_path)
 
+        # Step 5: 执行安装后命令
         if component.after_command:
             self._run_command_list(state, component.after_command_list, install_path, scope, f"组件 {component.name} 安装后命令")
 
         state.managed_components[component.id] = True
         self._export_env_bindings(state, state.template.components_section.env_output, component.env_output, component.env_output_list, scope)
+
+    def _perform_component_check(
+        self,
+        state: RuntimeState,
+        component: ComponentDefinition,
+        install_path: str,
+        scope: RuntimeScope,
+    ) -> Dict[str, Any]:
+        """执行组件检查，返回详细信息。"""
+        if not component.check:
+            return {"installed": False, "output": "", "detected_version": ""}
+
+        check_cwd = state.runtime_root if os.path.isdir(state.runtime_root) else os.getcwd()
+        self._notify(state, 2, 6, f"组件 {component.name}", "running", "正在检查组件是否已安装...")
+        output = self._run_command_list(
+            state,
+            component.check_command,
+            check_cwd,
+            scope,
+            f"组件 {component.name} 检查命令",
+            raise_on_error=False,
+        )
+
+        if not output:
+            self._notify(state, 2, 6, f"组件 {component.name}", "running", "检查命令无输出，假设组件未安装")
+            return {"installed": False, "output": "", "detected_version": ""}
+
+        lowered_output = output.lower()
+        detected_version = ""
+        for token in component.check_version_contains:
+            if str(token).lower() in lowered_output:
+                import re as re_module
+                version_match = re_module.search(r"(\d+\.\d+(?:\.\d+)?)", output)
+                detected_version = version_match.group(1) if version_match else str(token)
+                break
+
+        is_installed = all(str(token).lower() in lowered_output for token in component.check_version_contains)
+
+        if is_installed:
+            self._notify(
+                state, 2, 6, f"组件 {component.name}", "running",
+                f"✓ 检查通过，已安装版本: {detected_version or '未知'}",
+            )
+        else:
+            self._notify(
+                state, 2, 6, f"组件 {component.name}", "running",
+                f"✗ 检查未通过，将执行安装",
+            )
+
+        return {"installed": is_installed, "output": output.strip(), "detected_version": detected_version}
 
     def _check_component_installed(
         self,
@@ -312,20 +404,11 @@ class DeploymentModRuntime:
         install_path: str,
         scope: RuntimeScope,
     ) -> bool:
-        if not component.check_command:
+        """兼容旧逻辑的简单检查。"""
+        if not component.check:
             return False
-        output = self._run_command_list(
-            state,
-            component.check_command,
-            install_path,
-            scope,
-            f"组件 {component.name} 检查命令",
-            raise_on_error=False,
-        )
-        if not output:
-            return False
-        lowered_output = output.lower()
-        return all(str(token).lower() in lowered_output for token in component.check_version_contains)
+        result = self._perform_component_check(state, component, install_path, scope)
+        return result["installed"]
 
     def _install_component_asset(
         self,
@@ -670,7 +753,7 @@ class DeploymentModRuntime:
     def _persist_runtime_files_for_existing_instance(self, state: RuntimeState) -> None:
         if not state.instance_serial_number:
             return
-        config_name, config = self._find_instance_config(state.instance_serial_number)
+        config_name, config = self.find_instance_config(state.instance_serial_number)
         runtime_info = dict(config.get("template_runtime", {}) or {})
         instance_root = str(runtime_info.get("instance_root", "") or self._primary_instance_root_from_config(config))
         self._prepare_runtime_file_locations(state, instance_root or state.runtime_root)
@@ -682,7 +765,7 @@ class DeploymentModRuntime:
     def _restore_runtime_state_for_instance(self, state: RuntimeState, serial_number: str) -> None:
         if not serial_number:
             raise RuntimeError("单独运行启动或配置阶段时必须提供实例序列号")
-        _, config = self._find_instance_config(serial_number)
+        _, config = self.find_instance_config(serial_number)
         mod_binding = dict(config.get("mod_binding", {}) or {})
         bound_template_id = str(mod_binding.get("template_id", "") or "")
         if bound_template_id and bound_template_id != state.template.metadata.mod_id:
@@ -740,6 +823,15 @@ class DeploymentModRuntime:
                 "instance_root": state.instance_root,
                 "env_file": state.runtime_env_file,
                 "state_file": state.runtime_state_file,
+                "exported_env": dict(state.env_pool),
+                "install_paths": dict(state.install_paths),
+                "deploy_paths": dict(state.deploy_paths),
+                "deployment_roots": dict(state.deployment_roots),
+                "versions": dict(state.versions),
+                "version_meta": dict(state.version_meta),
+                "managed_components": dict(state.managed_components),
+                "opened_files": list(state.opened_files),
+                "launched_items": list(state.launched_items),
             }
         )
 
@@ -792,7 +884,7 @@ class DeploymentModRuntime:
         with open(file_path, "r", encoding="utf-8") as handle:
             return toml.load(handle)
 
-    def _find_instance_config(self, serial_number: str) -> tuple[str, Dict[str, Any]]:
+    def find_instance_config(self, serial_number: str) -> tuple[str, Dict[str, Any]]:
         for config_name, config in config_manager.get_all_configurations().items():
             if str(config.get("serial_number", "") or "") == str(serial_number):
                 return config_name, config
@@ -957,6 +1049,72 @@ class DeploymentModRuntime:
                 return candidates[0]
         return ""
 
+    def fetch_version_candidates(
+        self,
+        template: TemplateDefinition,
+        stage_name: str,
+        item_id: str,
+        definition: Any,
+    ) -> List[Dict[str, Any]]:
+        """获取给定组件/部署项的可用版本候选列表，供 CLI 交互式选择用。"""
+        version_source = str(getattr(definition, "get_version", "") or "").strip().lower()
+        if version_source == "github_repo":
+            github_repo = self._resolve_text_for_static(
+                getattr(definition, "github_repo", "") or "",
+                template.raw,
+            )
+            if github_repo:
+                return self._fetch_github_candidates(github_repo)
+        elif version_source == "filelink":
+            scope = RuntimeScope()
+            source = self._resolve_provider_source_static(definition, scope, self.FILELINK_FIELD_ALIASES)
+            if source:
+                content = self._read_text_source(source)
+                if source.lower().endswith(".json"):
+                    return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(json.loads(content))]
+                if source.lower().endswith(".toml"):
+                    return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(toml.loads(content))]
+                if source.lower().endswith(".xml"):
+                    root = ElementTree.fromstring(content)
+                    return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(self._xml_to_tree(root))]
+                return [{"name": item.strip(), "raw_name": item.strip(), "type": "file"} for item in content.splitlines() if item.strip()]
+        elif version_source == "custom":
+            scope = RuntimeScope()
+            source = self._resolve_provider_source_static(definition, scope, self.SCRIPT_FIELD_ALIASES)
+            if source:
+                output = self._run_external_script(source, os.path.dirname(source) or os.getcwd())
+                return [{"name": item.strip(), "raw_name": item.strip(), "type": "custom"} for item in output.splitlines() if item.strip()]
+        return []
+
+    def _resolve_text_for_static(self, text: str, raw_template: Dict[str, Any]) -> str:
+        """静态版本的文本解析，不依赖运行时 state。"""
+        if not text:
+            return ""
+
+        def repl(match: re.Match[str]) -> str:
+            kind = match.group(1)
+            key = match.group(2).strip()
+            if kind == "key":
+                return self._resolve_template_key(raw_template, key)
+            return ""
+
+        for _ in range(5):
+            changed = False
+            new_text = PLACEHOLDER_PATTERN.sub(repl, text)
+            if new_text == text:
+                break
+            text = new_text
+        return text
+
+    def _resolve_provider_source_static(self, definition: Any, scope: RuntimeScope, aliases: Iterable[str]) -> str:
+        """静态版本的 provider source 解析。"""
+        raw = getattr(definition, "raw", {}) or {}
+        for alias in aliases:
+            value = str(raw.get(alias, "") or "").strip()
+            if value:
+                return value
+        return ""
+
     def _select_version(
         self,
         state: RuntimeState,
@@ -1046,7 +1204,7 @@ class DeploymentModRuntime:
                 f"https://api.github.com/repos/{owner}/{repo}/{endpoint}",
                 headers=headers,
                 timeout=20,
-                verify=False,
+                **self._get_request_kwargs(),
             )
             if not response.ok:
                 continue
@@ -1238,6 +1396,20 @@ class DeploymentModRuntime:
         env.update(state.env_pool)
         env.update(scope.env_values)
 
+        # 记录详细日志
+        logger.info(
+            "执行命令脚本",
+            label=label,
+            script_path=script_path,
+            cwd=cwd,
+            runtime=runtime,
+            command_count=len(resolved_commands),
+            commands=resolved_commands,
+        )
+        self._notify(state, 0, 0, label, "running", f"执行脚本: {script_path}")
+        self._notify(state, 0, 0, label, "running", f"工作目录: {cwd}")
+        self._notify(state, 0, 0, label, "running", f"命令数量: {len(resolved_commands)}")
+
         if detached:
             popen_kwargs: Dict[str, Any] = {"cwd": cwd, "env": env, "shell": False}
             if os.name == "nt":
@@ -1248,13 +1420,92 @@ class DeploymentModRuntime:
             self._notify(state, 4, 6, label, "running", f"已托管启动脚本: {script_path}")
             return ""
 
-        result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace", shell=False)
-        output = f"{result.stdout}\n{result.stderr}".strip()
-        if result.returncode != 0 and raise_on_error:
-            raise RuntimeError(f"{label} 执行失败: {output or result.returncode}")
-        if output:
-            self._notify(state, 0, 0, label, "running", output[-800:])
-        return output
+        # 使用 Popen 进行实时流式输出捕获
+        try:
+            process = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
+        except OSError as exc:
+            raise RuntimeError(f"{label} 无法启动进程: {exc}")
+
+        output_lines: List[str] = []
+        self._stream_process_output(process, label, output_lines, timeout_seconds=600)
+
+        try:
+            returncode = process.wait()
+        except Exception:
+            process.kill()
+            raise RuntimeError(f"{label} 进程等待失败")
+
+        full_output = "\n".join(output_lines).strip()
+        if returncode != 0 and raise_on_error:
+            raise RuntimeError(f"{label} 执行失败 (返回码 {returncode}):\n{full_output}")
+        if full_output:
+            self._notify(state, 0, 0, label, "running", f"[输出] {full_output[-1000:]}")
+        return full_output
+
+    def _stream_process_output(
+        self,
+        process: subprocess.Popen,
+        label: str,
+        output_lines: List[str],
+        timeout_seconds: int = 600,
+    ) -> None:
+        """实时流式读取子进程输出并打印到控制台。"""
+        from concurrent.futures import ThreadPoolExecutor
+        import threading
+
+        def read_stream(stream) -> List[str]:
+            try:
+                lines = []
+                for raw_line in iter(lambda: stream.read(1), b""):
+                    if isinstance(raw_line, bytes):
+                        raw_line = raw_line.decode("utf-8", errors="replace")
+                    if raw_line:
+                        lines.append(raw_line)
+                return lines
+            except Exception:
+                return []
+
+        start_time = time.monotonic()
+        done = threading.Event()
+        stream_lines: List[str] = []
+
+        def stream_reader():
+            try:
+                reader_thread = ThreadPoolExecutor(max_workers=1)
+                future = reader_thread.submit(read_stream, process.stdout)
+                try:
+                    stream_lines.extend(future.result(timeout=timeout_seconds))
+                finally:
+                    reader_thread.shutdown(warning=False)
+            finally:
+                done.set()
+
+        thread = threading.Thread(target=stream_reader, daemon=True)
+        thread.start()
+
+        try:
+            while True:
+                if done.wait(timeout=0.1):
+                    break
+                elapsed = time.monotonic() - start_time
+                if elapsed > timeout_seconds:
+                    process.kill()
+                    raise RuntimeError(f"{label} 执行超时（超过 {timeout_seconds // 60} 分钟）")
+
+                if stream_lines:
+                    line = stream_lines.pop(0)
+                    output_lines.append(line.rstrip())
+                    line_display = line.rstrip("\r\n")
+                    if line_display:
+                        ui.console.print(f"[dim]│[/dim] {line_display}", highlight=False)
+        finally:
+            thread.join(timeout=5)
+            # 处理剩余缓冲
+            for line in stream_lines:
+                output_lines.append(line.rstrip())
+                line_display = line.rstrip("\r\n")
+                if line_display:
+                    ui.console.print(f"[dim]│[/dim] {line_display}", highlight=False)
 
     def _download_asset(self, state: RuntimeState, item_id: str, url: str, target_dir: str, stage_name: str) -> str:
         download_dir = os.path.join(target_dir, "__downloads__")
@@ -1266,7 +1517,7 @@ class DeploymentModRuntime:
         step_name = f"{stage_name}:{item_id}"
         self._notify(state, 0, 0, step_name, "running", f"下载资源: {url}")
         try:
-            with requests.get(url, stream=True, timeout=60, verify=False) as response:
+            with requests.get(url, stream=True, timeout=(15, 60), **self._get_request_kwargs()) as response:
                 response.raise_for_status()
                 total_bytes = int(response.headers.get("content-length") or 0)
                 download_meta = {
@@ -1620,13 +1871,12 @@ class DeploymentModRuntime:
         walk(data)
         return values
 
-    @staticmethod
-    def _read_text_source(source: str) -> str:
+    def _read_text_source(self, source: str) -> str:
         if source.startswith("file:///"):
             with open(source[8:], "r", encoding="utf-8") as handle:
                 return handle.read()
         if re.match(r"^https?://", source, re.I):
-            response = requests.get(source, timeout=30, verify=False)
+            response = requests.get(source, timeout=30, **self._get_request_kwargs())
             response.raise_for_status()
             return response.text
         with open(source, "r", encoding="utf-8") as handle:
@@ -1679,7 +1929,7 @@ class DeploymentModRuntime:
                 self._notify(state, 1, 1, label, "completed", normalized)
 
     def _remove_instance_config(self, serial_number: str) -> str:
-        config_name, _ = self._find_instance_config(serial_number)
+        config_name, _ = self.find_instance_config(serial_number)
         if not config_manager.delete_configuration(config_name):
             raise RuntimeError(f"删除实例配置失败: {config_name}")
 
