@@ -178,7 +178,7 @@ class UninstallDefinition(BaseTaskDefinition):
 class TemplateFormField:
     key: str
     label: str
-    field_type: Literal["text", "select", "boolean"]
+    field_type: Literal["text", "select", "boolean", "hidden"]
     required: bool = False
     default: Any = None
     options: List[Dict[str, Any]] = field(default_factory=list)

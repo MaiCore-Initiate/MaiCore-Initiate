@@ -32,7 +32,7 @@ from .models import (
 class DeploymentModParser:
     """解析并规范化 DeploymentMOD.toml。"""
 
-    ARRAY_SECTIONS = {"Component", "Deployment", "LaunchItem", "ConfigItem"}
+    ARRAY_SECTIONS = {"Component", "Deployment", "LaunchItem", "ConfigItem", "UninstallItem"}
 
     def parse_file(self, file_path: str) -> TemplateDefinition:
         with open(file_path, "r", encoding="utf-8") as handle:
@@ -210,6 +210,16 @@ class DeploymentModParser:
         )
 
     def _parse_component(self, item: Dict[str, Any]) -> ComponentDefinition:
+        get_method_val = str(item.get("get_method", "") or "").strip().lower()
+        install_operate_val = str(item.get("install_operate", "") or "").strip().lower()
+        get_version_val = str(item.get("get_version", "") or "").strip().lower()
+        get_link_val = str(item.get("get_link", "") or "").strip().lower()
+
+        self._validate_enum_field("get_method", get_method_val, ["", "direct", "get_version", "get_link"])
+        self._validate_enum_field("install_operate", install_operate_val, ["", "auto", "no", "custom"])
+        self._validate_enum_field("get_version", get_version_val, ["", "github_repo", "filelink", "custom"])
+        self._validate_enum_field("get_link", get_link_val, ["", "filelink", "custom", "user_input"])
+
         return ComponentDefinition(
             id=self._required_str(item, "id"),
             name=self._optional_name(item),
@@ -220,17 +230,17 @@ class DeploymentModParser:
             check_command=self._ensure_str_list(item.get("check_command")),
             check_version_contains=self._ensure_str_list(item.get("check_version_contains")),
             install_command_list=self._ensure_str_list(item.get("install_command_list")),
-            get_method=str(item.get("get_method", "") or "").strip().lower(),
+            get_method=get_method_val,
             direct_link=str(item.get("direct_link", "") or ""),
-            get_version=str(item.get("get_version", "") or "").strip().lower(),
-            get_link=str(item.get("get_link", "") or "").strip().lower(),
+            get_version=get_version_val,
+            get_link=get_link_val,
             get_link_provide_list=self._ensure_str_list(item.get("get_link_provide_list")),
             github_repo=str(item.get("github_repo", "") or ""),
             user_choose=bool(item.get("user_choose", False)),
             choose_list=self._ensure_list(item.get("choose_list")),
             format_version=bool(item.get("format_version", False)),
             version_formatting_formula=self._parse_version_formatting_formula(item.get("version_formatting_formula")),
-            install_operate=str(item.get("install_operate", "") or "").strip().lower(),
+            install_operate=install_operate_val,
             install_custom_list=self._parse_install_custom_list(item.get("install_custom_list")),
             install_path=str(item.get("install_path", "") or ""),
             custom_path=str(item.get("custom_path", "") or ""),
@@ -247,6 +257,16 @@ class DeploymentModParser:
         )
 
     def _parse_deployment(self, item: Dict[str, Any]) -> DeploymentDefinition:
+        deploy_method_val = str(item.get("deploy_method", "") or "").strip().lower()
+        get_method_val = str(item.get("get_method", "") or "").strip().lower()
+        get_version_val = str(item.get("get_version", "") or "").strip().lower()
+        get_link_val = str(item.get("get_link", "") or "").strip().lower()
+
+        self._validate_enum_field("deploy_method", deploy_method_val, ["", "auto", "gitclone", "!gitclone", "getfile"])
+        self._validate_enum_field("get_method", get_method_val, ["", "direct", "get_version", "get_link"])
+        self._validate_enum_field("get_version", get_version_val, ["", "github_repo", "filelink", "custom"])
+        self._validate_enum_field("get_link", get_link_val, ["", "filelink", "custom", "user_input"])
+
         return DeploymentDefinition(
             id=self._required_str(item, "id"),
             name=self._optional_name(item),
@@ -254,14 +274,14 @@ class DeploymentModParser:
             deploy=bool(item.get("deploy", True)),
             command_deploy=bool(item.get("command_deploy", False)),
             deploy_command_list=self._ensure_str_list(item.get("deploy_command_list")),
-            deploy_method=str(item.get("deploy_method", "") or "").strip().lower(),
+            deploy_method=deploy_method_val,
             base_link=str(item.get("base_link", "") or ""),
             deploy_path=str(item.get("deploy_path", "") or ""),
             custom_path=str(item.get("custom_path", "") or ""),
-            get_method=str(item.get("get_method", "") or "").strip().lower(),
+            get_method=get_method_val,
             direct_link=str(item.get("direct_link", "") or ""),
-            get_version=str(item.get("get_version", "") or "").strip().lower(),
-            get_link=str(item.get("get_link", "") or "").strip().lower(),
+            get_version=get_version_val,
+            get_link=get_link_val,
             get_link_provide_list=self._ensure_str_list(item.get("get_link_provide_list")),
             github_repo=str(item.get("github_repo", "") or ""),
             user_choose=bool(item.get("user_choose", False)),
@@ -480,6 +500,8 @@ class DeploymentModParser:
             )
         if user_choose:
             string_choices = [str(item) for item in choose_list if isinstance(item, str)]
+            has_integer_choices = any(isinstance(item, int) for item in choose_list)
+
             if string_choices and len(string_choices) == len(choose_list):
                 fields.append(
                     TemplateFormField(
@@ -490,6 +512,19 @@ class DeploymentModParser:
                         default=string_choices[0],
                         options=[{"label": item, "value": item} for item in string_choices],
                         description="模板声明了固定版本列表，可直接选择。",
+                    )
+                )
+            elif has_integer_choices:
+                # choose_list 包含整数 → 需要从 GitHub 等源动态获取版本列表
+                fields.append(
+                    TemplateFormField(
+                        key=f"version::{stage_name}::{item_id}",
+                        label=f"{item_id} 版本",
+                        field_type="hidden",
+                        required=False,
+                        default="",
+                        options=[],
+                        description="将从 GitHub 自动获取版本列表（由 CLI 交互式获取）。",
                     )
                 )
             else:
@@ -573,6 +608,10 @@ class DeploymentModParser:
         return str(item.get("name", item.get("id", "")) or "").strip()
 
     @staticmethod
+    def _validate_enum_field(self, field_name: str, value: str, valid_options: List[str]) -> None:
+        if value not in valid_options:
+            raise ValueError(f"字段 {field_name} 的值 '{value}' 非法，可选值: {', '.join(repr(v) for v in valid_options)}")
+
     def _ensure_list(value: Any) -> List[Any]:
         if value is None:
             return []
