@@ -315,18 +315,9 @@ class DeploymentModRuntime:
             )
             return
 
-        # 组件不存在
-        if not component.choose:
-            # choose=false：强制要求组件存在 → 报错，提示用户手动安装
-            raise RuntimeError(
-                f"组件 {component.name} 未检测到已安装。"
-                f"请先在系统中安装 {component.name} 后再继续部署。"
-            )
-
-        # choose=true：可选安装 → 用户已在 CLI 阶段选择是否安装
-        # 如果用户选择安装，继续执行安装流程
-        # 如果用户选择跳过（inputs 中对应字段为 false），plan 阶段就会跳过此组件
-        # 到达此处说明用户选择安装，执行安装
+        # 组件不存在 → 按模板提供的方式自动安装
+        # choose=false：强制安装，无需用户确认；choose=true：用户已在 CLI 阶段选择安装
+        # （如果用户选择跳过，plan 阶段就会跳过此组件，不会到达这里）
 
         # Step 3: 执行安装前命令
         if component.before_command:
