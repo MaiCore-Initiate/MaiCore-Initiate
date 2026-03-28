@@ -1,6 +1,6 @@
 
 
-# MCStart 部署模版开发文档
+# MCStart 部署模版开发文档 V2.0
 
 ---
 
@@ -136,7 +136,7 @@ file_import = false
 file_import_list = []
 runtime = "powershell"
 platforms = ["windows"]
-schema_version = "1.0"
+schema_version = "2.0"
 ```
 
 ### 2.2 文件组织结构
@@ -2131,7 +2131,7 @@ env_output = false   # 个体开关关闭 → ❌ 不生效
 
 ### Q20: `schema_version` 的作用是什么？
 
-**A**: `schema_version` 标识当前模版使用的模版格式版本。MCStart 会根据此版本号选择对应的解析器来处理模版。当 MCStart 未来升级模版格式时，旧版本的模版仍然可以通过此字段被正确识别和兼容处理。当前版本为 `"1.0"`。
+**A**: `schema_version` 标识当前模版使用的模版格式版本。MCStart 会根据此版本号选择对应的解析器来处理模版。当 MCStart 未来升级模版格式时，旧版本的模版仍然可以通过此字段被正确识别和兼容处理。当前版本为 `"2.0"`。
 
 ### Q21: 卸载阶段会删除系统里已经存在的共享组件吗？
 
