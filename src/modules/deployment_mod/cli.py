@@ -663,7 +663,8 @@ class DeploymentModCliRunner:
         items_to_resolve: List[tuple[str, str, Any]] = []
 
         for component in template.components:
-            if component.user_choose and any(isinstance(item, int) for item in component.choose_list):
+            # choose=true 时才在表单阶段让用户选择版本（choose=false 强制安装，由 runtime 在 check 后决定）
+            if component.choose and component.user_choose and any(isinstance(item, int) for item in component.choose_list):
                 items_to_resolve.append(("component", component.id, component))
 
         for deployment in template.deployments:
