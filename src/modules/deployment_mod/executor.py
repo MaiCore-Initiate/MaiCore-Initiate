@@ -64,7 +64,7 @@ class DeploymentModExecutor:
         template = deployment_mod_registry.get(template_id, refresh=True)
         if not template:
             raise ValueError(f"未找到模板: {template_id}")
-        config_name, config = self.runtime._find_instance_config(serial_number)
+        config_name, config = self.runtime.find_instance_config(serial_number)
         _ = config_name
         stored_inputs = dict(config.get("template_inputs", {}) or {})
         merged_inputs = dict(stored_inputs)
