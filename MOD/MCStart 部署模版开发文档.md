@@ -64,6 +64,7 @@
   - [6.2 导入（env\_input）](#62-导入env_input)
   - [6.3 作用域与执行顺序](#63-作用域与执行顺序)
   - [6.4 完整数据流示例](#64-完整数据流示例)
+  - [6.5 自动导出用户输入](#65-自动导出用户输入)
 - [7. 路径变量参考](#7-路径变量参考)
 - [8. 版本获取与格式化](#8-版本获取与格式化)
   - [8.1 版本获取方式](#81-版本获取方式)
@@ -1363,6 +1364,70 @@ list = ["MaiBot", "Adapter"]
 └─────────────────────────────────────────────────────┘
 ```
 
+### 6.5 自动导出用户输入
+
+MCStart 引擎在执行组件安装阶段之前，会**自动将所有用户输入的表单字段导出到环境变量池**，无需模板显式声明 `env_output`。
+
+这意味着以下用户输入可以直接通过 `{{env|...}}` 引用：
+
+| 字段 Key | 来源 | 说明 |
+|----------|------|------|
+| `nickname` | 系统内置表单 | 实例名称，用于创建实例隔离目录 |
+| `serial_number` | 系统内置表单 | 实例唯一业务序列号 |
+| `qq_account` | 系统内置表单 | QQ 账号（可选） |
+| `bot_type` | 系统内置表单 | 部署画像（如 MaiBot、MoFox-Core 等） |
+| `path::deployment::<部署ID>` | 表单字段（path_value = "$CustomPath" 时自动生成） | 用户输入的部署路径 |
+| `path::component::<组件ID>` | 同上 | 用户输入的组件安装路径 |
+| `version::<stage>::<ID>` | 用户选择版本后自动生成 | 用户选择的版本号 |
+| `deployment::<部署ID>` | 表单字段（choose = true 时） | 用户是否选择部署该部署项 |
+| `component::<组件ID>` | 同上 | 用户是否选择安装该组件 |
+
+**使用示例**：
+
+```toml
+# 在组件中使用用户输入的路径 + nickname 拼接实例目录
+[[Component]]
+name = "NapCat"
+id = "napcat-download"
+install_path = "{{env|path::deployment::MaiBot}}\\{{env|nickname}}"
+# 用户输入路径 D:\test，nickname = 111
+# → install_path = D:\test\111
+
+# 在部署项中使用用户输入的路径
+[[Deployment]]
+name = "MaiBot"
+id = "MaiBot"
+deploy_path = "$CustomPath"
+custom_path = "$input$"
+# → 用户输入的路径存入 path::deployment::MaiBot
+
+# 在另一个部署项中引用同一个路径
+[[Deployment]]
+name = "NapCat-Adapter"
+id = "NapCat-Adapter"
+deploy_path = "{{env|path::deployment::MaiBot}}"
+# → 复用 MaiBot 的用户输入路径
+
+# 在配置项中使用 nickname
+[[ConfigItem]]
+name = "MaiBot|config/bot_config.toml"
+file_path = "{{env|path::deployment::MaiBot}}\\{{env|nickname}}\\MaiBot\\config\\bot_config.toml"
+```
+
+**自动导出机制说明**：
+
+```
+用户输入表单
+    ↓
+plan.template_inputs 填充
+    ↓
+引擎启动时自动遍历并导出到 env_pool
+    ↓
+模板中任意位置通过 {{env|...}} 引用
+```
+
+> 注意：自动导出发生在**组件安装阶段之前**，因此组件阶段和部署阶段均可在 `after_command`、`deploy_command_list`、`launch_command` 等命令中引用用户输入的值。
+
 ---
 
 ## 7. 路径变量参考
@@ -2071,3 +2136,101 @@ env_output = false   # 个体开关关闭 → ❌ 不生效
 ### Q21: 卸载阶段会删除系统里已经存在的共享组件吗？
 
 **A**: 默认不会。MCStart 会根据实例运行时状态判断组件是否由模板托管安装。只有模板实际安装过的组件目录，且卸载项显式设置了 `remove_component = true`，才会尝试删除；如果组件是在部署时检查到系统中已存在而被跳过安装，则卸载阶段只会跳过，不会删除共享组件。
+
+### Q22: 版本获取失败后如何处理？
+
+**A**: MCStart 实现了智能的版本获取失败处理机制：
+
+1. **指数退避重试**：版本获取时会进行 3 次指数退避重试（延迟分别为 1s、2s、4s），应对临时网络问题
+2. **失败后用户选项**：如果重试 3 次后仍然失败，会向用户提供三个选项：
+   - **[1] 手动重试**：重新尝试获取版本列表
+   - **[2] 自行输入版本号**：用户可以直接输入版本号或分支名
+   - **[3] 跳过（使用默认版本）**：跳过版本选择，使用默认行为
+
+3. **版本优先级**：获取版本时优先展示 Release（分发版本），其次是 Tag（标签），最后是 Branch（分支）
+
+### Q23: 命令执行的显示格式是什么？
+
+**A**: MCStart 在执行命令时会实时显示命令内容和输出，格式如下：
+
+```bash
+● Bash <命令内容>
+  ⎿ 工作目录: <路径>
+  ⎿ <命令输出内容>
+```
+
+**示例**：
+```bash
+● Bash python --version
+  ⎿ 工作目录: C:\Users\xxx
+  ⎿ Python 3.12.8
+```
+
+这种格式让用户可以清晰地看到：
+- 当前正在执行的命令
+- 命令的工作目录
+- 命令的实际输出内容
+
+### Q24: 组件检查的结果会显示吗？
+
+**A**: 是的，组件检查的结果会实时显示。当执行 `check_command` 时：
+
+1. **检查中**：显示 "正在检查组件是否已安装..."
+2. **检查通过**：显示 "✓ 检查通过，已安装版本: x.x.x"
+3. **检查未通过**：显示 "✗ 检查未通过，将执行安装"
+
+检查命令的输出也会按照上述命令执行显示格式实时展示。
+
+### Q25: 部署下载失败时的回退策略是什么？
+
+**A**: 当使用 `deploy_method = "gitclone"` 或 `"auto"` 时，如果 Git Clone 失败：
+
+1. **优先使用分支回退**：如果用户选择了特定版本（Release/Tag），会尝试下载该版本的源码压缩包
+2. **分支优先**：如果版本类型是 Branch，会使用 `archive/refs/heads/{branch_name}.zip` 格式的链接
+3. **Release 优先**：如果版本类型是 Release/Tag，会使用 `archive/refs/tags/{tag_name}.zip` 格式的链接
+
+这确保了在网络问题导致 clone 失败时，仍能通过下载源码包的方式完成部署。
+
+### Q26: 如何在模板中引用用户输入的 `nickname` 或自定义路径？
+
+**A**: MCStart 引擎在启动时会**自动将所有用户输入的表单字段导出到环境变量池**，无需模板显式声明 `env_output`。因此可以直接在任意命令中使用 `{{env|...}}` 引用：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `nickname` | 用户输入的实例名称 | `{{env\|nickname}}` → `111` |
+| `serial_number` | 实例唯一序列号 | `{{env\|serial_number}}` → `222` |
+| `path::deployment::MaiBot` | 用户输入的部署路径 | `{{env\|path::deployment::MaiBot}}` → `D:\test` |
+| `path::component::napcat` | 用户输入的组件路径 | `{{env\|path::component::napcat}}` → `D:\test` |
+
+**典型用法 — 多实例隔离目录**：
+
+```toml
+# 用户基础路径：D:\test，nickname：111
+# 期望目录结构：D:\test\111\
+#   ├── MaiBot/
+#   ├── NapCat-Adapter/
+#   └── NapCat/
+
+# 组件安装路径：基础路径 + nickname
+[[Component]]
+name = "NapCat"
+id = "napcat-download"
+install_path = "{{env|path::deployment::MaiBot}}\\{{env|nickname}}"
+# → D:\test\111
+
+# 部署路径：直接用用户输入的基础路径
+[[Deployment]]
+name = "MaiBot"
+id = "MaiBot"
+deploy_path = "$CustomPath"
+custom_path = "$input$"
+
+# 另一个部署项复用同一个基础路径
+[[Deployment]]
+name = "NapCat-Adapter"
+id = "NapCat-Adapter"
+deploy_path = "{{env|path::deployment::MaiBot}}"
+# → D:\test
+```
+
+自动导出发生在**组件安装阶段之前**，因此组件、部署、启动、配置等所有阶段的命令中均可使用。

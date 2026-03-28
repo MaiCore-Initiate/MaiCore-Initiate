@@ -182,6 +182,11 @@ class DeploymentModRuntime:
             self._notify(state, 1, 6, "准备模板运行时", "running", f"模板: {template.metadata.mod_name}")
             self._prepare_file_imports(state)
 
+            # 自动将所有用户输入的表单字段导出到环境变量池，供模板通过 {{env|...}} 引用
+            for key, value in state.plan.template_inputs.items():
+                if value and str(value).strip():
+                    state.env_pool[key] = str(value).strip()
+
             self._notify(state, 2, 6, "组件安装阶段", "running", "开始执行组件安装阶段")
             self._execute_components(state)
 
@@ -1182,40 +1187,92 @@ class DeploymentModRuntime:
             value = re.sub(rule.match, rule.replace, value)
         return value
 
-    def _fetch_github_candidates(self, repo_url: str) -> List[Dict[str, Any]]:
+    def _fetch_github_candidates_with_retry(
+        self,
+        repo_url: str,
+        max_retries: int = 3,
+        base_delay: float = 1.0,
+    ) -> tuple[List[Dict[str, Any]], str]:
+        """
+        带指数退避重试的 GitHub 版本获取。
+        
+        返回: (candidates, error_message)
+        - 成功时 candidates 为版本列表，error_message 为空
+        - 失败时 candidates 为空列表，error_message 包含错误信息
+        """
         owner, repo = self._parse_github_repo(repo_url)
         if not owner or not repo:
-            raise RuntimeError(f"无效的 GitHub 仓库地址: {repo_url}")
+            return [], f"无效的 GitHub 仓库地址: {repo_url}"
 
         headers = {"Accept": "application/vnd.github+json", "User-Agent": "MaiCore-Start"}
-        candidates: List[Dict[str, Any]] = []
-        for endpoint, item_key, item_type in (
+        
+        # 优先获取 releases（分发版本），其次是 tags，最后是 branches
+        endpoints = [
             ("releases", "tag_name", "release"),
             ("tags", "name", "tag"),
             ("branches", "name", "branch"),
-        ):
-            response = requests.get(
-                f"https://api.github.com/repos/{owner}/{repo}/{endpoint}",
-                headers=headers,
-                timeout=20,
-                **self._get_request_kwargs(),
-            )
-            if not response.ok:
-                continue
-            for item in response.json()[:30]:
-                name = str(item.get(item_key, "") or "").strip()
-                if name:
-                    candidates.append({"name": name, "raw_name": name, "type": item_type})
+        ]
+        
+        last_error = ""
+        for attempt in range(max_retries):
+            candidates: List[Dict[str, Any]] = []
+            success_count = 0
+            
+            for endpoint, item_key, item_type in endpoints:
+                try:
+                    response = requests.get(
+                        f"https://api.github.com/repos/{owner}/{repo}/{endpoint}",
+                        headers=headers,
+                        timeout=20,
+                        **self._get_request_kwargs(),
+                    )
+                    
+                    if response.ok:
+                        success_count += 1
+                        for item in response.json()[:30]:
+                            name = str(item.get(item_key, "") or "").strip()
+                            if name:
+                                candidates.append({"name": name, "raw_name": name, "type": item_type})
+                    else:
+                        last_error = f"GitHub API 返回 {response.status_code}"
+                        
+                except requests.exceptions.Timeout:
+                    last_error = "请求超时"
+                except requests.exceptions.ConnectionError as e:
+                    last_error = f"网络连接失败: {str(e)[:50]}"
+                except Exception as e:
+                    last_error = f"请求异常: {str(e)[:50]}"
+            
+            # 如果至少有一个端点成功，就返回结果
+            if success_count > 0:
+                unique: List[Dict[str, Any]] = []
+                seen = set()
+                for candidate in candidates:
+                    key = (candidate["name"].lower(), candidate["type"])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    unique.append(candidate)
+                return unique, ""
+            
+            # 所有端点都失败，进行指数退避
+            if attempt < max_retries - 1:
+                delay = base_delay * (2 ** attempt)  # 指数退避: 1s, 2s, 4s
+                logger.warning(
+                    f"版本获取失败 (尝试 {attempt + 1}/{max_retries})，{delay:.1f}秒后重试...",
+                    repo=repo_url,
+                    error=last_error,
+                )
+                time.sleep(delay)
+        
+        return [], last_error
 
-        unique: List[Dict[str, Any]] = []
-        seen = set()
-        for candidate in candidates:
-            key = (candidate["name"].lower(), candidate["type"])
-            if key in seen:
-                continue
-            seen.add(key)
-            unique.append(candidate)
-        return unique
+    def _fetch_github_candidates(self, repo_url: str) -> List[Dict[str, Any]]:
+        """兼容旧接口的版本获取（无重试）"""
+        candidates, error = self._fetch_github_candidates_with_retry(repo_url, max_retries=1)
+        if error and not candidates:
+            raise RuntimeError(f"获取版本列表失败: {error}")
+        return candidates
 
     def _extract_candidates_from_source(self, state: RuntimeState, definition: Any, scope: RuntimeScope) -> List[str]:
         source = self._resolve_provider_source(state, definition, scope, self.FILELINK_FIELD_ALIASES)
@@ -1400,9 +1457,12 @@ class DeploymentModRuntime:
             command_count=len(resolved_commands),
             commands=resolved_commands,
         )
-        self._notify(state, 0, 0, label, "running", f"执行脚本: {script_path}")
-        self._notify(state, 0, 0, label, "running", f"工作目录: {cwd}")
-        self._notify(state, 0, 0, label, "running", f"命令数量: {len(resolved_commands)}")
+        # 显示正在执行的命令（按照用户要求的格式）
+        first_cmd = resolved_commands[0] if resolved_commands else script_path
+        self._notify(state, 0, 0, label, "running", f"● Bash {first_cmd}")
+        self._notify(state, 0, 0, label, "running", f"  ⎿ 工作目录: {cwd}")
+        if len(resolved_commands) > 1:
+            self._notify(state, 0, 0, label, "running", f"  ⎿ 命令数量: {len(resolved_commands)}")
 
         if detached:
             popen_kwargs: Dict[str, Any] = {"cwd": cwd, "env": env, "shell": False}
@@ -1432,8 +1492,16 @@ class DeploymentModRuntime:
         full_output = "\n".join(output_lines).strip()
         if returncode != 0 and raise_on_error:
             raise RuntimeError(f"{label} 执行失败 (返回码 {returncode}):\n{full_output}")
+        
+        # 显示命令输出的前几行（按照用户要求的格式）
         if full_output:
-            self._notify(state, 0, 0, label, "running", f"[输出] {full_output[-1000:]}")
+            output_lines_list = full_output.split('\n')
+            output_preview = output_lines_list[:5]
+            output_text = '\n  ⎿ '.join(output_preview)
+            if len(output_lines_list) > 5:
+                output_text += f"\n  ⎿ ... (共 {len(output_lines_list)} 行)"
+            self._notify(state, 0, 0, label, "running", f"  ⎿ {output_text}")
+        
         return full_output
 
     def _stream_process_output(
@@ -1450,11 +1518,23 @@ class DeploymentModRuntime:
         def read_stream(stream) -> List[str]:
             try:
                 lines = []
-                for raw_line in iter(lambda: stream.read(1), b""):
-                    if isinstance(raw_line, bytes):
-                        raw_line = raw_line.decode("utf-8", errors="replace")
-                    if raw_line:
-                        lines.append(raw_line)
+                buffer = ""
+                # 每次读取更多字符，提高效率
+                while True:
+                    char = stream.read(1)
+                    if not char:
+                        break
+                    if isinstance(char, bytes):
+                        char = char.decode("utf-8", errors="replace")
+                    buffer += char
+                    # 遇到换行符时输出整行
+                    if char in ('\n', '\r'):
+                        if buffer.strip():
+                            lines.append(buffer.rstrip('\r\n'))
+                        buffer = ""
+                # 处理最后一行（如果没有换行符）
+                if buffer.strip():
+                    lines.append(buffer.strip())
                 return lines
             except Exception:
                 return []
@@ -1470,7 +1550,11 @@ class DeploymentModRuntime:
                 try:
                     stream_lines.extend(future.result(timeout=timeout_seconds))
                 finally:
-                    reader_thread.shutdown(warning=False)
+                    try:
+                        reader_thread.shutdown(wait=True)
+                    except TypeError:
+                        # Python < 3.9 不支持 wait 参数
+                        reader_thread.shutdown()
             finally:
                 done.set()
 
@@ -1491,6 +1575,7 @@ class DeploymentModRuntime:
                     output_lines.append(line.rstrip())
                     line_display = line.rstrip("\r\n")
                     if line_display:
+                        # 紧凑输出格式
                         ui.console.print(f"[dim]│[/dim] {line_display}", highlight=False)
         finally:
             thread.join(timeout=5)

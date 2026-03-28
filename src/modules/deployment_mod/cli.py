@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 from collections import deque
-from typing import Any, Callable, Deque, Dict, Iterable, Optional
+from typing import Any, Callable, Deque, Dict, Iterable, List, Optional
 
 from rich.box import Box
 from rich.console import Group
@@ -679,43 +679,132 @@ class DeploymentModCliRunner:
 
         for stage_name, item_id, definition in items_to_resolve:
             version_key = f"version::{stage_name}::{item_id}"
-            try:
-                candidates = self.runtime.fetch_version_candidates(template, stage_name, item_id, definition)
-                if not candidates:
-                    ui.print_warning(f"无法获取 {item_id} 的版本列表，将使用最新版本")
-                    result[version_key] = ""
-                    continue
-
-                filtered = self._filter_version_candidates(definition, candidates)
-
-                ui.console.print()
-                ui.console.print(f"[bold cyan]请选择 {item_id} 的版本[/bold cyan]")
-                for idx, item in enumerate(filtered, 1):
-                    type_label = {"release": "Release", "tag": "Tag", "branch": "Branch", "file": "文件", "custom": "自定义"}.get(
-                        item.get("type", ""), item.get("type", "")
-                    )
-                    ui.console.print(f"  [{idx}] {item['name']} [{type_label}]")
-
-                default_idx = 1
-                while True:
-                    choice = ui.get_input(f"选择版本 (1-{len(filtered)}, 默认 1)", default="1").strip()
-                    if not choice:
-                        choice = "1"
-                    if choice.isdigit():
-                        idx = int(choice) - 1
-                        if 0 <= idx < len(filtered):
-                            selected = filtered[idx]
-                            result[version_key] = selected.get("raw_name") or selected.get("name", "")
-                            ui.print_success(f"已选择版本: {result[version_key]}")
-                            break
-                    ui.print_warning(f"请输入 1 到 {len(filtered)} 之间的数字")
-
-            except Exception as exc:
-                ui.print_error(f"获取 {item_id} 版本列表失败: {exc}")
-                ui.print_warning(f"将跳过 {item_id} 的版本选择，使用默认版本")
-                result[version_key] = ""
+            result[version_key] = self._resolve_single_version_with_fallback(
+                template, stage_name, item_id, definition
+            )
 
         return result
+
+    def _resolve_single_version_with_fallback(
+        self,
+        template: TemplateDefinition,
+        stage_name: str,
+        item_id: str,
+        definition: Any,
+    ) -> str:
+        """
+        获取单个组件/部署项的版本，支持失败后用户选择：
+        1. 手动重试
+        2. 自行输入版本号
+        3. 跳过（使用默认版本）
+        """
+        version_key = f"version::{stage_name}::{item_id}"
+        
+        while True:
+            ui.console.print()
+            ui.print_info(f"正在获取 {item_id} 的版本信息...")
+            
+            try:
+                # 使用带重试的方法获取版本
+                candidates, error = self.runtime._fetch_github_candidates_with_retry(
+                    self._get_github_repo(definition),
+                    max_retries=3,
+                    base_delay=1.0,
+                )
+                
+                if error and not candidates:
+                    ui.print_warning(f"获取 {item_id} 版本失败: {error}")
+                elif not candidates:
+                    ui.print_warning(f"无法获取 {item_id} 的版本列表")
+                else:
+                    # 成功获取版本列表，让用户选择
+                    filtered = self._filter_version_candidates(definition, candidates)
+                    
+                    ui.console.print()
+                    ui.console.print(f"[bold cyan]请选择 {item_id} 的版本[/bold cyan]")
+                    for idx, item in enumerate(filtered, 1):
+                        type_label = {"release": "Release", "tag": "Tag", "branch": "Branch", "file": "文件", "custom": "自定义"}.get(
+                            item.get("type", ""), item.get("type", "")
+                        )
+                        ui.console.print(f"  [{idx}] {item['name']} [{type_label}]")
+                    
+                    default_idx = 1
+                    while True:
+                        choice = ui.get_input(f"选择版本 (1-{len(filtered)}, 默认 1)", default="1").strip()
+                        if not choice:
+                            choice = "1"
+                        if choice.isdigit():
+                            idx = int(choice) - 1
+                            if 0 <= idx < len(filtered):
+                                selected = filtered[idx]
+                                version = selected.get("raw_name") or selected.get("name", "")
+                                ui.print_success(f"已选择版本: {version}")
+                                return version
+                        ui.print_warning(f"请输入 1 到 {len(filtered)} 之间的数字")
+                
+                # 获取失败，显示选项让用户选择
+                ui.console.print()
+                ui.console.print(f"[bold yellow]获取 {item_id} 版本失败，请选择处理方式:[/bold yellow]")
+                ui.console.print("  [1] 手动重试")
+                ui.console.print("  [2] 自行输入版本号")
+                ui.console.print("  [3] 跳过（使用默认版本）")
+                
+                while True:
+                    choice = ui.get_input("请选择 (1-3)", default="3").strip()
+                    if not choice:
+                        choice = "3"
+                    
+                    if choice == "1":
+                        # 手动重试 - 继续外层循环
+                        break
+                    elif choice == "2":
+                        # 自行输入版本号
+                        ui.console.print()
+                        version_input = ui.get_input(f"请输入 {item_id} 的版本号或分支名").strip()
+                        if version_input:
+                            ui.print_success(f"已输入版本: {version_input}")
+                            return version_input
+                        ui.print_warning("版本号不能为空，请重新选择")
+                    elif choice == "3":
+                        # 跳过，使用默认版本
+                        ui.print_info(f"将跳过 {item_id} 的版本选择，使用默认版本")
+                        return ""
+                    else:
+                        ui.print_warning("请输入 1-3 之间的数字")
+                
+                # 如果选择了重试，继续外层循环
+                continue
+                
+            except Exception as exc:
+                ui.print_error(f"获取 {item_id} 版本列表时发生异常: {exc}")
+                
+                # 同样显示三个选项
+                ui.console.print()
+                ui.console.print(f"[bold yellow]获取 {item_id} 版本失败，请选择处理方式:[/bold yellow]")
+                ui.console.print("  [1] 手动重试")
+                ui.console.print("  [2] 自行输入版本号")
+                ui.console.print("  [3] 跳过（使用默认版本）")
+                
+                while True:
+                    choice = ui.get_input("请选择 (1-3)", default="3").strip()
+                    if not choice:
+                        choice = "3"
+                    
+                    if choice == "1":
+                        break  # 继续外层循环重试
+                    elif choice == "2":
+                        version_input = ui.get_input(f"请输入 {item_id} 的版本号或分支名").strip()
+                        if version_input:
+                            return version_input
+                        ui.print_warning("版本号不能为空")
+                    elif choice == "3":
+                        return ""
+                
+                continue
+
+    def _get_github_repo(self, definition: Any) -> str:
+        """从定义中获取 GitHub 仓库地址"""
+        return getattr(definition, "github_repo", "") or ""
 
     def _filter_version_candidates(
         self,
