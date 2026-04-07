@@ -95,3 +95,5 @@ MOD/*
 !MOD/MaiCoer-Start.DeploymentMOD/
 !MOD/MaiCoer-Start.DeploymentMOD/DeploymentMOD.toml
 !MOD/MaiCoer-Start.DeploymentMOD/version.json
+
+webui/frontend/public/backgrounds
