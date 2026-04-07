@@ -24,7 +24,7 @@ from .runtime import DeploymentModRuntime
 class _TemplateExecutionDisplay:
     """命令行模板执行期的 Rich 动画与进度条展示器。"""
 
-    HISTORY_LIMIT = 8
+    HISTORY_LIMIT = 18
     DOT_FRAMES = (
         "●○○○○○",
         "○●○○○○",
@@ -43,7 +43,7 @@ class _TemplateExecutionDisplay:
         self.history: Deque[tuple[str, str]] = deque(maxlen=self.HISTORY_LIMIT)
         self.download_tasks: Dict[str, TaskID] = {}
         self.command_output_label = ""
-        self.command_output_lines: Deque[str] = deque(maxlen=12)
+        self.command_output_lines: Deque[str] = deque(maxlen=28)
         self.progress = Progress(
             TextColumn("[bold cyan]{task.fields[prefix]}", justify="right"),
             TextColumn("{task.description}", style="bold"),
@@ -121,11 +121,59 @@ class _TemplateExecutionDisplay:
     ) -> None:
         if event == "download":
             self._update_download(step_name=step_name, status=status, message=message, **payload)
+        elif event == "command":
+            self._update_command(step_name=step_name, status=status, message=message, **payload)
         elif event == "command_output":
             self._update_command_output(step_name=step_name, message=message, **payload)
+        elif event == "detail":
+            self._update_detail(step=step, total_steps=total_steps, step_name=step_name, status=status, message=message)
         else:
             self._update_stage(step=step, total_steps=total_steps, step_name=step_name, status=status, message=message)
         self._refresh()
+
+    def _update_command(self, *, step_name: str, status: str, message: str, **payload: Any) -> None:
+        command_status = str(payload.get("command_status") or status or "running")
+        runtime_label = str(payload.get("runtime_label") or payload.get("runtime") or "Shell")
+        primary_command = self._compact_message(str(payload.get("primary_command") or message or ""), limit=320)
+        cwd = self._compact_message(str(payload.get("cwd") or ""), limit=320)
+        script_path = self._compact_message(str(payload.get("script_path") or ""), limit=320)
+        command_count = self._safe_int(payload.get("command_count"))
+        returncode = payload.get("returncode")
+        line_count = self._safe_int(payload.get("line_count"))
+        pid = payload.get("pid")
+
+        if step_name:
+            self.command_output_label = step_name
+        if command_status == "started":
+            self.command_output_lines.clear()
+            if primary_command:
+                self.command_output_lines.append(f"● {runtime_label} {primary_command}")
+            if cwd:
+                self.command_output_lines.append(f"  ⎿ 工作目录: {cwd}")
+            if command_count > 1:
+                self.command_output_lines.append(f"  ⎿ 命令数量: {command_count}")
+            if script_path:
+                self.command_output_lines.append(f"  ⎿ 脚本路径: {script_path}")
+            self.current_message = self._compact_message(message) or f"{step_name} 正在执行"
+            return
+
+        if command_status == "detached":
+            summary = self._compact_message(message) or "已托管到后台"
+            if pid:
+                summary = f"{summary} (PID: {pid})"
+            self.command_output_lines.append(f"  ⎿ {summary}")
+            self._append_history("completed", f"{step_name}: {summary}")
+            self.current_message = summary
+            return
+
+        summary = self._compact_message(message) or f"{step_name} 已结束"
+        if returncode not in (None, ""):
+            summary = f"{summary} (返回码: {returncode})"
+        if line_count:
+            summary = f"{summary} / 输出 {line_count} 行"
+        self.command_output_lines.append(f"  ⎿ {summary}")
+        self._append_history("failed" if command_status == "failed" else "completed", f"{step_name}: {summary}")
+        self.current_message = summary
 
     def _update_command_output(self, *, step_name: str, message: str, **payload: Any) -> None:
         """处理命令输出的流式更新。"""
@@ -134,9 +182,21 @@ class _TemplateExecutionDisplay:
         if message:
             lines = message.splitlines()
             for line in lines:
-                stripped = line.strip()
+                stripped = line.rstrip()
                 if stripped:
-                    self.command_output_lines.append(stripped)
+                    self.command_output_lines.append(f"│ {stripped}")
+
+    def _update_detail(self, *, step: int, total_steps: int, step_name: str, status: str, message: str) -> None:
+        detail = self._format_detail(step, total_steps, step_name, message)
+        compact_message = self._compact_message(message)
+        if step and total_steps:
+            self.current_step = step
+            self.total_steps = total_steps
+        if step_name:
+            self.current_stage = step_name
+        if compact_message:
+            self.current_message = compact_message
+        self._append_history(status, detail)
 
     def _update_stage(self, *, step: int, total_steps: int, step_name: str, status: str, message: str) -> None:
         detail = self._format_detail(step, total_steps, step_name, message)
@@ -247,7 +307,12 @@ class _TemplateExecutionDisplay:
         for index, line in enumerate(self.command_output_lines):
             if index:
                 result.append("\n")
-            result.append(f"│ {line}", style="dim")
+            if line.startswith("● "):
+                result.append(line, style=ui.colors["primary"])
+            elif line.startswith("  ⎿ "):
+                result.append(line, style="cyan")
+            else:
+                result.append(line, style="dim")
         if not self.command_output_lines:
             result.append("[dim]等待输出...[/dim]", style="dim")
         return result
@@ -549,6 +614,8 @@ class DeploymentModCliRunner:
             ui.print_info(f"运行时环境文件: {result.runtime_env_file}")
         if result.runtime_state_file:
             ui.print_info(f"运行时状态文件: {result.runtime_state_file}")
+        if getattr(result, "runtime_log_file", ""):
+            ui.print_info(f"执行日志文件: {result.runtime_log_file}")
         return 0
 
     def _execute_with_display(self, title: str, action: Callable[[], Any]) -> Any:
@@ -589,6 +656,34 @@ class DeploymentModCliRunner:
                 ui.print_error(f"{step_name}: {message}")
             elif str(payload.get("download_status") or "") == "started":
                 ui.print_info(f"{step_name}: {message}")
+            return
+        if event == "command":
+            command_status = str(payload.get("command_status") or status or "running")
+            runtime_label = str(payload.get("runtime_label") or payload.get("runtime") or "Shell")
+            primary_command = str(payload.get("primary_command") or "")
+            cwd = str(payload.get("cwd") or "")
+            if command_status == "started":
+                if primary_command:
+                    ui.console.print(f"● {runtime_label} {primary_command}", highlight=False)
+                if cwd:
+                    ui.console.print(f"  ⎿ 工作目录: {cwd}", highlight=False)
+                if payload.get("command_count"):
+                    ui.console.print(f"  ⎿ 命令数量: {payload.get('command_count')}", highlight=False)
+                return
+            if command_status == "detached":
+                ui.print_success(f"{step_name}: {message}")
+                return
+            if command_status == "failed":
+                ui.print_error(f"{step_name}: {message}")
+                return
+            ui.print_success(f"{step_name}: {message}")
+            return
+        if event == "command_output":
+            if message.strip():
+                ui.console.print(f"│ {message}", highlight=False)
+            return
+        if event == "detail":
+            ui.print_info(f"{step_name}: {message}")
             return
 
         prefix = f"[{step}/{total_steps}] " if step and total_steps else ""
@@ -658,30 +753,45 @@ class DeploymentModCliRunner:
         template: TemplateDefinition,
         inputs: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """对需要动态获取版本的字段，从 GitHub 等源获取版本列表并让用户选择。"""
+        """对需要动态获取的版本/链接字段进行交互式选择。"""
         result = dict(inputs)
-        items_to_resolve: List[tuple[str, str, Any]] = []
+        version_items: List[tuple[str, str, Any]] = []
+        link_items: List[tuple[str, str, Any]] = []
 
         for component in template.components:
-            # choose=true 时才在表单阶段让用户选择版本（choose=false 强制安装，由 runtime 在 check 后决定）
-            if component.choose and component.user_choose and any(isinstance(item, int) for item in component.choose_list):
-                items_to_resolve.append(("component", component.id, component))
+            if not self._is_component_enabled(component, result):
+                continue
+            if self._needs_dynamic_version_selection(component) and not str(result.get(f"version::component::{component.id}", "") or "").strip():
+                version_items.append(("component", component.id, component))
+            if self._needs_dynamic_link_selection(component) and not str(result.get(f"link::component::{component.id}", "") or "").strip():
+                link_items.append(("component", component.id, component))
 
         for deployment in template.deployments:
-            if deployment.user_choose and any(isinstance(item, int) for item in deployment.choose_list):
-                items_to_resolve.append(("deployment", deployment.id, deployment))
+            if not self._is_deployment_enabled(deployment, result):
+                continue
+            if self._needs_dynamic_version_selection(deployment) and not str(result.get(f"version::deployment::{deployment.id}", "") or "").strip():
+                version_items.append(("deployment", deployment.id, deployment))
+            if self._needs_dynamic_link_selection(deployment) and not str(result.get(f"link::deployment::{deployment.id}", "") or "").strip():
+                link_items.append(("deployment", deployment.id, deployment))
 
-        if not items_to_resolve:
+        if not version_items and not link_items:
             return result
 
-        ui.console.print()
-        ui.print_info("正在获取版本信息，请稍候...")
+        if version_items:
+            ui.console.print()
+            ui.print_info("正在获取版本信息，请稍候...")
 
-        for stage_name, item_id, definition in items_to_resolve:
+        for stage_name, item_id, definition in version_items:
             version_key = f"version::{stage_name}::{item_id}"
-            result[version_key] = self._resolve_single_version_with_fallback(
-                template, stage_name, item_id, definition
-            )
+            result[version_key] = self._resolve_single_version_with_fallback(template, stage_name, item_id, definition)
+
+        if link_items:
+            ui.console.print()
+            ui.print_info("正在获取下载链接信息，请稍候...")
+
+        for stage_name, item_id, definition in link_items:
+            link_key = f"link::{stage_name}::{item_id}"
+            result[link_key] = self._resolve_single_link_with_fallback(template, stage_name, item_id, definition)
 
         return result
 
@@ -692,73 +802,43 @@ class DeploymentModCliRunner:
         item_id: str,
         definition: Any,
     ) -> str:
-        """
-        获取单个组件/部署项的版本，支持失败后用户选择：
-        1. 手动重试
-        2. 自行输入版本号
-        3. 跳过（使用默认版本）
-        """
-        version_key = f"version::{stage_name}::{item_id}"
-        
         while True:
             ui.console.print()
             ui.print_info(f"正在获取 {item_id} 的版本信息...")
-            
+
             try:
-                # 使用带重试的方法获取版本
-                candidates, error = self.runtime._fetch_github_candidates_with_retry(
-                    self._get_github_repo(definition),
-                    max_retries=3,
-                    base_delay=1.0,
-                )
-                
-                if error and not candidates:
-                    ui.print_warning(f"获取 {item_id} 版本失败: {error}")
-                elif not candidates:
+                candidates = self.runtime.fetch_version_candidates(template, stage_name, item_id, definition)
+                filtered = self._filter_version_candidates(definition, candidates)
+                if not filtered:
                     ui.print_warning(f"无法获取 {item_id} 的版本列表")
                 else:
-                    # 成功获取版本列表，让用户选择
-                    filtered = self._filter_version_candidates(definition, candidates)
-                    
                     ui.console.print()
                     ui.console.print(f"[bold cyan]请选择 {item_id} 的版本[/bold cyan]")
                     for idx, item in enumerate(filtered, 1):
-                        type_label = {"release": "Release", "tag": "Tag", "branch": "Branch", "file": "文件", "custom": "自定义"}.get(
+                        type_label = {"release": "Release", "tag": "Tag", "branch": "Branch", "file": "文件", "custom": "自定义", "explicit": "显式"}.get(
                             item.get("type", ""), item.get("type", "")
                         )
                         ui.console.print(f"  [{idx}] {item['name']} [{type_label}]")
-                    
-                    default_idx = 1
-                    while True:
-                        choice = ui.get_input(f"选择版本 (1-{len(filtered)}, 默认 1)", default="1").strip()
-                        if not choice:
-                            choice = "1"
-                        if choice.isdigit():
-                            idx = int(choice) - 1
-                            if 0 <= idx < len(filtered):
-                                selected = filtered[idx]
-                                version = selected.get("raw_name") or selected.get("name", "")
-                                ui.print_success(f"已选择版本: {version}")
-                                return version
-                        ui.print_warning(f"请输入 1 到 {len(filtered)} 之间的数字")
-                
-                # 获取失败，显示选项让用户选择
+
+                    selected = self._prompt_candidate_selection(f"选择版本 (1-{len(filtered)}, 默认 1)", filtered)
+                    version = selected.get("raw_name") or selected.get("name", "")
+                    ui.print_success(f"已选择版本: {version}")
+                    return str(version)
+
                 ui.console.print()
                 ui.console.print(f"[bold yellow]获取 {item_id} 版本失败，请选择处理方式:[/bold yellow]")
                 ui.console.print("  [1] 手动重试")
                 ui.console.print("  [2] 自行输入版本号")
                 ui.console.print("  [3] 跳过（使用默认版本）")
-                
+
                 while True:
                     choice = ui.get_input("请选择 (1-3)", default="3").strip()
                     if not choice:
                         choice = "3"
-                    
+
                     if choice == "1":
-                        # 手动重试 - 继续外层循环
                         break
                     elif choice == "2":
-                        # 自行输入版本号
                         ui.console.print()
                         version_input = ui.get_input(f"请输入 {item_id} 的版本号或分支名").strip()
                         if version_input:
@@ -766,32 +846,28 @@ class DeploymentModCliRunner:
                             return version_input
                         ui.print_warning("版本号不能为空，请重新选择")
                     elif choice == "3":
-                        # 跳过，使用默认版本
                         ui.print_info(f"将跳过 {item_id} 的版本选择，使用默认版本")
                         return ""
                     else:
                         ui.print_warning("请输入 1-3 之间的数字")
-                
-                # 如果选择了重试，继续外层循环
+
                 continue
-                
             except Exception as exc:
                 ui.print_error(f"获取 {item_id} 版本列表时发生异常: {exc}")
-                
-                # 同样显示三个选项
+
                 ui.console.print()
                 ui.console.print(f"[bold yellow]获取 {item_id} 版本失败，请选择处理方式:[/bold yellow]")
                 ui.console.print("  [1] 手动重试")
                 ui.console.print("  [2] 自行输入版本号")
                 ui.console.print("  [3] 跳过（使用默认版本）")
-                
+
                 while True:
                     choice = ui.get_input("请选择 (1-3)", default="3").strip()
                     if not choice:
                         choice = "3"
-                    
+
                     if choice == "1":
-                        break  # 继续外层循环重试
+                        break
                     elif choice == "2":
                         version_input = ui.get_input(f"请输入 {item_id} 的版本号或分支名").strip()
                         if version_input:
@@ -799,12 +875,135 @@ class DeploymentModCliRunner:
                         ui.print_warning("版本号不能为空")
                     elif choice == "3":
                         return ""
-                
+
                 continue
 
-    def _get_github_repo(self, definition: Any) -> str:
-        """从定义中获取 GitHub 仓库地址"""
-        return getattr(definition, "github_repo", "") or ""
+    def _resolve_single_link_with_fallback(
+        self,
+        template: TemplateDefinition,
+        stage_name: str,
+        item_id: str,
+        definition: Any,
+    ) -> str:
+        while True:
+            ui.console.print()
+            ui.print_info(f"正在获取 {item_id} 的下载链接...")
+
+            try:
+                candidates = self.runtime.fetch_link_candidates(template, stage_name, item_id, definition)
+                if not candidates:
+                    ui.print_warning(f"无法获取 {item_id} 的下载链接列表")
+                else:
+                    ui.console.print()
+                    ui.console.print(f"[bold cyan]请选择 {item_id} 的下载链接[/bold cyan]")
+                    for idx, item in enumerate(candidates, 1):
+                        type_label = {"provided": "模板", "file": "文件", "custom": "自定义"}.get(
+                            item.get("type", ""), item.get("type", "")
+                        )
+                        ui.console.print(f"  [{idx}] {item['name']} [{type_label}]")
+
+                    selected = self._prompt_candidate_selection(f"选择链接 (1-{len(candidates)}, 默认 1)", candidates)
+                    link_value = selected.get("raw_name") or selected.get("name", "")
+                    ui.print_success(f"已选择下载链接: {link_value}")
+                    return str(link_value)
+
+                ui.console.print()
+                ui.console.print(f"[bold yellow]获取 {item_id} 下载链接失败，请选择处理方式:[/bold yellow]")
+                ui.console.print("  [1] 手动重试")
+                ui.console.print("  [2] 自行输入下载链接")
+                ui.console.print("  [3] 跳过（使用默认行为）")
+
+                while True:
+                    choice = ui.get_input("请选择 (1-3)", default="3").strip()
+                    if not choice:
+                        choice = "3"
+
+                    if choice == "1":
+                        break
+                    if choice == "2":
+                        ui.console.print()
+                        link_input = ui.get_input(f"请输入 {item_id} 的完整下载链接").strip()
+                        if link_input:
+                            ui.print_success(f"已输入下载链接: {link_input}")
+                            return link_input
+                        ui.print_warning("下载链接不能为空，请重新选择")
+                    elif choice == "3":
+                        ui.print_info(f"将跳过 {item_id} 的下载链接选择，使用默认行为")
+                        return ""
+                    else:
+                        ui.print_warning("请输入 1-3 之间的数字")
+
+                continue
+            except Exception as exc:
+                ui.print_error(f"获取 {item_id} 下载链接列表时发生异常: {exc}")
+                ui.console.print()
+                ui.console.print(f"[bold yellow]获取 {item_id} 下载链接失败，请选择处理方式:[/bold yellow]")
+                ui.console.print("  [1] 手动重试")
+                ui.console.print("  [2] 自行输入下载链接")
+                ui.console.print("  [3] 跳过（使用默认行为）")
+
+                while True:
+                    choice = ui.get_input("请选择 (1-3)", default="3").strip()
+                    if not choice:
+                        choice = "3"
+
+                    if choice == "1":
+                        break
+                    elif choice == "2":
+                        link_input = ui.get_input(f"请输入 {item_id} 的完整下载链接").strip()
+                        if link_input:
+                            return link_input
+                        ui.print_warning("下载链接不能为空")
+                    elif choice == "3":
+                        return ""
+
+                continue
+
+    def _prompt_candidate_selection(self, prompt: str, candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
+        while True:
+            choice = ui.get_input(prompt, default="1").strip()
+            if not choice:
+                choice = "1"
+            if choice.isdigit():
+                idx = int(choice) - 1
+                if 0 <= idx < len(candidates):
+                    return candidates[idx]
+            ui.print_warning(f"请输入 1 到 {len(candidates)} 之间的数字")
+
+    @staticmethod
+    def _is_component_enabled(definition: Any, inputs: Dict[str, Any]) -> bool:
+        if getattr(definition, "install", False):
+            if getattr(definition, "choose", False):
+                return bool(inputs.get(f"component::{definition.id}", True))
+            return True
+        return bool(getattr(definition, "check", False))
+
+    @staticmethod
+    def _is_deployment_enabled(definition: Any, inputs: Dict[str, Any]) -> bool:
+        default_enabled = bool(getattr(definition, "deploy", False))
+        if getattr(definition, "choose", False):
+            return bool(inputs.get(f"deployment::{definition.id}", default_enabled))
+        return default_enabled
+
+    @staticmethod
+    def _needs_dynamic_version_selection(definition: Any) -> bool:
+        if not getattr(definition, "user_choose", False):
+            return False
+        if str(getattr(definition, "get_method", "") or "").strip().lower() != "get_version":
+            return False
+        choose_list = list(getattr(definition, "choose_list", []) or [])
+        string_choices = [item for item in choose_list if isinstance(item, str)]
+        if string_choices and len(string_choices) == len(choose_list):
+            return False
+        return True
+
+    @staticmethod
+    def _needs_dynamic_link_selection(definition: Any) -> bool:
+        if str(getattr(definition, "get_method", "") or "").strip().lower() != "get_link":
+            return False
+        if any(str(item).strip() for item in getattr(definition, "get_link_provide_list", []) or []):
+            return False
+        return str(getattr(definition, "get_link", "") or "").strip().lower() in {"filelink", "custom"}
 
     def _filter_version_candidates(
         self,

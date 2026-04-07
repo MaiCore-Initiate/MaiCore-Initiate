@@ -285,6 +285,7 @@ class RuntimeResult:
     removed_paths: List[str] = field(default_factory=list)
     runtime_env_file: str = ""
     runtime_state_file: str = ""
+    runtime_log_file: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return _to_plain(self)

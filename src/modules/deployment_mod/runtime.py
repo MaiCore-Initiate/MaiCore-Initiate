@@ -25,7 +25,6 @@ from urllib3.exceptions import InsecureRequestWarning
 from ...core.config import config_manager
 from ...core.p_config import p_config_manager
 from ...utils.common import make_toml_safe, open_files_in_editor
-from ...ui.interface import ui
 from .models import (
     ComponentDefinition,
     ConfigDefinition,
@@ -50,6 +49,14 @@ class RuntimeScope:
 
 
 @dataclass
+class CommandExecutionResult:
+    output: str = ""
+    returncode: int = 0
+    script_path: str = ""
+    detached: bool = False
+
+
+@dataclass
 class RuntimeState:
     template: TemplateDefinition
     plan: DeploymentPlan
@@ -59,6 +66,7 @@ class RuntimeState:
     instance_root: str = ""
     runtime_env_file: str = ""
     runtime_state_file: str = ""
+    runtime_log_file: str = ""
     env_pool: Dict[str, str] = field(default_factory=dict)
     file_paths: Dict[str, str] = field(default_factory=dict)
     file_trees: Dict[str, Any] = field(default_factory=dict)
@@ -78,6 +86,7 @@ class DeploymentModRuntime:
 
     RUNTIME_ENV_FILENAME = ".mcstart-template.env"
     RUNTIME_STATE_FILENAME = ".mcstart-template-state.toml"
+    LOG_SENSITIVE_KEYWORDS = ("password", "passwd", "token", "secret", "apikey", "api_key", "cookie", "authorization")
 
     def _get_request_kwargs(self) -> Dict[str, Any]:
         """生成网络请求的统一参数，包含代理和 SSL 配置。"""
@@ -154,6 +163,7 @@ class DeploymentModRuntime:
             removed_paths=list(state.removed_paths),
             runtime_env_file=state.runtime_env_file,
             runtime_state_file=state.runtime_state_file,
+            runtime_log_file=state.runtime_log_file,
         )
 
     def execute(
@@ -176,10 +186,13 @@ class DeploymentModRuntime:
             progress_callback=progress_callback,
             runtime_root=runtime_root,
             instance_serial_number=str(plan.template_inputs.get("serial_number", "") or ""),
+            runtime_log_file=os.path.join(runtime_root, "execution.log"),
         )
 
         try:
             self._notify(state, 1, 6, "准备模板运行时", "running", f"模板: {template.metadata.mod_name}")
+            self._notify(state, 1, 6, "准备模板运行时", "running", f"运行时目录: {runtime_root}", event="detail")
+            self._notify(state, 1, 6, "准备模板运行时", "running", f"执行日志: {state.runtime_log_file}", event="detail")
             self._prepare_file_imports(state)
 
             # 自动将所有用户输入的表单字段导出到环境变量池，供模板通过 {{env|...}} 引用
@@ -240,15 +253,21 @@ class DeploymentModRuntime:
             progress_callback=progress_callback,
             runtime_root=runtime_root,
             instance_serial_number=serial_number or str(plan.template_inputs.get("serial_number", "") or ""),
+            runtime_log_file=os.path.join(runtime_root, "execution.log"),
         )
 
         try:
             self._prepare_file_imports(state)
-            if normalized_stage in {"components", "deployments"}:
+            should_restore_instance_state = normalized_stage in {"launches", "configs", "uninstalls"} or (
+                normalized_stage == "deployments" and bool(serial_number)
+            )
+            if not should_restore_instance_state:
                 self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"模板: {template.metadata.mod_name}")
             else:
                 self._restore_runtime_state_for_instance(state, state.instance_serial_number)
                 self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"实例序列号: {state.instance_serial_number}")
+            self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"运行时目录: {runtime_root}", event="detail")
+            self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"执行日志: {state.runtime_log_file}", event="detail")
 
             if normalized_stage == "components":
                 self._execute_components(state)
@@ -281,9 +300,9 @@ class DeploymentModRuntime:
         bindings = {item.component_id: item for item in state.plan.component_bindings}
         for component in ordered_components:
             binding = bindings.get(component.id)
-            enabled = binding.enabled if binding else component.install
+            enabled = binding.enabled if binding else self._component_requires_processing(component)
             if not enabled:
-                self._notify(state, 2, 6, f"跳过组件 {component.name}", "skipped", "用户未选择安装该组件")
+                self._notify(state, 2, 6, f"跳过组件 {component.name}", "skipped", "用户未选择或模板无需处理该组件")
                 continue
             self._execute_component(state, component)
 
@@ -320,6 +339,17 @@ class DeploymentModRuntime:
             )
             return
 
+        if not component.install:
+            self._notify(
+                state,
+                2,
+                6,
+                f"组件 {component.name}",
+                "skipped",
+                "检查未通过，模板未配置自动安装，请按模板说明手动准备该组件",
+            )
+            return
+
         # 组件不存在 → 按模板提供的方式自动安装
         # choose=false：强制安装，无需用户确认；choose=true：用户已在 CLI 阶段选择安装
         # （如果用户选择跳过，plan 阶段就会跳过此组件，不会到达这里）
@@ -336,8 +366,9 @@ class DeploymentModRuntime:
             download_url = self._resolve_version_and_link(state, "component", component.id, component, scope)
             if not download_url:
                 raise RuntimeError(f"组件 {component.name} 未能解析出下载链接")
+            self._notify(state, 2, 6, f"组件 {component.name}", "running", f"下载链接: {download_url}", event="detail")
             asset_path = self._download_asset(state, component.id, download_url, install_path, "component")
-            self._install_component_asset(component, asset_path, install_path)
+            self._install_component_asset(state, component, asset_path, install_path)
 
         # Step 5: 执行安装后命令
         if component.after_command:
@@ -359,7 +390,7 @@ class DeploymentModRuntime:
 
         check_cwd = state.runtime_root if os.path.isdir(state.runtime_root) else os.getcwd()
         self._notify(state, 2, 6, f"组件 {component.name}", "running", "正在检查组件是否已安装...")
-        output = self._run_command_list(
+        result = self._run_command_list(
             state,
             component.check_command,
             check_cwd,
@@ -367,10 +398,22 @@ class DeploymentModRuntime:
             f"组件 {component.name} 检查命令",
             raise_on_error=False,
         )
+        output = result.output
+
+        if result.returncode != 0:
+            self._notify(
+                state,
+                2,
+                6,
+                f"组件 {component.name}",
+                "running",
+                f"检查命令返回非零退出码 {result.returncode}，视为未安装",
+            )
+            return {"installed": False, "output": output.strip(), "detected_version": "", "returncode": result.returncode}
 
         if not output:
             self._notify(state, 2, 6, f"组件 {component.name}", "running", "检查命令无输出，假设组件未安装")
-            return {"installed": False, "output": "", "detected_version": ""}
+            return {"installed": False, "output": "", "detected_version": "", "returncode": result.returncode}
 
         lowered_output = output.lower()
         detected_version = ""
@@ -394,7 +437,16 @@ class DeploymentModRuntime:
                 f"✗ 检查未通过，将执行安装",
             )
 
-        return {"installed": is_installed, "output": output.strip(), "detected_version": detected_version}
+        return {
+            "installed": is_installed,
+            "output": output.strip(),
+            "detected_version": detected_version,
+            "returncode": result.returncode,
+        }
+
+    @staticmethod
+    def _component_requires_processing(component: ComponentDefinition) -> bool:
+        return bool(component.install or component.check)
 
     def _check_component_installed(
         self,
@@ -411,20 +463,33 @@ class DeploymentModRuntime:
 
     def _install_component_asset(
         self,
+        state: RuntimeState,
         component: ComponentDefinition,
         asset_path: str,
         install_path: str,
     ) -> None:
         extension = self._normalize_extension(asset_path)
         operate_mode = component.install_operate or "auto"
+        self._notify(
+            state,
+            2,
+            6,
+            f"组件 {component.name}",
+            "running",
+            f"处理安装资源: {os.path.basename(asset_path)} [{extension or 'unknown'}], 模式: {operate_mode}",
+            event="detail",
+        )
         if operate_mode == "custom":
             matched = next((item for item in component.install_custom_list if item.extension.lower() == extension), None)
             if matched and matched.operate:
-                self._operate_asset(asset_path, install_path, is_deployment=False)
+                self._operate_asset(state, asset_path, install_path, is_deployment=False, label=f"组件 {component.name}")
+            else:
+                self._notify(state, 2, 6, f"组件 {component.name}", "skipped", f"自定义规则未处理扩展名 {extension}")
             return
         if operate_mode == "no":
+            self._notify(state, 2, 6, f"组件 {component.name}", "completed", f"仅下载资源，不执行安装: {asset_path}", event="detail")
             return
-        self._operate_asset(asset_path, install_path, is_deployment=False)
+        self._operate_asset(state, asset_path, install_path, is_deployment=False, label=f"组件 {component.name}")
 
     def _execute_deployments(self, state: RuntimeState) -> None:
         ordered_deployments = self._ordered_items(
@@ -458,11 +523,14 @@ class DeploymentModRuntime:
 
         final_root = os.path.join(deploy_path, deployment.id)
         self._notify(state, 3, 6, f"部署 {deployment.name}", "running", f"部署基路径: {deploy_path}")
+        self._notify(state, 3, 6, f"部署 {deployment.name}", "running", f"最终目录: {final_root}", event="detail")
 
         if deployment.before_command:
             self._run_command_list(state, deployment.before_command_list, deploy_path, scope, f"部署 {deployment.name} 前置命令")
 
         resolved_link = self._resolve_version_and_link(state, "deployment", deployment.id, deployment, scope)
+        if resolved_link:
+            self._notify(state, 3, 6, f"部署 {deployment.name}", "running", f"部署链接: {resolved_link}", event="detail")
 
         if deployment.command_deploy:
             self._run_command_list(state, deployment.deploy_command_list, deploy_path, scope, f"部署 {deployment.name} 自定义命令")
@@ -490,43 +558,64 @@ class DeploymentModRuntime:
         link = resolved_link or self._resolve_text(state, deployment.base_link, RuntimeScope())
         if not link:
             raise RuntimeError(f"部署项 {deployment.name} 未能解析出部署链接")
+        self._notify(state, 3, 6, f"部署 {deployment.name}", "running", f"部署方式: {method}", event="detail")
 
         if method in {"auto", "gitclone", "!gitclone"} and self._looks_like_git_repo(link):
             allow_fallback = method != "!gitclone"
-            clone_result = self._git_clone(link, final_root, state.version_meta.get(deployment.id, {}).get("name"))
+            self._notify(state, 3, 6, f"部署 {deployment.name}", "running", f"尝试 Git 克隆: {link}", event="detail")
+            clone_result = self._git_clone(
+                state,
+                link,
+                final_root,
+                state.version_meta.get(deployment.id, {}).get("name"),
+                label=f"部署 {deployment.name} Git 克隆",
+            )
             if clone_result:
                 state.deployment_roots[deployment.id] = final_root
+                self._notify(state, 3, 6, f"部署 {deployment.name}", "completed", f"Git 克隆完成: {final_root}", event="detail")
                 return
             if not allow_fallback:
                 raise RuntimeError(f"部署项 {deployment.name} Git 克隆失败且模板禁止回退")
             fallback_url = self._build_github_archive_url(link, state.version_meta.get(deployment.id, {}))
+            self._notify(state, 3, 6, f"部署 {deployment.name}", "running", f"Git 克隆失败，回退归档下载: {fallback_url}", event="detail")
             asset_path = self._download_asset(state, deployment.id, fallback_url, deploy_path, "deployment")
-            self._extract_or_copy_deployment_asset(asset_path, final_root)
+            self._extract_or_copy_deployment_asset(state, asset_path, final_root, deployment.name)
             state.deployment_roots[deployment.id] = final_root
             return
 
         asset_path = self._download_asset(state, deployment.id, link, deploy_path, "deployment")
         if method == "getfile" or method == "auto":
-            self._extract_or_copy_deployment_asset(asset_path, final_root)
+            self._extract_or_copy_deployment_asset(state, asset_path, final_root, deployment.name)
             state.deployment_roots[deployment.id] = final_root if os.path.isdir(final_root) else deploy_path
             return
 
         raise RuntimeError(f"不支持的 deploy_method: {method}")
 
-    def _extract_or_copy_deployment_asset(self, asset_path: str, final_root: str) -> None:
+    def _extract_or_copy_deployment_asset(self, state: RuntimeState, asset_path: str, final_root: str, deployment_name: str) -> None:
         if os.path.isdir(final_root):
             self._safe_rmtree(final_root)
         os.makedirs(final_root, exist_ok=True)
         extension = self._normalize_extension(asset_path)
+        self._notify(
+            state,
+            3,
+            6,
+            f"部署 {deployment_name}",
+            "running",
+            f"处理部署资源: {os.path.basename(asset_path)} [{extension or 'unknown'}]",
+            event="detail",
+        )
         if extension in {".zip", ".tar", ".gz", ".tgz", ".xz", ".tar.gz", ".tar.xz"}:
-            extracted_root = self._extract_archive(asset_path, final_root)
+            extracted_root = self._extract_archive(state, asset_path, final_root, label=f"部署 {deployment_name}")
             if extracted_root and extracted_root != final_root:
                 self._flatten_single_root(extracted_root, final_root)
+                self._notify(state, 3, 6, f"部署 {deployment_name}", "running", f"已整理目录结构到: {final_root}", event="detail")
             return
         if extension in {".exe", ".msi", ".ps1", ".bat", ".cmd", ".sh", ".py"}:
-            self._operate_asset(asset_path, final_root, is_deployment=True)
+            self._operate_asset(state, asset_path, final_root, is_deployment=True, label=f"部署 {deployment_name}")
             return
         shutil.copy2(asset_path, os.path.join(final_root, os.path.basename(asset_path)))
+        self._notify(state, 3, 6, f"部署 {deployment_name}", "completed", f"已复制文件到: {final_root}", event="detail")
 
     def _execute_launches(self, state: RuntimeState) -> None:
         ordered_launches = self._ordered_items(state.template.launches_section.list, state.template.launches)
@@ -747,6 +836,7 @@ class DeploymentModRuntime:
             raise RuntimeError("实例配置写入失败")
         config_manager.set("current_config", config_name)
         config_manager.save()
+        self._notify(state, 6, 6, "实例配置写入", "completed", f"配置名称: {config_name}", event="detail")
         return config_name, new_config
 
     def _persist_runtime_files_for_existing_instance(self, state: RuntimeState) -> None:
@@ -760,6 +850,7 @@ class DeploymentModRuntime:
         config["template_runtime"] = self._build_runtime_index(state)
         config_manager.get_all_configurations()[config_name] = config
         config_manager.save()
+        self._notify(state, 1, 1, "运行时状态", "completed", f"已更新实例运行时文件: {config_name}", event="detail")
 
     def _restore_runtime_state_for_instance(self, state: RuntimeState, serial_number: str) -> None:
         if not serial_number:
@@ -775,6 +866,11 @@ class DeploymentModRuntime:
         state.instance_root = str(runtime_info.get("instance_root", "") or self._primary_instance_root_from_config(config))
         state.runtime_env_file = str(runtime_info.get("env_file", "") or "")
         state.runtime_state_file = str(runtime_info.get("state_file", "") or "")
+        self._notify(state, 1, 1, "恢复实例运行时", "running", f"实例目录: {state.instance_root}", event="detail")
+        if state.runtime_env_file:
+            self._notify(state, 1, 1, "恢复实例运行时", "running", f"环境文件: {state.runtime_env_file}", event="detail")
+        if state.runtime_state_file:
+            self._notify(state, 1, 1, "恢复实例运行时", "running", f"状态文件: {state.runtime_state_file}", event="detail")
 
         self._prepare_file_imports(state)
         state.env_pool.update(self._read_runtime_env_file(state.runtime_env_file))
@@ -931,8 +1027,8 @@ class DeploymentModRuntime:
             if not os.path.isfile(file_path):
                 raise RuntimeError(f"模板导入文件不存在: {filename}")
             state.file_paths[filename] = os.path.abspath(file_path)
-            state.file_trees[filename] = self._parse_structured_file(file_path)
             self._notify(state, 1, 6, "准备模板运行时", "running", f"已导入文件: {filename}")
+            self._notify(state, 1, 6, "准备模板运行时", "running", f"文件路径: {state.file_paths[filename]}", event="detail")
 
     def _resolve_stage_path(
         self,
@@ -944,23 +1040,36 @@ class DeploymentModRuntime:
         scope: RuntimeScope,
     ) -> str:
         path_value = str(raw_path or "").strip()
+        source = "template"
         if path_value == "$CustomPath":
+            source = "custom"
             custom_value = str(custom_path or "").strip()
             if custom_value == "$input$":
                 user_value = str(state.plan.template_inputs.get(f"path::{stage_name}::{item_id}", "") or "").strip()
                 if not user_value:
                     raise RuntimeError(f"{item_id} 需要用户输入路径")
-                return os.path.abspath(os.path.expandvars(user_value))
-            return os.path.abspath(os.path.expandvars(self._resolve_text(state, custom_value, scope)))
+                resolved_path = os.path.abspath(os.path.expandvars(user_value))
+                self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"解析路径 -> {resolved_path} (来源: 用户输入)", event="detail")
+                return resolved_path
+            resolved_path = os.path.abspath(os.path.expandvars(self._resolve_text(state, custom_value, scope)))
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"解析路径 -> {resolved_path} (来源: 自定义表达式)", event="detail")
+            return resolved_path
 
         if path_value in self.SPECIAL_PATHS:
-            return os.path.abspath(self.SPECIAL_PATHS[path_value]())
+            resolved_path = os.path.abspath(self.SPECIAL_PATHS[path_value]())
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"解析路径 -> {resolved_path} (来源: 特殊路径 {path_value})", event="detail")
+            return resolved_path
 
         if not path_value:
-            return os.path.abspath(os.path.join(state.runtime_root, stage_name, item_id))
+            source = "default"
+            resolved_path = os.path.abspath(os.path.join(state.runtime_root, stage_name, item_id))
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"解析路径 -> {resolved_path} (来源: 默认运行时目录)", event="detail")
+            return resolved_path
 
         resolved = self._resolve_text(state, path_value, scope)
-        return os.path.abspath(os.path.expandvars(resolved))
+        resolved_path = os.path.abspath(os.path.expandvars(resolved))
+        self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"解析路径 -> {resolved_path} (来源: {source})", event="detail")
+        return resolved_path
 
     def _build_scope(
         self,
@@ -973,7 +1082,10 @@ class DeploymentModRuntime:
         if not (section_env_input and item_env_input):
             return scope
         for binding in bindings:
-            scope.env_values[binding.name] = self._resolve_text(state, binding.value, scope)
+            resolved_value = self._resolve_text(state, binding.value, scope)
+            scope.env_values[binding.name] = resolved_value
+            display_value = self._format_value_for_log(binding.name, resolved_value)
+            self._notify(state, 0, 0, "环境变量导入", "running", f"{binding.name}={display_value}", event="detail")
         return scope
 
     def _export_env_bindings(
@@ -987,8 +1099,10 @@ class DeploymentModRuntime:
         if not (section_env_output and item_env_output):
             return
         for binding in bindings:
-            state.env_pool[binding.name] = self._resolve_text(state, binding.value, scope)
-            self._notify(state, 0, 0, "环境变量导出", "running", f"{binding.name}={state.env_pool[binding.name]}")
+            resolved_value = self._resolve_text(state, binding.value, scope)
+            state.env_pool[binding.name] = resolved_value
+            display_value = self._format_value_for_log(binding.name, resolved_value)
+            self._notify(state, 0, 0, "环境变量导出", "running", f"{binding.name}={display_value}", event="detail")
 
     def _resolve_version_and_link(
         self,
@@ -998,25 +1112,38 @@ class DeploymentModRuntime:
         definition: Any,
         scope: RuntimeScope,
     ) -> str:
-        if getattr(definition, "get_method", "") == "direct":
-            return self._resolve_text(state, getattr(definition, "direct_link", ""), scope)
+        get_method = str(getattr(definition, "get_method", "") or "").strip().lower()
+        if get_method:
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"获取策略: {get_method}", event="detail")
 
-        if getattr(definition, "get_method", "") == "get_link":
+        if get_method == "direct":
+            resolved_link = self._resolve_text(state, getattr(definition, "direct_link", ""), scope)
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"直接链接: {resolved_link}", event="detail")
+            return resolved_link
+
+        if get_method == "get_link":
             link = self._resolve_link_only(state, stage_name, item_id, definition, scope)
             if link:
+                self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"解析下载链接: {link}", event="detail")
                 return link
             raise RuntimeError(f"{item_id} 未能获取下载链接")
 
-        if getattr(definition, "get_method", "") == "get_version":
+        if get_method == "get_version":
             selected = self._select_version(state, stage_name, item_id, definition, scope)
             state.versions[item_id] = selected.get("name", "")
             state.version_meta[item_id] = selected
             if getattr(definition, "splicing_link", ""):
-                return self._resolve_text(state, getattr(definition, "splicing_link", ""), scope)
-            return self._resolve_text(state, getattr(definition, "base_link", "") or getattr(definition, "direct_link", ""), scope)
+                resolved_link = self._resolve_text(state, getattr(definition, "splicing_link", ""), scope)
+                self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"拼接下载链接: {resolved_link}", event="detail")
+                return resolved_link
+            resolved_link = self._resolve_text(state, getattr(definition, "base_link", "") or getattr(definition, "direct_link", ""), scope)
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"版本对应链接: {resolved_link}", event="detail")
+            return resolved_link
 
         if getattr(definition, "base_link", ""):
-            return self._resolve_text(state, getattr(definition, "base_link", ""), scope)
+            resolved_link = self._resolve_text(state, getattr(definition, "base_link", ""), scope)
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"基础链接: {resolved_link}", event="detail")
+            return resolved_link
         return ""
 
     def _resolve_link_only(
@@ -1029,23 +1156,16 @@ class DeploymentModRuntime:
     ) -> str:
         provided = str(state.plan.template_inputs.get(f"link::{stage_name}::{item_id}", "") or "").strip()
         if provided:
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"使用用户提供的下载链接: {provided}", event="detail")
             return provided
 
-        get_link = str(getattr(definition, "get_link", "") or "").strip().lower()
-        provided_list = [self._resolve_text(state, item, scope) for item in getattr(definition, "get_link_provide_list", []) if str(item).strip()]
-        if provided_list:
-            return provided_list[0]
+        candidates = self._fetch_link_candidates_runtime(state, stage_name, item_id, definition, scope)
+        if candidates:
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"未指定下载链接，默认采用首个候选", event="detail")
+            return str(candidates[0].get("raw_name") or candidates[0].get("name", "") or "")
 
-        if get_link == "user_input":
+        if str(getattr(definition, "get_link", "") or "").strip().lower() == "user_input":
             raise RuntimeError(f"{item_id} 需要用户输入下载链接")
-        if get_link == "filelink":
-            candidates = self._extract_candidates_from_source(state, definition, scope)
-            if candidates:
-                return candidates[0]
-        if get_link == "custom":
-            candidates = self._execute_custom_provider(state, definition, scope)
-            if candidates:
-                return candidates[0]
         return ""
 
     def fetch_version_candidates(
@@ -1065,8 +1185,7 @@ class DeploymentModRuntime:
             if github_repo:
                 return self._fetch_github_candidates(github_repo)
         elif version_source == "filelink":
-            scope = RuntimeScope()
-            source = self._resolve_provider_source_static(definition, scope, self.FILELINK_FIELD_ALIASES)
+            source = self._resolve_provider_source_static(template, definition, self.FILELINK_FIELD_ALIASES)
             if source:
                 content = self._read_text_source(source)
                 if source.lower().endswith(".json"):
@@ -1078,11 +1197,49 @@ class DeploymentModRuntime:
                     return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(self._xml_to_tree(root))]
                 return [{"name": item.strip(), "raw_name": item.strip(), "type": "file"} for item in content.splitlines() if item.strip()]
         elif version_source == "custom":
-            scope = RuntimeScope()
-            source = self._resolve_provider_source_static(definition, scope, self.SCRIPT_FIELD_ALIASES)
+            source = self._resolve_provider_source_static(template, definition, self.SCRIPT_FIELD_ALIASES)
             if source:
                 output = self._run_external_script(source, os.path.dirname(source) or os.getcwd())
                 return [{"name": item.strip(), "raw_name": item.strip(), "type": "custom"} for item in output.splitlines() if item.strip()]
+        return []
+
+    def fetch_link_candidates(
+        self,
+        template: TemplateDefinition,
+        stage_name: str,
+        item_id: str,
+        definition: Any,
+    ) -> List[Dict[str, Any]]:
+        _ = stage_name
+        _ = item_id
+        provided_list = [
+            self._resolve_text_for_static(str(item), template.raw)
+            for item in getattr(definition, "get_link_provide_list", [])
+            if str(item).strip()
+        ]
+        if provided_list:
+            return [{"name": item, "raw_name": item, "type": "provided"} for item in provided_list]
+
+        get_link = str(getattr(definition, "get_link", "") or "").strip().lower()
+        if get_link == "filelink":
+            source = self._resolve_provider_source_static(template, definition, self.FILELINK_FIELD_ALIASES)
+            if not source:
+                return []
+            content = self._read_text_source(source)
+            if source.lower().endswith(".json"):
+                return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(json.loads(content))]
+            if source.lower().endswith(".toml"):
+                return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(toml.loads(content))]
+            if source.lower().endswith(".xml"):
+                root = ElementTree.fromstring(content)
+                return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(self._xml_to_tree(root))]
+            return [{"name": item.strip(), "raw_name": item.strip(), "type": "file"} for item in content.splitlines() if item.strip()]
+        if get_link == "custom":
+            source = self._resolve_provider_source_static(template, definition, self.SCRIPT_FIELD_ALIASES)
+            if not source:
+                return []
+            output = self._run_external_script(source, os.path.dirname(source) or os.getcwd())
+            return [{"name": item.strip(), "raw_name": item.strip(), "type": "custom"} for item in output.splitlines() if item.strip()]
         return []
 
     def _resolve_text_for_static(self, text: str, raw_template: Dict[str, Any]) -> str:
@@ -1105,13 +1262,14 @@ class DeploymentModRuntime:
             text = new_text
         return text
 
-    def _resolve_provider_source_static(self, definition: Any, scope: RuntimeScope, aliases: Iterable[str]) -> str:
+    def _resolve_provider_source_static(self, template: TemplateDefinition, definition: Any, aliases: Iterable[str]) -> str:
         """静态版本的 provider source 解析。"""
         raw = getattr(definition, "raw", {}) or {}
         for alias in aliases:
             value = str(raw.get(alias, "") or "").strip()
             if value:
-                return value
+                resolved = self._resolve_text_for_static(value, template.raw)
+                return self._normalize_provider_source_path(resolved, template.metadata.template_root)
         return ""
 
     def _select_version(
@@ -1124,17 +1282,23 @@ class DeploymentModRuntime:
     ) -> Dict[str, Any]:
         manual_version = str(state.plan.template_inputs.get(f"version::{stage_name}::{item_id}", "") or "").strip()
         if manual_version:
-            return {"name": self._format_version_if_needed(definition, manual_version), "raw_name": manual_version, "type": "manual"}
+            formatted_version = self._format_version_if_needed(definition, manual_version)
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"使用手动指定版本: {manual_version} -> {formatted_version}", event="detail")
+            return {"name": formatted_version, "raw_name": manual_version, "type": "manual"}
 
         version_source = str(getattr(definition, "get_version", "") or "").strip().lower()
         candidates: List[Dict[str, Any]] = []
+        self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"开始获取版本，来源: {version_source or '未指定'}", event="detail")
         if version_source == "github_repo":
             repo_url = self._resolve_text(state, getattr(definition, "github_repo", ""), scope)
             candidates = self._fetch_github_candidates(repo_url)
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"GitHub 返回 {len(candidates)} 个版本候选", event="detail")
         elif version_source == "filelink":
             candidates = [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_candidates_from_source(state, definition, scope)]
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"文件源返回 {len(candidates)} 个版本候选", event="detail")
         elif version_source == "custom":
             candidates = [{"name": item, "raw_name": item, "type": "custom"} for item in self._execute_custom_provider(state, definition, scope)]
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"自定义脚本返回 {len(candidates)} 个版本候选", event="detail")
 
         filtered = self._filter_candidates(definition, candidates)
         selected = filtered[0] if filtered else (candidates[0] if candidates else None)
@@ -1143,6 +1307,15 @@ class DeploymentModRuntime:
         selected = dict(selected)
         selected["raw_name"] = selected.get("raw_name", selected.get("name", ""))
         selected["name"] = self._format_version_if_needed(definition, selected.get("name", ""))
+        self._notify(
+            state,
+            0,
+            0,
+            f"{stage_name}:{item_id}",
+            "running",
+            f"选定版本: {selected.get('raw_name', '')} -> {selected.get('name', '')} [{selected.get('type', '')}]",
+            event="detail",
+        )
         return selected
 
     def _filter_candidates(self, definition: Any, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1278,6 +1451,7 @@ class DeploymentModRuntime:
         source = self._resolve_provider_source(state, definition, scope, self.FILELINK_FIELD_ALIASES)
         if not source:
             return []
+        self._notify(state, 0, 0, "provider:filelink", "running", f"读取文件源: {source}", event="detail")
         content = self._read_text_source(source)
         if source.lower().endswith(".json"):
             return self._extract_scalar_strings(json.loads(content))
@@ -1292,6 +1466,7 @@ class DeploymentModRuntime:
         source = self._resolve_provider_source(state, definition, scope, self.SCRIPT_FIELD_ALIASES)
         if not source:
             return []
+        self._notify(state, 0, 0, "provider:custom", "running", f"执行自定义提供器: {source}", event="detail")
         output = self._run_external_script(source, os.path.dirname(source) or os.getcwd())
         return [line.strip() for line in output.splitlines() if line.strip()]
 
@@ -1300,8 +1475,39 @@ class DeploymentModRuntime:
         for alias in aliases:
             value = str(raw.get(alias, "") or "").strip()
             if value:
-                return self._resolve_text(state, value, scope)
+                resolved = self._resolve_text(state, value, scope)
+                return self._normalize_provider_source_path(resolved, state.template.metadata.template_root)
         return ""
+
+    def _fetch_link_candidates_runtime(
+        self,
+        state: RuntimeState,
+        stage_name: str,
+        item_id: str,
+        definition: Any,
+        scope: RuntimeScope,
+    ) -> List[Dict[str, Any]]:
+        provided_list = [
+            self._resolve_text(state, item, scope)
+            for item in getattr(definition, "get_link_provide_list", [])
+            if str(item).strip()
+        ]
+        if provided_list:
+            self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"模板提供 {len(provided_list)} 个下载链接候选", event="detail")
+            return [{"name": item, "raw_name": item, "type": "provided"} for item in provided_list]
+
+        get_link = str(getattr(definition, "get_link", "") or "").strip().lower()
+        if get_link == "filelink":
+            raw_candidates = self._extract_candidates_from_source(state, definition, scope)
+            if raw_candidates:
+                self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"文件源返回 {len(raw_candidates)} 个下载链接", event="detail")
+            return [{"name": item, "raw_name": item, "type": "file"} for item in raw_candidates]
+        if get_link == "custom":
+            raw_candidates = self._execute_custom_provider(state, definition, scope)
+            if raw_candidates:
+                self._notify(state, 0, 0, f"{stage_name}:{item_id}", "running", f"自定义脚本返回 {len(raw_candidates)} 个下载链接", event="detail")
+            return [{"name": item, "raw_name": item, "type": "custom"} for item in raw_candidates]
+        return []
 
     def _run_external_script(self, script_path: str, cwd: str) -> str:
         lower_name = script_path.lower()
@@ -1381,13 +1587,26 @@ class DeploymentModRuntime:
         return self._resolve_tree_value(current, segments[index:], path)
 
     def _resolve_file_key(self, state: RuntimeState, path: str) -> str:
-        for filename in sorted(state.file_trees.keys(), key=len, reverse=True):
+        for filename in sorted(state.file_paths.keys(), key=len, reverse=True):
             if path == filename:
-                return self._stringify_value(state.file_trees[filename], path)
+                return self._stringify_value(self._get_file_tree(state, filename), path)
             prefix = f"{filename}."
             if path.startswith(prefix):
-                return self._resolve_tree_value(state.file_trees[filename], path[len(prefix):].split("."), path)
+                return self._resolve_tree_value(self._get_file_tree(state, filename), path[len(prefix):].split("."), path)
         raise RuntimeError(f"文件键路径不存在: {path}")
+
+    def _get_file_tree(self, state: RuntimeState, filename: str) -> Any:
+        if filename in state.file_trees:
+            return state.file_trees[filename]
+        file_path = str(state.file_paths.get(filename, "") or "").strip()
+        if not file_path:
+            raise RuntimeError(f"模板导入文件不存在: {filename}")
+        try:
+            parsed = self._parse_structured_file(file_path)
+        except Exception as exc:
+            raise RuntimeError(f"导入文件 {filename} 无法作为结构化文本解析: {exc}") from exc
+        state.file_trees[filename] = parsed
+        return parsed
 
     def _resolve_tree_value(self, current: Any, segments: List[str], raw_path: str) -> str:
         node = current
@@ -1432,9 +1651,9 @@ class DeploymentModRuntime:
         label: str,
         detached: bool = False,
         raise_on_error: bool = True,
-    ) -> str:
+    ) -> CommandExecutionResult:
         if not commands:
-            return ""
+            return CommandExecutionResult()
         runtime = state.template.metadata.runtime
         script_dir = os.path.join(state.runtime_root, "scripts")
         os.makedirs(script_dir, exist_ok=True)
@@ -1446,8 +1665,9 @@ class DeploymentModRuntime:
         env = os.environ.copy()
         env.update(state.env_pool)
         env.update(scope.env_values)
+        runtime_label = self._runtime_label(runtime)
+        primary_command = resolved_commands[0] if resolved_commands else script_path
 
-        # 记录详细日志
         logger.info(
             "执行命令脚本",
             label=label,
@@ -1457,12 +1677,25 @@ class DeploymentModRuntime:
             command_count=len(resolved_commands),
             commands=resolved_commands,
         )
-        # 显示正在执行的命令（按照用户要求的格式）
-        first_cmd = resolved_commands[0] if resolved_commands else script_path
-        self._notify(state, 0, 0, label, "running", f"● Bash {first_cmd}")
-        self._notify(state, 0, 0, label, "running", f"  ⎿ 工作目录: {cwd}")
-        if len(resolved_commands) > 1:
-            self._notify(state, 0, 0, label, "running", f"  ⎿ 命令数量: {len(resolved_commands)}")
+        self._notify(
+            state,
+            0,
+            0,
+            label,
+            "running",
+            f"开始执行 {len(resolved_commands)} 条命令",
+            event="command",
+            data={
+                "command_status": "started",
+                "runtime": runtime,
+                "runtime_label": runtime_label,
+                "script_path": script_path,
+                "cwd": cwd,
+                "command_count": len(resolved_commands),
+                "primary_command": primary_command,
+                "commands": resolved_commands,
+            },
+        )
 
         if detached:
             popen_kwargs: Dict[str, Any] = {"cwd": cwd, "env": env, "shell": False}
@@ -1470,18 +1703,64 @@ class DeploymentModRuntime:
                 popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
             else:
                 popen_kwargs["start_new_session"] = True
-            subprocess.Popen(cmd, **popen_kwargs)
-            self._notify(state, 4, 6, label, "running", f"已托管启动脚本: {script_path}")
-            return ""
+            process = subprocess.Popen(cmd, **popen_kwargs)
+            self._notify(
+                state,
+                4,
+                6,
+                label,
+                "completed",
+                f"已托管启动脚本: {script_path}",
+                event="command",
+                data={
+                    "command_status": "detached",
+                    "runtime": runtime,
+                    "runtime_label": runtime_label,
+                    "script_path": script_path,
+                    "cwd": cwd,
+                    "command_count": len(resolved_commands),
+                    "primary_command": primary_command,
+                    "pid": getattr(process, "pid", None),
+                },
+            )
+            return CommandExecutionResult(output="", returncode=0, script_path=script_path, detached=True)
 
-        # 使用 Popen 进行实时流式输出捕获
         try:
-            process = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
+            process = subprocess.Popen(
+                cmd,
+                cwd=cwd,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                shell=False,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+            )
         except OSError as exc:
+            self._notify(
+                state,
+                0,
+                0,
+                label,
+                "failed",
+                f"无法启动进程: {exc}",
+                event="command",
+                data={
+                    "command_status": "failed",
+                    "runtime": runtime,
+                    "runtime_label": runtime_label,
+                    "script_path": script_path,
+                    "cwd": cwd,
+                    "command_count": len(resolved_commands),
+                    "primary_command": primary_command,
+                },
+            )
             raise RuntimeError(f"{label} 无法启动进程: {exc}")
 
         output_lines: List[str] = []
-        self._stream_process_output(process, label, output_lines, timeout_seconds=600)
+        self._stream_process_output(state, process, label, output_lines, timeout_seconds=600)
 
         try:
             returncode = process.wait()
@@ -1491,100 +1770,130 @@ class DeploymentModRuntime:
 
         full_output = "\n".join(output_lines).strip()
         if returncode != 0 and raise_on_error:
+            self._notify(
+                state,
+                0,
+                0,
+                label,
+                "failed",
+                f"命令执行失败，返回码 {returncode}",
+                event="command",
+                data={
+                    "command_status": "failed",
+                    "runtime": runtime,
+                    "runtime_label": runtime_label,
+                    "script_path": script_path,
+                    "cwd": cwd,
+                    "command_count": len(resolved_commands),
+                    "primary_command": primary_command,
+                    "returncode": returncode,
+                    "line_count": len(output_lines),
+                },
+            )
             raise RuntimeError(f"{label} 执行失败 (返回码 {returncode}):\n{full_output}")
-        
-        # 显示命令输出的前几行（按照用户要求的格式）
-        if full_output:
-            output_lines_list = full_output.split('\n')
-            output_preview = output_lines_list[:5]
-            output_text = '\n  ⎿ '.join(output_preview)
-            if len(output_lines_list) > 5:
-                output_text += f"\n  ⎿ ... (共 {len(output_lines_list)} 行)"
-            self._notify(state, 0, 0, label, "running", f"  ⎿ {output_text}")
-        
-        return full_output
+
+        self._notify(
+            state,
+            0,
+            0,
+            label,
+            "failed" if returncode != 0 else "completed",
+            f"命令执行完成，返回码 {returncode}",
+            event="command",
+            data={
+                "command_status": "failed" if returncode != 0 else "completed",
+                "runtime": runtime,
+                "runtime_label": runtime_label,
+                "script_path": script_path,
+                "cwd": cwd,
+                "command_count": len(resolved_commands),
+                "primary_command": primary_command,
+                "returncode": returncode,
+                "line_count": len(output_lines),
+            },
+        )
+        return CommandExecutionResult(output=full_output, returncode=returncode, script_path=script_path)
 
     def _stream_process_output(
         self,
+        state: RuntimeState,
         process: subprocess.Popen,
         label: str,
         output_lines: List[str],
         timeout_seconds: int = 600,
     ) -> None:
-        """实时流式读取子进程输出并打印到控制台。"""
-        from concurrent.futures import ThreadPoolExecutor
+        """实时流式读取子进程输出，并通过事件系统同步到 CLI / WebUI。"""
+        import queue
         import threading
 
-        def read_stream(stream) -> List[str]:
-            try:
-                lines = []
-                buffer = ""
-                # 每次读取更多字符，提高效率
-                while True:
-                    char = stream.read(1)
-                    if not char:
-                        break
-                    if isinstance(char, bytes):
-                        char = char.decode("utf-8", errors="replace")
-                    buffer += char
-                    # 遇到换行符时输出整行
-                    if char in ('\n', '\r'):
-                        if buffer.strip():
-                            lines.append(buffer.rstrip('\r\n'))
-                        buffer = ""
-                # 处理最后一行（如果没有换行符）
-                if buffer.strip():
-                    lines.append(buffer.strip())
-                return lines
-            except Exception:
-                return []
+        if process.stdout is None:
+            return
 
-        start_time = time.monotonic()
+        output_queue: "queue.Queue[str]" = queue.Queue()
         done = threading.Event()
-        stream_lines: List[str] = []
+        read_error: List[BaseException] = []
 
-        def stream_reader():
+        def read_stream() -> None:
             try:
-                reader_thread = ThreadPoolExecutor(max_workers=1)
-                future = reader_thread.submit(read_stream, process.stdout)
-                try:
-                    stream_lines.extend(future.result(timeout=timeout_seconds))
-                finally:
-                    try:
-                        reader_thread.shutdown(wait=True)
-                    except TypeError:
-                        # Python < 3.9 不支持 wait 参数
-                        reader_thread.shutdown()
+                while True:
+                    line = process.stdout.readline()
+                    if line == "":
+                        break
+                    output_queue.put(line.rstrip("\r\n"))
+            except BaseException as exc:
+                read_error.append(exc)
             finally:
                 done.set()
+                try:
+                    process.stdout.close()
+                except Exception:
+                    pass
 
-        thread = threading.Thread(target=stream_reader, daemon=True)
+        start_time = time.monotonic()
+        thread = threading.Thread(target=read_stream, daemon=True)
         thread.start()
 
         try:
             while True:
-                if done.wait(timeout=0.1):
-                    break
-                elapsed = time.monotonic() - start_time
-                if elapsed > timeout_seconds:
+                if time.monotonic() - start_time > timeout_seconds:
                     process.kill()
                     raise RuntimeError(f"{label} 执行超时（超过 {timeout_seconds // 60} 分钟）")
 
-                if stream_lines:
-                    line = stream_lines.pop(0)
-                    output_lines.append(line.rstrip())
-                    line_display = line.rstrip("\r\n")
-                    if line_display:
-                        # 紧凑输出格式
-                        ui.console.print(f"[dim]│[/dim] {line_display}", highlight=False)
+                try:
+                    line = output_queue.get(timeout=0.1)
+                except queue.Empty:
+                    if done.is_set() and process.poll() is not None and output_queue.empty():
+                        break
+                    continue
+
+                output_lines.append(line)
+                if line.strip():
+                    self._notify(
+                        state,
+                        0,
+                        0,
+                        label,
+                        "running",
+                        line,
+                        event="command_output",
+                    )
         finally:
             thread.join(timeout=5)
-            # 处理剩余缓冲
-            for line in stream_lines:
-                output_lines.append(line.rstrip())
-                line_display = line.rstrip("\r\n")
-                if line_display:
-                    ui.console.print(f"[dim]│[/dim] {line_display}", highlight=False)
+            while not output_queue.empty():
+                line = output_queue.get_nowait()
+                output_lines.append(line)
+                if line.strip():
+                    self._notify(
+                        state,
+                        0,
+                        0,
+                        label,
+                        "running",
+                        line,
+                        event="command_output",
+                    )
+            if read_error:
+                raise RuntimeError(f"{label} 读取命令输出失败: {read_error[0]}")
 
     def _download_asset(self, state: RuntimeState, item_id: str, url: str, target_dir: str, stage_name: str) -> str:
         download_dir = os.path.join(target_dir, "__downloads__")
@@ -1595,10 +1904,12 @@ class DeploymentModRuntime:
 
         step_name = f"{stage_name}:{item_id}"
         self._notify(state, 0, 0, step_name, "running", f"下载资源: {url}")
+        self._notify(state, 0, 0, step_name, "running", f"保存路径: {target_path}", event="detail")
         try:
             with requests.get(url, stream=True, timeout=(15, 60), **self._get_request_kwargs()) as response:
                 response.raise_for_status()
                 total_bytes = int(response.headers.get("content-length") or 0)
+                self._notify(state, 0, 0, step_name, "running", f"远端文件大小: {total_bytes or '未知'} 字节", event="detail")
                 download_meta = {
                     "download_id": f"{stage_name}:{item_id}:{filename}",
                     "stage_name": stage_name,
@@ -1684,30 +1995,53 @@ class DeploymentModRuntime:
             raise
         return target_path
 
-    def _operate_asset(self, asset_path: str, target_dir: str, is_deployment: bool) -> None:
+    def _operate_asset(
+        self,
+        state: RuntimeState,
+        asset_path: str,
+        target_dir: str,
+        is_deployment: bool,
+        label: str,
+    ) -> None:
         extension = self._normalize_extension(asset_path)
+        self._notify(
+            state,
+            0,
+            0,
+            label,
+            "running",
+            f"处理资源文件: {os.path.basename(asset_path)} [{extension or 'unknown'}] -> {target_dir}",
+            event="detail",
+        )
         if extension in {".zip", ".tar", ".gz", ".tgz", ".xz", ".tar.gz", ".tar.xz"}:
-            extracted_root = self._extract_archive(asset_path, target_dir)
+            extracted_root = self._extract_archive(state, asset_path, target_dir, label=label)
             if not is_deployment:
                 self._merge_component_archive_payload(target_dir, extracted_root)
+                self._notify(state, 0, 0, label, "running", f"组件资源已合并到: {target_dir}", event="detail")
             return
         if extension in {".exe", ".msi"}:
+            self._notify(state, 0, 0, label, "running", f"执行安装程序: {asset_path}", event="detail")
             subprocess.run([asset_path], cwd=target_dir, check=True)
             return
         if extension == ".ps1":
+            self._notify(state, 0, 0, label, "running", f"执行 PowerShell 脚本资源: {asset_path}", event="detail")
             subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", asset_path], cwd=target_dir, check=True)
             return
         if extension in {".bat", ".cmd"}:
+            self._notify(state, 0, 0, label, "running", f"执行批处理资源: {asset_path}", event="detail")
             subprocess.run(["cmd.exe", "/c", asset_path], cwd=target_dir, check=True)
             return
         if extension == ".sh":
+            self._notify(state, 0, 0, label, "running", f"执行 Shell 脚本资源: {asset_path}", event="detail")
             subprocess.run(["bash", asset_path], cwd=target_dir, check=True)
             return
         if extension == ".py":
+            self._notify(state, 0, 0, label, "running", f"执行 Python 脚本资源: {asset_path}", event="detail")
             subprocess.run([sys.executable, asset_path], cwd=target_dir, check=True)
             return
         if is_deployment:
             shutil.copy2(asset_path, os.path.join(target_dir, os.path.basename(asset_path)))
+            self._notify(state, 0, 0, label, "completed", f"已复制资源到: {target_dir}", event="detail")
 
     def _merge_component_archive_payload(self, target_dir: str, extracted_root: str) -> None:
         if not extracted_root or not os.path.isdir(extracted_root):
@@ -1730,11 +2064,12 @@ class DeploymentModRuntime:
         if os.path.isdir(extract_root):
             self._safe_rmtree(extract_root)
 
-    def _extract_archive(self, archive_path: str, target_dir: str) -> str:
+    def _extract_archive(self, state: RuntimeState, archive_path: str, target_dir: str, label: str) -> str:
         temp_extract = os.path.join(target_dir, "__extract__")
         if os.path.isdir(temp_extract):
             self._safe_rmtree(temp_extract)
         os.makedirs(temp_extract, exist_ok=True)
+        self._notify(state, 0, 0, label, "running", f"解压资源: {archive_path} -> {temp_extract}", event="detail")
 
         lower_name = archive_path.lower()
         if lower_name.endswith(".zip"):
@@ -1748,8 +2083,11 @@ class DeploymentModRuntime:
 
         entries = [entry for entry in os.listdir(temp_extract) if entry not in {".", ".."}]
         if len(entries) == 1:
-            return os.path.join(temp_extract, entries[0])
-        return temp_extract
+            extracted_root = os.path.join(temp_extract, entries[0])
+        else:
+            extracted_root = temp_extract
+        self._notify(state, 0, 0, label, "completed", f"解压完成，输出目录: {extracted_root}", event="detail")
+        return extracted_root
 
     def _flatten_single_root(self, source_root: str, final_root: str) -> None:
         source_abs = os.path.abspath(source_root)
@@ -1778,17 +2116,88 @@ class DeploymentModRuntime:
         os.makedirs(os.path.dirname(final_abs), exist_ok=True)
         shutil.move(source_abs, final_abs)
 
-    def _git_clone(self, repo_url: str, target_dir: str, ref_name: Optional[str]) -> bool:
+    def _git_clone(
+        self,
+        state: RuntimeState,
+        repo_url: str,
+        target_dir: str,
+        ref_name: Optional[str],
+        label: str,
+    ) -> bool:
         if os.path.isdir(target_dir):
             self._safe_rmtree(target_dir)
         cmd = ["git", "clone", "--depth", "1"]
         if ref_name:
             cmd.extend(["-b", ref_name])
         cmd.extend([repo_url, target_dir])
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        if result.returncode == 0:
+        clone_cwd = os.path.dirname(target_dir) or os.getcwd()
+        self._notify(
+            state,
+            0,
+            0,
+            label,
+            "running",
+            f"开始执行 Git 克隆",
+            event="command",
+            data={
+                "command_status": "started",
+                "runtime_label": "Git",
+                "cwd": clone_cwd,
+                "primary_command": " ".join(cmd),
+                "command_count": 1,
+            },
+        )
+        try:
+            process = subprocess.Popen(
+                cmd,
+                cwd=clone_cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+            )
+        except OSError as exc:
+            self._notify(state, 0, 0, label, "failed", f"Git 无法启动: {exc}", event="command", data={"command_status": "failed"})
+            logger.warning("Git 克隆启动失败", repo=repo_url, target=target_dir, error=str(exc))
+            return False
+
+        output_lines: List[str] = []
+        try:
+            self._stream_process_output(state, process, label, output_lines, timeout_seconds=1800)
+            returncode = process.wait()
+        except Exception as exc:
+            process.kill()
+            self._notify(state, 0, 0, label, "failed", f"Git 克隆异常: {exc}", event="command", data={"command_status": "failed"})
+            logger.warning("Git 克隆异常，准备回退", repo=repo_url, target=target_dir, error=str(exc))
+            return False
+
+        if returncode == 0:
+            self._notify(
+                state,
+                0,
+                0,
+                label,
+                "completed",
+                "Git 克隆完成",
+                event="command",
+                data={"command_status": "completed", "returncode": 0, "line_count": len(output_lines)},
+            )
             return True
-        logger.warning("Git 克隆失败，准备回退", repo=repo_url, target=target_dir, error=result.stderr or result.stdout)
+
+        full_output = "\n".join(output_lines).strip()
+        self._notify(
+            state,
+            0,
+            0,
+            label,
+            "failed",
+            f"Git 克隆失败，返回码 {returncode}",
+            event="command",
+            data={"command_status": "failed", "returncode": returncode, "line_count": len(output_lines)},
+        )
+        logger.warning("Git 克隆失败，准备回退", repo=repo_url, target=target_dir, error=full_output)
         return False
 
     def _build_github_archive_url(self, repo_url: str, version_meta: Dict[str, Any]) -> str:
@@ -1827,8 +2236,8 @@ class DeploymentModRuntime:
         item_map = {item.id if getattr(item, "id", "") else item.name: item for item in items}
         return [item_map[item_id] for item_id in order if item_id in item_map]
 
-    @staticmethod
     def _notify(
+        self,
         state: RuntimeState,
         step: int,
         total_steps: int,
@@ -1838,8 +2247,9 @@ class DeploymentModRuntime:
         event: str = "stage",
         data: Optional[Dict[str, Any]] = None,
     ) -> None:
+        payload = dict(data or {})
+        self._append_runtime_log(state, step=step, total_steps=total_steps, step_name=step_name, status=status, message=message, event=event, payload=payload)
         if state.progress_callback:
-            payload = data or {}
             state.progress_callback(
                 step=step,
                 total_steps=total_steps,
@@ -1849,6 +2259,86 @@ class DeploymentModRuntime:
                 event=event,
                 **payload,
             )
+
+    def _append_runtime_log(
+        self,
+        state: RuntimeState,
+        *,
+        step: int,
+        total_steps: int,
+        step_name: str,
+        status: str,
+        message: str,
+        event: str,
+        payload: Dict[str, Any],
+    ) -> None:
+        log_path = str(state.runtime_log_file or "").strip()
+        if not log_path:
+            return
+        try:
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            prefix = f"[{timestamp}] [{event}] [{status}]"
+            if step and total_steps:
+                prefix += f" [{step}/{total_steps}]"
+            if step_name:
+                prefix += f" [{step_name}]"
+            line = f"{prefix} {message}".rstrip()
+            payload_text = self._log_payload_text(payload)
+            if payload_text:
+                line = f"{line} | {payload_text}"
+            with open(log_path, "a", encoding="utf-8") as handle:
+                handle.write(f"{line}\n")
+        except Exception as exc:
+            logger.warning("写入模板执行日志失败", log_path=log_path, error=str(exc))
+
+    def _log_payload_text(self, payload: Dict[str, Any]) -> str:
+        if not payload:
+            return ""
+        parts: List[str] = []
+        for key in (
+            "command_status",
+            "runtime_label",
+            "cwd",
+            "script_path",
+            "primary_command",
+            "command_count",
+            "returncode",
+            "line_count",
+            "filename",
+            "download_status",
+            "downloaded_bytes",
+            "total_bytes",
+            "url",
+            "pid",
+            "error",
+        ):
+            if key not in payload:
+                continue
+            value = payload.get(key)
+            if value in (None, "", []):
+                continue
+            parts.append(f"{key}={self._format_value_for_log(key, value)}")
+        return ", ".join(parts)
+
+    def _format_value_for_log(self, name: str, value: Any, limit: int = 240) -> str:
+        raw = str(value if value is not None else "")
+        lowered_name = str(name or "").lower()
+        if any(keyword in lowered_name for keyword in self.LOG_SENSITIVE_KEYWORDS):
+            return "***"
+        compact = " | ".join(part.strip() for part in raw.splitlines() if part.strip()) or raw.strip()
+        if len(compact) > limit:
+            return f"{compact[: limit - 3]}..."
+        return compact
+
+    @staticmethod
+    def _runtime_label(runtime: str) -> str:
+        return {
+            "powershell": "PowerShell",
+            "cmd": "CMD",
+            "bash": "Bash",
+            "python3": "Python",
+        }.get(str(runtime or "").lower(), str(runtime or "Shell"))
 
     @staticmethod
     def _script_extension(runtime: str) -> str:
@@ -1907,16 +2397,13 @@ class DeploymentModRuntime:
     def _parse_structured_file(file_path: str) -> Any:
         lower_name = file_path.lower()
         if lower_name.endswith(".json"):
-            with open(file_path, "r", encoding="utf-8") as handle:
-                return json.load(handle)
+            return json.loads(DeploymentModRuntime._read_local_text_file(file_path))
         if lower_name.endswith(".toml"):
-            with open(file_path, "r", encoding="utf-8") as handle:
-                return toml.load(handle)
+            return toml.loads(DeploymentModRuntime._read_local_text_file(file_path))
         if lower_name.endswith(".xml"):
-            root = ElementTree.parse(file_path).getroot()
+            root = ElementTree.fromstring(DeploymentModRuntime._read_local_text_file(file_path))
             return DeploymentModRuntime._xml_to_tree(root)
-        with open(file_path, "r", encoding="utf-8") as handle:
-            return [line.rstrip("\n") for line in handle]
+        return [line.rstrip("\n") for line in DeploymentModRuntime._read_local_text_file(file_path).splitlines()]
 
     @staticmethod
     def _xml_to_tree(node: ElementTree.Element) -> Dict[str, Any]:
@@ -1952,14 +2439,42 @@ class DeploymentModRuntime:
 
     def _read_text_source(self, source: str) -> str:
         if source.startswith("file:///"):
-            with open(source[8:], "r", encoding="utf-8") as handle:
-                return handle.read()
+            return self._read_local_text_file(source[8:])
         if re.match(r"^https?://", source, re.I):
             response = requests.get(source, timeout=30, **self._get_request_kwargs())
             response.raise_for_status()
             return response.text
-        with open(source, "r", encoding="utf-8") as handle:
+        return self._read_local_text_file(source)
+
+    @staticmethod
+    def _read_local_text_file(file_path: str) -> str:
+        encodings = ("utf-8-sig", "utf-8", "utf-16", "gb18030", "gbk")
+        last_error: Exception | None = None
+        for encoding in encodings:
+            try:
+                with open(file_path, "r", encoding=encoding) as handle:
+                    return handle.read()
+            except UnicodeDecodeError as exc:
+                last_error = exc
+                continue
+        if last_error is not None:
+            raise last_error
+        with open(file_path, "r", encoding="utf-8") as handle:
             return handle.read()
+
+    @staticmethod
+    def _normalize_provider_source_path(source: str, template_root: str) -> str:
+        value = str(source or "").strip()
+        if not value:
+            return ""
+        if re.match(r"^(?:https?://|file:///)", value, re.I):
+            return value
+        expanded = os.path.expandvars(os.path.expanduser(value))
+        if os.path.isabs(expanded):
+            return expanded
+        if template_root:
+            return os.path.abspath(os.path.join(template_root, expanded))
+        return os.path.abspath(expanded)
 
     @staticmethod
     def _sanitize_filename(value: str) -> str:
