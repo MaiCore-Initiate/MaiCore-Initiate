@@ -18,6 +18,8 @@
 
 ## [文档中心](https://docs.mmcstart.cn:8850)
 
+## [MCStart_部署模版开发文档](MOD\MCStart_部署模版开发文档.md)
+
 
 ## 📖 目录
 
