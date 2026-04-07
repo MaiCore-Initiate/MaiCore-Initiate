@@ -154,7 +154,7 @@ my-mod/
 
 ### 2.3 使用 `mcsb` 快捷执行模板
 
-`bin/mcsb.c` 除了作为启动器入口，也内置了 DeploymentMOD 的快捷执行模式。只要第一个参数是模板模式命令，`mcsb` 就会直接转发到 `main_refactored.py` 的 DeploymentMOD CLI，而不是进入主菜单。
+`bin/mcsb.*` 除了作为启动器入口，也内置了 DeploymentMOD 的快捷执行模式。只要第一个参数是模板模式命令，`mcsb` 就会直接转发到 `main_refactored.py` 的 DeploymentMOD CLI，而不是进入主菜单。
 
 支持的快捷命令如下：
 
