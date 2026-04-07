@@ -91,7 +91,7 @@ backgrounds/
 
 # --- MOD 模板生态 ---
 MOD/*
-!MOD/MCStart_部署模版开发文档_V2.0.md
+!MOD/MCStart_部署模版开发文档.md
 !MOD/MaiCoer-Start.DeploymentMOD/
 !MOD/MaiCoer-Start.DeploymentMOD/DeploymentMOD.toml
 !MOD/MaiCoer-Start.DeploymentMOD/version.json
