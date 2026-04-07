@@ -16,10 +16,14 @@
 
 ---
 
-## [文档中心](https://docs.mmcstart.cn:8850)
+<p align="center">
+  MCStart_部署模版开发文档
+  <a href="./MOD/MCStart_部署模版开发文档.md">简体中文</a> ·
+</p>
 
-## [MCStart_部署模版开发文档](MOD\MCStart_部署模版开发文档.md)
 
+
+### [文档中心](https://docs.mmcstart.cn:8850)
 
 ## 📖 目录
 
