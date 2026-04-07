@@ -13,6 +13,7 @@
 - [2. 快速开始](#2-快速开始)
   - [2.1 最小可运行模版](#21-最小可运行模版)
   - [2.2 文件组织结构](#22-文件组织结构)
+  - [2.3 使用 mcsb 快捷执行模板](#23-使用-mcsb-快捷执行模板)
 - [3. 模版文件结构总览](#3-模版文件结构总览)
 - [4. 区块详解](#4-区块详解)
   - [4.1 \[MCStart\] — 模版标识](#41-mcstart--模版标识)
@@ -150,6 +151,46 @@ my-mod/
 ```
 
 当 `file_import = true` 时，`file_import_list` 中声明的文件必须与模版文件位于同一目录下。
+
+### 2.3 使用 `mcsb` 快捷执行模板
+
+`bin/mcsb.c` 除了作为启动器入口，也内置了 DeploymentMOD 的快捷执行模式。只要第一个参数是模板模式命令，`mcsb` 就会直接转发到 `main_refactored.py` 的 DeploymentMOD CLI，而不是进入主菜单。
+
+支持的快捷命令如下：
+
+| 写法 | 对应阶段 | 说明 |
+|------|----------|------|
+| `mcsb -d <PATH>` | `deploy` | 执行完整模板部署 |
+| `mcsb -l <PATH>` | `launch` | 执行模板启动阶段 |
+| `mcsb -c <PATH>` | `config` | 执行模板配置阶段 |
+| `mcsb -com <PATH>` | `component` | 仅执行组件阶段 |
+| `mcsb -u <PATH>` | `uninstall` | 执行模板卸载阶段 |
+| `mcsb deploy <PATH>` | `deploy` | `-d` 的长命令别名 |
+| `mcsb launch <PATH>` | `launch` | `-l` 的长命令别名 |
+| `mcsb config <PATH>` | `config` | `-c` 的长命令别名 |
+| `mcsb component <PATH>` | `component` | `-com` 的长命令别名 |
+| `mcsb uninstall <PATH>` | `uninstall` | `-u` 的长命令别名 |
+
+其中 `<PATH>` 支持两种写法：
+
+- 模版目录路径：例如 `.\MOD\MaiCoer-Start.DeploymentMOD`
+- 直接指向模版文件：例如 `.\MOD\MaiCoer-Start.DeploymentMOD\DeploymentMOD.toml`
+
+如果传入的是目录，MCStart 会自动补全为该目录下的 `DeploymentMOD.toml`。如果传入的是相对路径，`mcsb` 会记录调用时的当前工作目录，并以调用者所在目录为基准解析路径，而不是以 `mcsb.exe` 自身所在目录为基准。
+
+示例：
+
+```powershell
+mcsb -d .\MOD\MaiCoer-Start.DeploymentMOD
+mcsb deploy .\MOD\MaiCoer-Start.DeploymentMOD\DeploymentMOD.toml
+mcsb -l D:\templates\MaiBot\DeploymentMOD.toml
+```
+
+补充说明：
+
+- `mcsb -h` / `mcsb --help` 可查看快捷命令帮助
+- `mcsb -v` / `mcsb --version` 可查看当前启动器版本
+- 如果首个参数不是模板模式命令，`mcsb` 会按默认逻辑启动 MCStart 主程序
 
 ---
 
