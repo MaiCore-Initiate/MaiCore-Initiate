@@ -98,6 +98,7 @@ class ComponentDefinition(BaseTaskDefinition):
     command_install: bool = False
     check_command: List[str] = field(default_factory=list)
     check_version_contains: List[str] = field(default_factory=list)
+    check_version_regex: List[str] = field(default_factory=list)
     install_command_list: List[str] = field(default_factory=list)
     get_method: str = ""
     direct_link: str = ""

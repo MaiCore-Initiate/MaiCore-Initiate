@@ -229,6 +229,7 @@ class DeploymentModParser:
             command_install=bool(item.get("command_install", False)),
             check_command=self._ensure_str_list(item.get("check_command")),
             check_version_contains=self._ensure_str_list(item.get("check_version_contains")),
+            check_version_regex=self._ensure_str_list(item.get("check_version_regex")),
             install_command_list=self._ensure_str_list(item.get("install_command_list")),
             get_method=get_method_val,
             direct_link=str(item.get("direct_link", "") or ""),

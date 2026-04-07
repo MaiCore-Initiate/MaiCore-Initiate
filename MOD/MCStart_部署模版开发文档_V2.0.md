@@ -312,13 +312,30 @@ install = true
 | `check` | Boolean | **是** | 是否需要检查组件是否已安装 |
 | `check_command` | Array\[String\] | 条件必填 | 检查命令列表。仅当 `check = true` 时需要提供 |
 | `check_version_contains` | Array\[String\] | 条件必填 | 版本关键字列表。MCStart 检查命令输出中是否包含这些关键字来判断组件是否已安装。仅当 `check = true` 时需要提供 |
+| `check_version_regex` | Array\[String\] | 否 | 正则表达式列表。MCStart 检查命令输出中必须匹配这些正则后才会判定为已安装。支持使用捕获组提取版本号 |
 
-**检查逻辑**：执行 `check_command` 中的命令，如果命令执行成功且输出结果中包含 `check_version_contains` 中的所有关键字，则认为组件已安装，将跳过安装。
+**检查逻辑**：
+
+1. 执行 `check_command`
+2. 只有当命令执行成功（退出码为 `0`）时，才继续匹配
+3. 若配置了 `check_version_contains`，则输出必须包含其中所有关键字
+4. 若配置了 `check_version_regex`，则输出还必须匹配其中所有正则表达式
+5. 同时满足以上条件时，才认为组件已安装，将跳过安装
+
+`check_version_contains` 适合做固定关键字判断，`check_version_regex` 适合处理带前缀、括号、路径、复杂版本字符串等场景。两者可以同时使用。
 
 ```toml
 check = true
 check_command = ["python --version"]
 check_version_contains = ["3.12.8"]
+```
+
+**示例 — 使用正则表达式匹配版本**：
+
+```toml
+check = true
+check_command = ["node --version"]
+check_version_regex = ["^v(\\d+\\.\\d+\\.\\d+)$"]
 ```
 
 ---
@@ -1107,6 +1124,7 @@ MCStart 模版中存在两套占位符机制，分别用于不同的场景。
 # 嵌套数组
 {{key|Component.python3-12-8.check_command.0}}                   → "python --version"
 {{key|Component.python3-12-8.check_version_contains.0}}          → "3.12.8"
+{{key|Component.python3-12-8.check_version_regex.0}}             → "^v(\\d+\\.\\d+\\.\\d+)$"
 
 # 内联表数组
 {{key|Deployment.MaiBot.env_output_list.0.name}}                 → "MAIBOT_HOME"
@@ -1566,7 +1584,7 @@ version_formatting_formula = [
 │
 ├─ check = true ?
 │  └─ 是 → 执行 check_command
-│     └─ 输出包含 check_version_contains → 已安装，跳过
+│     └─ 退出码 = 0 且匹配 check_version_contains / check_version_regex → 已安装，跳过
 │
 ├─ 导入环境变量（若 env_input = true）
 │
@@ -1758,6 +1776,7 @@ version_formatting_formula = [
 | `check` | Boolean | ✅ | — | 是否检查已安装 |
 | `check_command` | Array\[String\] | 📎 | `check=true` | 检查命令 |
 | `check_version_contains` | Array\[String\] | 📎 | `check=true` | 版本关键字 |
+| `check_version_regex` | Array\[String\] | ❌ | — | 版本正则匹配 |
 | `command_install` | Boolean | 📎 | `install=true` | 是否命令行安装 |
 | `install_command_list` | Array\[String\] | 📎 | `command_install=true` | 安装命令列表 |
 | `get_method` | String | ✅ | — | 获取方法 |
@@ -2178,8 +2197,9 @@ env_output = false   # 个体开关关闭 → ❌ 不生效
 1. **检查中**：显示 "正在检查组件是否已安装..."
 2. **检查通过**：显示 "✓ 检查通过，已安装版本: x.x.x"
 3. **检查未通过**：显示 "✗ 检查未通过，将执行安装"
+4. **检查异常**：如果命令退出码非 `0`，会显示检查失败并按“未安装”处理
 
-检查命令的输出也会按照上述命令执行显示格式实时展示。
+如果配置了 `check_version_regex`，MCStart 会在输出中执行正则匹配；当正则包含捕获组时，会优先使用第一个捕获组作为显示的版本号。检查命令的输出也会按照上述命令执行显示格式实时展示。
 
 ### Q25: 部署下载失败时的回退策略是什么？
 

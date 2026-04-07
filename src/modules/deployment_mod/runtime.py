@@ -416,15 +416,41 @@ class DeploymentModRuntime:
             return {"installed": False, "output": "", "detected_version": "", "returncode": result.returncode}
 
         lowered_output = output.lower()
+        regex_patterns = [str(pattern).strip() for pattern in component.check_version_regex if str(pattern).strip()]
+        contains_tokens = [str(token).strip() for token in component.check_version_contains if str(token).strip()]
         detected_version = ""
-        for token in component.check_version_contains:
-            if str(token).lower() in lowered_output:
-                import re as re_module
-                version_match = re_module.search(r"(\d+\.\d+(?:\.\d+)?)", output)
-                detected_version = version_match.group(1) if version_match else str(token)
-                break
+        regex_matched = True
+        if regex_patterns:
+            regex_matched = False
+            for pattern in regex_patterns:
+                try:
+                    match = re.search(pattern, output, re.MULTILINE)
+                except re.error as exc:
+                    raise RuntimeError(f"组件 {component.name} 的 check_version_regex 非法: {pattern} ({exc})") from exc
+                if match and not detected_version:
+                    if match.lastindex:
+                        detected_version = next((group for group in match.groups() if group), "") or match.group(0)
+                    else:
+                        detected_version = match.group(0)
+                if not match:
+                    regex_matched = False
+                    break
+                regex_matched = True
 
-        is_installed = all(str(token).lower() in lowered_output for token in component.check_version_contains)
+        contains_matched = all(token.lower() in lowered_output for token in contains_tokens)
+        if contains_matched and not detected_version:
+            for token in contains_tokens:
+                if token.lower() in lowered_output:
+                    version_match = re.search(r"(\d+\.\d+(?:\.\d+)?)", output)
+                    detected_version = version_match.group(1) if version_match else token
+                    break
+
+        is_installed = regex_matched and contains_matched
+        if not regex_patterns and not contains_tokens:
+            is_installed = bool(output.strip())
+            if is_installed and not detected_version:
+                version_match = re.search(r"(\d+\.\d+(?:\.\d+)?)", output)
+                detected_version = version_match.group(1) if version_match else output.strip().splitlines()[0]
 
         if is_installed:
             self._notify(
