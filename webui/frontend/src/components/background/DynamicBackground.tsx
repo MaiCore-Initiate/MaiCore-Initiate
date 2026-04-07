@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useTheme, type ResolvedTheme } from '../theme/ThemeProvider'
 
-const FALLBACK_BG_URL = '/default_backgrounds/default.jpg'
+const FALLBACK_BG_URL = '/default_backgrounds/default.png'
 const BASE_BG_STORAGE_KEY = 'mcstart.base_bg_url'
 const BASE_BG_CHANGE_EVENT = 'mcstart:base-bg-change'
 const BG_SETTINGS_STORAGE_KEY = 'mcstart.bg_settings'
