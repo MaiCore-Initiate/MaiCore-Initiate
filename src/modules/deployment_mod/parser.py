@@ -121,7 +121,7 @@ class DeploymentModParser:
         component_bindings = [
             ComponentBinding(
                 component_id=item.id,
-                enabled=bool(inputs.get(f"component::{item.id}", item.install if item.choose else item.install)),
+                enabled=self._component_enabled(item, inputs),
                 selected_value=inputs.get(f"component::{item.id}"),
             )
             for item in self._ordered_items(template.components_section.list, template.components)
@@ -413,7 +413,7 @@ class DeploymentModParser:
         ]
 
         for item in components:
-            if item.choose:
+            if item.choose and item.install:
                 fields.append(
                     TemplateFormField(
                         key=f"component::{item.id}",
@@ -423,7 +423,19 @@ class DeploymentModParser:
                         description="组件级可选开关。",
                     )
                 )
-            fields.extend(self._build_runtime_fields("component", item.id, item.install_path, item.custom_path, item.user_choose, item.choose_list, item.get_link))
+            fields.extend(
+                self._build_runtime_fields(
+                    "component",
+                    item.id,
+                    item.install_path,
+                    item.custom_path,
+                    item.user_choose,
+                    item.choose_list,
+                    item.get_method,
+                    item.get_link,
+                    item.get_link_provide_list,
+                )
+            )
 
         for item in deployments:
             if item.choose:
@@ -436,7 +448,19 @@ class DeploymentModParser:
                         description="部署项级可选开关。",
                     )
                 )
-            fields.extend(self._build_runtime_fields("deployment", item.id, item.deploy_path, item.custom_path, item.user_choose, item.choose_list, item.get_link))
+            fields.extend(
+                self._build_runtime_fields(
+                    "deployment",
+                    item.id,
+                    item.deploy_path,
+                    item.custom_path,
+                    item.user_choose,
+                    item.choose_list,
+                    item.get_method,
+                    item.get_link,
+                    item.get_link_provide_list,
+                )
+            )
 
         for item in launches:
             if item.choose:
@@ -484,7 +508,9 @@ class DeploymentModParser:
         custom_path: str,
         user_choose: bool,
         choose_list: List[Any],
+        get_method: str,
         get_link: str,
+        get_link_provide_list: List[str],
     ) -> List[TemplateFormField]:
         fields: List[TemplateFormField] = []
         if str(path_value or "").strip() == "$CustomPath" and str(custom_path or "").strip() == "$input$":
@@ -501,6 +527,7 @@ class DeploymentModParser:
         if user_choose:
             string_choices = [str(item) for item in choose_list if isinstance(item, str)]
             has_integer_choices = any(isinstance(item, int) for item in choose_list)
+            version_source = str(get_method or "").strip().lower()
 
             if string_choices and len(string_choices) == len(choose_list):
                 fields.append(
@@ -514,8 +541,7 @@ class DeploymentModParser:
                         description="模板声明了固定版本列表，可直接选择。",
                     )
                 )
-            elif has_integer_choices:
-                # choose_list 包含整数 → 需要从 GitHub 等源动态获取版本列表
+            elif version_source == "get_version" and (has_integer_choices or not choose_list):
                 fields.append(
                     TemplateFormField(
                         key=f"version::{stage_name}::{item_id}",
@@ -524,7 +550,7 @@ class DeploymentModParser:
                         required=False,
                         default="",
                         options=[],
-                        description="将从 GitHub 自动获取版本列表（由 CLI 交互式获取）。",
+                        description="将从运行时数据源自动获取版本列表。",
                     )
                 )
             else:
@@ -538,7 +564,21 @@ class DeploymentModParser:
                         description="可留空使用自动选择，也可手动指定版本/分支/标签。",
                     )
                 )
-        if str(get_link or "").strip().lower() == "user_input":
+        link_mode = str(get_link or "").strip().lower()
+        link_options = [str(item) for item in get_link_provide_list if str(item).strip()]
+        if link_options:
+            fields.append(
+                TemplateFormField(
+                    key=f"link::{stage_name}::{item_id}",
+                    label=f"{item_id} 下载链接",
+                    field_type="select",
+                    required=False,
+                    default=link_options[0],
+                    options=[{"label": item, "value": item} for item in link_options],
+                    description="模板声明了固定下载链接候选列表，可直接选择。",
+                )
+            )
+        elif link_mode == "user_input":
             fields.append(
                 TemplateFormField(
                     key=f"link::{stage_name}::{item_id}",
@@ -547,6 +587,18 @@ class DeploymentModParser:
                     required=True,
                     default="",
                     description="模板要求用户输入完整下载链接。",
+                )
+            )
+        elif str(get_method or "").strip().lower() == "get_link" and link_mode in {"filelink", "custom"}:
+            fields.append(
+                TemplateFormField(
+                    key=f"link::{stage_name}::{item_id}",
+                    label=f"{item_id} 下载链接",
+                    field_type="hidden",
+                    required=False,
+                    default="",
+                    options=[],
+                    description="将从运行时数据源自动获取下载链接列表。",
                 )
             )
         return fields
@@ -595,6 +647,17 @@ class DeploymentModParser:
         for item_id in ordered_ids:
             if item_id not in actual_set:
                 raise ValueError(f"{label} 中声明了未定义的条目: {item_id}")
+
+    @staticmethod
+    def _component_enabled(item: ComponentDefinition, inputs: Dict[str, Any]) -> bool:
+        if item.install:
+            default_value = item.install
+            if item.choose:
+                return bool(inputs.get(f"component::{item.id}", default_value))
+            return default_value
+        if item.check:
+            return True
+        return False
 
     @staticmethod
     def _required_str(item: Dict[str, Any], key: str) -> str:

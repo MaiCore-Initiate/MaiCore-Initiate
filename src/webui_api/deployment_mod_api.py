@@ -34,6 +34,75 @@ class TemplateStageRequest(BaseModel):
     serial_number: str = ""
 
 
+def _find_template_item(template, stage_name: str, item_id: str):
+    stage_map = {
+        "component": template.components,
+        "deployment": template.deployments,
+    }
+    for item in stage_map.get(stage_name, []):
+        if str(getattr(item, "id", "") or "") == item_id:
+            return item
+    return None
+
+
+def _candidate_label(candidate: Dict[str, Any]) -> str:
+    type_label = {
+        "release": "Release",
+        "tag": "Tag",
+        "branch": "Branch",
+        "file": "文件",
+        "custom": "自定义",
+        "explicit": "显式",
+        "provided": "模板",
+    }.get(str(candidate.get("type", "") or ""), str(candidate.get("type", "") or "候选"))
+    name = str(candidate.get("name", "") or candidate.get("raw_name", "") or "")
+    return f"{name} [{type_label}]".strip()
+
+
+def _enrich_form_schema(template) -> Dict[str, Any]:
+    form = template.form_schema.to_dict()
+    runtime = deployment_mod_executor.runtime
+
+    for field in form.get("fields", []):
+        if str(field.get("field_type", "") or "") != "hidden":
+            continue
+        key = str(field.get("key", "") or "")
+        parts = key.split("::")
+        if len(parts) != 3:
+            continue
+        kind, stage_name, item_id = parts
+        definition = _find_template_item(template, stage_name, item_id)
+        if definition is None:
+            continue
+
+        try:
+            if kind == "version":
+                candidates = runtime.fetch_version_candidates(template, stage_name, item_id, definition)
+                candidates = runtime._filter_candidates(definition, candidates)
+            elif kind == "link":
+                candidates = runtime.fetch_link_candidates(template, stage_name, item_id, definition)
+            else:
+                continue
+        except Exception as exc:
+            field["field_type"] = "text"
+            field["description"] = f"{field.get('description', '')} 自动获取失败，可手动输入。原因: {exc}".strip()
+            continue
+
+        if candidates:
+            field["field_type"] = "select"
+            field["options"] = [{"label": _candidate_label(item), "value": str(item.get("raw_name") or item.get("name", ""))} for item in candidates]
+            field["default"] = str(candidates[0].get("raw_name") or candidates[0].get("name", ""))
+            field["description"] = f"{field.get('description', '')} 已自动加载候选项。".strip()
+        else:
+            field["field_type"] = "text"
+            if kind == "version":
+                field["description"] = f"{field.get('description', '')} 当前未能获取候选版本，可手动输入版本/分支。".strip()
+            else:
+                field["description"] = f"{field.get('description', '')} 当前未能获取候选链接，可手动输入完整链接。".strip()
+
+    return form
+
+
 @router.get("/templates", summary="列出本地模板")
 async def list_templates():
     templates = deployment_mod_registry.get_all(refresh=True)
@@ -71,7 +140,7 @@ async def get_template_form(template_id: str):
     return {
         "success": True,
         "template_id": template_id,
-        "form": template.form_schema.to_dict(),
+        "form": _enrich_form_schema(template),
         "launches": [item.to_dict() for item in template.launches],
     }
 
