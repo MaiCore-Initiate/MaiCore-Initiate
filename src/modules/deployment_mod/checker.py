@@ -14,6 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover
     import tomli as toml_reader  # type: ignore[no-redef]
 
 from .parser import DeploymentModParser
+from .versioning import get_current_mod_schema_version
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{([^{}]+)}}")
 ARRAY_SECTIONS = {"Component", "Deployment", "LaunchItem", "ConfigItem", "UninstallItem"}
@@ -282,6 +283,7 @@ class TemplateSourceMap:
 class DeploymentModTemplateChecker:
     def __init__(self) -> None:
         self.parser = DeploymentModParser()
+        self.standard_schema_version = get_current_mod_schema_version()
 
     def check(self, template_path: str) -> CheckReport:
         path = Path(template_path).resolve()
@@ -461,8 +463,12 @@ class DeploymentModTemplateChecker:
             report.warn("模板版本号不规范", "开发文档建议 `version` 使用 SemVer 风格字符串。", source_map.table("MODINFO", "version"))
 
         schema_version = str(modinfo.get("schema_version", "") or "").strip()
-        if schema_version and schema_version != "2.1":
-            report.warn("schema_version 与当前文档版本不一致", "当前开发文档标注的模板格式版本为 `2.1`。", source_map.table("MODINFO", "schema_version"))
+        if schema_version and schema_version != self.standard_schema_version:
+            report.warn(
+                "schema_version 与当前标准版本不一致",
+                f"当前 DeploymentMOD 标准版本为 `{self.standard_schema_version}`，以 `MOD/MODVersion.json` 为准。",
+                source_map.table("MODINFO", "schema_version"),
+            )
 
         min_version = str(modinfo.get("min_version", "") or "").strip()
         max_version = str(modinfo.get("max_version", "") or "").strip()

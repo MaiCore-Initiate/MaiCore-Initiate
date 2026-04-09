@@ -8,6 +8,7 @@ from rich.text import Text
 
 from ...utils.common import setup_console
 from .checker import CheckIssue, CheckReport, DeploymentModTemplateChecker
+from .versioning import get_current_mod_schema_version, get_mod_version_file_path
 
 
 class DeploymentModTestCliRunner:
@@ -37,7 +38,12 @@ class DeploymentModTestCliRunner:
             Text(f"模板路径: {report.template_path}", style="#1F4E79"),
         )
         self.console.print(
-            Text("检测标准: 严格对齐 MOD/MCStart_部署模版开发文档.md", style="#1F4E79"),
+            Text(
+                f"检测标准: 严格对齐 MOD/MCStart_部署模版开发文档.md / "
+                f"当前标准版本 {get_current_mod_schema_version()} "
+                f"（{get_mod_version_file_path()}）",
+                style="#1F4E79",
+            ),
         )
         self.console.print()
 
@@ -90,4 +96,3 @@ class DeploymentModTestCliRunner:
 
 
 deployment_mod_test_cli_runner = DeploymentModTestCliRunner()
-

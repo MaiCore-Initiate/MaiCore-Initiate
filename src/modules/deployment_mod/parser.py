@@ -27,6 +27,7 @@ from .models import (
     UninstallDefinition,
     VersionFormattingRule,
 )
+from .versioning import get_current_mod_schema_version
 
 
 class DeploymentModParser:
@@ -58,7 +59,7 @@ class DeploymentModParser:
             file_import_list=self._ensure_list(modinfo.get("file_import_list")),
             runtime=str(modinfo.get("runtime", "powershell") or "powershell").strip().lower(),
             platforms=[str(item).strip().lower() for item in self._ensure_list(modinfo.get("platforms")) if str(item).strip()],
-            schema_version=str(modinfo.get("schema_version", "1.0") or "1.0"),
+            schema_version=str(modinfo.get("schema_version", "") or "").strip(),
             template_root=template_root,
         )
 
@@ -186,6 +187,15 @@ class DeploymentModParser:
         )
 
     def validate_runtime_constraints(self, template: TemplateDefinition) -> None:
+        expected_schema_version = get_current_mod_schema_version()
+        if not template.metadata.schema_version:
+            raise ValueError("模板缺少 schema_version，无法确认与当前 DeploymentMOD 标准版本的兼容性")
+        if template.metadata.schema_version != expected_schema_version:
+            raise ValueError(
+                f"模板 schema_version 为 {template.metadata.schema_version}，"
+                f"当前 DeploymentMOD 标准版本为 {expected_schema_version}（以 MOD/MODVersion.json 为准）"
+            )
+
         current_platform = self._current_platform()
         platforms = set(template.metadata.platforms)
         if platforms and current_platform not in platforms:
@@ -633,6 +643,8 @@ class DeploymentModParser:
         return mapping.get(profile, "Custom")
 
     def _validate_metadata(self, metadata: TemplateMetadata) -> None:
+        if not metadata.schema_version:
+            raise ValueError("缺少必填字段: schema_version")
         if metadata.file_import and not metadata.file_import_list:
             raise ValueError("启用 file_import 时必须提供 file_import_list")
         if metadata.template_root and metadata.file_import:

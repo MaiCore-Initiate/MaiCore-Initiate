@@ -205,7 +205,7 @@ mcsb -t .\MOD\MaiCoer-Start.DeploymentMOD
 mcsb test .\MOD\MaiCoer-Start.DeploymentMOD\DeploymentMOD.toml
 ```
 
-检测器会严格对齐本开发文档，并输出带颜色的详细日志：
+检测器会严格对齐本开发文档，并以 `MOD/MODVersion.json` 中的 `MODVersion` 作为当前标准版本输出带颜色的详细日志：
 
 - **蓝色**：健康项 / 已通过的检查
 - **暗蓝色**：健康项的附加说明、定位信息
@@ -298,6 +298,8 @@ MCStart = true
 | `runtime` | String | **是** | — | 模版运行时环境，见下表 |
 | `platforms` | Array\[String\] | **是** | — | 平台限制，为空数组时不限制平台 |
 | `schema_version` | String | **是** | — | 模版格式版本号 |
+
+`schema_version` 的校验标准以 `MOD/MODVersion.json` 中的 `MODVersion` 为准。模板检测与实际部署都会读取这个文件，而不是使用写死常量。
 
 #### runtime 可选值
 
@@ -2226,7 +2228,7 @@ env_output = false   # 个体开关关闭 → ❌ 不生效
 
 ### Q20: `schema_version` 的作用是什么？
 
-**A**: `schema_version` 标识当前模版使用的模版格式版本。MCStart 会根据此版本号选择对应的解析器来处理模版。当 MCStart 未来升级模版格式时，旧版本的模版仍然可以通过此字段被正确识别和兼容处理。当前版本为 `"2.1"`。
+**A**: `schema_version` 标识当前模版使用的模版格式版本。MCStart 会根据此版本号选择对应的解析器来处理模版。当 MCStart 未来升级模版格式时，旧版本的模版仍然可以通过此字段被正确识别和兼容处理。当前标准版本以 `MOD/MODVersion.json` 中的 `MODVersion` 为准；模板检测与实际部署都使用这个值做校验。
 
 ### Q21: 卸载阶段会删除系统里已经存在的共享组件吗？
 
