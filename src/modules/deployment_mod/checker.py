@@ -1119,7 +1119,8 @@ class DeploymentModTemplateChecker:
             if not custom_path:
                 report.error("custom_path 缺失", f"`{field_name} = \"$CustomPath\"` 时必须提供 `custom_path`。", location)
                 return
-            self._validate_path_token(custom_path, report, location)
+            if custom_path != "$input$":
+                self._validate_path_token(custom_path, report, location)
         elif custom_path:
             report.warn("custom_path 将被忽略", f"只有 `{field_name} = \"$CustomPath\"` 时 `custom_path` 才会生效。", location)
 
