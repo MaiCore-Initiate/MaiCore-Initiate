@@ -215,7 +215,7 @@ class DeploymentModParser:
         get_version_val = str(item.get("get_version", "") or "").strip().lower()
         get_link_val = str(item.get("get_link", "") or "").strip().lower()
 
-        self._validate_enum_field("get_method", get_method_val, ["", "direct", "get_version", "get_link"])
+        self._validate_enum_field("get_method", get_method_val, ["", "get_version", "get_link"])
         self._validate_enum_field("install_operate", install_operate_val, ["", "auto", "no", "custom"])
         self._validate_enum_field("get_version", get_version_val, ["", "github_repo", "filelink", "custom"])
         self._validate_enum_field("get_link", get_link_val, ["", "filelink", "custom", "user_input"])

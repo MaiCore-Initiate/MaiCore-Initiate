@@ -22,6 +22,7 @@ from .parser import DeploymentModParser
 from .planner import DeploymentModPlanner
 from .registry import DeploymentModRegistry, deployment_mod_registry
 from .runtime import DeploymentModRuntime
+from .test_cli import DeploymentModTestCliRunner, deployment_mod_test_cli_runner
 
 __all__ = [
     "ComponentBinding",
@@ -35,6 +36,7 @@ __all__ = [
     "DeploymentModRegistry",
     "DeploymentPlan",
     "DeploymentProfileBinding",
+    "DeploymentModTestCliRunner",
     "LaunchDefinition",
     "ModBinding",
     "UninstallDefinition",
@@ -47,4 +49,5 @@ __all__ = [
     "deployment_mod_cli_runner",
     "deployment_mod_executor",
     "deployment_mod_registry",
+    "deployment_mod_test_cli_runner",
 ]
