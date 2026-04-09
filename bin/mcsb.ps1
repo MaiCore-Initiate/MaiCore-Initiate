@@ -4,6 +4,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $parentDir = Split-Path -Parent $scriptDir
 $metaFile = Join-Path $scriptDir "mcsb.env"
 $mainScript = Join-Path $parentDir "main_refactored.py"
+$testScript = Join-Path $parentDir "deployment_mod_test.py"
 $venvPython = Join-Path $parentDir "venv\Scripts\python.exe"
 $meta = @{
     APP_NAME = "MaiCoreStart"
@@ -32,11 +33,13 @@ function Show-Usage {
     Write-Host "       mcsb -c <DeploymentMOD path>"
     Write-Host "       mcsb -com <DeploymentMOD path>"
     Write-Host "       mcsb -u <DeploymentMOD path>"
+    Write-Host "       mcsb -t <DeploymentMOD path>"
     Write-Host "       mcsb deploy <DeploymentMOD path>"
     Write-Host "       mcsb launch <DeploymentMOD path>"
     Write-Host "       mcsb config <DeploymentMOD path>"
     Write-Host "       mcsb component <DeploymentMOD path>"
     Write-Host "       mcsb uninstall <DeploymentMOD path>"
+    Write-Host "       mcsb test <DeploymentMOD path>"
     Write-Host ""
     Write-Host "You can pass either a template directory or a DeploymentMOD.toml file path."
 }
@@ -54,11 +57,13 @@ function Show-Version {
     Write-Host "  mcsb -c PATH            - Execute template config stage"
     Write-Host "  mcsb -com PATH          - Execute template component stage"
     Write-Host "  mcsb -u PATH            - Execute template uninstall stage"
+    Write-Host "  mcsb -t PATH            - Execute template syntax validation"
     Write-Host "  mcsb deploy PATH        - Execute full template deployment"
     Write-Host "  mcsb launch PATH        - Execute template launch stage"
     Write-Host "  mcsb config PATH        - Execute template config stage"
     Write-Host "  mcsb component PATH     - Execute template component stage"
     Write-Host "  mcsb uninstall PATH     - Execute template uninstall stage"
+    Write-Host "  mcsb test PATH          - Execute template syntax validation"
     Write-Host "  mcsb -v|version         - Show version"
     Write-Host ""
 }
@@ -83,6 +88,19 @@ function Invoke-TemplateMode([string]$mode, [string]$templatePath) {
     exit $LASTEXITCODE
 }
 
+function Invoke-TemplateTest([string]$templatePath) {
+    if ([string]::IsNullOrWhiteSpace($templatePath)) {
+        Show-Usage
+        exit 1
+    }
+
+    $pythonExe = Resolve-Python
+    $env:MCSB_CALLER_CWD = (Get-Location).Path
+    Write-Host "Starting template syntax validation..."
+    & $pythonExe $testScript $templatePath
+    exit $LASTEXITCODE
+}
+
 if ($args.Count -gt 0) {
     $first = [string]$args[0]
     switch -Regex ($first.ToLowerInvariant()) {
@@ -91,11 +109,13 @@ if ($args.Count -gt 0) {
         '^-c$' { Invoke-TemplateMode $first $args[1] }
         '^-com$' { Invoke-TemplateMode $first $args[1] }
         '^-u$' { Invoke-TemplateMode $first $args[1] }
+        '^-t$' { Invoke-TemplateTest $args[1] }
         '^deploy$' { Invoke-TemplateMode $first $args[1] }
         '^launch$' { Invoke-TemplateMode $first $args[1] }
         '^config$' { Invoke-TemplateMode $first $args[1] }
         '^component$' { Invoke-TemplateMode $first $args[1] }
         '^uninstall$' { Invoke-TemplateMode $first $args[1] }
+        '^test$' { Invoke-TemplateTest $args[1] }
         '^--version$' {
             Write-Host "$($meta["APP_NAME"]) version $($meta["APP_VERSION"])"
             exit 0

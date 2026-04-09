@@ -14,6 +14,7 @@
   - [2.1 最小可运行模版](#21-最小可运行模版)
   - [2.2 文件组织结构](#22-文件组织结构)
   - [2.3 使用 mcsb 快捷执行模板](#23-使用-mcsb-快捷执行模板)
+  - [2.4 使用 mcsb 检测模板语法](#24-使用-mcsb-检测模板语法)
 - [3. 模版文件结构总览](#3-模版文件结构总览)
 - [4. 区块详解](#4-区块详解)
   - [4.1 \[MCStart\] — 模版标识](#41-mcstart--模版标识)
@@ -154,7 +155,7 @@ my-mod/
 
 ### 2.3 使用 `mcsb` 快捷执行模板
 
-`bin/mcsb.*` 除了作为启动器入口，也内置了 DeploymentMOD 的快捷执行模式。只要第一个参数是模板模式命令，`mcsb` 就会直接转发到 `main_refactored.py` 的 DeploymentMOD CLI，而不是进入主菜单。
+`bin/mcsb.*` 除了作为启动器入口，也内置了 DeploymentMOD 的快捷执行模式。只要第一个参数是模板模式命令，`mcsb` 就会直接进入对应的 DeploymentMOD CLI 入口，而不是进入主菜单；其中部署/启动/配置/组件/卸载仍走 `main_refactored.py`，语法检测走独立的 `deployment_mod_test.py`。
 
 支持的快捷命令如下：
 
@@ -165,11 +166,13 @@ my-mod/
 | `mcsb -c <PATH>` | `config` | 执行模板配置阶段 |
 | `mcsb -com <PATH>` | `component` | 仅执行组件阶段 |
 | `mcsb -u <PATH>` | `uninstall` | 执行模板卸载阶段 |
+| `mcsb -t <PATH>` | `test` | 执行模板语法检测 |
 | `mcsb deploy <PATH>` | `deploy` | `-d` 的长命令别名 |
 | `mcsb launch <PATH>` | `launch` | `-l` 的长命令别名 |
 | `mcsb config <PATH>` | `config` | `-c` 的长命令别名 |
 | `mcsb component <PATH>` | `component` | `-com` 的长命令别名 |
 | `mcsb uninstall <PATH>` | `uninstall` | `-u` 的长命令别名 |
+| `mcsb test <PATH>` | `test` | `-t` 的长命令别名 |
 
 其中 `<PATH>` 支持两种写法：
 
@@ -190,7 +193,39 @@ mcsb -l D:\templates\MaiBot\DeploymentMOD.toml
 
 - `mcsb -h` / `mcsb --help` 可查看快捷命令帮助
 - `mcsb -v` / `mcsb --version` 可查看当前启动器版本
+- `mcsb -t` / `mcsb test` 会调用独立的 `deployment_mod_test.py` 入口做静态语法检测
 - 如果首个参数不是模板模式命令，`mcsb` 会按默认逻辑启动 MCStart 主程序
+
+### 2.4 使用 `mcsb` 检测模板语法
+
+MCStart 提供了独立的模板语法检测入口，用于在真正部署前先做一次“静态体检”：
+
+```powershell
+mcsb -t .\MOD\MaiCoer-Start.DeploymentMOD
+mcsb test .\MOD\MaiCoer-Start.DeploymentMOD\DeploymentMOD.toml
+```
+
+检测器会严格对齐本开发文档，并输出带颜色的详细日志：
+
+- **蓝色**：健康项 / 已通过的检查
+- **暗蓝色**：健康项的附加说明、定位信息
+- **黄色**：警告项
+- **暗黄色**：警告项的附加说明、定位信息
+- **红色**：错误项
+- **暗红色**：错误项的附加说明、定位信息
+
+日志中会尽量给出**具体文件、行号、列号和错误原因**。常见输出包括：
+
+- 命令行安装 / 命令行部署已启用，但同一个表数组里仍混用了声明式下载规则：这属于**合法但不推荐**，检测器会给出警告，建议只保留命令列表和必要路径 / 环境变量定义
+- 使用了 `get_method = "get_version"`、`format_version` 或 `splicing_link`，但命令列表里并没有用到 `{{version|ID}}` 或引用 `splicing_link`：检测器会提示“版本虽然能取到，但命令实际没消费这个版本”
+- `file_import = false` 却使用了 `{{file_path|...}}` / `{{file_key|...}}`
+- `CONFIG.list`、`DEPLOY.list`、`LAUNCH.list`、`UNINSTALL.list` 中引用了不存在的 ID
+- 正则表达式、占位符路径、导入文件路径、跨文件取值路径不合法
+
+返回码规则：
+
+- `0`：没有错误（允许存在警告）
+- `1`：存在错误，模板不建议继续执行
 
 ---
 
@@ -1191,10 +1226,10 @@ MCStart 模版中存在两套占位符机制，分别用于不同的场景。
 
 | 情况 | 行为 |
 |------|------|
-| `{{key|不存在的路径}}` | 报错或返回空字符串并警告 |
-| `{{key|Deployment.MaiBot}}` | 报错：不允许引用整个表 |
-| `{{key|DEPLOY.list.99}}` | 报错：索引越界 |
-| `{{key|Component.SQLiteStudio.install_custom_list.0}}` | 报错：内联表必须指定键 |
+| `{{key\|不存在的路径}}` | 报错或返回空字符串并警告 |
+| `{{key\|Deployment.MaiBot}}` | 报错：不允许引用整个表 |
+| `{{key\|DEPLOY.list.99}}` | 报错：索引越界 |
+| `{{key\|Component.SQLiteStudio.install_custom_list.0}}` | 报错：内联表必须指定键 |
 
 #### 完整路径解析流程示例
 

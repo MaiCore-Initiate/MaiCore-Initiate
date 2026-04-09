@@ -48,6 +48,11 @@ static int is_template_mode(const char *arg) {
            _stricmp(arg, "uninstall") == 0;
 }
 
+static int is_test_mode(const char *arg) {
+    return _stricmp(arg, "-t") == 0 ||
+           _stricmp(arg, "test") == 0;
+}
+
 static int is_version_mode(const char *arg) {
     return _stricmp(arg, "-v") == 0 ||
            _stricmp(arg, "--version") == 0 ||
@@ -139,11 +144,13 @@ static void show_usage(const MetaInfo *meta) {
     puts("       mcsb -c <DeploymentMOD path>");
     puts("       mcsb -com <DeploymentMOD path>");
     puts("       mcsb -u <DeploymentMOD path>");
+    puts("       mcsb -t <DeploymentMOD path>");
     puts("       mcsb deploy <DeploymentMOD path>");
     puts("       mcsb launch <DeploymentMOD path>");
     puts("       mcsb config <DeploymentMOD path>");
     puts("       mcsb component <DeploymentMOD path>");
     puts("       mcsb uninstall <DeploymentMOD path>");
+    puts("       mcsb test <DeploymentMOD path>");
     puts("");
     puts("You can pass either a template directory or a DeploymentMOD.toml file path.");
 }
@@ -225,6 +232,7 @@ int main(int argc, char *argv[]) {
     char meta_file[PATH_BUF_SIZE];
     char app_exe[PATH_BUF_SIZE];
     char main_script[PATH_BUF_SIZE];
+    char test_script[PATH_BUF_SIZE];
     char venv_python[PATH_BUF_SIZE];
     const char *python_exe = "python";
     char command_line[CMD_BUF_SIZE];
@@ -244,6 +252,7 @@ int main(int argc, char *argv[]) {
     load_meta_file(meta_file, &meta);
     join_path(app_exe, sizeof(app_exe), parent_dir, meta.app_exe);
     join_path(main_script, sizeof(main_script), parent_dir, "main_refactored.py");
+    join_path(test_script, sizeof(test_script), parent_dir, "deployment_mod_test.py");
     join_path(venv_python, sizeof(venv_python), parent_dir, "venv\\Scripts\\python.exe");
 
     if (file_exists(venv_python)) {
@@ -258,6 +267,18 @@ int main(int argc, char *argv[]) {
     if (argc > 1 && is_version_mode(argv[1])) {
         show_version_detail(&meta);
         return 0;
+    }
+
+    if (argc > 1 && is_test_mode(argv[1])) {
+        if (argc < 3) {
+            show_usage(&meta);
+            return 1;
+        }
+        if (GetCurrentDirectoryA(sizeof(caller_cwd), caller_cwd) > 0) {
+            SetEnvironmentVariableA("MCSB_CALLER_CWD", caller_cwd);
+        }
+        build_python_command(command_line, sizeof(command_line), python_exe, test_script, argc, argv, 2);
+        return run_process(command_line, parent_dir);
     }
 
     if (argc > 1 && is_template_mode(argv[1])) {

@@ -9,7 +9,9 @@ APP_VERSION="v5.0.0-beta"
 APP_EXE_NAME="MaiCoreStart-v5.0.0-beta.exe"
 BUILD_DATE="2025-12-13"
 MAIN_SCRIPT="${PARENT_DIR}/main_refactored.py"
-VENV_PYTHON="${PARENT_DIR}/venv/Scripts/python.exe"
+TEST_SCRIPT="${PARENT_DIR}/deployment_mod_test.py"
+VENV_PYTHON_WIN="${PARENT_DIR}/venv/Scripts/python.exe"
+VENV_PYTHON_POSIX="${PARENT_DIR}/venv/bin/python"
 
 if [[ -f "${META_FILE}" ]]; then
   while IFS='=' read -r key value; do
@@ -33,11 +35,13 @@ Usage: mcsb -d <DeploymentMOD path>
        mcsb -c <DeploymentMOD path>
        mcsb -com <DeploymentMOD path>
        mcsb -u <DeploymentMOD path>
+       mcsb -t <DeploymentMOD path>
        mcsb deploy <DeploymentMOD path>
        mcsb launch <DeploymentMOD path>
        mcsb config <DeploymentMOD path>
        mcsb component <DeploymentMOD path>
        mcsb uninstall <DeploymentMOD path>
+       mcsb test <DeploymentMOD path>
 
 You can pass either a template directory or a DeploymentMOD.toml file path.
 EOF
@@ -48,8 +52,12 @@ show_version() {
 }
 
 resolve_python() {
-  if [[ -f "${VENV_PYTHON}" ]]; then
-    printf '%s\n' "${VENV_PYTHON}"
+  if [[ -f "${VENV_PYTHON_POSIX}" ]]; then
+    printf '%s\n' "${VENV_PYTHON_POSIX}"
+    return
+  fi
+  if [[ -f "${VENV_PYTHON_WIN}" ]]; then
+    printf '%s\n' "${VENV_PYTHON_WIN}"
     return
   fi
   if command -v python3 >/dev/null 2>&1; then
@@ -74,10 +82,27 @@ run_template_mode() {
   "${python_exe}" "${MAIN_SCRIPT}" "${mode}" "${template_path}"
 }
 
+run_template_test() {
+  local template_path="${1:-}"
+  if [[ -z "${template_path}" ]]; then
+    show_usage
+    exit 1
+  fi
+
+  local python_exe
+  python_exe="$(resolve_python)"
+  export MCSB_CALLER_CWD="${PWD}"
+  echo "Starting template syntax validation..."
+  "${python_exe}" "${TEST_SCRIPT}" "${template_path}"
+}
+
 first_arg="${1:-}"
 case "${first_arg}" in
   -d|-l|-c|-com|-u|deploy|launch|config|component|uninstall)
     run_template_mode "${first_arg}" "${2:-}"
+    ;;
+  -t|test)
+    run_template_test "${2:-}"
     ;;
   -v|version|--version|Version)
     show_version

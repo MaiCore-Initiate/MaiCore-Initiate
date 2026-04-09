@@ -18,16 +18,21 @@ if exist "%META_FILE%" (
     )
 )
 
+set "PYTHON_EXE=%PARENT_DIR%\venv\Scripts\python.exe"
+if not exist "%PYTHON_EXE%" set "PYTHON_EXE=python"
+
 if /i "%1"=="-d" goto deploy_template
 if /i "%1"=="-l" goto deploy_template
 if /i "%1"=="-c" goto deploy_template
 if /i "%1"=="-com" goto deploy_template
 if /i "%1"=="-u" goto deploy_template
+if /i "%1"=="-t" goto test_template
 if /i "%1"=="deploy" goto deploy_template
 if /i "%1"=="launch" goto deploy_template
 if /i "%1"=="config" goto deploy_template
 if /i "%1"=="component" goto deploy_template
 if /i "%1"=="uninstall" goto deploy_template
+if /i "%1"=="test" goto test_template
 
 :: 检查版本参数
 if /i "%1"=="-v" goto show_version
@@ -35,12 +40,7 @@ if /i "%1"=="Version" goto show_version
 if /i "%1"=="version" goto show_version
 if /i "%1"=="--version" goto j_version
 
-if not exist "%PARENT_DIR%\%APP_EXE%" (
-    echo Error: Cannot find %APP_EXE%
-    echo Expected path: %PARENT_DIR%\%APP_EXE%
-    pause
-    exit /b 1
-)
+if not exist "%PARENT_DIR%\%APP_EXE%" goto fallback_python
 
 cd /d "%PARENT_DIR%"
 echo Starting %APP_EXE%...
@@ -55,6 +55,12 @@ if %errorlevel% equ 0 (
 
 goto :eof
 
+:fallback_python
+cd /d "%PARENT_DIR%"
+echo Executable not found, fallback to Python entry...
+"%PYTHON_EXE%" "%PARENT_DIR%\main_refactored.py"
+exit /b %errorlevel%
+
 :deploy_template
 if "%~2"=="" (
     echo Usage: mcsb -d ^<DeploymentMOD path^>
@@ -62,11 +68,13 @@ if "%~2"=="" (
     echo        mcsb -c ^<DeploymentMOD path^>
     echo        mcsb -com ^<DeploymentMOD path^>
     echo        mcsb -u ^<DeploymentMOD path^>
+    echo        mcsb -t ^<DeploymentMOD path^>
     echo        mcsb deploy ^<DeploymentMOD path^>
     echo        mcsb launch ^<DeploymentMOD path^>
     echo        mcsb config ^<DeploymentMOD path^>
     echo        mcsb component ^<DeploymentMOD path^>
     echo        mcsb uninstall ^<DeploymentMOD path^>
+    echo        mcsb test ^<DeploymentMOD path^>
     echo.
     echo You can pass either a template directory or a DeploymentMOD.toml file path.
     exit /b 1
@@ -75,12 +83,27 @@ if "%~2"=="" (
 set "TEMPLATE_MODE=%~1"
 set "TEMPLATE_PATH=%~2"
 set "MCSB_CALLER_CWD=%cd%"
-set "PYTHON_EXE=%PARENT_DIR%\venv\Scripts\python.exe"
-if not exist "%PYTHON_EXE%" set "PYTHON_EXE=python"
 
 cd /d "%PARENT_DIR%"
 echo Starting template action %TEMPLATE_MODE%...
 "%PYTHON_EXE%" "%PARENT_DIR%\main_refactored.py" %TEMPLATE_MODE% "%TEMPLATE_PATH%"
+exit /b %errorlevel%
+
+:test_template
+if "%~2"=="" (
+    echo Usage: mcsb -t ^<DeploymentMOD path^>
+    echo        mcsb test ^<DeploymentMOD path^>
+    echo.
+    echo You can pass either a template directory or a DeploymentMOD.toml file path.
+    exit /b 1
+)
+
+set "TEMPLATE_PATH=%~2"
+set "MCSB_CALLER_CWD=%cd%"
+
+cd /d "%PARENT_DIR%"
+echo Starting template syntax validation...
+"%PYTHON_EXE%" "%PARENT_DIR%\deployment_mod_test.py" "%TEMPLATE_PATH%"
 exit /b %errorlevel%
 
 :show_version
@@ -106,11 +129,13 @@ echo "  mcsb -l 路径      - 执行模版启动阶段"
 echo "  mcsb -c 路径      - 执行模版配置阶段"
 echo "  mcsb -com 路径    - 执行模版组件阶段"
 echo "  mcsb -u 路径      - 执行模版卸载阶段"
+echo "  mcsb -t 路径      - 执行模版语法检测"
 echo "  mcsb deploy 路径  - 执行完整部署模版"
 echo "  mcsb launch 路径  - 执行模版启动阶段"
 echo "  mcsb config 路径  - 执行模版配置阶段"
 echo "  mcsb component 路径 - 执行模版组件阶段"
 echo "  mcsb uninstall 路径 - 执行模版卸载阶段"
+echo "  mcsb test 路径    - 执行模版语法检测"
 echo "  mcsb -v           - 显示版本及信息"
 echo "  mcsb Version      - 显示版本及信息"
 echo "  mcsb version      - 显示版本及信息"
