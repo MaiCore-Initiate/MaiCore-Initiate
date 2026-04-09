@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -87,6 +88,10 @@ class DeploymentModRuntime:
     RUNTIME_ENV_FILENAME = ".mcstart-template.env"
     RUNTIME_STATE_FILENAME = ".mcstart-template-state.toml"
     LOG_SENSITIVE_KEYWORDS = ("password", "passwd", "token", "secret", "apikey", "api_key", "cookie", "authorization")
+    COMMAND_EVENT_PREFIX = "__MCSB_EVT__"
+    COMMAND_EVENT_BEGIN = f"{COMMAND_EVENT_PREFIX}BEGIN__"
+    COMMAND_EVENT_CWD = f"{COMMAND_EVENT_PREFIX}CWD__"
+    COMMAND_EVENT_CLEAR = f"{COMMAND_EVENT_PREFIX}CLEAR__"
 
     def _get_request_kwargs(self) -> Dict[str, Any]:
         """生成网络请求的统一参数，包含代理和 SSL 配置。"""
@@ -356,12 +361,28 @@ class DeploymentModRuntime:
 
         # Step 3: 执行安装前命令
         if component.before_command:
-            self._run_command_list(state, component.before_command_list, install_path, scope, f"组件 {component.name} 安装前命令")
+            self._run_command_list(
+                state,
+                component.before_command_list,
+                install_path,
+                scope,
+                f"组件 {component.name} 安装前命令",
+                runtime=component.runtime,
+                command_theme=component.command_theme,
+            )
 
         # Step 4: 执行安装
         if component.command_install:
             self._resolve_version_and_link(state, "component", component.id, component, scope)
-            self._run_command_list(state, component.install_command_list, install_path, scope, f"组件 {component.name} 安装命令")
+            self._run_command_list(
+                state,
+                component.install_command_list,
+                install_path,
+                scope,
+                f"组件 {component.name} 安装命令",
+                runtime=component.runtime,
+                command_theme=component.command_theme,
+            )
         else:
             download_url = self._resolve_version_and_link(state, "component", component.id, component, scope)
             if not download_url:
@@ -372,7 +393,15 @@ class DeploymentModRuntime:
 
         # Step 5: 执行安装后命令
         if component.after_command:
-            self._run_command_list(state, component.after_command_list, install_path, scope, f"组件 {component.name} 安装后命令")
+            self._run_command_list(
+                state,
+                component.after_command_list,
+                install_path,
+                scope,
+                f"组件 {component.name} 安装后命令",
+                runtime=component.runtime,
+                command_theme=component.command_theme,
+            )
 
         state.managed_components[component.id] = True
         self._export_env_bindings(state, state.template.components_section.env_output, component.env_output, component.env_output_list, scope)
@@ -397,6 +426,8 @@ class DeploymentModRuntime:
             scope,
             f"组件 {component.name} 检查命令",
             raise_on_error=False,
+            runtime=component.runtime,
+            command_theme=component.command_theme,
         )
         output = result.output
 
@@ -552,14 +583,30 @@ class DeploymentModRuntime:
         self._notify(state, 3, 6, f"部署 {deployment.name}", "running", f"最终目录: {final_root}", event="detail")
 
         if deployment.before_command:
-            self._run_command_list(state, deployment.before_command_list, deploy_path, scope, f"部署 {deployment.name} 前置命令")
+            self._run_command_list(
+                state,
+                deployment.before_command_list,
+                deploy_path,
+                scope,
+                f"部署 {deployment.name} 前置命令",
+                runtime=deployment.runtime,
+                command_theme=deployment.command_theme,
+            )
 
         resolved_link = self._resolve_version_and_link(state, "deployment", deployment.id, deployment, scope)
         if resolved_link:
             self._notify(state, 3, 6, f"部署 {deployment.name}", "running", f"部署链接: {resolved_link}", event="detail")
 
         if deployment.command_deploy:
-            self._run_command_list(state, deployment.deploy_command_list, deploy_path, scope, f"部署 {deployment.name} 自定义命令")
+            self._run_command_list(
+                state,
+                deployment.deploy_command_list,
+                deploy_path,
+                scope,
+                f"部署 {deployment.name} 自定义命令",
+                runtime=deployment.runtime,
+                command_theme=deployment.command_theme,
+            )
             if os.path.isdir(final_root):
                 state.deployment_roots[deployment.id] = final_root
             elif os.path.isdir(deploy_path):
@@ -568,7 +615,15 @@ class DeploymentModRuntime:
             self._perform_deployment(state, deployment, deploy_path, final_root, resolved_link)
 
         if deployment.after_command:
-            self._run_command_list(state, deployment.after_command_list, deploy_path, scope, f"部署 {deployment.name} 后置命令")
+            self._run_command_list(
+                state,
+                deployment.after_command_list,
+                deploy_path,
+                scope,
+                f"部署 {deployment.name} 后置命令",
+                runtime=deployment.runtime,
+                command_theme=deployment.command_theme,
+            )
 
         self._export_env_bindings(state, state.template.deployments_section.env_output, deployment.env_output, deployment.env_output_list, scope)
 
@@ -664,6 +719,8 @@ class DeploymentModRuntime:
                 scope,
                 f"启动 {launch.name}",
                 detached=True,
+                runtime=launch.runtime,
+                command_theme=launch.command_theme,
             )
             state.launched_items.append(launch.id)
             self._export_env_bindings(state, state.template.launches_section.env_output, launch.env_output, launch.env_output_list, scope)
@@ -720,10 +777,26 @@ class DeploymentModRuntime:
         self._notify(state, 1, 1, f"卸载 {uninstall.name}", "running", f"工作目录: {workdir}")
 
         if uninstall.stop_before_uninstall and uninstall.stop_command_list:
-            self._run_command_list(state, uninstall.stop_command_list, workdir, scope, f"卸载 {uninstall.name} 停止命令")
+            self._run_command_list(
+                state,
+                uninstall.stop_command_list,
+                workdir,
+                scope,
+                f"卸载 {uninstall.name} 停止命令",
+                runtime=uninstall.runtime,
+                command_theme=uninstall.command_theme,
+            )
 
         if uninstall.before_command:
-            self._run_command_list(state, uninstall.before_command_list, workdir, scope, f"卸载 {uninstall.name} 前置命令")
+            self._run_command_list(
+                state,
+                uninstall.before_command_list,
+                workdir,
+                scope,
+                f"卸载 {uninstall.name} 前置命令",
+                runtime=uninstall.runtime,
+                command_theme=uninstall.command_theme,
+            )
 
         for deployment_id in self._resolve_uninstall_deployment_targets(state, uninstall):
             root = str(state.deployment_roots.get(deployment_id, "") or "")
@@ -751,7 +824,15 @@ class DeploymentModRuntime:
 
         if uninstall.after_command:
             after_workdir = workdir if os.path.isdir(workdir) else (state.instance_root if os.path.isdir(state.instance_root) else os.getcwd())
-            self._run_command_list(state, uninstall.after_command_list, after_workdir, scope, f"卸载 {uninstall.name} 后置命令")
+            self._run_command_list(
+                state,
+                uninstall.after_command_list,
+                after_workdir,
+                scope,
+                f"卸载 {uninstall.name} 后置命令",
+                runtime=uninstall.runtime,
+                command_theme=uninstall.command_theme,
+            )
 
         self._export_env_bindings(
             state,
@@ -1677,10 +1758,13 @@ class DeploymentModRuntime:
         label: str,
         detached: bool = False,
         raise_on_error: bool = True,
+        runtime: str = "",
+        command_theme: str = "",
     ) -> CommandExecutionResult:
         if not commands:
             return CommandExecutionResult()
-        runtime = state.template.metadata.runtime
+        runtime = self._normalize_runtime(runtime or state.template.metadata.runtime)
+        command_theme = self._normalize_command_theme(command_theme or self._default_command_theme())
         script_dir = os.path.join(state.runtime_root, "scripts")
         os.makedirs(script_dir, exist_ok=True)
         timestamp = int(time.time() * 1000)
@@ -1720,6 +1804,7 @@ class DeploymentModRuntime:
                 "command_count": len(resolved_commands),
                 "primary_command": primary_command,
                 "commands": resolved_commands,
+                "command_theme": command_theme,
             },
         )
 
@@ -1747,6 +1832,7 @@ class DeploymentModRuntime:
                     "command_count": len(resolved_commands),
                     "primary_command": primary_command,
                     "pid": getattr(process, "pid", None),
+                    "command_theme": command_theme,
                 },
             )
             return CommandExecutionResult(output="", returncode=0, script_path=script_path, detached=True)
@@ -1781,12 +1867,20 @@ class DeploymentModRuntime:
                     "cwd": cwd,
                     "command_count": len(resolved_commands),
                     "primary_command": primary_command,
+                    "command_theme": command_theme,
                 },
             )
             raise RuntimeError(f"{label} 无法启动进程: {exc}")
 
         output_lines: List[str] = []
-        self._stream_process_output(state, process, label, output_lines, timeout_seconds=600)
+        self._stream_process_output(
+            state,
+            process,
+            label,
+            output_lines,
+            timeout_seconds=600,
+            runtime=runtime,
+        )
 
         try:
             returncode = process.wait()
@@ -1814,6 +1908,7 @@ class DeploymentModRuntime:
                     "primary_command": primary_command,
                     "returncode": returncode,
                     "line_count": len(output_lines),
+                    "command_theme": command_theme,
                 },
             )
             raise RuntimeError(f"{label} 执行失败 (返回码 {returncode}):\n{full_output}")
@@ -1836,6 +1931,7 @@ class DeploymentModRuntime:
                 "primary_command": primary_command,
                 "returncode": returncode,
                 "line_count": len(output_lines),
+                "command_theme": command_theme,
             },
         )
         return CommandExecutionResult(output=full_output, returncode=returncode, script_path=script_path)
@@ -1847,6 +1943,7 @@ class DeploymentModRuntime:
         label: str,
         output_lines: List[str],
         timeout_seconds: int = 600,
+        runtime: str = "",
     ) -> None:
         """实时流式读取子进程输出，并通过事件系统同步到 CLI / WebUI。"""
         import queue
@@ -1878,6 +1975,7 @@ class DeploymentModRuntime:
         start_time = time.monotonic()
         thread = threading.Thread(target=read_stream, daemon=True)
         thread.start()
+        active_command_index: Optional[int] = None
 
         try:
             while True:
@@ -1892,6 +1990,24 @@ class DeploymentModRuntime:
                         break
                     continue
 
+                marker = self._parse_command_marker(line)
+                if marker:
+                    marker_type = marker["type"]
+                    if marker_type == "begin":
+                        active_command_index = int(marker.get("command_index", 0))
+                    marker_message = str(marker.get("command") or marker.get("cwd") or marker_type)
+                    self._notify(
+                        state,
+                        0,
+                        0,
+                        label,
+                        "running",
+                        marker_message,
+                        event="command_meta",
+                        data={"meta_type": marker_type, **marker},
+                    )
+                    continue
+
                 output_lines.append(line)
                 if line.strip():
                     self._notify(
@@ -1902,11 +2018,30 @@ class DeploymentModRuntime:
                         "running",
                         line,
                         event="command_output",
+                        data={"command_index": active_command_index, "runtime": runtime},
                     )
         finally:
             thread.join(timeout=5)
             while not output_queue.empty():
                 line = output_queue.get_nowait()
+                marker = self._parse_command_marker(line)
+                if marker:
+                    marker_type = marker["type"]
+                    if marker_type == "begin":
+                        active_command_index = int(marker.get("command_index", 0))
+                    marker_message = str(marker.get("command") or marker.get("cwd") or marker_type)
+                    self._notify(
+                        state,
+                        0,
+                        0,
+                        label,
+                        "running",
+                        marker_message,
+                        event="command_meta",
+                        data={"meta_type": marker_type, **marker},
+                    )
+                    continue
+
                 output_lines.append(line)
                 if line.strip():
                     self._notify(
@@ -1917,6 +2052,7 @@ class DeploymentModRuntime:
                         "running",
                         line,
                         event="command_output",
+                        data={"command_index": active_command_index, "runtime": runtime},
                     )
             if read_error:
                 raise RuntimeError(f"{label} 读取命令输出失败: {read_error[0]}")
@@ -2325,6 +2461,7 @@ class DeploymentModRuntime:
         for key in (
             "command_status",
             "runtime_label",
+            "command_theme",
             "cwd",
             "script_path",
             "primary_command",
@@ -2361,48 +2498,244 @@ class DeploymentModRuntime:
     def _runtime_label(runtime: str) -> str:
         return {
             "powershell": "PowerShell",
-            "cmd": "CMD",
-            "bash": "Bash",
-            "python3": "Python",
-        }.get(str(runtime or "").lower(), str(runtime or "Shell"))
+            "pwsh": "pwsh",
+            "cmd": "cmd",
+            "bash": "bash",
+            "python3": "python",
+            "python": "python",
+            "node": "node",
+        }.get(str(runtime or "").lower(), str(runtime or "shell"))
+
+    @staticmethod
+    def _normalize_runtime(runtime: str) -> str:
+        normalized = str(runtime or "").strip().lower()
+        if normalized in {"powershell", "pwsh", "cmd", "bash", "python3", "python", "node"}:
+            return normalized
+        raise RuntimeError(f"不支持的运行时: {runtime}")
+
+    @staticmethod
+    def _normalize_command_theme(command_theme: str) -> str:
+        normalized = str(command_theme or "").strip().lower()
+        if not normalized:
+            return ""
+        if normalized == "oh-my-posh":
+            return "oh-my-push"
+        if normalized in {"oh-my-push", "classical"}:
+            return normalized
+        raise RuntimeError(f"不支持的命令主题: {command_theme}")
+
+    @staticmethod
+    def _default_command_theme() -> str:
+        return "oh-my-push" if shutil.which("oh-my-posh") or shutil.which("oh-my-push") else "classical"
 
     @staticmethod
     def _script_extension(runtime: str) -> str:
-        return {"powershell": ".ps1", "cmd": ".cmd", "bash": ".sh", "python3": ".py"}.get(runtime, ".txt")
+        return {
+            "powershell": ".ps1",
+            "pwsh": ".ps1",
+            "cmd": ".cmd",
+            "bash": ".sh",
+            "python3": ".py",
+            "python": ".py",
+            "node": ".js",
+        }.get(runtime, ".txt")
 
     @staticmethod
     def _build_shell_command(runtime: str, script_path: str) -> List[str]:
         if runtime == "powershell":
             return ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
+        if runtime == "pwsh":
+            return ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
         if runtime == "cmd":
             return ["cmd.exe", "/c", script_path]
         if runtime == "bash":
             return ["bash", script_path]
         if runtime == "python3":
             return [sys.executable, script_path]
+        if runtime == "python":
+            return ["python", script_path]
+        if runtime == "node":
+            return ["node", script_path]
         raise RuntimeError(f"不支持的运行时: {runtime}")
 
-    @staticmethod
-    def _write_script(runtime: str, script_path: str, commands: Sequence[str]) -> None:
-        if runtime == "powershell":
-            Path(script_path).write_text("\n".join(["$ErrorActionPreference = 'Stop'"] + list(commands)), encoding="utf-8-sig")
+    def _write_script(self, runtime: str, script_path: str, commands: Sequence[str]) -> None:
+        runtime = self._normalize_runtime(runtime)
+        if runtime in {"powershell", "pwsh"}:
+            Path(script_path).write_text(self._build_powershell_script(commands), encoding="utf-8-sig")
             return
         if runtime == "cmd":
-            Path(script_path).write_text("\r\n".join(["@echo off", "chcp 65001 >nul"] + list(commands)), encoding="utf-8")
+            Path(script_path).write_text(self._build_cmd_script(commands), encoding="utf-8")
             return
         if runtime == "bash":
-            Path(script_path).write_text("\n".join(["#!/usr/bin/env bash", "set -e"] + list(commands)), encoding="utf-8")
+            Path(script_path).write_text(self._build_bash_script(commands), encoding="utf-8")
             os.chmod(script_path, os.stat(script_path).st_mode | stat.S_IEXEC)
             return
-        if runtime == "python3":
-            Path(script_path).write_text("\n".join(commands), encoding="utf-8")
+        if runtime in {"python3", "python"}:
+            Path(script_path).write_text(self._build_python_script(commands), encoding="utf-8")
+            return
+        if runtime == "node":
+            Path(script_path).write_text(self._build_node_script(commands), encoding="utf-8")
             return
         raise RuntimeError(f"不支持的运行时: {runtime}")
+
+    def _build_powershell_script(self, commands: Sequence[str]) -> str:
+        lines = [
+            "$ErrorActionPreference = 'Stop'",
+            "function __mcsb_emit([string]$prefix, [string]$payload = '') {",
+            "    Write-Output ($prefix + $payload)",
+            "}",
+        ]
+        for index, command in enumerate(commands):
+            encoded = self._encode_command_marker_payload(command)
+            lines.append(f"__mcsb_emit '{self.COMMAND_EVENT_BEGIN}' '{index}|{encoded}'")
+            lines.append("$global:LASTEXITCODE = 0")
+            lines.append(command)
+            lines.append("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }")
+            lines.append(f"__mcsb_emit '{self.COMMAND_EVENT_CWD}' ('{index}|' + (Get-Location).Path)")
+            if self._command_triggers_clear(command, "powershell"):
+                lines.append(f"__mcsb_emit '{self.COMMAND_EVENT_CLEAR}' '{index}'")
+        return "\n".join(lines)
+
+    def _build_cmd_script(self, commands: Sequence[str]) -> str:
+        lines = [
+            "@echo off",
+            "setlocal EnableExtensions",
+            "chcp 65001 >nul",
+        ]
+        for index, command in enumerate(commands):
+            encoded = self._encode_command_marker_payload(command)
+            lines.append(f"echo {self.COMMAND_EVENT_BEGIN}{index}^|{encoded}")
+            lines.append(command)
+            lines.append("if errorlevel 1 exit /b %errorlevel%")
+            lines.append(f"echo {self.COMMAND_EVENT_CWD}{index}^|%cd%")
+            if self._command_triggers_clear(command, "cmd"):
+                lines.append(f"echo {self.COMMAND_EVENT_CLEAR}{index}")
+        lines.append("endlocal")
+        return "\r\n".join(lines)
+
+    def _build_bash_script(self, commands: Sequence[str]) -> str:
+        lines = [
+            "#!/usr/bin/env bash",
+            "set -e",
+        ]
+        for index, command in enumerate(commands):
+            encoded = self._encode_command_marker_payload(command)
+            lines.append(f"printf '%s\\n' '{self.COMMAND_EVENT_BEGIN}{index}|{encoded}'")
+            lines.append(command)
+            lines.append(f"printf '%s\\n' \"{self.COMMAND_EVENT_CWD}{index}|$PWD\"")
+            if self._command_triggers_clear(command, "bash"):
+                lines.append(f"printf '%s\\n' '{self.COMMAND_EVENT_CLEAR}{index}'")
+        return "\n".join(lines)
+
+    def _build_python_script(self, commands: Sequence[str]) -> str:
+        items = [
+            {
+                "code": command,
+                "encoded": self._encode_command_marker_payload(command),
+                "clear": self._command_triggers_clear(command, "python"),
+            }
+            for command in commands
+        ]
+        return "\n".join(
+            [
+                "import os",
+                "import sys",
+                f"COMMANDS = {json.dumps(items, ensure_ascii=False)}",
+                "namespace = {'__name__': '__main__', '__file__': __file__, 'os': os, 'sys': sys}",
+                "for index, item in enumerate(COMMANDS):",
+                f"    print('{self.COMMAND_EVENT_BEGIN}' + str(index) + '|' + item['encoded'])",
+                "    exec(compile(item['code'], f'<mcsb-command-{index + 1}>', 'exec'), namespace, namespace)",
+                f"    print('{self.COMMAND_EVENT_CWD}' + str(index) + '|' + os.getcwd())",
+                "    if item.get('clear'):",
+                f"        print('{self.COMMAND_EVENT_CLEAR}' + str(index))",
+            ]
+        )
+
+    def _build_node_script(self, commands: Sequence[str]) -> str:
+        items = [
+            {
+                "code": command,
+                "encoded": self._encode_command_marker_payload(command),
+                "clear": self._command_triggers_clear(command, "node"),
+            }
+            for command in commands
+        ]
+        payload = json.dumps(items, ensure_ascii=False)
+        return "\n".join(
+            [
+                f"const COMMANDS = {payload};",
+                "const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;",
+                "(async () => {",
+                "  for (let index = 0; index < COMMANDS.length; index += 1) {",
+                "    const item = COMMANDS[index];",
+                f"    console.log('{self.COMMAND_EVENT_BEGIN}' + `${{index}}|${{item.encoded}}`);",
+                "    const fn = new AsyncFunction('require', 'process', 'console', '__dirname', '__filename', item.code);",
+                "    await fn(require, process, console, __dirname, __filename);",
+                f"    console.log('{self.COMMAND_EVENT_CWD}' + `${{index}}|${{process.cwd()}}`);",
+                "    if (item.clear) {",
+                f"      console.log('{self.COMMAND_EVENT_CLEAR}' + String(index));",
+                "    }",
+                "  }",
+                "})().catch((error) => {",
+                "  console.error(error && error.stack ? error.stack : String(error));",
+                "  process.exit(1);",
+                "});",
+            ]
+        )
+
+    @staticmethod
+    def _encode_command_marker_payload(value: str) -> str:
+        return base64.urlsafe_b64encode(str(value or "").encode("utf-8")).decode("ascii")
+
+    @staticmethod
+    def _decode_command_marker_payload(value: str) -> str:
+        try:
+            return base64.urlsafe_b64decode(str(value or "").encode("ascii")).decode("utf-8")
+        except Exception:
+            return str(value or "")
+
+    def _parse_command_marker(self, line: str) -> Optional[Dict[str, Any]]:
+        if line.startswith(self.COMMAND_EVENT_BEGIN):
+            index_text, _, payload = line[len(self.COMMAND_EVENT_BEGIN):].partition("|")
+            if index_text.isdigit():
+                return {
+                    "type": "begin",
+                    "command_index": int(index_text),
+                    "command": self._decode_command_marker_payload(payload),
+                }
+        if line.startswith(self.COMMAND_EVENT_CWD):
+            index_text, _, payload = line[len(self.COMMAND_EVENT_CWD):].partition("|")
+            if index_text.isdigit():
+                return {
+                    "type": "cwd",
+                    "command_index": int(index_text),
+                    "cwd": payload,
+                }
+        if line.startswith(self.COMMAND_EVENT_CLEAR):
+            index_text = line[len(self.COMMAND_EVENT_CLEAR):].strip()
+            if index_text.isdigit():
+                return {"type": "clear", "command_index": int(index_text)}
+        return None
+
+    @staticmethod
+    def _command_triggers_clear(command: str, runtime: str) -> bool:
+        text = str(command or "").strip().lower()
+        if not text:
+            return False
+        if runtime == "cmd":
+            return bool(re.search(r"(^|[&|])\s*cls(?:\s|$)", text))
+        if runtime in {"powershell", "pwsh", "bash"}:
+            return bool(re.search(r"(^|[;&|])\s*(?:cls|clear)(?:\s|$)", text))
+        if runtime in {"python", "python3"}:
+            return "os.system" in text and ("'cls'" in text or '"cls"' in text or "'clear'" in text or '"clear"' in text)
+        if runtime == "node":
+            return "console.clear(" in text
+        return False
 
     @staticmethod
     def _normalize_extension(path: str) -> str:
         lower_name = path.lower()
-        for extension in (".tar.gz", ".tar.xz", ".tgz", ".zip", ".tar", ".gz", ".xz", ".msi", ".exe", ".ps1", ".bat", ".cmd", ".sh", ".py"):
+        for extension in (".tar.gz", ".tar.xz", ".tgz", ".zip", ".tar", ".gz", ".xz", ".msi", ".exe", ".ps1", ".bat", ".cmd", ".sh", ".py", ".js"):
             if lower_name.endswith(extension):
                 return extension
         return Path(path).suffix.lower()

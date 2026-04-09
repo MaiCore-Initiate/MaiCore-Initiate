@@ -81,6 +81,8 @@ class BaseTaskDefinition:
     id: str
     name: str
     choose: bool = False
+    runtime: str = ""
+    command_theme: str = ""
     env_output: bool = False
     env_output_list: List[EnvBinding] = field(default_factory=list)
     env_input: bool = False

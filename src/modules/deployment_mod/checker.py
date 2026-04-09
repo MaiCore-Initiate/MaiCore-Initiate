@@ -22,7 +22,8 @@ TABLE_SECTIONS = {"MCStart", "MODINFO", "COMPONENTS", "DEPLOY", "LAUNCH", "CONFI
 TOP_LEVEL_KEYS = TABLE_SECTIONS | ARRAY_SECTIONS
 ALLOWED_PLACEHOLDER_KINDS = {"key", "env", "install_path", "deploy_path", "version", "file_path", "file_key"}
 
-VALID_RUNTIMES = {"powershell", "cmd", "bash", "python3"}
+VALID_RUNTIMES = {"powershell", "pwsh", "cmd", "bash", "python3", "python", "node"}
+VALID_COMMAND_THEMES = {"oh-my-push", "oh-my-posh", "classical"}
 VALID_PLATFORMS = {"windows", "linux", "macos"}
 VALID_COMPONENT_GET_METHODS = {"direct", "get_version", "get_link"}
 VALID_DEPLOYMENT_GET_METHODS = {"get_version", "get_link"}
@@ -50,6 +51,8 @@ COMPONENT_ALLOWED_FIELDS = {
     "name",
     "id",
     "choose",
+    "runtime",
+    "command_theme",
     "install",
     "check",
     "check_command",
@@ -86,6 +89,8 @@ DEPLOYMENT_ALLOWED_FIELDS = {
     "name",
     "id",
     "choose",
+    "runtime",
+    "command_theme",
     "deploy",
     "command_deploy",
     "deploy_command_list",
@@ -117,6 +122,8 @@ LAUNCH_ALLOWED_FIELDS = {
     "id",
     "name",
     "choose",
+    "runtime",
+    "command_theme",
     "launch",
     "launch_command",
     "env_output",
@@ -130,6 +137,8 @@ CONFIG_ALLOWED_FIELDS = {
     "name",
     "file_path",
     "choose",
+    "runtime",
+    "command_theme",
     "env_input",
     "env_input_list",
     "env_output",
@@ -140,6 +149,8 @@ UNINSTALL_ALLOWED_FIELDS = {
     "id",
     "name",
     "choose",
+    "runtime",
+    "command_theme",
     "uninstall",
     "stop_before_uninstall",
     "stop_command_list",
@@ -283,11 +294,16 @@ class TemplateSourceMap:
 class DeploymentModTemplateChecker:
     def __init__(self) -> None:
         self.parser = DeploymentModParser()
-        self.standard_schema_version = get_current_mod_schema_version()
+        self.standard_schema_version = ""
 
     def check(self, template_path: str) -> CheckReport:
         path = Path(template_path).resolve()
         report = CheckReport(template_path=str(path))
+        try:
+            self.standard_schema_version = get_current_mod_schema_version()
+        except Exception as exc:
+            report.error("无法读取 DeploymentMOD 标准版本", str(exc), CheckLocation(str(path), 0, 1, "MODVersion"))
+            return report
         if not path.is_file():
             report.error("模板文件不存在", f"未找到模板文件: {path}", CheckLocation(str(path), 0, 1, "template"))
             return report
@@ -514,6 +530,7 @@ class DeploymentModTemplateChecker:
             after_command = self._require_bool(item, "after_command", report, source_map.array_field("Component", index, "after_command", item_id), required=True)
             env_output = self._require_bool(item, "env_output", report, source_map.array_field("Component", index, "env_output", item_id), required=False)
             env_input = self._require_bool(item, "env_input", report, source_map.array_field("Component", index, "env_input", item_id), required=False)
+            self._validate_item_runtime_and_theme(item, report, source_map.array_item("Component", index, item_id))
 
             if install:
                 self._require_bool(item, "choose", report, source_map.array_field("Component", index, "choose", item_id), required=True)
@@ -679,6 +696,7 @@ class DeploymentModTemplateChecker:
             after_command = self._require_bool(item, "after_command", report, source_map.array_field("Deployment", index, "after_command", item_id), required=True)
             env_output = self._require_bool(item, "env_output", report, source_map.array_field("Deployment", index, "env_output", item_id), required=False)
             env_input = self._require_bool(item, "env_input", report, source_map.array_field("Deployment", index, "env_input", item_id), required=False)
+            self._validate_item_runtime_and_theme(item, report, source_map.array_item("Deployment", index, item_id))
 
             deploy_path = str(item.get("deploy_path", "") or "").strip()
             custom_path = str(item.get("custom_path", "") or "").strip()
@@ -809,6 +827,7 @@ class DeploymentModTemplateChecker:
             self._require_bool(item, "choose", report, source_map.array_field("LaunchItem", index, "choose", item_id), required=True)
             env_output = self._require_bool(item, "env_output", report, source_map.array_field("LaunchItem", index, "env_output", item_id), required=False)
             env_input = self._require_bool(item, "env_input", report, source_map.array_field("LaunchItem", index, "env_input", item_id), required=False)
+            self._validate_item_runtime_and_theme(item, report, source_map.array_item("LaunchItem", index, item_id))
             if launch:
                 self._require_command_list(item, "launch_command", report, source_map.array_field("LaunchItem", index, "launch_command", item_id), raw, Path(source_map.file_path).parent, set(), set(), launch_ids, set())
             elif item.get("launch_command"):
@@ -845,6 +864,7 @@ class DeploymentModTemplateChecker:
             self._require_bool(item, "choose", report, source_map.array_field("ConfigItem", index, "choose", config_id or name), required=True)
             env_input = self._require_bool(item, "env_input", report, source_map.array_field("ConfigItem", index, "env_input", config_id or name), required=False)
             env_output = self._require_bool(item, "env_output", report, source_map.array_field("ConfigItem", index, "env_output", config_id or name), required=False)
+            self._validate_item_runtime_and_theme(item, report, source_map.array_item("ConfigItem", index, config_id or name))
 
             effective_key = config_id or name
             if not config_id:
@@ -928,6 +948,7 @@ class DeploymentModTemplateChecker:
             after_command = self._require_bool(item, "after_command", report, source_map.array_field("UninstallItem", index, "after_command", item_id), required=True)
             env_output = self._require_bool(item, "env_output", report, source_map.array_field("UninstallItem", index, "env_output", item_id), required=False)
             env_input = self._require_bool(item, "env_input", report, source_map.array_field("UninstallItem", index, "env_input", item_id), required=False)
+            self._validate_item_runtime_and_theme(item, report, source_map.array_item("UninstallItem", index, item_id))
 
             if stop_before:
                 self._require_command_list(item, "stop_command_list", report, source_map.array_field("UninstallItem", index, "stop_command_list", item_id), raw, Path(source_map.file_path).parent, component_ids, deployment_ids, set(), set())
@@ -1387,6 +1408,19 @@ class DeploymentModTemplateChecker:
             re.compile(pattern)
         except re.error as exc:
             report.error("正则表达式非法", f"`{label}` 无法通过正则编译：{exc}。", location)
+
+    def _validate_item_runtime_and_theme(self, item: Dict[str, Any], report: CheckReport, location: CheckLocation) -> None:
+        runtime = str(item.get("runtime", "") or "").strip().lower()
+        if runtime and runtime not in VALID_RUNTIMES:
+            report.error("运行时声明非法", f"`{location.label}.runtime` 只支持: {', '.join(sorted(VALID_RUNTIMES))}。", location)
+
+        command_theme = str(item.get("command_theme", "") or "").strip().lower()
+        if command_theme and command_theme not in VALID_COMMAND_THEMES:
+            report.error(
+                "命令主题声明非法",
+                f"`{location.label}.command_theme` 只支持: {', '.join(sorted(VALID_COMMAND_THEMES))}。",
+                location,
+            )
 
     def _validate_text_placeholders(
         self,

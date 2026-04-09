@@ -30,6 +30,12 @@ class DeploymentModTestCliRunner:
         return 0 if report.success else 1
 
     def _render_report(self, report: CheckReport) -> None:
+        try:
+            standard_version = get_current_mod_schema_version()
+            version_file_text = str(get_mod_version_file_path())
+        except Exception as exc:
+            standard_version = f"读取失败: {exc}"
+            version_file_text = str(get_mod_version_file_path())
         self.console.print()
         self.console.print(
             Text("DeploymentMOD 模板语法检测", style="bold #4DA3FF"),
@@ -40,8 +46,8 @@ class DeploymentModTestCliRunner:
         self.console.print(
             Text(
                 f"检测标准: 严格对齐 MOD/MCStart_部署模版开发文档.md / "
-                f"当前标准版本 {get_current_mod_schema_version()} "
-                f"（{get_mod_version_file_path()}）",
+                f"当前标准版本 {standard_version} "
+                f"（{version_file_text}）",
                 style="#1F4E79",
             ),
         )

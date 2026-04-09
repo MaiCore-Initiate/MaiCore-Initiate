@@ -34,6 +34,8 @@ class DeploymentModParser:
     """解析并规范化 DeploymentMOD.toml。"""
 
     ARRAY_SECTIONS = {"Component", "Deployment", "LaunchItem", "ConfigItem", "UninstallItem"}
+    VALID_RUNTIMES = {"powershell", "pwsh", "cmd", "bash", "python3", "python", "node"}
+    VALID_COMMAND_THEMES = {"", "oh-my-push", "oh-my-posh", "classical"}
 
     def parse_file(self, file_path: str) -> TemplateDefinition:
         with open(file_path, "r", encoding="utf-8") as handle:
@@ -234,6 +236,8 @@ class DeploymentModParser:
             id=self._required_str(item, "id"),
             name=self._optional_name(item),
             choose=bool(item.get("choose", False)),
+            runtime=self._optional_runtime(item),
+            command_theme=self._optional_command_theme(item),
             install=bool(item.get("install", True)),
             check=bool(item.get("check", False)),
             command_install=bool(item.get("command_install", False)),
@@ -282,6 +286,8 @@ class DeploymentModParser:
             id=self._required_str(item, "id"),
             name=self._optional_name(item),
             choose=bool(item.get("choose", False)),
+            runtime=self._optional_runtime(item),
+            command_theme=self._optional_command_theme(item),
             deploy=bool(item.get("deploy", True)),
             command_deploy=bool(item.get("command_deploy", False)),
             deploy_command_list=self._ensure_str_list(item.get("deploy_command_list")),
@@ -316,6 +322,8 @@ class DeploymentModParser:
             id=self._required_str(item, "id"),
             name=self._optional_name(item),
             choose=bool(item.get("choose", False)),
+            runtime=self._optional_runtime(item),
+            command_theme=self._optional_command_theme(item),
             launch=bool(item.get("launch", True)),
             launch_command=self._ensure_str_list(item.get("launch_command")),
             env_output=bool(item.get("env_output", False)),
@@ -330,6 +338,8 @@ class DeploymentModParser:
         return ConfigDefinition(
             id=config_id,
             name=self._optional_name(item),
+            runtime=self._optional_runtime(item),
+            command_theme=self._optional_command_theme(item),
             file_path=str(item.get("file_path", "") or ""),
             choose=bool(item.get("choose", False)),
             env_input=bool(item.get("env_input", False)),
@@ -344,6 +354,8 @@ class DeploymentModParser:
             id=self._required_str(item, "id"),
             name=self._optional_name(item),
             choose=bool(item.get("choose", False)),
+            runtime=self._optional_runtime(item),
+            command_theme=self._optional_command_theme(item),
             uninstall=bool(item.get("uninstall", True)),
             stop_before_uninstall=bool(item.get("stop_before_uninstall", False)),
             stop_command_list=self._ensure_str_list(item.get("stop_command_list")),
@@ -652,7 +664,7 @@ class DeploymentModParser:
                 file_path = os.path.join(metadata.template_root, filename)
                 if not os.path.isfile(file_path):
                     raise ValueError(f"文件导入项不存在: {filename}")
-        if metadata.runtime not in {"powershell", "cmd", "bash", "python3"}:
+        if metadata.runtime not in self.VALID_RUNTIMES:
             raise ValueError(f"暂不支持的 runtime: {metadata.runtime}")
 
     def _validate_stage_ids(self, label: str, ordered_ids: List[str], actual_ids: List[str]) -> None:
@@ -682,6 +694,20 @@ class DeploymentModParser:
     @staticmethod
     def _optional_name(item: Dict[str, Any]) -> str:
         return str(item.get("name", item.get("id", "")) or "").strip()
+
+    def _optional_runtime(self, item: Dict[str, Any]) -> str:
+        value = str(item.get("runtime", "") or "").strip().lower()
+        if value and value not in self.VALID_RUNTIMES:
+            raise ValueError(f"暂不支持的 runtime: {value}")
+        return value
+
+    def _optional_command_theme(self, item: Dict[str, Any]) -> str:
+        value = str(item.get("command_theme", "") or "").strip().lower()
+        if value not in self.VALID_COMMAND_THEMES:
+            raise ValueError(f"暂不支持的 command_theme: {value}")
+        if value == "oh-my-posh":
+            return "oh-my-push"
+        return value
 
     @staticmethod
     def _validate_enum_field(field_name: str, value: str, valid_options: List[str]) -> None:

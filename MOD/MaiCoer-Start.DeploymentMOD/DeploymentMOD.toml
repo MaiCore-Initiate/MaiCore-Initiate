@@ -18,7 +18,7 @@ file_import_list=[   #文件导入列表，只有当file_import为true时才需�
 ]
 runtime = "powershell"  #模版运行时使用的运行环境，注册和标识用，支持 powershell、cmd、bash、python3 等
 platforms = ["windows"]  #平台限制，注册用，MCStart将根据此字段来判断当前模版是否适用于当前系统平台，格式为数组，元素为字符串，支持windows、linux、macos等常见平台名称，为空时不限制平台
-schema_version = "1.0"  #模版格式版本
+schema_version = "2.3"  #模版格式版本
 
 [COMPONENTS]
 

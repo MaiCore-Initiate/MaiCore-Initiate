@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 import os
+import re
+import sys
+import threading
 import time
 from collections import deque
 from typing import Any, Callable, Deque, Dict, Iterable, List, Optional
 
-from rich.box import Box
+from rich import box
+from rich.align import Align
+from rich.cells import cell_len
 from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import BarColumn, DownloadColumn, Progress, TaskID, TextColumn, TimeRemainingColumn, TransferSpeedColumn
 from rich.table import Table
 from rich.text import Text
+import math
 
 from ...ui.interface import ui
 from ...utils.common import setup_console
@@ -21,18 +27,54 @@ from .planner import DeploymentModPlanner
 from .runtime import DeploymentModRuntime
 
 
+class _DirectoryChange:
+    def __init__(self, old_path: str, new_path: str) -> None:
+        self.old_path = old_path
+        self.new_path = new_path
+
+
+class _CommandEntry:
+    def __init__(
+        self,
+        *,
+        entry_id: int,
+        session_id: int,
+        command_index: int,
+        label: str,
+        runtime: str,
+        runtime_label: str,
+        command: str,
+        cwd: str,
+        command_theme: str,
+    ) -> None:
+        self.entry_id = entry_id
+        self.session_id = session_id
+        self.command_index = command_index
+        self.label = label
+        self.runtime = runtime
+        self.runtime_label = runtime_label
+        self.command = command
+        self.cwd_initial = cwd
+        self.cwd_current = cwd
+        self.command_theme = command_theme or "classical"
+        self.status = "pending"
+        self.returncode: Optional[int] = None
+        self.detached_pid: Optional[int] = None
+        self.output_lines: List[str] = []
+        self.clear_points: List[int] = []
+        self.directory_changes: List[_DirectoryChange] = []
+
+    @property
+    def preview_output_start(self) -> int:
+        return self.clear_points[-1] if self.clear_points else 0
+
+
 class _TemplateExecutionDisplay:
-    """命令行模板执行期的 Rich 动画与进度条展示器。"""
+    """命令行模板执行期的 Rich 动画与命令检视展示器。"""
 
     HISTORY_LIMIT = 18
-    DOT_FRAMES = (
-        "●○○○○○",
-        "○●○○○○",
-        "○○●○○○",
-        "○○○●○○",
-        "○○○○●○",
-        "○○○○○●",
-    )
+    PREVIEW_OUTPUT_LINES = 5
+    PREVIEW_ENTRY_LIMIT = 3
 
     def __init__(self, title: str) -> None:
         self.title = title
@@ -42,8 +84,6 @@ class _TemplateExecutionDisplay:
         self.current_message = "准备开始..."
         self.history: Deque[tuple[str, str]] = deque(maxlen=self.HISTORY_LIMIT)
         self.download_tasks: Dict[str, TaskID] = {}
-        self.command_output_label = ""
-        self.command_output_lines: Deque[str] = deque(maxlen=28)
         self.progress = Progress(
             TextColumn("[bold cyan]{task.fields[prefix]}", justify="right"),
             TextColumn("{task.description}", style="bold"),
@@ -56,6 +96,17 @@ class _TemplateExecutionDisplay:
         )
         self.live = Live(self, console=ui.console, refresh_per_second=12, transient=False)
         self._started = False
+        self._lock = threading.RLock()
+        self._stop_input = threading.Event()
+        self._input_thread: Optional[threading.Thread] = None
+        self._command_entries: List[_CommandEntry] = []
+        self._session_entries: Dict[int, List[int]] = {}
+        self._entry_lookup: Dict[int, _CommandEntry] = {}
+        self._active_session_id = 0
+        self._active_command_id: Optional[int] = None
+        self._selected_command_id: Optional[int] = None
+        self._view_mode = False
+        self._preview_anchor_id = 1
 
     def __enter__(self) -> "_TemplateExecutionDisplay":
         self.start()
@@ -69,44 +120,43 @@ class _TemplateExecutionDisplay:
             return
         self.live.start()
         self._started = True
+        self._start_input_listener()
 
     def stop(self) -> None:
         if not self._started:
             return
+        self._stop_input.set()
+        if self._input_thread is not None:
+            self._input_thread.join(timeout=1)
+            self._input_thread = None
         self.live.stop()
         self._started = False
 
     def __rich__(self) -> Group:
-        renderables = [self._render_status_panel()]
-        if self.download_tasks:
-            renderables.append(
-                Panel(
-                    self.progress,
-                    title="[bold]下载进度[/bold]",
-                    title_align="left",
-                    border_style=ui.colors["border"],
+        with self._lock:
+            renderables: List[Any] = [self._render_status_panel()]
+            if self.download_tasks:
+                renderables.append(
+                    Panel(
+                        self.progress,
+                        title="[bold]下载进度[/bold]",
+                        title_align="left",
+                        border_style=ui.colors["border"],
+                    )
                 )
-            )
-        if self.command_output_lines:
-            renderables.append(
-                Panel(
-                    self._render_command_output(),
-                    title=f"[bold]命令输出: {self.command_output_label}[/bold]" if self.command_output_label else "[bold]命令输出[/bold]",
-                    title_align="left",
-                    border_style=ui.colors["border"],
-                    box=Box.ASCII,
+            command_panel = self._render_command_panel()
+            if command_panel is not None:
+                renderables.append(command_panel)
+            if self.history:
+                renderables.append(
+                    Panel(
+                        self._render_history(),
+                        title="[bold]最近事件[/bold]",
+                        title_align="left",
+                        border_style=ui.colors["border"],
+                    )
                 )
-            )
-        if self.history:
-            renderables.append(
-                Panel(
-                    self._render_history(),
-                    title="[bold]最近事件[/bold]",
-                    title_align="left",
-                    border_style=ui.colors["border"],
-                )
-            )
-        return Group(*renderables)
+            return Group(*renderables)
 
     def update(
         self,
@@ -119,72 +169,133 @@ class _TemplateExecutionDisplay:
         event: str = "stage",
         **payload: Any,
     ) -> None:
-        if event == "download":
-            self._update_download(step_name=step_name, status=status, message=message, **payload)
-        elif event == "command":
-            self._update_command(step_name=step_name, status=status, message=message, **payload)
-        elif event == "command_output":
-            self._update_command_output(step_name=step_name, message=message, **payload)
-        elif event == "detail":
-            self._update_detail(step=step, total_steps=total_steps, step_name=step_name, status=status, message=message)
-        else:
-            self._update_stage(step=step, total_steps=total_steps, step_name=step_name, status=status, message=message)
-        self._refresh()
+        should_wait_for_exit = False
+        with self._lock:
+            if event == "download":
+                self._update_download(step_name=step_name, status=status, message=message, **payload)
+            elif event == "command":
+                should_wait_for_exit = self._update_command(step_name=step_name, status=status, message=message, **payload)
+            elif event == "command_meta":
+                self._update_command_meta(step_name=step_name, **payload)
+            elif event == "command_output":
+                self._update_command_output(step_name=step_name, message=message, **payload)
+            elif event == "detail":
+                self._update_detail(step=step, total_steps=total_steps, step_name=step_name, status=status, message=message)
+            else:
+                self._update_stage(step=step, total_steps=total_steps, step_name=step_name, status=status, message=message)
+            self._refresh()
 
-    def _update_command(self, *, step_name: str, status: str, message: str, **payload: Any) -> None:
+        if should_wait_for_exit:
+            while self._started:
+                with self._lock:
+                    if not self._view_mode:
+                        break
+                    self.current_message = "命令已结束；退出命令检视模式后继续后续步骤"
+                    self._refresh()
+                time.sleep(0.05)
+
+    def _update_command(self, *, step_name: str, status: str, message: str, **payload: Any) -> bool:
         command_status = str(payload.get("command_status") or status or "running")
-        runtime_label = str(payload.get("runtime_label") or payload.get("runtime") or "Shell")
-        primary_command = self._compact_message(str(payload.get("primary_command") or message or ""), limit=320)
-        cwd = self._compact_message(str(payload.get("cwd") or ""), limit=320)
-        script_path = self._compact_message(str(payload.get("script_path") or ""), limit=320)
-        command_count = self._safe_int(payload.get("command_count"))
+        runtime = str(payload.get("runtime") or "").strip().lower()
+        runtime_label = str(payload.get("runtime_label") or payload.get("runtime") or "shell")
+        cwd = str(payload.get("cwd") or "")
+        commands = [str(item) for item in list(payload.get("commands") or []) if str(item).strip()]
+        primary_command = str(payload.get("primary_command") or message or "")
+        command_theme = str(payload.get("command_theme") or "")
         returncode = payload.get("returncode")
-        line_count = self._safe_int(payload.get("line_count"))
         pid = payload.get("pid")
 
-        if step_name:
-            self.command_output_label = step_name
         if command_status == "started":
-            self.command_output_lines.clear()
-            if primary_command:
-                self.command_output_lines.append(f"● {runtime_label} {primary_command}")
-            if cwd:
-                self.command_output_lines.append(f"  ⎿ 工作目录: {cwd}")
-            if command_count > 1:
-                self.command_output_lines.append(f"  ⎿ 命令数量: {command_count}")
-            if script_path:
-                self.command_output_lines.append(f"  ⎿ 脚本路径: {script_path}")
+            session_id = len(self._session_entries) + 1
+            self._active_session_id = session_id
+            session_command_ids: List[int] = []
+            if not commands:
+                commands = [primary_command] if primary_command else []
+            for index, command in enumerate(commands):
+                entry_id = len(self._command_entries) + 1
+                entry = _CommandEntry(
+                    entry_id=entry_id,
+                    session_id=session_id,
+                    command_index=index,
+                    label=step_name,
+                    runtime=runtime,
+                    runtime_label=runtime_label,
+                    command=command,
+                    cwd=cwd,
+                    command_theme=command_theme,
+                )
+                self._command_entries.append(entry)
+                self._entry_lookup[entry_id] = entry
+                session_command_ids.append(entry_id)
+            self._session_entries[session_id] = session_command_ids
+            self._active_command_id = session_command_ids[0] if session_command_ids else None
+            if self._selected_command_id is None or not self._view_mode:
+                self._selected_command_id = self._active_command_id
             self.current_message = self._compact_message(message) or f"{step_name} 正在执行"
-            return
+            return False
 
-        if command_status == "detached":
-            summary = self._compact_message(message) or "已托管到后台"
-            if pid:
-                summary = f"{summary} (PID: {pid})"
-            self.command_output_lines.append(f"  ⎿ {summary}")
-            self._append_history("completed", f"{step_name}: {summary}")
-            self.current_message = summary
-            return
-
+        entry = self._get_active_entry()
+        if entry is None and self._active_session_id in self._session_entries:
+            session_ids = self._session_entries[self._active_session_id]
+            if session_ids:
+                entry = self._entry_lookup.get(session_ids[-1])
+        if entry is not None:
+            entry.status = command_status
+            entry.returncode = self._safe_int(returncode) if returncode not in (None, "") else None
+            entry.detached_pid = self._safe_int(pid) if pid not in (None, "") else None
         summary = self._compact_message(message) or f"{step_name} 已结束"
-        if returncode not in (None, ""):
-            summary = f"{summary} (返回码: {returncode})"
-        if line_count:
-            summary = f"{summary} / 输出 {line_count} 行"
-        self.command_output_lines.append(f"  ⎿ {summary}")
+        if command_status == "detached" and entry is not None and entry.detached_pid:
+            summary = f"{summary} (PID: {entry.detached_pid})"
+        if command_status in {"completed", "failed"} and entry is not None and entry.returncode is not None:
+            summary = f"{summary} (返回码: {entry.returncode})"
         self._append_history("failed" if command_status == "failed" else "completed", f"{step_name}: {summary}")
         self.current_message = summary
+        return self._view_mode and command_status in {"completed", "failed", "detached"}
+
+    def _update_command_meta(self, *, step_name: str, **payload: Any) -> None:
+        _ = step_name
+        meta_type = str(payload.get("meta_type") or "")
+        command_index = self._safe_int(payload.get("command_index"))
+        entry = self._get_session_entry(command_index)
+        if entry is None:
+            return
+        if meta_type == "begin":
+            active = self._get_active_entry()
+            if active is not None and active.entry_id != entry.entry_id and active.status == "running":
+                active.status = "completed"
+            entry.status = "running"
+            if payload.get("command"):
+                entry.command = str(payload.get("command") or entry.command)
+            self._active_command_id = entry.entry_id
+            if self._selected_command_id is None or not self._view_mode:
+                self._selected_command_id = entry.entry_id
+            return
+        if meta_type == "cwd":
+            cwd = str(payload.get("cwd") or "")
+            if cwd and cwd != entry.cwd_current:
+                entry.directory_changes.append(_DirectoryChange(entry.cwd_current, cwd))
+                entry.cwd_current = cwd
+            return
+        if meta_type == "clear":
+            entry.clear_points.append(len(entry.output_lines))
+            self._preview_anchor_id = entry.entry_id
 
     def _update_command_output(self, *, step_name: str, message: str, **payload: Any) -> None:
-        """处理命令输出的流式更新。"""
-        if step_name:
-            self.command_output_label = step_name
-        if message:
-            lines = message.splitlines()
-            for line in lines:
-                stripped = line.rstrip()
-                if stripped:
-                    self.command_output_lines.append(f"│ {stripped}")
+        _ = step_name
+        entry = None
+        if payload.get("command_index") not in (None, ""):
+            entry = self._get_session_entry(self._safe_int(payload.get("command_index")))
+        if entry is None:
+            entry = self._get_active_entry()
+        if entry is None or not message:
+            return
+        for line in message.splitlines() or [message]:
+            entry.output_lines.append(line.rstrip("\r\n"))
+        if entry.status == "pending":
+            entry.status = "running"
+        self._active_command_id = entry.entry_id
+        if self._selected_command_id is None or not self._view_mode:
+            self._selected_command_id = entry.entry_id
 
     def _update_detail(self, *, step: int, total_steps: int, step_name: str, status: str, message: str) -> None:
         detail = self._format_detail(step, total_steps, step_name, message)
@@ -201,7 +312,6 @@ class _TemplateExecutionDisplay:
     def _update_stage(self, *, step: int, total_steps: int, step_name: str, status: str, message: str) -> None:
         detail = self._format_detail(step, total_steps, step_name, message)
         compact_message = self._compact_message(message)
-
         if status == "running":
             if step and total_steps:
                 self.current_step = step
@@ -211,7 +321,6 @@ class _TemplateExecutionDisplay:
             if compact_message:
                 self.current_message = compact_message
             return
-
         self._append_history(status, detail)
         if step and total_steps:
             self.current_step = step
@@ -220,8 +329,6 @@ class _TemplateExecutionDisplay:
             self.current_stage = step_name
         if compact_message:
             self.current_message = compact_message
-        if status == "failed":
-            self.current_message = compact_message or detail
 
     def _update_download(self, *, step_name: str, status: str, message: str, **payload: Any) -> None:
         download_id = str(payload.get("download_id") or step_name)
@@ -230,7 +337,6 @@ class _TemplateExecutionDisplay:
         total_bytes = self._safe_int(payload.get("total_bytes"))
         downloaded_bytes = self._safe_int(payload.get("downloaded_bytes"))
         task_id = self.download_tasks.get(download_id)
-
         if task_id is None and download_status in {"started", "progress", "completed"}:
             task_id = self.progress.add_task(
                 filename,
@@ -239,7 +345,6 @@ class _TemplateExecutionDisplay:
                 prefix="[下载]",
             )
             self.download_tasks[download_id] = task_id
-
         if task_id is not None:
             update_kwargs: Dict[str, Any] = {"description": filename, "completed": downloaded_bytes}
             if total_bytes > 0:
@@ -248,15 +353,12 @@ class _TemplateExecutionDisplay:
                 update_kwargs["total"] = max(downloaded_bytes, 1)
                 update_kwargs["completed"] = max(downloaded_bytes, 1)
             self.progress.update(task_id, **update_kwargs)
-
         self.current_stage = step_name or self.current_stage
         self.current_message = self._compact_message(message) or f"{filename} 正在下载"
-
         if download_status == "completed":
             self._append_history("completed", f"{step_name}: {self.current_message}")
             self._remove_download_task(download_id)
             return
-
         if download_status == "failed":
             error_message = self._compact_message(str(payload.get("error", "") or ""))
             if error_message:
@@ -269,21 +371,18 @@ class _TemplateExecutionDisplay:
         headline.append(f"{self._frame()} ", style=ui.colors["primary"])
         prefix = f"[{self.current_step}/{self.total_steps}] " if self.current_step and self.total_steps else ""
         headline.append(f"{prefix}{self.current_stage}", style=f"bold {ui.colors['primary']}")
-
         body = Text()
         if self.current_message:
             body.append(self.current_message, style="white")
-        if self.download_tasks:
+        if self._view_mode:
             if body:
                 body.append("\n")
-            body.append(f"活跃下载: {len(self.download_tasks)}", style="dim")
-
+            body.append("命令检视模式已启用，按 Ctrl + O 退出，按 R/L 切换命令。", style="bold cyan")
         content = Text()
         content.append_text(headline)
         if body:
             content.append("\n")
             content.append_text(body)
-
         return Panel(
             content,
             title=f"[bold]{self.title}[/bold]",
@@ -301,21 +400,506 @@ class _TemplateExecutionDisplay:
             result.append(detail, style=style)
         return result
 
-    def _render_command_output(self) -> Text:
-        """渲染命令输出区域。"""
-        result = Text()
-        for index, line in enumerate(self.command_output_lines):
+    def _render_command_panel(self) -> Optional[Panel]:
+        if not self._command_entries:
+            return None
+        if self._view_mode:
+            content = self._render_command_view()
+            title = "[bold]命令检视模式[/bold]"
+            border_style = ui.colors["primary"]
+        else:
+            content = self._render_command_preview()
+            title = "[bold]命令运行[/bold]"
+            border_style = ui.colors["border"]
+        return Panel(content, title=title, title_align="left", border_style=border_style, box=box.ASCII)
+
+    def _render_command_preview(self) -> Group:
+        visible_entries = [entry for entry in self._command_entries if entry.entry_id >= self._preview_anchor_id]
+        visible_entries = visible_entries[-self.PREVIEW_ENTRY_LIMIT:]
+        renderables: List[Any] = []
+        for index, entry in enumerate(visible_entries):
             if index:
-                result.append("\n")
-            if line.startswith("● "):
-                result.append(line, style=ui.colors["primary"])
-            elif line.startswith("  ⎿ "):
-                result.append(line, style="cyan")
+                renderables.append(Text("─" * max(12, ui.console.size.width - 12), style="grey35"))
+            renderables.append(self._render_preview_entry(entry))
+        renderables.append(Text("─" * max(12, ui.console.size.width - 12), style="grey35"))
+        renderables.append(Text("Running, press Ctrl + O to enter command view mode.", style="cyan"))
+        return Group(*renderables)
+
+    def _render_preview_entry(self, entry: _CommandEntry) -> Group:
+        renderables = self._render_entry_header(entry, preview=True)
+        width = max(20, ui.console.size.width - 20)
+        preview_lines = entry.output_lines[entry.preview_output_start:]
+        if not preview_lines:
+            renderables.append(Text("  └── <等待输出>", style="grey54"))
+            return Group(*renderables)
+
+        shown_lines = preview_lines[: self.PREVIEW_OUTPUT_LINES]
+        for idx, raw_line in enumerate(shown_lines):
+            prefix = "  └── " if idx == 0 else "      "
+            line = Text(prefix, style="grey42")
+            line.append_text(self._render_output_line(raw_line, preview=True, width=width))
+            renderables.append(line)
+        if len(preview_lines) > self.PREVIEW_OUTPUT_LINES:
+            renderables.append(Text("      ...", style="grey42"))
+        return Group(*renderables)
+
+    def _render_entry_header(self, entry: _CommandEntry, *, preview: bool) -> List[Any]:
+        width = max(20, ui.console.size.width - 20)
+        header_lines = self._wrap_text(entry.command or "", width)
+        runtime_prefix = Text()
+        runtime_prefix.append("● ", style=self._command_dot_style(entry))
+        runtime_prefix.append(f"{entry.runtime_label} ", style="bold white")
+        header_first = runtime_prefix.copy()
+        command_chunks = self._highlight_command(header_lines[0] if header_lines else "", entry.runtime, preview=preview)
+        header_first.append_text(command_chunks)
+        renderables: List[Any] = [header_first]
+        for extra in header_lines[1:]:
+            line = Text("  │   ", style="grey42")
+            line.append_text(self._highlight_command(extra, entry.runtime, preview=preview))
+            renderables.append(line)
+
+        cwd_text = self._format_workdir(entry.cwd_current or entry.cwd_initial, entry.command_theme)
+        cwd_lines = self._wrap_path(cwd_text, width)
+        for idx, chunk in enumerate(cwd_lines):
+            prefix = "  ├── " if idx == 0 else "  │   "
+            line = Text(prefix, style="grey42")
+            line.append(chunk, style="grey54" if preview else "#4DA3FF")
+            renderables.append(line)
+        return renderables
+
+    def _render_command_view(self) -> Group:
+        entry = self._selected_entry()
+        if entry is None:
+            return Group(Text("暂无可查看的命令输出。", style="grey58"))
+        renderables: List[Any] = list(self._render_entry_header(entry, preview=False))
+        if entry.directory_changes:
+            for change in entry.directory_changes:
+                text = Text()
+                text.append(change.old_path, style="#1F4E79")
+                text.append(" -> ", style="grey54")
+                text.append(change.new_path, style="#4DA3FF")
+                renderables.append(Panel(text, border_style="grey50", box=box.ROUNDED, expand=False))
+        clear_points = list(entry.clear_points)
+        if entry.output_lines:
+            for idx, raw_line in enumerate(entry.output_lines):
+                if clear_points and idx == clear_points[0]:
+                    renderables.append(Text("  ├" + "─" * max(8, ui.console.size.width - 22), style="grey35"))
+                    clear_points.pop(0)
+                prefix = "  └── " if idx == 0 else "      "
+                line = Text(prefix, style="grey42")
+                line.append_text(self._render_output_line(raw_line, preview=False, width=max(20, ui.console.size.width - 20)))
+                renderables.append(line)
+            while clear_points:
+                renderables.append(Text("  ├" + "─" * max(8, ui.console.size.width - 22), style="grey35"))
+                clear_points.pop(0)
+        else:
+            renderables.append(Text("  └── <当前命令尚未产生输出>", style="grey58"))
+        renderables.append(Align.center(self._render_command_footer(), vertical="middle"))
+        return Group(*renderables)
+
+    def _render_command_footer(self) -> Text:
+        total = len(self._command_entries)
+        selected = self._selected_command_position()
+        footer = Text()
+        has_prev = selected > 1
+        has_next = selected < total
+        if has_prev:
+            footer.append("<- ", style="cyan")
+            footer.append("(R) ", style="bold cyan")
+        else:
+            footer.append("(R) ", style="grey42")
+        indexes = self._command_footer_indexes(total, selected)
+        last_value = 0
+        for value in indexes:
+            if footer.plain and not footer.plain.endswith(" "):
+                footer.append(" ")
+            if last_value and value - last_value > 1:
+                footer.append("... ", style="grey42")
+            if value == selected:
+                footer.append("●", style="bold white")
             else:
-                result.append(line, style="dim")
-        if not self.command_output_lines:
-            result.append("[dim]等待输出...[/dim]", style="dim")
-        return result
+                footer.append(str(value), style="cyan")
+            last_value = value
+        footer.append(" ")
+        if has_next:
+            footer.append("(L) ", style="bold cyan")
+            footer.append("->", style="cyan")
+        else:
+            footer.append("(L)", style="grey42")
+        footer.append(" | Press Ctrl + O to exit command view.", style="grey58")
+        return footer
+
+    @staticmethod
+    def _command_footer_indexes(total: int, selected: int) -> List[int]:
+        if total <= 9:
+            return list(range(1, total + 1))
+        start = max(1, selected - 4)
+        end = min(total, selected + 4)
+        return list(range(start, end + 1))
+
+    def _render_output_line(self, raw_line: str, *, preview: bool, width: int) -> Text:
+        text = Text.from_ansi(str(raw_line or ""))
+        if not preview:
+            return text
+        text.stylize("dim")
+        return self._truncate_text(text, max(8, width))
+
+    @staticmethod
+    def _truncate_text(text: Text, width: int) -> Text:
+        if text.cell_len <= width:
+            return text
+        ellipsis = "..."
+        visible_width = max(1, width - len(ellipsis))
+        truncated = text.copy()
+        truncated.truncate(visible_width, overflow="crop", pad=False)
+        ellipsis_style: Any = "grey42"
+        if truncated.plain:
+            try:
+                ellipsis_style = truncated.get_style_at_offset(ui.console, len(truncated.plain) - 1) or ellipsis_style
+            except Exception:
+                ellipsis_style = "grey42"
+        truncated.append(ellipsis, style=ellipsis_style)
+        return truncated
+
+    def _highlight_command(self, command: str, runtime: str, *, preview: bool) -> Text:
+        """对命令字符串进行语法高亮，根据 runtime 微调规则。"""
+        text = Text(str(command or ""))
+        plain = text.plain
+        if not plain:
+            if preview:
+                text.stylize("dim")
+            return text
+
+        length = len(plain)
+        claimed = [False] * length
+
+        def _claim(start: int, end: int) -> bool:
+            if any(claimed[start:end]):
+                return False
+            for i in range(start, end):
+                claimed[i] = True
+            return True
+
+        def stylize_first(pattern: str, style: str, flags: int = 0, group: int = 0) -> None:
+            for m in re.finditer(pattern, plain, flags):
+                s, e = m.start(group), m.end(group)
+                if s < e and _claim(s, e):
+                    text.stylize(style, s, e)
+
+        is_ps = runtime in {"pwsh", "powershell"}
+        is_cmd = runtime in {"cmd", "bat"}
+        is_node = runtime in {"node", "bun", "deno"}
+        is_posix = runtime in {"bash", "sh", "zsh", "fish", ""}
+
+        # ── 1. Comments ──
+        if is_ps:
+            stylize_first(r"(?:^|(?<=\s))#.*$", "dim italic grey58", re.MULTILINE)
+        elif is_cmd:
+            stylize_first(r"(?:^|(?<=\s))(?:REM|::)\s.*$", "dim italic grey58", re.MULTILINE | re.IGNORECASE)
+        elif not is_node:
+            stylize_first(r"(?:^|(?<=\s))#.*$", "dim italic grey58", re.MULTILINE)
+
+        # ── 2. Strings ──
+        # Backtick strings (JS/TS)
+        if is_node:
+            stylize_first(r"`[^`\\]*(?:\\.[^`\\]*)*`", "green")
+        stylize_first(r'"[^"\\]*(?:\\.[^"\\]*)*"', "green")
+        stylize_first(r"'[^'\\]*(?:\\.[^'\\]*)*'", "green")
+
+        # ── 3. Here-strings (bash/pwsh) ──
+        if is_posix:
+            stylize_first(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n.*?\1", "green dim", re.DOTALL)
+        if is_ps:
+            stylize_first(r"@[\"'][\s\S]*?[\"']@", "green")
+
+        # ── 4. Template / interpolation ──
+        stylize_first(r"\{\{[^{}]*\}\}", "bright_magenta bold")
+        stylize_first(r"\$\{[^}]*\}", "bright_magenta")
+        if is_posix or is_ps:
+            stylize_first(r"\$\([^)]*\)", "bright_magenta")
+
+        # ── 5. Environment variables ──
+        if is_ps:
+            stylize_first(r"\$(?:env:)?[A-Za-z_][A-Za-z0-9_]*", "magenta")
+        elif is_cmd:
+            stylize_first(r"%[A-Za-z_][A-Za-z0-9_]*%", "magenta")
+            stylize_first(r"%~?[0-9dpnx]+", "magenta")
+        else:
+            stylize_first(r"\$[A-Za-z_][A-Za-z0-9_]*", "magenta")
+
+        # ── 6. Operators ──
+        stylize_first(r"2>&1|1>&2", "bright_yellow bold")
+        stylize_first(r"[12]?>>|[12]?>|<", "bright_yellow bold")
+        stylize_first(r"\|{1,2}|&&|;{1,2}", "bright_yellow bold")
+        if is_ps:
+            stylize_first(r"`(?=\s*$)", "bright_yellow", re.MULTILINE)
+            stylize_first(r"(?:^|(?<=\s))-(?:and|or|not|eq|ne|gt|ge|lt|le|like|match|contains|in|replace|split|join|is|isnot|as|f|band|bor|bnot|bxor|shl|shr)(?=\s|$)", "bright_yellow bold", re.IGNORECASE)
+        if is_cmd:
+            stylize_first(r"\^(?=\s*$)", "bright_yellow", re.MULTILINE)
+
+        # ── 7. Flags / options ──
+        if is_cmd:
+            stylize_first(r"(?:^|(?<=\s))/[A-Za-z0-9?][\w-]*(?::[\w]*)?", "cyan")
+        stylize_first(r"(?:^|(?<=\s))--[A-Za-z0-9][\w-]*(?:=\S*)?", "cyan")
+        stylize_first(r"(?:^|(?<=\s))-[A-Za-z0-9][\w-]*", "cyan")
+
+        # ── 8. Numeric literals ──
+        stylize_first(r"(?<![.\w])0x[0-9A-Fa-f]+(?!\w)", "bright_cyan")
+        stylize_first(r"(?<![.\w])\d+(?:\.\d+)?(?!\w)", "bright_cyan")
+
+        # ── 9. Well-known commands / keywords ──
+        _KW_POSIX = (
+            r"if|then|else|elif|fi|for|in|do|done|while|until|case|esac|"
+            r"function|return|exit|break|continue|select|trap|"
+            r"source|eval|exec|wait|true|false|test"
+        )
+        _KW_PS = (
+            r"if|else|elseif|switch|default|for|foreach|while|do|until|"
+            r"try|catch|finally|throw|return|exit|break|continue|"
+            r"function|filter|param|begin|process|end|"
+            r"Import-Module|Get-Command|Set-Location|Get-ChildItem|"
+            r"Write-Host|Write-Output|Write-Error|Write-Warning|"
+            r"Invoke-Expression|Invoke-WebRequest|Invoke-RestMethod|"
+            r"New-Item|Remove-Item|Copy-Item|Move-Item|"
+            r"Get-Content|Set-Content|Add-Content|"
+            r"Start-Process|Stop-Process|Get-Process|"
+            r"ForEach-Object|Where-Object|Select-Object|Sort-Object|"
+            r"Out-Null|Out-File|Tee-Object|Measure-Object"
+        )
+        _KW_CMD = (
+            r"if|else|for|in|do|goto|call|exit|"
+            r"set|setlocal|endlocal|echo|pause|rem|"
+            r"copy|xcopy|robocopy|move|del|rd|md|"
+            r"type|more|find|findstr|sort|"
+            r"start|taskkill|tasklist|net|sc|reg|"
+            r"assoc|ftype|mklink|attrib|icacls|"
+            r"errorlevel|exist|not|defined|equ|neq|lss|leq|gtr|geq"
+        )
+        _KW_COMMON = (
+            r"cd|pushd|popd|echo|printf|cat|ls|dir|cp|mv|rm|mkdir|rmdir|"
+            r"chmod|chown|grep|sed|awk|find|xargs|sort|uniq|wc|head|tail|tee|"
+            r"curl|wget|tar|gzip|gunzip|zip|unzip|ssh|scp|rsync|"
+            r"set|unset|export|alias|unalias|env|sudo|su|"
+            r"git|python|python3|pip|pip3|node|npm|npx|yarn|pnpm|bun|deno|"
+            r"docker|docker-compose|podman|kubectl|helm|terraform|"
+            r"make|cmake|cargo|go|rustc|rustup|javac|java|dotnet|"
+            r"pwsh|powershell|bash|sh|zsh|fish|cmd|"
+            r"uv|uvx|ruff|mypy|pytest|tox|nox|black|isort|flake8|"
+            r"cls|clear|which|where|type|man|help|"
+            r"systemctl|journalctl|service|crontab|"
+            r"apt|apt-get|dpkg|yum|dnf|pacman|brew|choco|scoop|winget|"
+            r"nc|netstat|ss|ip|ifconfig|ping|traceroute|nslookup|dig"
+        )
+
+        if is_ps:
+            kw = f"{_KW_PS}|{_KW_COMMON}"
+        elif is_cmd:
+            kw = f"{_KW_CMD}|{_KW_COMMON}"
+        elif is_node:
+            kw = _KW_COMMON
+        else:
+            kw = f"{_KW_POSIX}|{_KW_COMMON}"
+
+        stylize_first(
+            rf"(?:^|(?<=\s))(?:{kw})(?=\s|$|;|\||&|>|<|\)|`)",
+            "bright_yellow bold",
+            re.IGNORECASE if is_cmd else 0,
+        )
+
+        # ── 10. Path-like patterns ──
+        stylize_first(
+            r"(?:^|(?<=\s))(?:\.{1,2}[/\\]|~[/\\]|[A-Za-z]:[/\\])[\w./\\:@*?=-]*",
+            "underline",
+        )
+
+        # ── 11. Sub-commands (stdlib re compatible) ──
+        _TOOLS_WITH_SUB = (
+            r"git|docker|kubectl|npm|npx|yarn|pnpm|cargo|go|pip|pip3|uv|uvx|"
+            r"docker-compose|podman|helm|make|cmake|systemctl|"
+            r"apt|apt-get|brew|dnf|yum|pacman|choco|scoop|winget|"
+            r"dotnet|rustup|terraform"
+        )
+        for m in re.finditer(
+            rf"(?:^|(?<=\s))(?:{_TOOLS_WITH_SUB})\s+([a-z][\w-]*)",
+            plain,
+            re.IGNORECASE if is_cmd else 0,
+        ):
+            s, e = m.start(1), m.end(1)
+            if s < e and _claim(s, e):
+                text.stylize("bright_green", s, e)
+
+        # ── 12. PowerShell cmdlet pattern: Verb-Noun (unclaimed) ──
+        if is_ps:
+            stylize_first(
+                r"(?:^|(?<=\s))[A-Z][a-z]+-[A-Z][\w]*",
+                "bright_yellow",
+            )
+
+        # ── 13. Assignment operator (=) not yet claimed ──
+        stylize_first(r"(?<!=)=(?!=)", "bright_yellow bold")
+
+        if preview:
+            text.stylize("dim")
+        return text
+
+    def _format_workdir(self, cwd: str, command_theme: str) -> str:
+        normalized_theme = str(command_theme or "classical").strip().lower()
+        if normalized_theme == "oh-my-posh":
+            normalized_theme = "oh-my-push"
+        path = str(cwd or "")
+        if normalized_theme == "oh-my-push":
+            name = os.path.basename(path.rstrip("\\/")) or path
+            return f"{path} [{name}]"
+        return f"{path}>"
+
+    @staticmethod
+    def _wrap_text(text: str, width: int) -> List[str]:
+        return _TemplateExecutionDisplay._wrap_plain_text(str(text or ""), max(12, width), {" "})
+
+    @staticmethod
+    def _wrap_path(text: str, width: int) -> List[str]:
+        return _TemplateExecutionDisplay._wrap_plain_text(str(text or ""), max(12, width), {"\\", "/"}, keep_break_char=True)
+
+    @staticmethod
+    def _wrap_plain_text(text: str, width: int, break_chars: set[str], *, keep_break_char: bool = False) -> List[str]:
+        if not text:
+            return [""]
+        wrapped: List[str] = []
+        remaining = text
+        while remaining and cell_len(remaining) > width:
+            split_at = _TemplateExecutionDisplay._find_wrap_index(remaining, width, break_chars)
+            if keep_break_char and split_at < len(remaining) and remaining[split_at] in break_chars:
+                split_at += 1
+            wrapped.append(remaining[:split_at].rstrip())
+            remaining = remaining[split_at:]
+            remaining = remaining if keep_break_char else remaining.lstrip()
+        if remaining:
+            wrapped.append(remaining)
+        return wrapped or [text]
+
+    @staticmethod
+    def _find_wrap_index(text: str, width: int, break_chars: set[str]) -> int:
+        used_width = 0
+        last_break = -1
+        for index, char in enumerate(text):
+            char_width = cell_len(char)
+            if used_width + char_width > width:
+                return last_break if last_break > 0 else max(1, index)
+            used_width += char_width
+            if char in break_chars:
+                last_break = index
+        return len(text)
+
+    def _selected_entry(self) -> Optional[_CommandEntry]:
+        if self._selected_command_id is None:
+            return None
+        return self._entry_lookup.get(self._selected_command_id)
+
+    def _selected_command_position(self) -> int:
+        if self._selected_command_id is None:
+            return 0
+        return self._selected_command_id
+
+    def _get_active_entry(self) -> Optional[_CommandEntry]:
+        if self._active_command_id is None:
+            return None
+        return self._entry_lookup.get(self._active_command_id)
+
+    def _get_session_entry(self, command_index: int) -> Optional[_CommandEntry]:
+        session_ids = self._session_entries.get(self._active_session_id, [])
+        if 0 <= command_index < len(session_ids):
+            return self._entry_lookup.get(session_ids[command_index])
+        return None
+
+    def _start_input_listener(self) -> None:
+        self._stop_input.clear()
+        self._input_thread = threading.Thread(target=self._input_loop, daemon=True)
+        self._input_thread.start()
+
+    def _input_loop(self) -> None:
+        if os.name == "nt":
+            self._input_loop_windows()
+            return
+        self._input_loop_posix()
+
+    def _input_loop_windows(self) -> None:
+        try:
+            import msvcrt
+        except Exception:
+            return
+        while not self._stop_input.is_set():
+            try:
+                if not msvcrt.kbhit():
+                    time.sleep(0.05)
+                    continue
+                ch = msvcrt.getwch()
+            except Exception:
+                break
+            if not ch:
+                continue
+            if ch == "\x0f":
+                self._toggle_view_mode()
+                continue
+            if ch.lower() == "r":
+                self._move_selection(-1)
+                continue
+            if ch.lower() == "l":
+                self._move_selection(1)
+
+    def _input_loop_posix(self) -> None:
+        try:
+            import select
+            import termios
+            import tty
+        except Exception:
+            return
+        fd = None
+        old_settings = None
+        try:
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            tty.setcbreak(fd)
+            while not self._stop_input.is_set():
+                ready, _, _ = select.select([sys.stdin], [], [], 0.05)
+                if not ready:
+                    continue
+                ch = sys.stdin.read(1)
+                if ch == "\x0f":
+                    self._toggle_view_mode()
+                elif ch.lower() == "r":
+                    self._move_selection(-1)
+                elif ch.lower() == "l":
+                    self._move_selection(1)
+        except Exception:
+            return
+        finally:
+            if fd is not None and old_settings is not None:
+                try:
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                except Exception:
+                    pass
+
+    def _toggle_view_mode(self) -> None:
+        with self._lock:
+            if not self._command_entries:
+                return
+            self._view_mode = not self._view_mode
+            active = self._get_active_entry()
+            if self._view_mode and active is not None:
+                self._selected_command_id = active.entry_id
+            elif self._selected_command_id is None:
+                self._selected_command_id = active.entry_id if active is not None else self._command_entries[-1].entry_id
+            self._refresh()
+
+    def _move_selection(self, delta: int) -> None:
+        with self._lock:
+            if not self._view_mode or self._selected_command_id is None:
+                return
+            new_value = min(max(1, self._selected_command_id + delta), len(self._command_entries))
+            if new_value == self._selected_command_id:
+                return
+            self._selected_command_id = new_value
+            self._refresh()
 
     def _append_history(self, status: str, detail: str) -> None:
         compact_detail = self._compact_message(detail)
@@ -333,8 +917,21 @@ class _TemplateExecutionDisplay:
             self.live.refresh()
 
     def _frame(self) -> str:
-        frame_index = int(time.monotonic() * 8) % len(self.DOT_FRAMES)
-        return self.DOT_FRAMES[frame_index]
+        if self._view_mode:
+            return "●"
+        return "●" if int(time.monotonic() * 4) % 2 == 0 else "○"
+
+    def _command_dot_style(self, entry: _CommandEntry) -> str:
+        """命令状态圆点颜色：完成=绿，失败=红，运行中=呼吸灯效果。"""
+        if entry.status == "failed":
+            return ui.colors["error"]
+        if entry.status in {"completed", "detached"}:
+            return ui.colors["success"]
+        t = time.monotonic()
+        phase = (math.sin(t * math.pi) + 1.0) / 2.0
+        grey_level = int(30 + phase * 70)
+        v = int(grey_level * 255 / 100)
+        return f"rgb({v},{v},{v})"
 
     @staticmethod
     def _format_detail(step: int, total_steps: int, step_name: str, message: str) -> str:
@@ -677,6 +1274,8 @@ class DeploymentModCliRunner:
                 ui.print_error(f"{step_name}: {message}")
                 return
             ui.print_success(f"{step_name}: {message}")
+            return
+        if event == "command_meta":
             return
         if event == "command_output":
             if message.strip():
