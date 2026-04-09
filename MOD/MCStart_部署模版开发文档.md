@@ -2062,10 +2062,10 @@ mod_id = "my-mod"                          # ❌ 缺少用户名前缀
 
 | 需求 | 用法 |
 |------|------|
-| 引用另一个组件的 `id` 名称 | `{{key|Deployment.MaiBot.id}}` |
-| 引用模版版本号 | `{{key|MODINFO.version}}` |
-| 引用部署后的实际安装路径 | `{{env|MAIBOT_HOME}}`（需先导出后导入） |
-| 引用格式化后的版本号 | `{{version|SQLiteStudio}}`（在同一块内使用） |
+| 引用另一个组件的 `id` 名称 | `{{key\|Deployment.MaiBot.id}}` |
+| 引用模版版本号 | `{{key\|MODINFO.version}}` |
+| 引用部署后的实际安装路径 | `{{env\|MAIBOT_HOME}}`（需先导出后导入） |
+| 引用格式化后的版本号 | `{{version\|SQLiteStudio}}`（在同一块内使用） |
 
 ### Q6: 环境变量导入时，如果目标变量还没被导出会怎样？
 
