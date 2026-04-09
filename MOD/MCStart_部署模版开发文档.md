@@ -1,6 +1,6 @@
 
 
-# MCStart 部署模版开发文档 V2.2
+# MCStart 部署模版开发文档 V2.3
 
 ---
 
@@ -16,6 +16,7 @@
   - [2.2 文件组织结构](#22-文件组织结构)
   - [2.3 使用 mcsb 快捷执行模板](#23-使用-mcsb-快捷执行模板)
   - [2.4 使用 mcsb 检测模板语法](#24-使用-mcsb-检测模板语法)
+  - [2.5 命令输出与命令检视模式](#25-命令输出与命令检视模式)
 - [3. 模版文件结构总览](#3-模版文件结构总览)
 - [4. 区块详解](#4-区块详解)
   - [4.1 \[MCStart\] — 模版标识](#41-mcstart--模版标识)
@@ -122,6 +123,7 @@ MCStart 引擎读取该模版后，会按照模版中声明的流程自动或半
 | `2.0` | 新增卸载阶段，支持 `[UNINSTALL]` 与 `[[UninstallItem]]` 的实例回收能力 | [4.7 [UNINSTALL] 与 [[UninstallItem]] — 卸载管理](#47-uninstall-与-uninstallitem--卸载管理) |
 | `2.1` | 新增组件检查正则匹配逻辑 `check_version_regex`，并补充 `mcsb` 模板快捷命令使用说明 | [4.3.3 版本检查模块](#433-版本检查模块)、[2.3 使用 mcsb 快捷执行模板](#23-使用-mcsb-快捷执行模板) |
 | `2.2` | 新增模板语法检测模块与 `mcsb -t` / `mcsb test` 使用说明 | [2.4 使用 mcsb 检测模板语法](#24-使用-mcsb-检测模板语法) |
+| `2.3` | 新增命令运行输出增强、命令检视模式，以及表数组级 `runtime` / `command_theme` 键 | [2.5 命令输出与命令检视模式](#25-命令输出与命令检视模式)、[4.2.1 表数组级运行时与命令显示键](#421-表数组级运行时与命令显示键) |
 
 ---
 
@@ -148,14 +150,14 @@ file_import = false
 file_import_list = []
 runtime = "powershell"
 platforms = ["windows"]
-schema_version = "2.2"
+schema_version = "2.3"
 ```
 
 ### 2.2 文件组织结构
 
 ```
 my-mod/
-├── my-mod.toml              # 模版主文件
+├── DeploymentMOD.toml              # 模版主文件
 ├── example.txt              # （可选）需要导入的附属文件
 ├── version.json             # （可选）需要导入的附属文件
 └── GetVersion.ps1           # （可选）需要导入的附属文件
@@ -239,6 +241,25 @@ mcsb test .\MOD\MaiCoer-Start.DeploymentMOD\DeploymentMOD.toml
 
 ---
 
+### 2.5 命令输出与命令检视模式
+
+从 `2.3` 开始，DeploymentMOD CLI 会在执行命令时输出更完整的实时日志：
+
+- 默认模式下，会展示当前命令的运行时、命令文本、实时工作目录，以及最近 5 行输出
+- 命令运行中的圆点会在浅色 / 深色之间呼吸切换；完成后成功显示为绿色，失败显示为红色
+- 如果命令过程中发生了 `cd` / `Set-Location` / `cls` / `clear` 之类的目录切换或清屏动作，CLI 会同步刷新工作目录和预览区域
+- 按 `Ctrl + O` 可进入命令检视模式，只查看单条命令的完整输出；此时输出颜色恢复为命令原色
+- 命令检视模式下可用 `R` / `L` 在不同命令之间切换；若当前命令已执行结束，MCStart 会暂停后续步骤，直到退出检视模式
+
+工作目录显示风格由当前表数组的 `command_theme` 决定：
+
+- `"classical"`：使用类似 `D:\project>` 的经典风格
+- `"oh-my-push"`：使用更接近提示符主题的路径风格显示
+
+如果命令所属表数组额外声明了 `runtime`，则该命令会优先使用表数组内的运行时；否则回退到 `MODINFO.runtime`。
+
+---
+
 ## 3. 模版文件结构总览
 
 一个完整的模版包含以下区块，按出现顺序排列：
@@ -316,9 +337,45 @@ MCStart = true
 | 值 | 说明 |
 |----|------|
 | `"powershell"` | Windows PowerShell |
+| `"pwsh"` | PowerShell 7+（`pwsh`） |
 | `"cmd"` | Windows 命令提示符 |
 | `"bash"` | Bash（Linux/macOS 原生，Windows 需安装 Git Bash） |
-| `"python3"` | Python 3 脚本 |
+| `"python3"` | 使用当前 Python 3 解释器执行脚本 |
+| `"python"` | 使用环境变量中的 `python` 执行脚本 |
+| `"node"` | 使用 Node.js 执行脚本 |
+
+#### 4.2.1 表数组级运行时与命令显示键
+
+以下两个可选键可声明在所有表数组（`[[Component]]`、`[[Deployment]]`、`[[LaunchItem]]`、`[[ConfigItem]]`、`[[UninstallItem]]`）中：
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtime` | String | 回退到 `MODINFO.runtime` | 为当前表数组内的命令指定运行时；留空或缺失时，回退到 `MODINFO.runtime` |
+| `command_theme` | String | 自动判定 | 命令工作目录的显示主题。支持 `"oh-my-push"` 与 `"classical"`；未填写时，如环境中检测到 `oh-my-posh` / `oh-my-push`，则优先按 `oh-my-push` 显示，否则使用 `classical` |
+
+补充说明：
+
+- `runtime` 的合法值与 `MODINFO.runtime` 完全一致
+- `command_theme = "oh-my-posh"` 会被兼容性地视作 `"oh-my-push"`
+- `ConfigItem` 当前没有命令执行流程，因此这两个键更多用于统一模板键格式和后续扩展；真正执行命令的阶段会立即生效
+
+示例：
+
+```toml
+[[Component]]
+id = "runtime-demo"
+name = "Runtime Demo"
+choose = false
+install = true
+command_install = true
+runtime = "cmd"
+command_theme = "classical"
+install_command_list = [
+    "echo preparing runtime demo",
+    "cd tools",
+    "echo %cd%",
+]
+```
 
 #### platforms 可选值
 
@@ -379,6 +436,8 @@ list = ["python3-12-8", "SQLiteStudio"]
 | `name` | String | **是** | 组件显示名称 |
 | `id` | String | **是** | 组件唯一 ID。格式：小写字母、数字和 `-` 的组合，建议使用组件名称的小写加连字符形式 |
 | `choose` | Boolean | 条件必填 | 是否让用户选择安装。`true` = 用户可选，`false` = 强制安装。仅当 `install = true` 时有意义 |
+| `runtime` | String | 否 | 当前组件的命令运行时；为空时回退到 `MODINFO.runtime` |
+| `command_theme` | String | 否 | 当前组件命令工作目录的显示主题；仅影响命令输出 UI |
 | `install` | Boolean | **是** | 是否需要安装此组件。`true` = 需要安装，`false` = 不安装 |
 
 ```toml
@@ -612,7 +671,7 @@ custom_path = "C:\\temp"
 
 **当 `command_install = false` 时**：MCStart 使用 `install_operate` 指定的方式处理已下载的安装包。
 
-> 每个字符串元素等同于一行命令。Windows 环境下默认使用 PowerShell 执行。
+> 每个字符串元素等同于一行命令。默认使用当前表数组的 `runtime`；若未声明，则回退到 `MODINFO.runtime`。命令工作目录展示样式由 `command_theme` 决定。
 
 ```toml
 command_install = true
@@ -729,6 +788,8 @@ list = ["MaiBot", "Adapter"]
 | `name` | String | **是** | 部署项显示名称 |
 | `id` | String | **是** | 部署项唯一 ID |
 | `choose` | Boolean | **是** | 是否让用户选择部署。`true` = 用户可选，`false` = 强制部署 |
+| `runtime` | String | 否 | 当前部署项的命令运行时；为空时回退到 `MODINFO.runtime` |
+| `command_theme` | String | 否 | 当前部署项命令工作目录的显示主题；仅影响命令输出 UI |
 | `deploy` | Boolean | **是** | 是否需要部署 |
 
 ```toml
@@ -835,6 +896,8 @@ custom_path = "$input$"        # 用户运行时输入路径
 
 **当 `command_deploy = false` 时**：MCStart 使用 `deploy_method` 和 `base_link` 自动完成部署。
 
+> 命令行部署同样遵循“表数组级 `runtime` 优先，缺失时回退到 `MODINFO.runtime`”的规则；工作目录展示样式由 `command_theme` 决定。
+
 ```toml
 command_deploy = true
 deploy_command_list = [
@@ -938,6 +1001,8 @@ list = ["MaiBot", "Adapter"]
 | `id` | String | **是** | 启动项唯一 ID |
 | `name` | String | **是** | 启动项显示名称 |
 | `choose` | Boolean | **是** | 是否让用户选择启动。`true` = 用户可选，`false` = 强制启动 |
+| `runtime` | String | 否 | 当前启动项的命令运行时；为空时回退到 `MODINFO.runtime` |
+| `command_theme` | String | 否 | 当前启动项命令工作目录的显示主题；仅影响命令输出 UI |
 | `launch` | Boolean | **是** | 是否需要启动 |
 | `launch_command` | Array\[String\] | 条件必填 | 启动命令列表。仅当 `launch = true` 时需要提供 |
 | `env_input` | Boolean | 否 | 是否导入环境变量 |
@@ -1011,6 +1076,8 @@ list = [
 |------|------|------|------|
 | `id` | String | 建议提供 | 配置项唯一 ID，格式同 `list` 中的元素：`"从属ID\|相对路径"` |
 | `name` | String | **是** | 配置项显示名称，通常与 `id` 相同 |
+| `runtime` | String | 否 | 统一的表数组级运行时声明；`ConfigItem` 当前无命令执行时通常留空即可 |
+| `command_theme` | String | 否 | 统一的表数组级命令主题声明；`ConfigItem` 当前通常留空即可 |
 | `file_path` | String | **是** | 配置文件的完整路径，支持占位符 |
 | `choose` | Boolean | **是** | 是否让用户选择是否打开此配置文件 |
 | `env_input` | Boolean | 否 | 是否导入环境变量 |
@@ -1058,6 +1125,8 @@ list = ["OpenClaw"]
 | `id` | String | ✅ | — | 卸载项 ID |
 | `name` | String | ✅ | — | 卸载项显示名称 |
 | `choose` | Boolean | ✅ | — | 是否让用户选择执行该卸载项 |
+| `runtime` | String | ❌ | — | 当前卸载项的命令运行时；为空时回退到 `MODINFO.runtime` |
+| `command_theme` | String | ❌ | — | 当前卸载项命令工作目录的显示主题；仅影响命令输出 UI |
 | `uninstall` | Boolean | ✅ | — | 默认是否执行该卸载项 |
 | `stop_before_uninstall` | Boolean | ❌ | — | 是否在清理前执行停止命令 |
 | `stop_command_list` | Array\[String\] | 📎 | `stop_before_uninstall=true` | 卸载前停止命令列表 |
@@ -1860,6 +1929,8 @@ version_formatting_formula = [
 | `name` | String | ✅ | — | 组件名称 |
 | `id` | String | ✅ | — | 组件 ID |
 | `choose` | Boolean | 📎 | `install=true` | 用户可选安装 |
+| `runtime` | String | ❌ | — | 当前组件命令运行时，留空回退到 `MODINFO.runtime` |
+| `command_theme` | String | ❌ | — | 当前组件命令主题，支持 `oh-my-push` / `classical` |
 | `install` | Boolean | ✅ | — | 是否安装 |
 | `check` | Boolean | ✅ | — | 是否检查已安装 |
 | `check_command` | Array\[String\] | 📎 | `check=true` | 检查命令 |
@@ -1908,6 +1979,8 @@ version_formatting_formula = [
 | `name` | String | ✅ | — | 部署项名称 |
 | `id` | String | ✅ | — | 部署项 ID |
 | `choose` | Boolean | ✅ | — | 用户可选部署 |
+| `runtime` | String | ❌ | — | 当前部署项命令运行时，留空回退到 `MODINFO.runtime` |
+| `command_theme` | String | ❌ | — | 当前部署项命令主题，支持 `oh-my-push` / `classical` |
 | `deploy` | Boolean | ✅ | — | 是否部署 |
 | `command_deploy` | Boolean | 📎 | `deploy=true` | 是否命令行部署 |
 | `deploy_command_list` | Array\[String\] | 📎 | `command_deploy=true` | 部署命令列表 |
@@ -1949,6 +2022,8 @@ version_formatting_formula = [
 | `id` | String | ✅ | — | 启动项 ID |
 | `name` | String | ✅ | — | 启动项名称 |
 | `choose` | Boolean | ✅ | — | 用户可选启动 |
+| `runtime` | String | ❌ | — | 当前启动项命令运行时，留空回退到 `MODINFO.runtime` |
+| `command_theme` | String | ❌ | — | 当前启动项命令主题，支持 `oh-my-push` / `classical` |
 | `launch` | Boolean | ✅ | — | 是否启动 |
 | `launch_command` | Array\[String\] | 📎 | `launch=true` | 启动命令列表 |
 | `env_output` | Boolean | ❌ | — | 导出环境变量 |
@@ -1970,6 +2045,8 @@ version_formatting_formula = [
 |------|------|------|------|------|
 | `id` | String | 建议 | — | 配置项 ID，格式 `"从属ID\|相对路径"` |
 | `name` | String | ✅ | — | 配置项名称 |
+| `runtime` | String | ❌ | — | 统一的表数组级运行时声明，`ConfigItem` 当前通常留空即可 |
+| `command_theme` | String | ❌ | — | 统一的表数组级命令主题声明，`ConfigItem` 当前通常留空即可 |
 | `file_path` | String | ✅ | — | 配置文件完整路径（支持占位符） |
 | `choose` | Boolean | ✅ | — | 用户可选配置 |
 | `env_input` | Boolean | ❌ | — | 导入环境变量 |
@@ -1990,6 +2067,8 @@ version_formatting_formula = [
 | `id` | String | ✅ | — | 卸载项 ID |
 | `name` | String | ✅ | — | 卸载项名称 |
 | `choose` | Boolean | ✅ | — | 用户可选卸载 |
+| `runtime` | String | ❌ | — | 当前卸载项命令运行时，留空回退到 `MODINFO.runtime` |
+| `command_theme` | String | ❌ | — | 当前卸载项命令主题，支持 `oh-my-push` / `classical` |
 | `uninstall` | Boolean | ✅ | — | 默认是否执行 |
 | `stop_before_uninstall` | Boolean | ❌ | — | 是否先执行停止命令 |
 | `stop_command_list` | Array\[String\] | 📎 | `stop_before_uninstall=true` | 停止命令列表 |
