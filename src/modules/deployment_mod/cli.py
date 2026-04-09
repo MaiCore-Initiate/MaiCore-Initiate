@@ -5,19 +5,19 @@ import re
 import sys
 import threading
 import time
+import math
+import unicodedata
 from collections import deque
 from typing import Any, Callable, Deque, Dict, Iterable, List, Optional
 
 from rich import box
 from rich.align import Align
-from rich.cells import cell_len
 from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import BarColumn, DownloadColumn, Progress, TaskID, TextColumn, TimeRemainingColumn, TransferSpeedColumn
 from rich.table import Table
 from rich.text import Text
-import math
 
 from ...ui.interface import ui
 from ...utils.common import setup_console
@@ -413,6 +413,10 @@ class _TemplateExecutionDisplay:
             border_style = ui.colors["border"]
         return Panel(content, title=title, title_align="left", border_style=border_style, box=box.ASCII)
 
+# === PATCH 5: 修复 _render_command_preview 底部分割线和提示 ===
+# 找到 def _render_command_preview(self) -> Group: 方法
+# 替换整个方法体
+
     def _render_command_preview(self) -> Group:
         visible_entries = [entry for entry in self._command_entries if entry.entry_id >= self._preview_anchor_id]
         visible_entries = visible_entries[-self.PREVIEW_ENTRY_LIMIT:]
@@ -421,9 +425,21 @@ class _TemplateExecutionDisplay:
             if index:
                 renderables.append(Text("─" * max(12, ui.console.size.width - 12), style="grey35"))
             renderables.append(self._render_preview_entry(entry))
-        renderables.append(Text("─" * max(12, ui.console.size.width - 12), style="grey35"))
+
+        # 底部全宽分割线
+        renderables.append(Text("─" * ui.console.size.width, style="grey35"))
+        # 状态提示
+        running_entry = self._get_active_entry()
+        if running_entry and running_entry.status == "running":
+            extra = len(running_entry.output_lines) - running_entry.preview_output_start - self.PREVIEW_OUTPUT_LINES
+            if extra > 0:
+                renderables.insert(-1, Text(f"      ... +{extra} line{'s' if extra > 1 else ''}", style="grey42"))
         renderables.append(Text("Running, press Ctrl + O to enter command view mode.", style="cyan"))
         return Group(*renderables)
+
+# === PATCH 6: 修复 _render_preview_entry 中输出行超出后的省略计数 ===
+# 找到 def _render_preview_entry(self, entry: _CommandEntry) -> Group:
+# 替换整个方法体
 
     def _render_preview_entry(self, entry: _CommandEntry) -> Group:
         renderables = self._render_entry_header(entry, preview=True)
@@ -433,14 +449,16 @@ class _TemplateExecutionDisplay:
             renderables.append(Text("  └── <等待输出>", style="grey54"))
             return Group(*renderables)
 
-        shown_lines = preview_lines[: self.PREVIEW_OUTPUT_LINES]
+        shown_lines = preview_lines[:self.PREVIEW_OUTPUT_LINES]
         for idx, raw_line in enumerate(shown_lines):
-            prefix = "  └── " if idx == 0 else "      "
+            is_first = idx == 0 and not entry.directory_changes
+            prefix = "  └── " if is_first else "      "
             line = Text(prefix, style="grey42")
             line.append_text(self._render_output_line(raw_line, preview=True, width=width))
             renderables.append(line)
-        if len(preview_lines) > self.PREVIEW_OUTPUT_LINES:
-            renderables.append(Text("      ...", style="grey42"))
+        extra = len(preview_lines) - self.PREVIEW_OUTPUT_LINES
+        if extra > 0:
+            renderables.append(Text(f"      ... +{extra} line{'s' if extra > 1 else ''}", style="grey42"))
         return Group(*renderables)
 
     def _render_entry_header(self, entry: _CommandEntry, *, preview: bool) -> List[Any]:
@@ -537,29 +555,51 @@ class _TemplateExecutionDisplay:
         end = min(total, selected + 4)
         return list(range(start, end + 1))
 
+# === PATCH 3: 替换 _render_output_line 方法 ===
+# 找到 def _render_output_line(self, raw_line: str, *, preview: bool, width: int) -> Text:
+# 替换整个方法体
+
     def _render_output_line(self, raw_line: str, *, preview: bool, width: int) -> Text:
+        """
+        渲染输出行：
+        - preview 模式：所有颜色暗一级，超宽截断并留 "..." （提前 3 字符）
+        - view 模式：原样显示，不截断
+        """
         text = Text.from_ansi(str(raw_line or ""))
+        if preview:
+            text.stylize("dim")
         if not preview:
             return text
-        text.stylize("dim")
-        return self._truncate_text(text, max(8, width))
 
-    @staticmethod
-    def _truncate_text(text: Text, width: int) -> Text:
-        if text.cell_len <= width:
-            return text
-        ellipsis = "..."
-        visible_width = max(1, width - len(ellipsis))
-        truncated = text.copy()
-        truncated.truncate(visible_width, overflow="crop", pad=False)
-        ellipsis_style: Any = "grey42"
-        if truncated.plain:
-            try:
-                ellipsis_style = truncated.get_style_at_offset(ui.console, len(truncated.plain) - 1) or ellipsis_style
-            except Exception:
-                ellipsis_style = "grey42"
-        truncated.append(ellipsis, style=ellipsis_style)
-        return truncated
+        # 计算可见宽度并截断（考虑中文等宽字符）
+        max_visible = max(8, width - 3)  # 预留 3 字符给 "..."
+        plain = text.plain
+        visible_width = 0
+        cut_index = len(plain)
+        for i, ch in enumerate(plain):
+            # 东亚宽字符占 2 列            
+            char_width = 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+            if visible_width + char_width > max_visible:
+                cut_index = i
+                break
+            visible_width += char_width
+
+        if cut_index < len(plain):
+            # 获取截断点前最后一个字符的样式，用于 "..." 的颜色
+            truncated = text[:cut_index]
+            # 附加 "..."，继承末尾样式
+            last_style = text.get_style_at_offset(max(0, cut_index - 1))
+            ellipsis = Text("...", style=last_style)
+            if preview:
+                ellipsis.stylize("dim")
+            truncated.append_text(ellipsis)
+            return truncated
+
+        return text
+
+    # === PATCH 1: 替换整个 _highlight_command 方法 ===
+# 找到 def _highlight_command(self, command: str, runtime: str, *, preview: bool) -> Text:
+# 替换为以下完整方法（约第 260-350 行的整个方法体）
 
     def _highlight_command(self, command: str, runtime: str, *, preview: bool) -> Text:
         """对命令字符串进行语法高亮，根据 runtime 微调规则。"""
@@ -754,41 +794,39 @@ class _TemplateExecutionDisplay:
 
     @staticmethod
     def _wrap_text(text: str, width: int) -> List[str]:
-        return _TemplateExecutionDisplay._wrap_plain_text(str(text or ""), max(12, width), {" "})
+        source = str(text or "")
+        if not source:
+            return [""]
+        width = max(12, width)
+        wrapped: List[str] = []
+        remaining = source
+        while len(remaining) > width:
+            split_at = remaining.rfind(" ", 0, width)
+            if split_at <= 0:
+                split_at = width
+            wrapped.append(remaining[:split_at].rstrip())
+            remaining = remaining[split_at:].lstrip()
+        if remaining:
+            wrapped.append(remaining)
+        return wrapped or [source]
 
     @staticmethod
     def _wrap_path(text: str, width: int) -> List[str]:
-        return _TemplateExecutionDisplay._wrap_plain_text(str(text or ""), max(12, width), {"\\", "/"}, keep_break_char=True)
-
-    @staticmethod
-    def _wrap_plain_text(text: str, width: int, break_chars: set[str], *, keep_break_char: bool = False) -> List[str]:
-        if not text:
+        source = str(text or "")
+        if not source:
             return [""]
+        width = max(12, width)
         wrapped: List[str] = []
-        remaining = text
-        while remaining and cell_len(remaining) > width:
-            split_at = _TemplateExecutionDisplay._find_wrap_index(remaining, width, break_chars)
-            if keep_break_char and split_at < len(remaining) and remaining[split_at] in break_chars:
-                split_at += 1
-            wrapped.append(remaining[:split_at].rstrip())
-            remaining = remaining[split_at:]
-            remaining = remaining if keep_break_char else remaining.lstrip()
+        remaining = source
+        while len(remaining) > width:
+            split_at = max(remaining.rfind("\\", 0, width), remaining.rfind("/", 0, width))
+            if split_at <= 0:
+                split_at = width
+            wrapped.append(remaining[:split_at + 1].rstrip())
+            remaining = remaining[split_at + 1 :].lstrip()
         if remaining:
             wrapped.append(remaining)
-        return wrapped or [text]
-
-    @staticmethod
-    def _find_wrap_index(text: str, width: int, break_chars: set[str]) -> int:
-        used_width = 0
-        last_break = -1
-        for index, char in enumerate(text):
-            char_width = cell_len(char)
-            if used_width + char_width > width:
-                return last_break if last_break > 0 else max(1, index)
-            used_width += char_width
-            if char in break_chars:
-                last_break = index
-        return len(text)
+        return wrapped or [source]
 
     def _selected_entry(self) -> Optional[_CommandEntry]:
         if self._selected_command_id is None:
@@ -921,15 +959,24 @@ class _TemplateExecutionDisplay:
             return "●"
         return "●" if int(time.monotonic() * 4) % 2 == 0 else "○"
 
+# === PATCH 2: 替换 _command_dot_style 方法 ===
+# 找到 def _command_dot_style(self, entry: _CommandEntry) -> str:
+# 替换整个方法体
+
     def _command_dot_style(self, entry: _CommandEntry) -> str:
         """命令状态圆点颜色：完成=绿，失败=红，运行中=呼吸灯效果。"""
         if entry.status == "failed":
             return ui.colors["error"]
         if entry.status in {"completed", "detached"}:
             return ui.colors["success"]
+        # 呼吸灯：在 grey23 ~ white 之间平滑过渡
+        # grey 级别范围: 23 (暗) → 100 (亮白)
         t = time.monotonic()
-        phase = (math.sin(t * math.pi) + 1.0) / 2.0
+        # 用 sin 产生 0~1 的平滑值，周期约 2 秒       
+        phase = (math.sin(t * math.pi) + 1.0) / 2.0  # 0.0 ~ 1.0
+        # 映射到 grey 级别 30 ~ 100
         grey_level = int(30 + phase * 70)
+        # Rich 支持 rgb(...) 颜色
         v = int(grey_level * 255 / 100)
         return f"rgb({v},{v},{v})"
 
