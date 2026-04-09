@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 
 
-DEFAULT_MOD_SCHEMA_VERSION = "2.1"
+DEFAULT_MOD_SCHEMA_VERSION = "2.2"
 
 
 @lru_cache(maxsize=1)
@@ -23,4 +23,3 @@ def get_current_mod_schema_version() -> str:
 
     value = str(payload.get("MODVersion", "") or "").strip()
     return value or DEFAULT_MOD_SCHEMA_VERSION
-
