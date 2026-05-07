@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import Sidebar from './components/layout/Sidebar'
 import Header from './components/layout/Header'
 import HomePage from './pages/HomePage'
@@ -12,6 +12,7 @@ import Logs from './pages/Logs'
 import Settings from './pages/Settings'
 import Misc from './pages/Misc'
 import ComponentDownload from './pages/ComponentDownload'
+import TemplateWorkbench from './pages/TemplateWorkbench'
 import AuthPortal from './components/auth/AuthPortal'
 import AccessGuard from './components/ui/AccessGuard'
 import { NotificationProvider } from './components/ui/Notification'
@@ -19,8 +20,70 @@ import DynamicBackground, { BgProvider, resolveOverlayStyle, useBaseBgUrl, useBg
 import { useTheme } from './components/theme/ThemeProvider'
 import { AccountSystemProvider, PAGE_PERMISSION_LABELS, useAccountSystem } from './lib/account-system'
 import type { Page, SubPageParams, Tab } from './types'
+import {
+  RouterProvider,
+  createHashHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  useNavigate,
+  useRouterState,
+} from '@tanstack/react-router'
 
 const pageLabels: Record<Page, string> = PAGE_PERMISSION_LABELS
+
+const miscTabs = ['about', 'author', 'tech', 'libs', 'license', 'components', 'webshell', 'screensaver', 'desktop-pet', 'custom-console'] as const
+const configActions = ['edit', 'open-config', 'open-folder'] as const
+const logSources = ['main', 'webui', 'desktop_pet'] as const
+
+export const pageRoutes = {
+  home: '/',
+  instances: '/instances',
+  config: '/config',
+  knowledge: '/knowledge',
+  'db-migration': '/db-migration',
+  plugins: '/plugins',
+  deploy: '/deploy',
+  status: '/status',
+  logs: '/logs',
+  misc: '/misc',
+  settings: '/settings',
+  'component-download': '/component-download',
+  'template-workbench': '/template-workbench',
+} as const satisfies Record<Page, `/${string}`>
+
+const pageByRoute = Object.fromEntries(
+  Object.entries(pageRoutes).map(([page, route]) => [route, page])
+) as Record<string, Page>
+
+function isOneOf<T extends string>(value: unknown, options: readonly T[]): value is T {
+  return typeof value === 'string' && options.includes(value as T)
+}
+
+function normalizeRouteSearch(search: Record<string, unknown>): SubPageParams | undefined {
+  const params: SubPageParams = {}
+  if (isOneOf(search.miscTab, miscTabs)) params.miscTab = search.miscTab
+  if (isOneOf(search.configAction, configActions)) params.configAction = search.configAction
+  if (isOneOf(search.logSource, logSources)) params.logSource = search.logSource
+  return Object.keys(params).length ? params : undefined
+}
+
+function paramsKey(params?: SubPageParams) {
+  return `${params?.miscTab ?? ''}|${params?.configAction ?? ''}|${params?.logSource ?? ''}`
+}
+
+function routeSearch(params?: SubPageParams) {
+  return {
+    ...(params?.miscTab ? { miscTab: params.miscTab } : {}),
+    ...(params?.configAction ? { configAction: params.configAction } : {}),
+    ...(params?.logSource ? { logSource: params.logSource } : {}),
+  }
+}
+
+function resolveRoutePage(pathname: string): Page {
+  const normalized = pathname === '/' ? '/' : `/${pathname.replace(/^\/+|\/+$/g, '')}`
+  return pageByRoute[normalized] ?? 'home'
+}
 
 let tabCounter = 1
 function makeTab(page: Page): Tab {
@@ -89,8 +152,9 @@ function PageContent({
     case 'status': return <Status />
     case 'logs': return <Logs initialSource={params?.logSource} />
     case 'settings': return <Settings />
-    case 'misc': return <Misc initialTab={params?.miscTab} />
+    case 'misc': return <Misc initialTab={params?.miscTab} onNavigate={onNavigate} />
     case 'component-download': return <ComponentDownload />
+    case 'template-workbench': return <TemplateWorkbench />
     default:
       return (
         <div className="flex items-center justify-center h-full">
@@ -138,7 +202,47 @@ function LoginTransitionOverlay({ loginTransition }: { loginTransition: 'cover-i
   )
 }
 
-function AppShell() {
+function AppRootRoute() {
+  return (
+    <AccountSystemProvider>
+      <RoutedAppShell />
+    </AccountSystemProvider>
+  )
+}
+
+function RoutedAppShell() {
+  const location = useRouterState({ select: state => state.location })
+  const routePage = resolveRoutePage(location.pathname)
+  const routeParams = normalizeRouteSearch(location.search as Record<string, unknown>)
+  return <AppShell routePage={routePage} routeParams={routeParams} />
+}
+
+const rootRoute = createRootRoute({ component: AppRootRoute })
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+})
+const appPageRoutes = Object.entries(pageRoutes)
+  .filter(([page]) => page !== 'home')
+  .map(([, routePath]) => createRoute({
+    getParentRoute: () => rootRoute,
+    path: routePath.slice(1),
+  }))
+
+const routeTree = rootRoute.addChildren([indexRoute, ...appPageRoutes])
+
+export const router = createRouter({
+  routeTree,
+  history: createHashHistory(),
+})
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
+  }
+}
+
+function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: SubPageParams }) {
   const zoom = useZoom()
   const baseBgUrl = useBaseBgUrl()
   const cachedBgSettings = useCachedBgSettings()
@@ -147,22 +251,49 @@ function AppShell() {
   const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
   const [tabs, setTabs] = useState<Tab[]>([makeTab('home')])
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
+  const navigate = useNavigate()
 
   const activeTab = tabs.find(tab => tab.id === activeTabId) || tabs[0]
+  const routeParamsKey = paramsKey(routeParams)
+
+  const navigateToPage = useCallback((page: Page, params?: SubPageParams) => {
+    void navigate({
+      to: pageRoutes[page],
+      search: routeSearch(params),
+    } as never)
+  }, [navigate])
+
+  const navigateToTab = useCallback((tab: Tab) => {
+    navigateToPage(tab.page, tab.params)
+  }, [navigateToPage])
+
+  useEffect(() => {
+    setTabs(prev => {
+      const existing = prev.find(tab => tab.page === routePage)
+      if (existing) {
+        setActiveTabId(existing.id)
+        return prev.map(tab => tab.id === existing.id ? { ...tab, params: routeParams } : tab)
+      }
+      const tab = { ...makeTab(routePage), params: routeParams }
+      setActiveTabId(tab.id)
+      if (prev.length >= 12) {
+        return [...prev.slice(1), tab]
+      }
+      return [...prev, tab]
+    })
+  }, [routePage, routeParams, routeParamsKey])
 
   const handleNavigate = (page: Page, params?: SubPageParams) => {
     const existing = tabs.find(tab => tab.page === page)
-    if (existing) {
-      setActiveTabId(existing.id)
-      if (params) {
-        setTabs(prev => prev.map(tab => tab.id === existing.id ? { ...tab, params } : tab))
-      }
-      return
-    }
-    if (tabs.length >= 12) return
-    const tab = { ...makeTab(page), params }
-    setTabs(prev => [...prev, tab])
-    setActiveTabId(tab.id)
+    if (!existing && tabs.length >= 12) return
+    navigateToPage(page, params)
+  }
+
+  const handleSelectTab = (id: string) => {
+    const tab = tabs.find(item => item.id === id)
+    if (!tab) return
+    setActiveTabId(id)
+    navigateToTab(tab)
   }
 
   const handleCloseTab = (id: string) => {
@@ -171,22 +302,33 @@ function AppShell() {
       if (next.length === 0) return prev
       if (activeTabId === id) {
         const idx = prev.findIndex(tab => tab.id === id)
-        setActiveTabId(next[Math.min(idx, next.length - 1)].id)
+        const nextActive = next[Math.min(idx, next.length - 1)]
+        setActiveTabId(nextActive.id)
+        navigateToTab(nextActive)
       }
       return next
     })
   }
 
   const handleCloseOtherTabs = (id: string) => {
-    setTabs(prev => prev.filter(tab => tab.id === id))
+    const tab = tabs.find(item => item.id === id)
+    if (!tab) return
+    setTabs(prev => prev.filter(item => item.id === id))
     setActiveTabId(id)
+    navigateToTab(tab)
   }
 
   const handleCloseRightTabs = (id: string) => {
     setTabs(prev => {
       const idx = prev.findIndex(tab => tab.id === id)
       const next = prev.slice(0, idx + 1)
-      if (!next.find(tab => tab.id === activeTabId)) setActiveTabId(id)
+      if (!next.find(tab => tab.id === activeTabId)) {
+        const nextActive = next.find(tab => tab.id === id)
+        if (nextActive) {
+          setActiveTabId(id)
+          navigateToTab(nextActive)
+        }
+      }
       return next
     })
   }
@@ -201,9 +343,7 @@ function AppShell() {
   }
 
   const handleAddTab = () => {
-    const tab = makeTab('home')
-    setTabs(prev => [...prev, tab])
-    setActiveTabId(tab.id)
+    handleNavigate('home')
   }
 
   const handleLogout = async () => {
@@ -257,14 +397,24 @@ function AppShell() {
             <DynamicBackground />
             <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
 
-            {currentUser && (
+            {currentUser && routePage === 'template-workbench' ? (
+              <div className="relative z-10 h-full">
+                <AccessGuard
+                  allowed={canAccessPage('template-workbench')}
+                  className="h-full min-h-full"
+                  detail={`${pageLabels['template-workbench']} 对当前 ${currentUser.role === 'guest' ? '访客' : '成员'} 模板未开放。`}
+                >
+                  <TemplateWorkbench />
+                </AccessGuard>
+              </div>
+            ) : currentUser && (
               <div className="relative z-10 flex h-full">
                 <Sidebar currentPage={activeTab.page} onNavigate={handleNavigate} isPageAccessible={canAccessPage} />
                 <div className="flex-1 flex flex-col overflow-hidden">
                   <Header
                     tabs={tabs}
                     activeTabId={activeTabId}
-                    onSelectTab={setActiveTabId}
+                    onSelectTab={handleSelectTab}
                     onCloseTab={handleCloseTab}
                     onCloseOtherTabs={handleCloseOtherTabs}
                     onCloseRightTabs={handleCloseRightTabs}
@@ -297,9 +447,5 @@ function AppShell() {
 }
 
 export default function App() {
-  return (
-    <AccountSystemProvider>
-      <AppShell />
-    </AccountSystemProvider>
-  )
+  return <RouterProvider router={router} />
 }

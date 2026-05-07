@@ -33,7 +33,6 @@ export type ActionPermissionKey =
   | 'misc.screensaver.access'
   | 'misc.desktop-pet.access'
   | 'misc.custom-console.access'
-  | 'misc.template-market.access'
 
 export interface AccountUser {
   id: string
@@ -271,6 +270,7 @@ export const PAGE_PERMISSION_ORDER: Page[] = [
   'status',
   'logs',
   'misc',
+  'template-workbench',
   'settings',
   'component-download',
 ]
@@ -286,6 +286,7 @@ export const PAGE_PERMISSION_LABELS: Record<Page, string> = {
   status: '查看运行状态',
   logs: '日志查看器',
   misc: '杂项',
+  'template-workbench': '模板工作台',
   settings: '设置',
   'component-download': '组件下载',
 }
@@ -313,7 +314,6 @@ export const ACTION_PERMISSION_ORDER: ActionPermissionKey[] = [
   'misc.screensaver.access',
   'misc.desktop-pet.access',
   'misc.custom-console.access',
-  'misc.template-market.access',
 ]
 
 export const ACTION_PERMISSION_LABELS: Record<ActionPermissionKey, string> = {
@@ -339,7 +339,6 @@ export const ACTION_PERMISSION_LABELS: Record<ActionPermissionKey, string> = {
   'misc.screensaver.access': '杂项 / 屏保',
   'misc.desktop-pet.access': '杂项 / 桌宠',
   'misc.custom-console.access': '杂项 / 自定义控制台',
-  'misc.template-market.access': '杂项 / 模版市场',
 }
 
 const AccountSystemContext = createContext<AccountSystemContextValue | null>(null)
@@ -377,6 +376,7 @@ function createDefaultRoleTemplates(): Record<'member' | 'guest', RolePermission
   memberPages.status = true
   memberPages.logs = true
   memberPages.misc = true
+  memberPages['template-workbench'] = true
   memberPages.settings = true
   memberPages['component-download'] = true
 
