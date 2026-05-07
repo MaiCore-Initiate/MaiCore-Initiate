@@ -353,6 +353,12 @@ export default function TemplateWorkbench({
   return (
     <div className="template-workbench relative h-full w-full overflow-hidden" style={{ background: 'var(--twb-bg)', color: 'var(--twb-text)' }}>
       <aside className="absolute left-0 top-0 z-10 h-[1080px] w-[350px]" style={{ background: 'var(--twb-sidebar-bg)' }}>
+        <img
+          src={`${import.meta.env.BASE_URL}icon.png`}
+          alt=""
+          aria-hidden
+          className="absolute left-[20px] top-[20px] h-[40px] w-[40px] rounded-[10px] object-cover"
+        />
         <div className="absolute left-[70px] top-[29px] leading-none" style={{ fontFamily: font, fontSize: 30, fontWeight: 900 }}>
           MCStart
         </div>
