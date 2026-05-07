@@ -2,9 +2,7 @@ import { useState, type ReactNode } from 'react'
 import {
   CirclePlus,
   Clock,
-  Cloud,
   File,
-  Folder,
   Globe,
   Plus,
   Search,
@@ -164,39 +162,126 @@ function ProjectCard({
   return <FileCard item={item} left={left} top={top} onOpen={onOpen} />
 }
 
-function ProjectRow({
-  item,
-  index,
-  topBase,
+function ListStarGlyph() {
+  return (
+    <>
+      <rect width="24" height="24" transform="translate(0.5 0.5)" fill="none" />
+      <path
+        d="M12.913,18.378l4.725,3a.8.8,0,0,0,1.181-.891L17.45,15.106c0-.019-.009-.037-.012-.056s-.006-.038-.008-.057,0-.038,0-.057,0-.038,0-.057,0-.038,0-.057,0-.038.008-.057.007-.038.012-.056.01-.037.016-.055.013-.036.02-.054.015-.035.024-.052.017-.034.027-.05.02-.033.031-.048.022-.031.034-.046.024-.03.037-.044.026-.028.04-.041l.043-.038,4.237-3.534a.813.813,0,0,0-.45-1.434l-5.531-.356-.056-.005-.056-.009-.055-.013-.054-.017-.052-.021-.051-.025-.049-.028L15.561,8.8l-.044-.035-.041-.038c-.013-.013-.026-.027-.038-.041s-.024-.029-.035-.044-.022-.03-.032-.046-.02-.032-.029-.048-.017-.033-.025-.05-.015-.034-.021-.052L13.231,3.256q-.01-.028-.022-.055c-.008-.018-.017-.036-.027-.053s-.02-.034-.03-.051-.022-.033-.034-.048S13.093,3.018,13.08,3s-.027-.029-.041-.043-.029-.027-.044-.039l-.047-.036-.05-.032-.052-.028L12.79,2.8l-.056-.02-.057-.016-.058-.011-.059-.007-.059,0-.059,0-.059.007-.058.011-.057.016-.056.02-.054.024-.052.028-.05.032-.047.036q-.023.019-.044.039T11.92,3c-.013.015-.026.03-.038.046s-.023.032-.034.048-.021.034-.03.051-.018.035-.027.053-.016.036-.023.055L9.706,8.45q-.01.026-.021.052t-.025.05q-.013.025-.029.048T9.6,8.647q-.017.023-.035.044l-.038.041-.041.038L9.439,8.8l-.046.032-.049.028-.051.025-.052.021-.054.017-.055.013-.056.009-.056.005-5.531.356a.813.813,0,0,0-.45,1.434l4.237,3.534.043.038q.021.02.04.041c.013.014.025.029.037.044s.023.03.034.046.021.032.031.048.019.033.027.05.016.035.024.052.014.036.02.054.011.036.016.055.009.037.012.056.006.038.008.057,0,.038,0,.057,0,.038,0,.057,0,.038,0,.057,0,.038-.008.057-.007.037-.012.056L6.284,20.094a.949.949,0,0,0,1.406,1.069l4.4-2.784.047-.028.049-.024.05-.021.052-.017.053-.013.054-.01.054-.006.054,0,.054,0,.054.006.054.01.053.013.052.017.05.021.049.024Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </>
+  )
+}
+
+function CloudArrowDownGlyph() {
+  return (
+    <>
+      <rect width="32" height="32" transform="translate(0.5 0.5)" fill="none" />
+      <path d="M15.262,22.263,19.5,26.5l4.237-4.237" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      <path d="M19.5,16.5v10" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      <path
+        d="M12.5,26.5h-3q-.172,0-.343-.008t-.343-.025q-.171-.017-.341-.042t-.339-.059q-.169-.034-.335-.075T7.468,26.2q-.164-.05-.326-.108t-.321-.124q-.159-.066-.314-.139T6.2,25.674q-.152-.081-.3-.169t-.29-.184q-.143-.1-.281-.2t-.271-.211q-.133-.109-.26-.225T4.55,24.45q-.122-.121-.237-.249t-.224-.26q-.109-.133-.211-.271t-.2-.281q-.1-.143-.184-.29t-.169-.3q-.081-.152-.154-.307t-.139-.314q-.066-.159-.124-.32T2.8,21.532q-.05-.165-.092-.331t-.075-.335q-.034-.168-.059-.339t-.042-.341q-.017-.171-.025-.343T2.5,19.5q0-.172.008-.344t.025-.343q.017-.171.042-.341t.059-.339q.034-.169.075-.335t.092-.331q.05-.164.108-.326t.124-.32q.066-.159.139-.314t.154-.307q.081-.152.169-.3t.184-.29q.1-.143.2-.281t.211-.271q.109-.133.224-.26t.237-.249q.122-.122.249-.237t.26-.225q.133-.109.271-.211t.281-.2q.143-.1.29-.184t.3-.169q.152-.081.307-.154t.314-.139q.159-.066.321-.124t.326-.108q.164-.05.331-.092t.335-.075q.169-.033.339-.059t.341-.042q.171-.017.343-.025T9.5,12.5a7.194,7.194,0,0,1,1.738.212"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M10.5,16.5q0-.3.017-.591t.052-.589q.035-.294.087-.585t.122-.579q.069-.288.156-.571t.189-.56q.1-.277.222-.548t.254-.534q.135-.263.285-.518t.315-.5q.165-.246.344-.481t.372-.46q.193-.224.4-.437t.424-.413q.218-.2.447-.387t.469-.36q.24-.173.49-.331t.509-.3q.259-.143.525-.271t.54-.24q.274-.112.554-.207t.565-.174q.285-.079.574-.141t.582-.106q.292-.045.587-.072t.59-.037q.3-.01.591,0t.59.033q.295.025.587.068t.582.1q.29.06.575.137t.566.17q.281.094.555.2t.542.236q.267.126.527.268t.511.3q.251.157.492.328t.472.356q.231.185.45.384t.427.41q.207.211.4.434t.375.457q.181.234.347.479t.319.5q.152.254.288.516t.258.532q.121.27.226.547t.193.559q.088.282.16.569t.126.578q.054.291.091.584t.057.589q.02.3.022.591t-.013.591q-.016.3-.048.589t-.083.586q-.05.291-.118.58t-.151.572q-.084.284-.185.562t-.218.55q-.117.272-.25.536t-.281.52q-.148.256-.312.5T28.5,22.5"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </>
+  )
+}
+
+function FolderNotchGlyph() {
+  return (
+    <>
+      <rect width="32" height="32" transform="translate(0.5 0.5)" fill="none" />
+      <path
+        d="M16.5,10.5H27.549l.049,0,.049.006.048.008.048.011.047.013.047.015.046.018.045.02.044.022.043.024.042.026.04.028.039.03.037.032.036.034.034.035.032.037.03.039.028.04.026.042.024.043.022.044.02.045q.009.023.018.046c.006.015.011.031.016.047s.009.031.013.047.008.032.011.048.006.032.008.048,0,.032.006.049,0,.033,0,.049,0,.033,0,.049v14c0,.016,0,.033,0,.049s0,.033,0,.049,0,.033-.006.049-.005.032-.008.048-.007.032-.011.048-.008.032-.013.047-.01.031-.016.047-.011.031-.018.046-.013.03-.02.045l-.022.044-.024.043-.026.042-.028.04-.03.039-.032.037-.034.036-.036.034-.037.032-.039.03-.04.028-.042.026-.043.024-.044.022-.045.02-.046.018-.047.016-.047.013-.048.011-.048.008L27.6,26.5l-.049,0H5.451l-.049,0-.049-.006L5.3,26.481l-.048-.011-.047-.013-.047-.016-.046-.018-.045-.02-.044-.022-.043-.024-.041-.026L4.9,26.3l-.039-.03-.037-.032-.036-.034-.034-.036-.032-.037L4.7,26.1l-.028-.04-.026-.042-.024-.043L4.6,25.927q-.011-.022-.02-.045c-.006-.015-.012-.03-.018-.046s-.011-.031-.015-.047-.009-.031-.013-.047-.008-.032-.011-.048-.006-.032-.008-.048,0-.032-.006-.049,0-.032,0-.049,0-.033,0-.049v-12"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M12.163,13.5H4.5v-5q0-.025,0-.049t0-.049q0-.024.006-.049T4.519,8.3q0-.024.011-.048t.013-.047q.007-.023.015-.047t.018-.046q.009-.023.02-.045l.022-.044.024-.043.026-.041L4.7,7.9l.03-.039.032-.037.034-.036.036-.034.037-.032L4.9,7.7l.04-.028.041-.026.043-.024L5.072,7.6l.045-.02.046-.018.047-.015.047-.013L5.3,7.519l.048-.008L5.4,7.5l.049,0h6.712a1.013,1.013,0,0,1,.6.2L16.5,10.5l-3.738,2.8a1.015,1.015,0,0,1-.136.085,1.013,1.013,0,0,1-.464.115Z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </>
+  )
+}
+
+function ProjectList({
+  items,
   onOpen,
 }: {
-  item: TemplateWorkbenchItem
-  index: number
-  topBase: number
+  items: TemplateWorkbenchItem[]
   onOpen?: (item: TemplateWorkbenchItem) => void
 }) {
-  const top = topBase + index * 80
-  const isFolder = item.type === 'folder'
+  const rowStart = 61
+  const rowGap = 80
+  const height = items.length > 0 ? rowStart + (items.length - 1) * rowGap + 60 : 121
+
   return (
-    <button
-      type="button"
-      onClick={() => onOpen?.(item)}
-      className="absolute text-left transition-colors hover:bg-[var(--twb-hover)]"
-      style={{ left: 400, top, width: 1470, height: 60, color: 'var(--twb-text)' }}
-    >
-      <div className="absolute rounded-[5px] border" style={{ left: 0, top: 0, width: 60, height: 60, borderColor: 'var(--twb-card-border)' }} />
-      {!isFolder && <Star size={25} strokeWidth={1.5} className="absolute" style={{ left: 73, top: 18 }} />}
-      <div className="absolute leading-none" style={{ left: isFolder ? 69 : 103, top: 24, fontFamily: font, fontSize: 25, fontWeight: 300 }}>
-        {item.name}
-      </div>
-      <div className="absolute flex items-center leading-none" style={{ left: 571, top: 22, fontFamily: font, fontSize: 25, fontWeight: 300 }}>
-        {isFolder ? <Folder size={31} className="mr-[2px]" /> : <Cloud size={31} className="mr-[2px]" />}
-        {typeLabel(item.type)}
-      </div>
-      <div className="absolute leading-none" style={{ left: 1119, top: 24, color: 'var(--twb-muted)', fontFamily: font, fontSize: 25, fontWeight: 300 }}>
-        {item.updatedAt}
-      </div>
-    </button>
+    <div className="absolute" style={{ left: 400, top: 285, width: 1470, height, color: 'var(--twb-text)' }}>
+      {items.map((item, index) => {
+        const rowY = rowStart + index * rowGap
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onOpen?.(item)}
+            className="absolute z-0 rounded-[5px] transition-colors hover:bg-[var(--twb-hover)]"
+            style={{ left: 0, top: rowY, width: 1470, height: 60 }}
+            aria-label={`打开${item.name}`}
+          />
+        )
+      })}
+      <svg className="absolute left-0 top-0 z-10 pointer-events-none overflow-visible" width="1470" height={height} viewBox={`0 0 1470 ${height}`} fill="none" aria-hidden>
+        <text x="0" y="21" fill="var(--twb-muted)" fontSize="20" fontFamily={font} fontWeight="300">名称</text>
+        <text x="540" y="21" fill="var(--twb-muted)" fontSize="20" fontFamily={font} fontWeight="300">文件类型</text>
+        <text x="1120" y="21" fill="var(--twb-muted)" fontSize="20" fontFamily={font} fontWeight="300">更新时间</text>
+        <path d="M0 31H1470" stroke="var(--twb-muted)" strokeWidth="1" />
+
+        {items.map((item, index) => {
+          const rowY = rowStart + index * rowGap
+          const isFolder = item.type === 'folder'
+          return (
+            <g key={item.id}>
+              <rect x="0" y={rowY} width="60" height="60" rx="5" fill="var(--twb-bg)" stroke="var(--twb-border)" strokeWidth="0.4" />
+              {!isFolder && (
+                <g transform={`translate(69.5 ${rowY + 17.5})`}>
+                  <ListStarGlyph />
+                </g>
+              )}
+              <text x={isFolder ? 70 : 104} y={rowY + 40} fill="currentColor" fontSize="25" fontFamily={font} fontWeight="300">{item.name}</text>
+              <g transform={`translate(539.5 ${rowY + 13.5})`}>
+                {isFolder ? <FolderNotchGlyph /> : <CloudArrowDownGlyph />}
+              </g>
+              <text x="572" y={rowY + 40} fill="currentColor" fontSize="25" fontFamily={font} fontWeight="300">{typeLabel(item.type)}</text>
+              <text x="1120" y={rowY + 40} fill="var(--twb-muted)" fontSize="25" fontFamily={font} fontWeight="300">{item.updatedAt}</text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
   )
 }
 
@@ -496,16 +581,7 @@ export default function TemplateWorkbench({
         ))}
 
         {layoutMode === 'list' && (
-          <>
-            <div className="absolute leading-none" style={{ left: 400, top: 306, color: 'var(--twb-muted)', fontFamily: font, fontSize: 20, fontWeight: 300 }}>名称</div>
-            <div className="absolute leading-none" style={{ left: 940, top: 306, color: 'var(--twb-muted)', fontFamily: font, fontSize: 20, fontWeight: 300 }}>文件类型</div>
-            <div className="absolute leading-none" style={{ left: 1520, top: 306, color: 'var(--twb-muted)', fontFamily: font, fontSize: 20, fontWeight: 300 }}>更新时间</div>
-            <div className="absolute h-px w-[1470px]" style={{ left: 400, top: 338, background: 'var(--twb-border-soft)' }} />
-
-            {projectItems.map((item, index) => (
-              <ProjectRow key={item.id} item={item} index={index} topBase={350} onOpen={onOpenItem} />
-            ))}
-          </>
+          <ProjectList items={projectItems} onOpen={onOpenItem} />
         )}
 
         {slots?.contentTrailing}
