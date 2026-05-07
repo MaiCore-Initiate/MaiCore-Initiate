@@ -137,10 +137,12 @@ function PageContent({
   page,
   params,
   onNavigate,
+  onReturnFromWorkbench,
 }: {
   page: Page
   params?: SubPageParams
   onNavigate?: (page: Page, params?: SubPageParams) => void
+  onReturnFromWorkbench?: () => void
 }) {
   switch (page) {
     case 'home': return <HomePage onNavigate={onNavigate} />
@@ -154,7 +156,7 @@ function PageContent({
     case 'settings': return <Settings />
     case 'misc': return <Misc initialTab={params?.miscTab} onNavigate={onNavigate} />
     case 'component-download': return <ComponentDownload />
-    case 'template-workbench': return <TemplateWorkbench />
+    case 'template-workbench': return <TemplateWorkbench onReturnToSource={onReturnFromWorkbench} />
     default:
       return (
         <div className="flex items-center justify-center h-full">
@@ -251,6 +253,7 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
   const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
   const [tabs, setTabs] = useState<Tab[]>([makeTab('home')])
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
+  const workbenchReturnTarget = useRef<{ page: Page; params?: SubPageParams }>({ page: 'misc' })
   const navigate = useNavigate()
 
   const activeTab = tabs.find(tab => tab.id === activeTabId) || tabs[0]
@@ -266,6 +269,17 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
   const navigateToTab = useCallback((tab: Tab) => {
     navigateToPage(tab.page, tab.params)
   }, [navigateToPage])
+
+  const handleReturnFromWorkbench = useCallback(() => {
+    const target = workbenchReturnTarget.current
+    navigateToPage(target.page, target.params)
+  }, [navigateToPage])
+
+  useEffect(() => {
+    if (routePage !== 'template-workbench') {
+      workbenchReturnTarget.current = { page: routePage, params: routeParams }
+    }
+  }, [routePage, routeParams, routeParamsKey])
 
   useEffect(() => {
     setTabs(prev => {
@@ -404,7 +418,7 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
                   className="h-full min-h-full"
                   detail={`${pageLabels['template-workbench']} 对当前 ${currentUser.role === 'guest' ? '访客' : '成员'} 模板未开放。`}
                 >
-                  <TemplateWorkbench />
+                  <TemplateWorkbench onReturnToSource={handleReturnFromWorkbench} />
                 </AccessGuard>
               </div>
             ) : currentUser && (
@@ -430,7 +444,12 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
                         className="h-full min-h-full"
                         detail={pageDetail}
                       >
-                        <PageContent page={activeTab.page} params={activeTab.params} onNavigate={handleNavigate} />
+                        <PageContent
+                          page={activeTab.page}
+                          params={activeTab.params}
+                          onNavigate={handleNavigate}
+                          onReturnFromWorkbench={handleReturnFromWorkbench}
+                        />
                       </AccessGuard>
                     </PageTransition>
                   </main>

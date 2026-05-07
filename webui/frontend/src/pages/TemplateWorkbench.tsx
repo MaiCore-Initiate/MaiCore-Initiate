@@ -41,6 +41,7 @@ export interface TemplateWorkbenchProps {
   onImportProject?: () => void
   onOpenItem?: (item: TemplateWorkbenchItem) => void
   onSelectSection?: (section: TemplateWorkbenchSection) => void
+  onReturnToSource?: () => void
 }
 
 const defaultItems: TemplateWorkbenchItem[] = [
@@ -340,6 +341,7 @@ export default function TemplateWorkbench({
   onImportProject,
   onOpenItem,
   onSelectSection,
+  onReturnToSource,
 }: TemplateWorkbenchProps) {
   const [activeSection, setActiveSection] = useState<TemplateWorkbenchSection>('my-templates')
   const [layoutMode, setLayoutMode] = useState<TemplateWorkbenchLayout>('card')
@@ -353,15 +355,23 @@ export default function TemplateWorkbench({
   return (
     <div className="template-workbench relative h-full w-full overflow-hidden" style={{ background: 'var(--twb-bg)', color: 'var(--twb-text)' }}>
       <aside className="absolute left-0 top-0 z-10 h-[1080px] w-[350px]" style={{ background: 'var(--twb-sidebar-bg)' }}>
-        <img
-          src={`${import.meta.env.BASE_URL}icon.png`}
-          alt=""
-          aria-hidden
-          className="absolute left-[20px] top-[20px] h-[40px] w-[40px] rounded-[10px] object-cover"
-        />
-        <div className="absolute left-[70px] top-[29px] leading-none" style={{ fontFamily: font, fontSize: 30, fontWeight: 900 }}>
-          MCStart
-        </div>
+        <button
+          type="button"
+          onClick={onReturnToSource}
+          className="absolute left-[20px] top-[20px] flex h-[40px] items-center transition-colors hover:bg-[var(--twb-hover)]"
+          style={{ width: 210, color: 'var(--twb-text)' }}
+          aria-label="返回进入工作台前的页面"
+        >
+          <img
+            src={`${import.meta.env.BASE_URL}icon.png`}
+            alt=""
+            aria-hidden
+            className="h-[40px] w-[40px] rounded-[10px] object-cover"
+          />
+          <span className="ml-[10px] leading-none" style={{ fontFamily: font, fontSize: 30, fontWeight: 900 }}>
+            MCStart
+          </span>
+        </button>
 
         {sidebarItems.map(({ id, label, icon: Icon, top }) => (
           <button
@@ -418,6 +428,38 @@ export default function TemplateWorkbench({
           />
         </label>
         <div className="absolute" style={{ right: 30, top: 15 }}>{slots?.toolbarTrailing}</div>
+        <button
+          type="button"
+          onClick={onReturnToSource}
+          className="absolute flex items-center justify-center rounded-[6px] transition-colors hover:bg-[var(--twb-hover)]"
+          style={{ left: 1345, top: 15, width: 41, height: 41, color: 'var(--twb-text)' }}
+          aria-label="返回进入工作台前的页面"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="41" height="41" viewBox="0 0 41 41" fill="none" aria-hidden>
+            <path
+              fill="currentColor"
+              d="M5.5 0L35.5 0C38.5376 0 41 2.46243 41 5.5L41 35.5C41 38.5376 38.5376 41 35.5 41L5.5 41C2.46243 41 2.98023e-08 38.5376 2.98023e-08 35.5L2.98023e-08 5.5C2.98023e-08 2.46243 2.46243 0 5.5 0ZM5.5 1C3.01472 1 1 3.01472 1 5.5L1 35.5C1 37.9853 3.01472 40 5.5 40L35.5 40C37.9853 40 40 37.9853 40 35.5L40 5.5C40 3.01472 37.9853 1 35.5 1L5.5 1Z"
+            />
+            <path
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              d="M26.5 17.5L26.5 21.5L14.5 21.5"
+            />
+            <path
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              d="M17.5 18.5L14.5 21.5L17.5 24.5"
+            />
+            <path
+              fill="currentColor"
+              d="M9.5 9.5L31.5 9.5C32.6046 9.5 33.5 10.3954 33.5 11.5L33.5 29.5C33.5 30.6046 32.6046 31.5 31.5 31.5L9.5 31.5C8.39543 31.5 7.5 30.6046 7.5 29.5L7.5 11.5C7.5 10.3954 8.39543 9.5 9.5 9.5ZM9.5 11.5C9.5 11.5 9.5 11.5 9.5 11.5L9.5 29.5C9.5 29.5 9.5 29.5 9.5 29.5L31.5 29.5C31.5 29.5 31.5 29.5 31.5 29.5L31.5 11.5C31.5 11.5 31.5 11.5 31.5 11.5L9.5 11.5Z"
+            />
+          </svg>
+        </button>
         <button
           type="button"
           onClick={onImportProject}
