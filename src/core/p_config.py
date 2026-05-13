@@ -97,7 +97,14 @@ class PConfig:
             "webui_token": "",
             "token_max_attempts": 5,
             "host": "0.0.0.0",
-            "port": 10086
+            "port": 10086,
+            "github_oauth": {
+                "enabled": False,
+                "client_id": "",
+                "client_secret": "",
+                "redirect_uri": "",
+                "scope": "read:user user:email"
+            }
         }
     }
 

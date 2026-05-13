@@ -8,6 +8,8 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 
+from src.core.p_config import p_config_manager
+
 from .auth_core import (
     ACTION_ORDER,
     PAGE_ORDER,
@@ -157,6 +159,29 @@ async def get_account_state(request: Request):
         "success": True,
         "logged_in": user is not None,
         **account_store.get_state_snapshot(user.get("id") if user else None),
+    }
+
+
+@router.get("/github/status")
+async def get_github_oauth_status():
+    config = p_config_manager.get("webui.github_oauth", {}) or {}
+    enabled = bool(config.get("enabled", False))
+    redirect_uri = str(config.get("redirect_uri", "") or "").strip()
+    scope = str(config.get("scope", "") or "").strip()
+    required_fields = ("client_id", "client_secret", "redirect_uri")
+    missing_fields = [
+        field
+        for field in required_fields
+        if not str(config.get(field, "") or "").strip()
+    ]
+
+    return {
+        "success": True,
+        "configured": not missing_fields,
+        "enabled": enabled,
+        "redirect_uri": redirect_uri,
+        "scope": scope,
+        "missing_fields": missing_fields,
     }
 
 
