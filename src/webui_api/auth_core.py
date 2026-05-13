@@ -2,6 +2,8 @@
 """账号系统与会话鉴权核心。"""
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import logging
 import secrets
@@ -23,6 +25,7 @@ P_CONFIG_PATH = PROJECT_ROOT / "config" / "P-config.toml"
 LOGIN_FAIL_LIMIT = 5
 CODE_TTL_SECONDS = 5 * 60
 SESSION_TTL_SECONDS = 7 * 24 * 60 * 60
+GITHUB_OAUTH_STATE_TTL_SECONDS = 10 * 60
 
 PAGE_ORDER = [
     "home",
@@ -99,6 +102,23 @@ def safe_copy(value: Any) -> Any:
 
 def make_id(prefix: str) -> str:
     return f"{prefix}-{secrets.token_hex(6)}"
+
+
+def generate_code_verifier() -> str:
+    return secrets.token_urlsafe(64)
+
+
+def make_s256_code_challenge(code_verifier: str) -> str:
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def make_oauth_state() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def generate_local_password() -> str:
+    return f"Gh{secrets.token_urlsafe(30)}9"
 
 
 def is_valid_email(email: str) -> bool:
@@ -208,6 +228,55 @@ class TokenManager:
 
     def verify_token(self, input_token: str) -> bool:
         return (input_token or "") == self.get_token()
+
+    def set_token(self, token: str) -> bool:
+        token = (token or "").strip()
+        if not token:
+            return False
+        config = self._load_config()
+        config.setdefault("webui", {})["webui_token"] = token
+        self._save_config(config)
+        return True
+
+
+class OAuthStateStore:
+    """短期保存 OAuth state 与 PKCE verifier。"""
+
+    def __init__(self, ttl_seconds: int = GITHUB_OAUTH_STATE_TTL_SECONDS):
+        self.ttl_seconds = ttl_seconds
+        self._lock = threading.Lock()
+        self._states: Dict[str, Dict[str, Any]] = {}
+
+    def _prune(self) -> None:
+        now_ts = time.time()
+        self._states = {
+            state: record
+            for state, record in self._states.items()
+            if float(record.get("expires_at", 0)) > now_ts
+        }
+
+    def create(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        state = make_oauth_state()
+        now_ts = time.time()
+        record = {
+            **payload,
+            "state": state,
+            "created_at": now_ts,
+            "expires_at": now_ts + self.ttl_seconds,
+        }
+        with self._lock:
+            self._prune()
+            self._states[state] = record
+        return safe_copy(record)
+
+    def consume(self, state: str) -> Optional[Dict[str, Any]]:
+        state = (state or "").strip()
+        if not state:
+            return None
+        with self._lock:
+            self._prune()
+            record = self._states.pop(state, None)
+        return safe_copy(record) if record else None
 
 
 class AccountStore:
@@ -333,10 +402,28 @@ class AccountStore:
                 return user
         return None
 
+    def _find_user_by_github_id(self, state: Dict[str, Any], github_id: str) -> Optional[Dict[str, Any]]:
+        needle = str(github_id or "").strip()
+        if not needle:
+            return None
+        for user in state["users"]:
+            if str(user.get("github_id", "")).strip() == needle:
+                return user
+        return None
+
+    def _find_user_by_email(self, state: Dict[str, Any], email: str) -> Optional[Dict[str, Any]]:
+        needle = normalize(email)
+        if not needle:
+            return None
+        for user in state["users"]:
+            if normalize(user.get("email", "")) == needle:
+                return user
+        return None
+
     def _public_user(self, user: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if not user:
             return None
-        return {
+        public_user = {
             "id": user.get("id"),
             "role": user.get("role"),
             "status": user.get("status"),
@@ -348,6 +435,14 @@ class AccountStore:
             "last_login_at": user.get("last_login_at"),
             "login_code_enabled": bool(user.get("login_code_enabled", False)),
         }
+        if user.get("github_id"):
+            public_user["github"] = {
+                "id": user.get("github_id"),
+                "login": user.get("github_login"),
+                "url": user.get("github_url") or "",
+                "email_verified": bool(user.get("github_email_verified", False)),
+            }
+        return public_user
 
     def _record_audit(self, state: Dict[str, Any], action: str, detail: str):
         trail = state.get("audit_trail", [])
@@ -529,6 +624,101 @@ class AccountStore:
                 "success": True,
                 "message": "访客账号已创建，请返回登录。" if can_direct else "注册申请已提交，等待管理员审核。",
                 "mode": "registered" if can_direct else "applied",
+            }
+
+        return self._mutate(mutator)
+
+    def upsert_github_user(self, github_user: Dict[str, Any], primary_email: str, email_verified: bool) -> Dict[str, Any]:
+        github_id = str(github_user.get("id") or "").strip()
+        github_login = str(github_user.get("login") or "").strip()
+        email = (primary_email or github_user.get("email") or "").strip()
+        if not github_id or not github_login:
+            return {"success": False, "message": "GitHub 用户信息不完整。"}
+        if not is_valid_email(email):
+            email = f"{github_login}@users.noreply.github.com"
+
+        def mutator(state: Dict[str, Any]):
+            user = self._find_user_by_github_id(state, github_id) or self._find_user_by_email(state, email)
+            created = user is None
+            if created:
+                user = {
+                    "id": make_id("user"),
+                    "role": "guest",
+                    "status": "active",
+                    "name": github_user.get("name") or github_login,
+                    "email": email,
+                    "avatar": github_user.get("avatar_url") or "",
+                    "password": generate_local_password(),
+                    "created_at": now_iso(),
+                    "joined_via": "github-oauth",
+                    "last_login_at": None,
+                    "login_code_enabled": False,
+                }
+                state["users"].append(user)
+            else:
+                user["status"] = "active"
+                user["name"] = user.get("name") or github_user.get("name") or github_login
+                user["email"] = user.get("email") or email
+                user["avatar"] = github_user.get("avatar_url") or user.get("avatar") or ""
+                if user.get("joined_via") == "seed":
+                    user["joined_via"] = "github-oauth"
+                if not user.get("password"):
+                    user["password"] = generate_local_password()
+
+            user["github_id"] = github_id
+            user["github_login"] = github_login
+            user["github_url"] = github_user.get("html_url") or ""
+            user["github_email_verified"] = bool(email_verified)
+            user["last_login_at"] = now_iso()
+            self._record_audit(state, "github-oauth-login", f"{user['email']} 通过 GitHub OAuth 登录")
+            return {
+                "success": True,
+                "message": "GitHub 登录成功。",
+                "created": created,
+                "user": self._public_user(user),
+            }
+
+        return self._mutate(mutator)
+
+    def can_replace_admin_with_github_user(self, user_id: str) -> bool:
+        state = self._read()
+        user = self._find_user(state, user_id)
+        return bool(user and user.get("status") == "active" and user.get("github_id") and user.get("password"))
+
+    def replace_admin_with_github_user(self, user_id: str, confirm: bool) -> Dict[str, Any]:
+        if not confirm:
+            return {"success": False, "message": "已取消替换管理员账号。"}
+
+        def mutator(state: Dict[str, Any]):
+            target = self._find_user(state, user_id)
+            if not target or target.get("status") != "active" or not target.get("github_id"):
+                return {"success": False, "message": "当前账号不是已登录的 GitHub 账号。"}
+            local_password = str(target.get("password") or "").strip()
+            if not local_password:
+                local_password = generate_local_password()
+                target["password"] = local_password
+            if not self.token_manager.set_token(local_password):
+                return {"success": False, "message": "更新 WebUI Token 失败。"}
+
+            previous_admins = [user for user in state["users"] if user.get("role") == "admin" and user.get("id") != target.get("id")]
+            for user in state["users"]:
+                if user.get("id") == target.get("id"):
+                    user["role"] = "admin"
+                    user["status"] = "active"
+                elif user.get("role") == "admin":
+                    user["role"] = "member"
+                    user["status"] = "active"
+            if not any(user.get("role") == "admin" for user in state["users"]):
+                target["role"] = "admin"
+            self._record_audit(
+                state,
+                "github-admin-replace",
+                f"GitHub 账号 {target['email']} 已替换为管理员，原管理员数量 {len(previous_admins)}",
+            )
+            return {
+                "success": True,
+                "message": "已替换管理员账号，WebUI Token 已更新为 GitHub 账号的本地密码。",
+                "current_admin": self._public_user(target),
             }
 
         return self._mutate(mutator)
@@ -825,6 +1015,14 @@ class SessionManager:
         self._mark_success(session, admin["id"], "token")
         return {"success": True, "message": "登录成功", "user": self.account_store._public_user(admin)}
 
+    def login_oauth(self, session_id: str, user_id: str) -> Dict[str, Any]:
+        session = self.get_session(session_id)
+        user = self.account_store.get_user(user_id)
+        if not user or user.get("status") != "active":
+            return {"success": False, "message": "GitHub 账号不可登录。"}
+        self._mark_success(session, user["id"], "github-oauth")
+        return {"success": True, "message": "登录成功。", "user": self.account_store._public_user(user)}
+
     def login_account(self, session_id: str, identifier: str, password: str, code: str) -> Dict[str, Any]:
         session = self.get_session(session_id)
         self._check_unlock(session)
@@ -890,6 +1088,7 @@ class RequestRateLimiter:
 
 token_manager = TokenManager(P_CONFIG_PATH)
 account_store = AccountStore(ACCOUNT_DATA_FILE, token_manager)
+github_oauth_state_store = OAuthStateStore()
 session_manager = SessionManager(token_manager, account_store)
 request_rate_limiter = RequestRateLimiter()
 
