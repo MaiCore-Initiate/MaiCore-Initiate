@@ -48,6 +48,61 @@ function AvatarCircle({
 const titleFont = { fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const monoFont = { fontFamily: "'Ubuntu', 'HarmonyOS Sans SC', monospace" }
 
+const GITHUB_OAUTH_RESULT_KEY = 'mcstart.github-oauth-result'
+
+interface GithubOAuthStatusResponse {
+  enabled?: boolean
+  configured?: boolean
+  available?: boolean
+  message?: string
+}
+
+interface GithubOAuthStartResponse {
+  authorization_url?: string
+  message?: string
+}
+
+interface GithubOAuthResultPayload {
+  type?: string
+  status?: string
+  message?: string
+}
+
+async function requestGithubJson<T>(path: string, init?: RequestInit) {
+  const response = await fetch(path, {
+    credentials: 'include',
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
+  })
+  const text = await response.text()
+  const data = text ? JSON.parse(text) as T : {} as T
+  if (!response.ok) {
+    const message = typeof (data as { detail?: unknown }).detail === 'string'
+      ? (data as { detail: string }).detail
+      : typeof (data as { message?: unknown }).message === 'string'
+        ? (data as { message: string }).message
+        : `HTTP ${response.status}`
+    throw new Error(message)
+  }
+  return data
+}
+
+function parseGithubOAuthResult(value: unknown): GithubOAuthResultPayload | null {
+  if (!value) return null
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as GithubOAuthResultPayload
+    } catch {
+      return null
+    }
+  }
+  if (typeof value === 'object') return value as GithubOAuthResultPayload
+  return null
+}
+
 export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () => void }) {
   const {
     currentAdmin,
@@ -58,6 +113,8 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
     activateAdminSession,
     loginLocal,
     registerAccount,
+    refreshAccountState,
+    replaceGithubAdmin,
   } = useAccountSystem()
   const { notify } = useNotification()
 
@@ -75,11 +132,103 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
   const [registerAvatar, setRegisterAvatar] = useState('')
   const [registerHint, setRegisterHint] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [githubAvailable, setGithubAvailable] = useState(false)
+  const [githubChecking, setGithubChecking] = useState(true)
+  const [githubLoading, setGithubLoading] = useState(false)
+  const [githubMessage, setGithubMessage] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const githubHandlingRef = useRef(false)
 
   useEffect(() => {
     inputRef.current?.focus()
   }, [view])
+
+  useEffect(() => {
+    let cancelled = false
+    const checkGithubStatus = async () => {
+      setGithubChecking(true)
+      try {
+        const status = await requestGithubJson<GithubOAuthStatusResponse>('/api/account/github/status')
+        if (cancelled) return
+        const available = Boolean(status.enabled ?? status.configured ?? status.available)
+        setGithubAvailable(available)
+        setGithubMessage(available ? (status.message ?? '') : (status.message ?? 'GitHub 登录未配置'))
+      } catch (error) {
+        if (cancelled) return
+        setGithubAvailable(false)
+        setGithubMessage(error instanceof Error ? error.message : '无法读取 GitHub 登录状态')
+      } finally {
+        if (!cancelled) setGithubChecking(false)
+      }
+    }
+    void checkGithubStatus()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleGithubSuccess = async (message?: string) => {
+      if (githubHandlingRef.current) return
+      githubHandlingRef.current = true
+      setGithubLoading(true)
+      try {
+        window.localStorage.removeItem(GITHUB_OAUTH_RESULT_KEY)
+        const result = await refreshAccountState()
+        if (!result.success) {
+          notify(result.message, 'error')
+          return
+        }
+        const githubUser = result.data?.currentUser
+        notify(message || result.message || 'GitHub 登录成功。', 'success')
+        if (githubUser?.joinedVia === 'github' && githubUser.role !== 'admin') {
+          const confirmed = window.confirm('当前 GitHub 账号还不是管理员，是否将管理员身份替换为此 GitHub 账号？')
+          if (confirmed) {
+            const replaceResult = await replaceGithubAdmin()
+            notify(replaceResult.message, replaceResult.success ? 'success' : 'error')
+          }
+        }
+        onAuthenticated()
+      } finally {
+        setGithubLoading(false)
+        githubHandlingRef.current = false
+      }
+    }
+
+    const consumeGithubResult = (payload: GithubOAuthResultPayload | null) => {
+      if (!payload) return
+      if (payload.type && payload.type !== 'mcstart-github-oauth') return
+      window.localStorage.removeItem(GITHUB_OAUTH_RESULT_KEY)
+      if (payload.status === 'success') {
+        void handleGithubSuccess(payload.message)
+        return
+      }
+      if (payload.status) {
+        notify(payload.message || 'GitHub 登录未完成。', 'warning')
+      }
+    }
+
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      consumeGithubResult(parseGithubOAuthResult(event.data))
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== GITHUB_OAUTH_RESULT_KEY) return
+      consumeGithubResult(parseGithubOAuthResult(event.newValue))
+    }
+    const poll = window.setInterval(() => {
+      const raw = window.localStorage.getItem(GITHUB_OAUTH_RESULT_KEY)
+      if (raw) consumeGithubResult(parseGithubOAuthResult(raw))
+    }, 800)
+
+    window.addEventListener('message', onMessage)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener('message', onMessage)
+      window.removeEventListener('storage', onStorage)
+      window.clearInterval(poll)
+    }
+  }, [notify, onAuthenticated, refreshAccountState, replaceGithubAdmin])
 
   const previewUser = useMemo(() => {
     return findUserByIdentifier(identifier) ?? (identifier.trim() ? null : currentAdmin)
@@ -177,6 +326,37 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
       setView('login')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleGithubLogin = async () => {
+    if (githubLoading || githubChecking || !githubAvailable) return
+    setGithubLoading(true)
+    setGithubMessage('正在连接 GitHub...')
+    try {
+      window.localStorage.removeItem(GITHUB_OAUTH_RESULT_KEY)
+      const result = await requestGithubJson<GithubOAuthStartResponse>('/api/account/github/start', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      if (!result.authorization_url) {
+        throw new Error(result.message || '后端未返回 GitHub 授权地址。')
+      }
+      const popup = window.open(result.authorization_url, 'mcstart-github-oauth', 'width=520,height=720')
+      if (popup) {
+        popup.focus()
+        setGithubMessage('请在弹出的 GitHub 窗口完成授权。')
+        notify('请在 GitHub 弹窗中完成授权。', 'info')
+        return
+      }
+      setGithubMessage('浏览器阻止了弹窗，正在跳转到 GitHub。')
+      window.location.href = result.authorization_url
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '启动 GitHub 登录失败。'
+      setGithubMessage(message)
+      notify(message, 'error')
+    } finally {
+      setGithubLoading(false)
     }
   }
 
@@ -341,6 +521,47 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
           >
             {submitting ? '验证中...' : '登录'}
           </button>
+
+          {(githubAvailable || githubChecking) ? (
+            <div className="w-full grid grid-cols-1 gap-[10px]">
+              <div className="flex items-center gap-[12px] text-black/38" style={{ ...monoFont, fontSize: 15 }}>
+                <span className="h-px flex-1" style={{ backgroundColor: 'var(--mc-border-soft)' }} />
+                <span>或使用 OAuth 继续</span>
+                <span className="h-px flex-1" style={{ backgroundColor: 'var(--mc-border-soft)' }} />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleGithubLogin()}
+                disabled={githubChecking || githubLoading || !githubAvailable}
+                className="group w-full cursor-pointer overflow-hidden disabled:cursor-not-allowed disabled:opacity-60"
+                style={{
+                  height: 66,
+                  borderRadius: 28,
+                  border: '3px solid var(--mc-border-strong)',
+                  background: 'linear-gradient(135deg, var(--mc-control-bg), var(--mc-panel-bg-strong))',
+                  boxShadow: '0 12px 26px var(--mc-shadow-soft)',
+                  color: 'var(--mc-text-primary)',
+                }}
+              >
+                <span className="flex h-full items-center justify-center gap-[14px] px-[24px]">
+                  <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden className="shrink-0 transition-transform duration-200 group-hover:scale-110">
+                    <path
+                      fill="currentColor"
+                      d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56v-2.16c-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.27-1.68-1.27-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.68 1.25 3.34.96.1-.74.4-1.25.72-1.53-2.55-.29-5.23-1.28-5.23-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.16 1.18A10.96 10.96 0 0 1 12 6.05c.98 0 1.95.13 2.87.39 2.2-1.49 3.16-1.18 3.16-1.18.62 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.08 0 4.42-2.69 5.39-5.25 5.67.41.36.78 1.06.78 2.14v3.16c0 .31.21.67.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"
+                    />
+                  </svg>
+                  <span style={{ ...titleFont, fontSize: 27 }}>
+                    {githubLoading ? '等待 GitHub 授权...' : githubChecking ? '检查 GitHub 登录...' : '通过 GitHub 登录'}
+                  </span>
+                </span>
+              </button>
+              {githubMessage ? (
+                <div className="text-center text-black/42" style={{ ...monoFont, fontSize: 14 }}>
+                  {githubMessage}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           </form>
         ) : (
           <form className="mt-[34px] flex flex-col gap-[20px]" onSubmit={handleRegister}>

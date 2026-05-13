@@ -43,7 +43,7 @@ export interface AccountUser {
   avatar?: string
   password: string
   createdAt: string
-  joinedVia: 'seed' | 'self-register' | 'admin-approve'
+  joinedVia: 'seed' | 'self-register' | 'admin-approve' | 'github'
   lastLoginAt?: string
   loginCodeEnabled: boolean
 }
@@ -170,6 +170,8 @@ interface AccountSystemContextValue {
   updateRegisterPolicy: (patch: Partial<RegisterPolicy>) => Promise<OperationResult>
   updateAppearancePolicy: (patch: Partial<AppearancePolicy>) => Promise<OperationResult>
   transferAdmin: (targetUserId: string, token: string, code: string) => Promise<OperationResult>
+  refreshAccountState: () => Promise<OperationResult<{ currentUser: AccountUser | null }>>
+  replaceGithubAdmin: () => Promise<OperationResult>
 }
 
 interface BackendAccountUser {
@@ -1049,6 +1051,34 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const refreshAccountState = async (): Promise<OperationResult<{ currentUser: AccountUser | null }>> => {
+    try {
+      const data = await refreshState({ clearAdminToken: true })
+      return {
+        success: true,
+        message: '账号状态已刷新。',
+        data: { currentUser: mapBackendUser(data.current_user) },
+      }
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '刷新账号状态失败。' }
+    }
+  }
+
+  const replaceGithubAdmin = async (): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/github/replace-admin', {
+        method: 'POST',
+        body: JSON.stringify({ confirm: true }),
+      })
+      if (result.success) {
+        await refreshState({ clearAdminToken: true })
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '替换管理员失败。' }
+    }
+  }
+
   const value = useMemo<AccountSystemContextValue>(() => ({
     ready,
     adminToken: state.adminToken,
@@ -1082,6 +1112,8 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     updateRegisterPolicy,
     updateAppearancePolicy,
     transferAdmin,
+    refreshAccountState,
+    replaceGithubAdmin,
   }), [
     ready,
     state,
