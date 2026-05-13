@@ -4,6 +4,9 @@
 负责首次运行时的环境检查、组件下载和实例部署引导
 """
 import os
+import re
+import secrets
+import string
 import time
 import random
 import tempfile
@@ -12,7 +15,7 @@ from pathlib import Path
 import structlog
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 from rich.markdown import Markdown
 from rich.live import Live
 from rich.text import Text
@@ -279,6 +282,90 @@ def _type_text(text: str, style: str = "", end: str = "\n"):
             
     console.print(end=end) # 最后结束符
 
+def _show_webui_token():
+    """显示 WebUI Token（不启动 WebUI，仅查看/设置 Token）"""
+    ui.clear_screen()
+    ui.console.print("[🔐 WebUI Token查看]", style=ui.colors["secondary"])
+    ui.console.print("==================")
+
+    token = p_config_manager.get("webui.webui_token", "")
+    webui_port = p_config_manager.get("webui.port", 10086)
+
+    def _validate_token(token_str: str) -> tuple[bool, str]:
+        if len(token_str) < 16:
+            return False, "Token长度必须至少16位"
+        if not re.search(r"[A-Z]", token_str):
+            return False, "Token必须包含至少一个大写英文字母"
+        if not re.search(r"[a-z]", token_str):
+            return False, "Token必须包含至少一个小写英文字母"
+        if not re.search(r"\d", token_str):
+            return False, "Token必须包含至少一个数字"
+        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\\|,.<>/?]", token_str):
+            return False, "Token必须包含至少一个特殊字符 (!@#$%^&*...)"
+        return True, "Token验证通过"
+
+    def _generate_secure_token(length: int = 24) -> str:
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        while True:
+            new_token = ''.join(secrets.choice(alphabet) for _ in range(length))
+            is_valid, _ = _validate_token(new_token)
+            if is_valid:
+                return new_token
+
+    if not token:
+        token = _generate_secure_token()
+        p_config_manager.set("webui.webui_token", token)
+        p_config_manager.save()
+        ui.console.print("已自动生成符合安全要求的Token", style=ui.colors["success"])
+
+    ui.console.print(f"\nWebUI访问地址: http://localhost:{webui_port}", style=ui.colors["info"])
+    ui.console.print(f"\n[bold]当前Token:[/bold] {token}", style=ui.colors["primary"])
+
+    is_valid, msg = _validate_token(token)
+    if is_valid:
+        ui.console.print(f"Token状态: ✅ {msg}", style=ui.colors["success"])
+    else:
+        ui.console.print(f"Token状态: ❌ {msg}", style=ui.colors["error"])
+
+    ui.console.print("\n请妥善保管此Token，登录时需要输入", style=ui.colors["warning"])
+
+    ui.console.print("\n====== 操作 ======")
+    ui.console.print(" [A] 设置自定义Token", style=ui.colors["success"])
+    ui.console.print(" [B] 重新生成随机Token", style=ui.colors["warning"])
+    ui.console.print(" [Q] 返回", style=ui.colors["exit"])
+
+    choice = ui.get_choice("请选择操作", ["A", "B", "Q"])
+
+    if choice == "A":
+        while True:
+            custom_token = ui.get_input("请输入自定义Token（至少16位，包含大写、小写、数字和特殊字符）: ")
+            if not custom_token:
+                ui.print_warning("Token不能为空")
+                continue
+
+            is_valid, msg = _validate_token(custom_token)
+            if is_valid:
+                p_config_manager.set("webui.webui_token", custom_token)
+                p_config_manager.save()
+                ui.console.print(f"\n✅ 自定义Token设置成功！", style=ui.colors["success"])
+                ui.console.print(f"新Token: {custom_token}", style=ui.colors["primary"])
+                break
+            else:
+                ui.console.print(f"❌ Token不符合要求: {msg}", style=ui.colors["error"])
+                if not ui.confirm("是否重新输入？"):
+                    break
+
+    elif choice == "B":
+        if ui.confirm("确定要重新生成Token吗？之前的Token将失效！"):
+            new_token = _generate_secure_token()
+            p_config_manager.set("webui.webui_token", new_token)
+            p_config_manager.save()
+            ui.console.print(f"\n✅ 新Token已生成！", style=ui.colors["success"])
+            ui.console.print(f"新Token: {new_token}", style=ui.colors["primary"])
+
+    ui.pause()
+
+
 def run_onboarding():
     """运行新手引导流程"""
     # 初始清理
@@ -408,10 +495,21 @@ def run_onboarding():
     ui.console.file.flush()
     
     ui.console.print("\n")
-    _type_text("是否开始配置向导？", end="")
-    if not Confirm.ask("", default=True):
+    _type_text("请选择操作：", end="")
+    ui.console.print("\n[1] 开始配置向导")
+    ui.console.print("[2] 跳过向导")
+    ui.console.print("[3] 跳过向导并查看 WebUI Token")
+
+    choice = Prompt.ask("请输入选项编号", choices=["1", "2", "3"], default="1")
+
+    if choice == "2":
         _mark_as_not_first_run()
         return
+    elif choice == "3":
+        _show_webui_token()
+        _mark_as_not_first_run()
+        return
+    # choice == "1" continues with the full guide
 
     # 2. 组件检查与下载
     _check_and_install_components()
