@@ -99,11 +99,10 @@ class PConfig:
             "host": "0.0.0.0",
             "port": 10086,
             "github_oauth": {
-                "enabled": False,
-                "client_id": "",
-                "client_secret": "",
+                "enabled": True,
+                "client_id": "Ov23liLTqa4d2ihNDRBK",
                 "redirect_uri": "",
-                "scope": "read:user user:email"
+                "scope": "user:email"
             }
         }
     }

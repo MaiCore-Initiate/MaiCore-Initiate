@@ -82,7 +82,8 @@ GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_USER_URL = "https://api.github.com/user"
 GITHUB_EMAILS_URL = "https://api.github.com/user/emails"
 GITHUB_DEFAULT_REDIRECT_URI = "http://127.0.0.1:10086/api/account/github/callback"
-GITHUB_DEFAULT_SCOPE = "read:user user:email"
+GITHUB_DEFAULT_SCOPE = "user:email"
+GITHUB_DEFAULT_CLIENT_ID = "Ov23liLTqa4d2ihNDRBK"
 
 
 def _github_config() -> Dict[str, Any]:
@@ -97,19 +98,32 @@ def _github_redirect_uri(config: Dict[str, Any]) -> str:
 
 
 def _github_scope(config: Dict[str, Any]) -> str:
-    return str(config.get("scope", "") or "").strip() or GITHUB_DEFAULT_SCOPE
+    scope = str(config.get("scope", "") or "").strip()
+    if not scope or scope == "read:user user:email":
+        return GITHUB_DEFAULT_SCOPE
+    return scope
+
+
+def _github_client_id(config: Dict[str, Any]) -> str:
+    return str(config.get("client_id") or "").strip() or GITHUB_DEFAULT_CLIENT_ID
+
+
+def _github_enabled(config: Dict[str, Any]) -> bool:
+    explicit_client_id = str(config.get("client_id") or "").strip()
+    if not explicit_client_id:
+        return True
+    return bool(config.get("enabled", False))
 
 
 def _github_status_payload() -> Dict[str, Any]:
     config = _github_config()
-    missing_fields = [field for field in ("client_id", "client_secret") if not str(config.get(field, "") or "").strip()]
     return {
         "success": True,
-        "configured": not missing_fields,
-        "enabled": bool(config.get("enabled", False)),
+        "configured": True,
+        "enabled": _github_enabled(config),
         "redirect_uri": _github_redirect_uri(config),
         "scope": _github_scope(config),
-        "missing_fields": missing_fields,
+        "missing_fields": [],
     }
 
 
@@ -131,8 +145,7 @@ def _request_json(url: str, data: Dict[str, str] | None = None, access_token: st
 
 def _exchange_github_token(config: Dict[str, Any], code: str, code_verifier: str, redirect_uri: str) -> Dict[str, Any]:
     payload = {
-        "client_id": str(config.get("client_id") or "").strip(),
-        "client_secret": str(config.get("client_secret") or "").strip(),
+        "client_id": _github_client_id(config),
         "code": code,
         "redirect_uri": redirect_uri,
         "code_verifier": code_verifier,
@@ -295,7 +308,7 @@ async def start_github_oauth(request: Request):
         return {
             **status,
             "success": False,
-            "message": "GitHub OAuth 配置不完整，缺少 client_id 或 client_secret。",
+            "message": "GitHub OAuth 配置不完整，缺少 client_id。",
         }
 
     code_verifier = generate_code_verifier()
@@ -306,7 +319,7 @@ async def start_github_oauth(request: Request):
         "client_host": client_host,
     })
     query = urllib.parse.urlencode({
-        "client_id": str(config.get("client_id") or "").strip(),
+        "client_id": _github_client_id(config),
         "redirect_uri": status["redirect_uri"],
         "scope": status["scope"],
         "state": record["state"],
