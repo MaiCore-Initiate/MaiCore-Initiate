@@ -94,6 +94,12 @@ mcsb -in <文件.mcsins> [-s <目标目录>]
 
 默认导入到当前目录下的 `<序列号>/` 子文件夹。导入后自动注册到配置，`source` 字段设为 `import`。
 
+> **PowerShell 注意**：`@components` 和 `@plugins` 中的 `@` 在 PowerShell 中是 splatting 运算符，必须对 `-f` 参数值加引号：
+> ```powershell
+> mcsb -o 1 -f "!data,@plugins" -s "C:\output"
+> ```
+> CMD 和 bash 不受此限制。
+
 ---
 
 ## 用例示例
