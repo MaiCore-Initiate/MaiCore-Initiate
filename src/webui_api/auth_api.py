@@ -291,6 +291,12 @@ class PasswordBody(BaseModel):
     code: str = ""
 
 
+class CloseAccountBody(BaseModel):
+    password: str = ""
+    code: str = ""
+    confirm_email: str = ""
+
+
 class UpgradeBody(BaseModel):
     reason: str = ""
 
@@ -593,6 +599,22 @@ async def change_password(
     user: Dict[str, Any] = Depends(get_request_user),
 ):
     return account_store.change_password(user["id"], body.model_dump())
+
+
+@router.post("/close-account")
+async def close_account(
+    body: CloseAccountBody,
+    request: Request,
+    response: Response,
+    user: Dict[str, Any] = Depends(get_request_user),
+):
+    result = account_store.close_account(user["id"], body.model_dump())
+    if result.get("success"):
+        session_id = getattr(request.state, "session_id", None) or request.cookies.get(SESSION_COOKIE_NAME, "")
+        if session_id:
+            session_manager.logout(session_id)
+        _clear_session_cookie(response, request)
+    return result
 
 
 @router.post("/request-upgrade")

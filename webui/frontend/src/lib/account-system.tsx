@@ -140,6 +140,12 @@ interface PasswordPayload {
   code: string
 }
 
+interface CloseAccountPayload {
+  password: string
+  code: string
+  confirmEmail: string
+}
+
 interface AccountSystemContextValue {
   ready: boolean
   adminToken: string
@@ -164,6 +170,7 @@ interface AccountSystemContextValue {
   registerAccount: (payload: RegisterPayload) => Promise<OperationResult<{ mode: 'registered' | 'applied' }>>
   updateProfile: (payload: ProfilePayload) => Promise<OperationResult>
   changePassword: (payload: PasswordPayload) => Promise<OperationResult>
+  closeAccount: (payload: CloseAccountPayload) => Promise<OperationResult>
   requestMemberUpgrade: (reason: string) => Promise<OperationResult>
   approveRequest: (requestId: string) => Promise<OperationResult>
   rejectRequest: (requestId: string) => Promise<OperationResult>
@@ -917,6 +924,31 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const closeAccount = async (payload: CloseAccountPayload): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>('/api/account/close-account', {
+        method: 'POST',
+        body: JSON.stringify({
+          password: payload.password,
+          code: payload.code,
+          confirm_email: payload.confirmEmail,
+        }),
+      })
+      if (result.success) {
+        setState(prev => ({
+          ...pruneState(prev),
+          adminToken: '',
+          currentUserId: null,
+          verificationCodes: {},
+          loginGuards: {},
+        }))
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '注销账号失败。' }
+    }
+  }
+
   const requestMemberUpgrade = async (reason: string): Promise<OperationResult> => {
     try {
       const result = await requestJson<OperationResult>('/api/account/request-upgrade', {
@@ -1116,6 +1148,7 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     registerAccount,
     updateProfile,
     changePassword,
+    closeAccount,
     requestMemberUpgrade,
     approveRequest,
     rejectRequest,

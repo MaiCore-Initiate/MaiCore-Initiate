@@ -117,6 +117,7 @@ export default function AccountManagementPanel() {
     sendSensitiveCode,
     updateProfile,
     changePassword,
+    closeAccount,
     requestMemberUpgrade,
     approveRequest,
     rejectRequest,
@@ -137,6 +138,10 @@ export default function AccountManagementPanel() {
   const [nextPassword, setNextPassword] = useState('')
   const [passwordCode, setPasswordCode] = useState('')
   const [passwordHint, setPasswordHint] = useState('')
+  const [closePassword, setClosePassword] = useState('')
+  const [closeCode, setCloseCode] = useState('')
+  const [closeConfirmEmail, setCloseConfirmEmail] = useState('')
+  const [closeHint, setCloseHint] = useState('')
   const [upgradeReason, setUpgradeReason] = useState('')
   const [whitelistDraft, setWhitelistDraft] = useState(registerPolicy.allowedDomains.join('\n'))
   const [transferTarget, setTransferTarget] = useState('')
@@ -226,6 +231,45 @@ export default function AccountManagementPanel() {
       setCurrentPassword('')
       setNextPassword('')
       setPasswordCode('')
+    }
+  }
+
+  const handleCloseAccountCode = async () => {
+    const result = await sendSensitiveCode('close-account')
+    if (!result.success) {
+      notify(result.message, 'warning')
+      return
+    }
+    const hint = `注销验证码：${result.code}`
+    setCloseHint(hint)
+    notify(hint, 'success')
+  }
+
+  const handleCloseAccount = async () => {
+    if (currentUser.role === 'admin') {
+      notify('管理员账号不能直接注销，请先转让管理员权限。', 'warning')
+      return
+    }
+    if (closeConfirmEmail.trim().toLowerCase() !== currentUser.email.trim().toLowerCase()) {
+      notify('请完整输入当前账号邮箱以确认注销。', 'warning')
+      return
+    }
+    if (currentUser.passwordManagedByGithub && closePassword.trim()) {
+      notify('GitHub 注册账号未设置本地密码时，注销密码留空即可。', 'info')
+      return
+    }
+    if (!window.confirm('确定要注销当前账号吗？注销后需要重新注册或联系管理员恢复访问。')) {
+      return
+    }
+    const result = await pushResult(closeAccount({
+      password: closePassword,
+      code: closeCode,
+      confirmEmail: closeConfirmEmail,
+    }))
+    if (result.success) {
+      setClosePassword('')
+      setCloseCode('')
+      setCloseConfirmEmail('')
     }
   }
 
@@ -334,6 +378,39 @@ export default function AccountManagementPanel() {
               </div>
               <button type="button" onClick={handleChangePassword} className="cursor-pointer rounded-[18px] px-[16px] py-[10px]" style={{ border: '2px solid rgba(0,0,0,0.3)', background: 'rgba(255,255,255,0.34)', ...titleFont, fontSize: 20 }}>
                 更新密码
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="rounded-[20px] border-2 border-black/15 bg-white/25 p-[20px]">
+        <SectionTitle>注销账号</SectionTitle>
+        {currentUser.role === 'admin' ? (
+          <div className="mt-[12px] text-black/55" style={{ ...titleFont, fontSize: 22 }}>
+            当前账号是管理员。请先在下方“管理员账号转让”中完成转让，再注销原账号。
+          </div>
+        ) : (
+          <>
+            <div className="mt-[12px] text-black/55" style={{ ...titleFont, fontSize: 20, lineHeight: 1.55 }}>
+              注销后会删除当前系统账号、待处理申请和登录验证码，并立即退出登录。此操作不会删除 GitHub 账号。
+            </div>
+            <div className="mt-[14px] grid grid-cols-1 gap-[12px] xl:grid-cols-[1fr,1fr,1.1fr]">
+              <input value={closeConfirmEmail} onChange={event => setCloseConfirmEmail(event.target.value)} placeholder="输入当前邮箱确认" className="bg-white/40 border-2 border-black/20 rounded-[18px] px-[18px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
+              <input value={closePassword} onChange={event => setClosePassword(event.target.value)} type="password" placeholder={currentUser.passwordManagedByGithub ? '当前密码（未设置本地密码可留空）' : '当前密码'} className="bg-white/40 border-2 border-black/20 rounded-[18px] px-[18px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
+              <div className="flex gap-[10px]">
+                <input value={closeCode} onChange={event => setCloseCode(event.target.value)} placeholder="注销验证码" className="flex-1 bg-white/40 border-2 border-black/20 rounded-[18px] px-[18px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
+                <button type="button" onClick={handleCloseAccountCode} className="cursor-pointer rounded-[18px] px-[14px]" style={{ border: '2px solid rgba(0,0,0,0.25)', background: 'rgba(255,255,255,0.3)', ...titleFont, fontSize: 18 }}>
+                  发送
+                </button>
+              </div>
+            </div>
+            <div className="mt-[10px] flex items-center justify-between gap-[12px] flex-wrap">
+              <div className="text-black/45" style={{ ...monoFont, fontSize: 15 }}>
+                {closeHint || '注销前需要通过安全验证码校验。'}
+              </div>
+              <button type="button" onClick={() => void handleCloseAccount()} className="cursor-pointer rounded-[18px] px-[16px] py-[10px]" style={{ border: '2px solid rgba(0,0,0,0.3)', background: 'rgba(255,140,140,0.22)', ...titleFont, fontSize: 20 }}>
+                注销账号
               </button>
             </div>
           </>

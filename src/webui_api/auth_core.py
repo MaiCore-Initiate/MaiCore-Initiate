@@ -830,6 +830,38 @@ class AccountStore:
 
         return self._mutate(mutator)
 
+    def close_account(self, user_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        def mutator(state: Dict[str, Any]):
+            user = self._find_user(state, user_id)
+            if not user:
+                return {"success": False, "message": "账号不存在。"}
+            if user.get("role") == "admin":
+                return {"success": False, "message": "管理员账号不能直接注销，请先在 [设置]->[账号与成员管理] 中转让管理员权限。"}
+            confirm_email = normalize(payload.get("confirm_email") or "")
+            if confirm_email != normalize(user.get("email", "")):
+                return {"success": False, "message": "确认邮箱不匹配。"}
+            password = payload.get("password") or ""
+            password_optional = bool(user.get("github_id")) and bool(user.get("password_generated")) and not password
+            if not password_optional and user.get("password") != password:
+                return {"success": False, "message": "当前密码不正确。"}
+            if not self._consume_code(state, f"sensitive:{user_id}:close-account", payload.get("code") or ""):
+                return {"success": False, "message": "注销验证码错误或已过期。"}
+
+            email = user.get("email", "")
+            state["users"] = [item for item in state["users"] if item.get("id") != user_id]
+            state["requests"] = [
+                item for item in state.get("requests", [])
+                if item.get("applicant_id") != user_id
+            ]
+            state["verification_codes"] = {
+                key: value for key, value in state.get("verification_codes", {}).items()
+                if not key.startswith(f"login:{user_id}") and not key.startswith(f"sensitive:{user_id}:")
+            }
+            self._record_audit(state, "account-close", f"{email} 注销了账号")
+            return {"success": True, "message": "账号已注销。"}
+
+        return self._mutate(mutator)
+
     def request_member_upgrade(self, user_id: str, reason: str) -> Dict[str, Any]:
         def mutator(state: Dict[str, Any]):
             user = self._find_user(state, user_id)
