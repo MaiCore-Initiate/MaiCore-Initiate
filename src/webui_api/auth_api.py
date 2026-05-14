@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 import secrets
-import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List
 
+logger = logging.getLogger(__name__)
+
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from src.core.p_config import p_config_manager
 
@@ -20,9 +22,7 @@ from .auth_core import (
     ACTION_ORDER,
     PAGE_ORDER,
     account_store,
-    generate_code_verifier,
     github_oauth_state_store,
-    make_s256_code_challenge,
     get_request_user,
     require_action,
     require_admin,
@@ -77,12 +77,11 @@ def _enforce_rate_limit(key: str, limit: int, window_seconds: int) -> None:
         raise HTTPException(status_code=429, detail=f"请求过于频繁，请在 {retry_after} 秒后重试")
 
 
-GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
+GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_USER_URL = "https://api.github.com/user"
 GITHUB_EMAILS_URL = "https://api.github.com/user/emails"
-GITHUB_DEFAULT_REDIRECT_URI = "http://127.0.0.1:10086/api/account/github/callback"
-GITHUB_DEFAULT_SCOPE = "user:email"
+GITHUB_DEFAULT_SCOPE = "read:user user:email"
 GITHUB_DEFAULT_CLIENT_ID = "Ov23liLTqa4d2ihNDRBK"
 
 
@@ -91,10 +90,6 @@ def _github_config() -> Dict[str, Any]:
         p_config_manager.reload_if_changed()
     config = p_config_manager.get("webui.github_oauth", {}) or {}
     return config if isinstance(config, dict) else {}
-
-
-def _github_redirect_uri(config: Dict[str, Any]) -> str:
-    return str(config.get("redirect_uri", "") or "").strip() or GITHUB_DEFAULT_REDIRECT_URI
 
 
 def _github_scope(config: Dict[str, Any]) -> str:
@@ -121,10 +116,60 @@ def _github_status_payload() -> Dict[str, Any]:
         "success": True,
         "configured": True,
         "enabled": _github_enabled(config),
-        "redirect_uri": _github_redirect_uri(config),
         "scope": _github_scope(config),
         "missing_fields": [],
     }
+
+
+def _get_proxy_opener():
+    import os
+    http_proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
+    if http_proxy:
+        return urllib.request.ProxyHandler({"http": http_proxy, "https": http_proxy})
+    return None
+
+
+def _request_device_code(client_id: str, scope: str) -> Dict[str, Any]:
+    data = {
+        "client_id": client_id,
+        "scope": scope,
+    }
+    body = urllib.parse.urlencode(data).encode("utf-8")
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "MaiCore-Start-WebUI",
+    }
+    req = urllib.request.Request(GITHUB_DEVICE_CODE_URL, data=body, headers=headers, method="POST")
+    proxy_handler = _get_proxy_opener()
+    if proxy_handler:
+        opener = urllib.request.build_opener(proxy_handler)
+        with opener.open(req, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _poll_access_token(client_id: str, device_code: str) -> Dict[str, Any]:
+    data = {
+        "client_id": client_id,
+        "device_code": device_code,
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+    }
+    body = urllib.parse.urlencode(data).encode("utf-8")
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "MaiCore-Start-WebUI",
+    }
+    req = urllib.request.Request(GITHUB_TOKEN_URL, data=body, headers=headers, method="POST")
+    proxy_handler = _get_proxy_opener()
+    if proxy_handler:
+        opener = urllib.request.build_opener(proxy_handler)
+        with opener.open(req, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    with urllib.request.urlopen(req, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 def _request_json(url: str, data: Dict[str, str] | None = None, access_token: str = "") -> Any:
@@ -137,23 +182,26 @@ def _request_json(url: str, data: Dict[str, str] | None = None, access_token: st
         headers["Authorization"] = f"Bearer {access_token}"
         headers["Accept"] = "application/vnd.github+json"
         headers["X-GitHub-Api-Version"] = "2022-11-28"
-    request = urllib.request.Request(url, data=body, headers=headers, method="POST" if data is not None else "GET")
-    with urllib.request.urlopen(request, timeout=15) as response:
-        raw = response.read().decode("utf-8")
-    return json.loads(raw) if raw else {}
-
-
-def _exchange_github_token(config: Dict[str, Any], code: str, code_verifier: str, redirect_uri: str) -> Dict[str, Any]:
-    payload = {
-        "client_id": _github_client_id(config),
-        "code": code,
-        "redirect_uri": redirect_uri,
-        "code_verifier": code_verifier,
-    }
-    token_payload = _request_json(GITHUB_TOKEN_URL, payload)
-    if isinstance(token_payload, dict) and token_payload.get("error"):
-        raise ValueError(str(token_payload.get("error_description") or token_payload.get("error")))
-    return token_payload if isinstance(token_payload, dict) else {}
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST" if data is not None else "GET")
+    proxy_handler = _get_proxy_opener()
+    try:
+        if proxy_handler:
+            opener = urllib.request.build_opener(proxy_handler)
+            with opener.open(req, timeout=30) as response:
+                raw = response.read().decode("utf-8")
+        else:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                raw = response.read().decode("utf-8")
+    except Exception as exc:
+        logger.warning("HTTP request failed: %s", exc)
+        raise
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = urllib.parse.parse_qs(raw, keep_blank_values=True)
+        return {k: v[0] if len(v) == 1 else v for k, v in parsed.items()}
 
 
 def _github_api_json(url: str, access_token: str) -> Any:
@@ -176,18 +224,29 @@ def _github_callback_html(success: bool, message: str) -> str:
     safe_status = html.escape(status)
     safe_message = html.escape(message)
     heading = "GitHub 登录成功" if success else "GitHub 登录失败"
+    closing_text = "正在关闭窗口..." if success else "正在返回..."
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head><meta charset="utf-8"><title>GitHub OAuth</title></head>
 <body style="font-family: system-ui, sans-serif; padding: 32px;">
 <h1>{heading}</h1>
 <p>{safe_message}</p>
+<p id="closing" style="color: #888;"></p>
 <script>
-  try {{
-    localStorage.setItem('mcstart.github-oauth-result', JSON.stringify({{status: '{safe_status}', message: '{safe_message}', at: Date.now()}}));
-    if (window.opener) {{ window.opener.postMessage({{type: 'mcstart-github-oauth', status: '{safe_status}', message: '{safe_message}'}}, window.location.origin); }}
-  }} catch (error) {{}}
-  window.setTimeout(function () {{ window.location.href = '/'; }}, 900);
+  (function () {{
+    var payload = {{type: 'mcstart-github-oauth', status: '{safe_status}', message: '{safe_message}'}};
+    try {{ localStorage.setItem('mcstart.github-oauth-result', JSON.stringify(payload)); }} catch (ignore) {{}}
+    var isPopup = false;
+    try {{ isPopup = !!window.opener && !window.opener.closed; }} catch (ignore) {{}}
+    if (isPopup) {{
+      try {{ window.opener.postMessage(payload, window.location.origin); }} catch (ignore) {{}}
+      document.getElementById('closing').textContent = '{closing_text}';
+      window.setTimeout(function () {{ window.close(); }}, 800);
+    }} else {{
+      document.getElementById('closing').textContent = '即将跳转...';
+      window.setTimeout(function () {{ window.location.href = '/'; }}, 1500);
+    }}
+  }})();
 </script>
 </body>
 </html>"""
@@ -274,6 +333,7 @@ class TransferAdminBody(BaseModel):
 
 class GithubReplaceAdminBody(BaseModel):
     confirm: bool = False
+    token: str = ""
 
 
 @router.get("/bootstrap")
@@ -303,110 +363,160 @@ async def start_github_oauth(request: Request):
     config = _github_config()
     status = _github_status_payload()
     if not status["enabled"]:
-        return {**status, "success": False, "message": "GitHub OAuth 未启用。"}
+        return {**status, "success": False, "message": "GitHub Device Flow 未启用。"}
     if not status["configured"]:
         return {
             **status,
             "success": False,
-            "message": "GitHub OAuth 配置不完整，缺少 client_id。",
+            "message": "GitHub Device Flow 配置不完整，缺少 client_id。",
         }
 
-    code_verifier = generate_code_verifier()
-    code_challenge = make_s256_code_challenge(code_verifier)
+    client_id = _github_client_id(config)
+    scope = status["scope"]
+    try:
+        device_response = _request_device_code(client_id, scope)
+    except Exception as exc:
+        logger.exception("GitHub device code request failed: %s", exc)
+        return {
+            **status,
+            "success": False,
+            "message": f"GitHub Device Flow 启动失败：{exc}",
+        }
+
+    device_code = device_response.get("device_code")
+    user_code = device_response.get("user_code")
+    verification_uri = device_response.get("verification_uri", "https://github.com/login/device")
+    verification_uri_complete = device_response.get("verification_uri_complete")
+    if not verification_uri_complete:
+        verification_uri_complete = f"{verification_uri}?user_code={user_code}"
+    interval = int(device_response.get("interval", 5))
+    expires_in = int(device_response.get("expires_in", 900))
+
     record = github_oauth_state_store.create({
-        "code_verifier": code_verifier,
-        "redirect_uri": status["redirect_uri"],
+        "device_code": device_code,
+        "user_code": user_code,
         "client_host": client_host,
     })
-    query = urllib.parse.urlencode({
-        "client_id": _github_client_id(config),
-        "redirect_uri": status["redirect_uri"],
-        "scope": status["scope"],
-        "state": record["state"],
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
-    })
+
     return {
         "success": True,
-        "authorization_url": f"{GITHUB_AUTHORIZE_URL}?{query}",
+        "authorization_url": verification_uri_complete,
+        "device_code": device_code,
+        "user_code": user_code,
+        "verification_uri": verification_uri,
+        "verification_uri_complete": verification_uri_complete,
+        "interval": interval,
+        "expires_in": expires_in,
         "state": record["state"],
-        "expires_in": int(record["expires_at"] - record["created_at"]),
-        "replace_admin_candidate": False,
+    }
+
+
+@router.post("/github/poll")
+async def poll_github_oauth(request: Request, response: Response):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    state = body.get("state", "")
+    device_code = body.get("device_code", "")
+
+    logger.info(f"GitHub poll: state={state[:30] if state else 'empty'}, device_code={device_code[:30] if device_code else 'empty'}")
+
+    if not state and not device_code:
+        logger.warning("GitHub poll: no state or device_code provided")
+        return {"success": False, "message": "请先发起 GitHub Device Flow 授权。"}
+
+    config = _github_config()
+    status = _github_status_payload()
+    if not status["enabled"] or not status["configured"]:
+        return {**status, "success": False, "message": "GitHub Device Flow 未启用或配置不完整。"}
+
+    record = None
+    if state:
+        record = github_oauth_state_store.get(state)
+        logger.info(f"GitHub poll: state record found: {record is not None}")
+        if record:
+            device_code = record.get("device_code", device_code)
+
+    if not device_code:
+        logger.warning("GitHub poll: no device_code available")
+        return {"success": False, "message": "授权状态已过期，请重新发起。"}
+
+    logger.info(f"GitHub poll: attempting to exchange token for device_code={device_code[:20]}...")
+
+    client_id = _github_client_id(config)
+    try:
+        token_response = _poll_access_token(client_id, device_code)
+    except Exception as exc:
+        logger.warning("GitHub device poll network error (will retry): %s", exc)
+        return {"success": True, "status": "pending", "message": "等待授权中..."}
+
+    error = token_response.get("error")
+    if error:
+        if error == "authorization_pending":
+            return {"success": True, "status": "pending", "message": "等待用户授权..."}
+        elif error == "slowdown":
+            wait = int(token_response.get("interval", 5))
+            return {"success": True, "status": "pending", "message": f"请求过于频繁，请等待 {wait} 秒。"}
+        elif error == "expired_token":
+            return {"success": False, "message": "授权已过期，请重新发起。"}
+        elif error == "access_denied":
+            return {"success": False, "message": "用户拒绝授权。"}
+        else:
+            return {"success": False, "message": f"授权出错：{error}"}
+
+    access_token = str(token_response.get("access_token") or "").strip()
+    if not access_token:
+        logger.warning("GitHub poll: no access_token in response")
+        return {"success": False, "message": "未能获取访问令牌。"}
+
+    logger.info("GitHub poll: successfully got access_token, fetching user info...")
+
+    try:
+        github_user = _github_api_json(GITHUB_USER_URL, access_token)
+        github_emails = _github_api_json(GITHUB_EMAILS_URL, access_token)
+    except Exception as exc:
+        logger.exception("GitHub API request failed: %s", exc)
+        return {"success": False, "message": f"GitHub API 请求失败：{exc}"}
+
+    primary_email, email_verified = _select_github_email(github_user, github_emails)
+    result = account_store.upsert_github_user(github_user, primary_email, email_verified)
+    if not result.get("success"):
+        return {**result, "message": result.get("message", "GitHub 登录失败。")}
+
+    incoming_session_id = _ensure_session_id(request)
+    login_result = session_manager.login_oauth(incoming_session_id, result["user"]["id"])
+    if not login_result.get("success"):
+        return {**login_result, "message": login_result.get("message", "GitHub 登录失败。")}
+
+    session_id = secrets.token_hex(16)
+    session_manager.rotate_session(incoming_session_id, session_id)
+    _set_session_cookie(response, request, session_id)
+
+    if state:
+        github_oauth_state_store.consume(state)
+
+    return {
+        "success": True,
+        "status": "completed",
+        "session_id": session_id,
+        "user": login_result.get("user"),
+        "created": bool(result.get("created", False)),
     }
 
 
 @router.get("/github/callback", response_class=HTMLResponse)
-async def github_oauth_callback(request: Request, code: str = "", state: str = ""):
-    config = _github_config()
-    status = _github_status_payload()
-    if not status["enabled"] or not status["configured"]:
-        return HTMLResponse(
-            _github_callback_html(False, "GitHub OAuth 未启用或配置不完整。"),
-            status_code=400,
-        )
-    if not code or not state:
-        return HTMLResponse(
-            _github_callback_html(False, "GitHub OAuth 回调缺少 code 或 state 参数。"),
-            status_code=400,
-        )
-    record = github_oauth_state_store.consume(state)
-    if not record:
-        return HTMLResponse(
-            _github_callback_html(False, "GitHub OAuth state 无效或已过期。"),
-            status_code=400,
-        )
-    try:
-        token_payload = _exchange_github_token(
-            config,
-            code,
-            record["code_verifier"],
-            record.get("redirect_uri") or status["redirect_uri"],
-        )
-        access_token = str(token_payload.get("access_token") or "").strip()
-        if not access_token:
-            return HTMLResponse(
-                _github_callback_html(False, "GitHub 令牌交换失败。"),
-                status_code=400,
-            )
-        github_user = _github_api_json(GITHUB_USER_URL, access_token)
-        github_emails = _github_api_json(GITHUB_EMAILS_URL, access_token)
-    except urllib.error.HTTPError as exc:
-        return HTMLResponse(
-            _github_callback_html(False, f"GitHub 请求失败：HTTP {exc.code}"),
-            status_code=502,
-        )
-    except Exception:
-        return HTMLResponse(
-            _github_callback_html(False, "GitHub OAuth 请求失败。"),
-            status_code=502,
-        )
-    primary_email, email_verified = _select_github_email(github_user, github_emails)
-    result = account_store.upsert_github_user(github_user, primary_email, email_verified)
-    if not result.get("success"):
-        return HTMLResponse(
-            _github_callback_html(False, result.get("message", "GitHub 登录失败。")),
-            status_code=400,
-        )
-    incoming_session_id = _ensure_session_id(request)
-    login_result = session_manager.login_oauth(incoming_session_id, result["user"]["id"])
-    if not login_result.get("success"):
-        return HTMLResponse(
-            _github_callback_html(False, login_result.get("message", "GitHub 登录失败。")),
-            status_code=400,
-        )
-    session_id = secrets.token_hex(16)
-    session_manager.rotate_session(incoming_session_id, session_id)
-    response = HTMLResponse(
-        _github_callback_html(True, "GitHub 登录成功。"),
-        status_code=200,
+async def github_oauth_callback(request: Request):
+    return HTMLResponse(
+        _github_callback_html(False, "请在登录页面使用 Device Flow 进行授权。<br/>点击「通过 GitHub 登录」按钮，按提示在 GitHub 页面完成授权。"),
+        status_code=400,
     )
-    _set_session_cookie(response, request, session_id)
-    return response
 
 
 @router.post("/github/replace-admin")
 async def replace_admin_with_github_user(body: GithubReplaceAdminBody, request: Request, response: Response, user: Dict[str, Any] = Depends(get_request_user)):
-    result = account_store.replace_admin_with_github_user(user["id"], body.confirm)
+    result = account_store.replace_admin_with_github_user(user["id"], body.confirm, body.token)
     if result.get("success"):
         incoming_session_id = _ensure_session_id(request)
         session_id = secrets.token_hex(16)

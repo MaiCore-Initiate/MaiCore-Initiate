@@ -15,7 +15,7 @@ import ComponentDownload from './pages/ComponentDownload'
 import TemplateWorkbench from './pages/TemplateWorkbench'
 import AuthPortal from './components/auth/AuthPortal'
 import AccessGuard from './components/ui/AccessGuard'
-import { NotificationProvider } from './components/ui/Notification'
+import { NotificationProvider, useNotification } from './components/ui/Notification'
 import DynamicBackground, { BgProvider, resolveOverlayStyle, useBaseBgUrl, useBgContext, useCachedBgSettings } from './components/background/DynamicBackground'
 import { useTheme } from './components/theme/ThemeProvider'
 import { AccountSystemProvider, PAGE_PERMISSION_LABELS, useAccountSystem } from './lib/account-system'
@@ -31,6 +31,8 @@ import {
 } from '@tanstack/react-router'
 
 const pageLabels: Record<Page, string> = PAGE_PERMISSION_LABELS
+const titleFont = { fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
+const monoFont = { fontFamily: "'Ubuntu', 'HarmonyOS Sans SC', monospace" }
 
 const miscTabs = ['about', 'author', 'tech', 'libs', 'license', 'components', 'webshell', 'screensaver', 'desktop-pet', 'custom-console'] as const
 const configActions = ['edit', 'open-config', 'open-folder'] as const
@@ -204,6 +206,81 @@ function LoginTransitionOverlay({ loginTransition }: { loginTransition: 'cover-i
   )
 }
 
+function GithubAdminTransferPrompt({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { replaceGithubAdmin } = useAccountSystem()
+  const { notify } = useNotification()
+  const [token, setToken] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setToken('')
+      setSubmitting(false)
+    }
+  }, [open])
+
+  if (!open) return null
+
+  const handleSubmit = async () => {
+    if (!token.trim()) {
+      notify('请输入系统初始化时生成的 Token。', 'warning')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const result = await replaceGithubAdmin(token.trim())
+      notify(result.message, result.success ? 'success' : 'error')
+      if (result.success) onClose()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center px-[20px]">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[6px]" onClick={onClose} />
+      <div
+        className="relative w-full max-w-[560px] rounded-[24px] border-2 border-black/25 bg-white/75 p-[26px] shadow-[0_24px_70px_rgba(0,0,0,0.28)] backdrop-blur-[34px]"
+        onClick={event => event.stopPropagation()}
+      >
+        <h2 className="text-black/82" style={{ ...titleFont, fontSize: 32 }}>移交管理员权限</h2>
+        <p className="mt-[12px] text-black/58" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55 }}>
+          当前 GitHub 账号是除系统管理员外第一个注册的账号。确认后，系统管理员会降为成员，当前账号会成为新的管理员。
+        </p>
+        <input
+          value={token}
+          onChange={event => setToken(event.target.value)}
+          type="password"
+          placeholder="系统初始化 Token"
+          className="mt-[20px] w-full rounded-[18px] border-2 border-black/20 bg-white/45 px-[18px] outline-none"
+          style={{ height: 54, ...monoFont, fontSize: 18 }}
+          autoFocus
+        />
+        <div className="mt-[22px] flex flex-wrap justify-end gap-[12px]">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="cursor-pointer rounded-[18px] border-2 border-black/18 bg-white/28 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ ...titleFont, fontSize: 20 }}
+          >
+            暂不移交
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={submitting}
+            className="cursor-pointer rounded-[18px] border-2 border-black/30 bg-white/48 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ ...titleFont, fontSize: 20 }}
+          >
+            {submitting ? '验证中...' : '确认移交'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AppRootRoute() {
   return (
     <AccountSystemProvider>
@@ -251,6 +328,7 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
   const { resolvedTheme } = useTheme()
   const { ready, currentUser, canAccessPage, logout } = useAccountSystem()
   const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
+  const [dismissedGithubTransferUserId, setDismissedGithubTransferUserId] = useState<string | null>(null)
   const [tabs, setTabs] = useState<Tab[]>([makeTab('home')])
   const [activeTabId, setActiveTabId] = useState(tabs[0].id)
   const workbenchReturnTarget = useRef<{ page: Page; params?: SubPageParams }>({ page: 'misc' })
@@ -360,6 +438,20 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
     handleNavigate('home')
   }
 
+  const handleAuthenticated = () => {
+    setTabs(prev => {
+      const homeTab = prev.find(tab => tab.page === 'home') ?? makeTab('home')
+      setActiveTabId(homeTab.id)
+      return prev.some(tab => tab.id === homeTab.id) ? prev : [homeTab, ...prev]
+    })
+    navigateToPage('home')
+    setLoginTransition('cover-in')
+    window.setTimeout(() => {
+      setLoginTransition('cover-out')
+      window.setTimeout(() => setLoginTransition('none'), 900)
+    }, 560)
+  }
+
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
@@ -381,6 +473,12 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
   }
 
   const showLogin = !currentUser
+  const shouldPromptGithubAdminTransfer = Boolean(
+    currentUser &&
+    currentUser.githubAdminTransferPending &&
+    currentUser.role !== 'admin' &&
+    currentUser.id !== dismissedGithubTransferUserId,
+  )
   const pageDetail = currentUser
     ? `${pageLabels[activeTab.page]} 对当前 ${currentUser.role === 'guest' ? '访客' : '成员'} 模板未开放。`
     : '请先登录后再访问该页面。'
@@ -395,13 +493,7 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
           <div className="absolute inset-0 z-10" style={resolveOverlayStyle(cachedBgSettings, resolvedTheme)} />
           <div className="absolute inset-0 z-20 flex items-center justify-center">
             <AuthPortal
-              onAuthenticated={() => {
-                setLoginTransition('cover-in')
-                window.setTimeout(() => {
-                  setLoginTransition('cover-out')
-                  window.setTimeout(() => setLoginTransition('none'), 900)
-                }, 560)
-              }}
+              onAuthenticated={handleAuthenticated}
             />
           </div>
         </NotificationProvider>
@@ -458,6 +550,10 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
             )}
 
             {loginTransition !== 'none' && <LoginTransitionOverlay loginTransition={loginTransition} />}
+            <GithubAdminTransferPrompt
+              open={shouldPromptGithubAdminTransfer}
+              onClose={() => setDismissedGithubTransferUserId(currentUser?.id ?? null)}
+            />
           </NotificationProvider>
         </BgProvider>
       )}

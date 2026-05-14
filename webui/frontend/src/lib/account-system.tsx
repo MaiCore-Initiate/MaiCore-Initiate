@@ -46,6 +46,7 @@ export interface AccountUser {
   joinedVia: 'seed' | 'self-register' | 'admin-approve' | 'github'
   lastLoginAt?: string
   loginCodeEnabled: boolean
+  githubAdminTransferPending: boolean
 }
 
 export interface VerificationRecord {
@@ -171,7 +172,7 @@ interface AccountSystemContextValue {
   updateAppearancePolicy: (patch: Partial<AppearancePolicy>) => Promise<OperationResult>
   transferAdmin: (targetUserId: string, token: string, code: string) => Promise<OperationResult>
   refreshAccountState: () => Promise<OperationResult<{ currentUser: AccountUser | null }>>
-  replaceGithubAdmin: () => Promise<OperationResult>
+  replaceGithubAdmin: (token: string) => Promise<OperationResult>
 }
 
 interface BackendAccountUser {
@@ -182,9 +183,10 @@ interface BackendAccountUser {
   email: string
   avatar?: string
   created_at?: string
-  joined_via?: AccountUser['joinedVia']
+  joined_via?: AccountUser['joinedVia'] | 'github-oauth'
   last_login_at?: string
   login_code_enabled?: boolean
+  github_admin_transfer_pending?: boolean
 }
 
 interface BackendApprovalRequest {
@@ -446,6 +448,7 @@ function createDefaultState(): AccountSystemState {
         createdAt: nowIso(),
         joinedVia: 'seed',
         loginCodeEnabled: false,
+        githubAdminTransferPending: false,
       },
     ],
     currentUserId: null,
@@ -549,6 +552,7 @@ export function getAvatarFallback(name: string, email: string) {
 
 function mapBackendUser(user: BackendAccountUser | null | undefined): AccountUser | null {
   if (!user) return null
+  const joinedVia = user.joined_via === 'github-oauth' ? 'github' : (user.joined_via ?? 'seed')
   return {
     id: user.id,
     role: user.role,
@@ -558,9 +562,10 @@ function mapBackendUser(user: BackendAccountUser | null | undefined): AccountUse
     avatar: user.avatar ?? '',
     password: '',
     createdAt: user.created_at ?? '',
-    joinedVia: user.joined_via ?? 'seed',
+    joinedVia,
     lastLoginAt: user.last_login_at ?? undefined,
     loginCodeEnabled: Boolean(user.login_code_enabled),
+    githubAdminTransferPending: Boolean(user.github_admin_transfer_pending),
   }
 }
 
@@ -1064,11 +1069,11 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const replaceGithubAdmin = async (): Promise<OperationResult> => {
+  const replaceGithubAdmin = async (token: string): Promise<OperationResult> => {
     try {
       const result = await requestJson<OperationResult>('/api/account/github/replace-admin', {
         method: 'POST',
-        body: JSON.stringify({ confirm: true }),
+        body: JSON.stringify({ confirm: true, token }),
       })
       if (result.success) {
         await refreshState({ clearAdminToken: true })
