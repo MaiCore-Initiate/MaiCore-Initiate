@@ -12,6 +12,8 @@ interface Instance {
   botType: string
   version: string
   qqAccount: string
+  adapterMode: string
+  installOptions: Record<string, any>
 }
 
 type BotType = 'MaiBot' | 'MoFox-Core' | 'Neo-MoFox'
@@ -66,6 +68,32 @@ function formatUptime(seconds: number): string {
   return h > 0 ? `${h}h${m}m` : `${m}m`
 }
 
+function isVersionAtLeast(version: string, target: string): boolean {
+  const parse = (value: string) => {
+    const clean = value.trim().toLowerCase().replace(/^v/, '').split('-')[0]
+    const parts = clean.split('.').map(part => Number.parseInt(part, 10))
+    return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
+  }
+  const left = parse(version)
+  const right = parse(target)
+  for (let i = 0; i < 3; i += 1) {
+    if (left[i] > right[i]) return true
+    if (left[i] < right[i]) return false
+  }
+  return true
+}
+
+function isPluginAdapter(instance: Instance): boolean {
+  if (instance.adapterMode === 'plugin' || instance.installOptions?.adapter_mode === 'plugin') return true
+  const version = instance.version.trim().toLowerCase()
+  return normalizeBotType(instance.botType) === 'MaiBot' && (
+    version === 'main' ||
+    version === 'dev' ||
+    version === 'master' ||
+    isVersionAtLeast(version, '1.0.0')
+  )
+}
+
 function PillButton({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
   return (
     <button
@@ -94,8 +122,15 @@ function LaunchPanel({ instance }: { instance: Instance }) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const normalizedBotType = normalizeBotType(instance.botType)
-  const presets = PRESETS[normalizedBotType]
-  const advancedItems = ADVANCED_ITEMS[normalizedBotType]
+  const adapterIsPlugin = isPluginAdapter(instance)
+  const presets = PRESETS[normalizedBotType].map(p => ({
+    ...p,
+    label: adapterIsPlugin ? p.label.replace('+适配器', '') : p.label,
+    components: adapterIsPlugin ? p.components.filter(c => c !== 'adapter') : p.components,
+  }))
+  const advancedItems = ADVANCED_ITEMS[normalizedBotType].filter(item => (
+    !adapterIsPlugin || !item.components.includes('adapter')
+  ))
 
   useEffect(() => {
     setPresetIdx(null)
@@ -360,6 +395,8 @@ export default function Instances() {
           botType: normalizeBotType(cfg.bot_type || 'MaiBot'),
           version: cfg.version || '',
           qqAccount: cfg.qq_account || '',
+          adapterMode: cfg.adapter_mode || cfg.install_options?.adapter_mode || '',
+          installOptions: cfg.install_options || {},
         }))
         setInstances(list)
       })

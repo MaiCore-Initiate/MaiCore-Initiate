@@ -15,7 +15,7 @@ from rich.table import Table
 
 from ..ui.interface import ui
 from ..utils.common import check_process, validate_path
-from ..utils.version_detector import is_legacy_version, is_legacy_version_with_bot_type, has_builtin_webui
+from ..utils.version_detector import is_legacy_version, is_legacy_version_with_bot_type, has_builtin_webui, is_plugin_adapter_version
 
 logger = structlog.get_logger(__name__)
 
@@ -43,6 +43,16 @@ def _get_bot_path_key(bot_type: str) -> str:
 
 def _get_main_entry_file(bot_type: str) -> str:
     return "main.py" if _normalize_bot_type(bot_type) == "Neo-MoFox" else "bot.py"
+
+
+def _is_plugin_adapter_config(config: Dict[str, Any]) -> bool:
+    opts = config.get("install_options", {})
+    if opts.get("adapter_mode") == "plugin" or config.get("adapter_mode") == "plugin":
+        return True
+
+    bot_type = _normalize_bot_type(config.get("bot_type", "MaiBot"))
+    version = config.get("version_path", "")
+    return is_plugin_adapter_version(version, bot_type)
 
 
 # --- 内部辅助类 ---
@@ -632,6 +642,7 @@ class _AdapterComponent(_LaunchComponent):
         self.is_enabled = (
             bot_type == "MaiBot"
             and opts.get("install_adapter", False)
+            and not _is_plugin_adapter_config(self.config)
             and not is_legacy_version_with_bot_type(version, bot_type)
         )
 
@@ -880,6 +891,8 @@ class MaiLauncher:
             valid, msg = validate_path(adapter_path, check_file="main.py")
             if not valid:
                 errors.append(f"适配器路径: {msg}")
+        elif "adapter" in selected_components and _is_plugin_adapter_config(config):
+            errors.append("当前适配器以插件形式加载，不能作为独立组件启动")
 
         if "napcat" in selected_components and self._components['napcat'].is_enabled:
             napcat_path = config.get("napcat_path", "")
@@ -915,24 +928,39 @@ class MaiLauncher:
             # 检查是否为内置WebUI版本
             version = config.get("version_path", "")
             has_builtin = has_builtin_webui(version)
-            
-            menu_options = {
-                "1": ("主程序+适配器", ["mai", "adapter"]),
-                "2": ("主程序+适配器+NapCatQQ", ["mai", "adapter", "napcat"]),
-                "3": ("主程序+适配器+检查MongoDB", ["mai", "adapter", "mongodb"]),
-                "4": ("主程序+适配器+NapCatQQ+检查MongoDB", ["mai", "adapter", "napcat", "mongodb"]),
-            }
+            plugin_adapter = _is_plugin_adapter_config(config)
+
+            if plugin_adapter:
+                menu_options = {
+                    "1": ("主程序", ["mai"]),
+                    "2": ("主程序+NapCatQQ", ["mai", "napcat"]),
+                }
+            else:
+                menu_options = {
+                    "1": ("主程序+适配器", ["mai", "adapter"]),
+                    "2": ("主程序+适配器+NapCatQQ", ["mai", "adapter", "napcat"]),
+                    "3": ("主程序+适配器+检查MongoDB", ["mai", "adapter", "mongodb"]),
+                    "4": ("主程序+适配器+NapCatQQ+检查MongoDB", ["mai", "adapter", "napcat", "mongodb"]),
+                }
             
             # 如果控制面板可用，添加包含控制面板的启动选项
             if self._components['webui'].is_enabled:
                 if has_builtin:
                     # 内置版本显示为"控制面板(内置)"
-                    menu_options["5"] = ("主程序+适配器+控制面板(内置)", ["mai", "adapter", "webui"])
-                    menu_options["6"] = ("主程序+适配器+NapCat+控制面板(内置)", ["mai", "adapter", "napcat", "webui"])
+                    if plugin_adapter:
+                        menu_options["5"] = ("主程序+控制面板(内置)", ["mai", "webui"])
+                        menu_options["6"] = ("主程序+NapCat+控制面板(内置)", ["mai", "napcat", "webui"])
+                    else:
+                        menu_options["5"] = ("主程序+适配器+控制面板(内置)", ["mai", "adapter", "webui"])
+                        menu_options["6"] = ("主程序+适配器+NapCat+控制面板(内置)", ["mai", "adapter", "napcat", "webui"])
                 else:
                     # 独立版本显示为"控制面板"
-                    menu_options["5"] = ("主程序+适配器+控制面板", ["mai", "adapter", "webui"])
-                    menu_options["6"] = ("主程序+适配器+NapCat+控制面板", ["mai", "adapter", "napcat", "webui"])
+                    if plugin_adapter:
+                        menu_options["5"] = ("主程序+控制面板", ["mai", "webui"])
+                        menu_options["6"] = ("主程序+NapCat+控制面板", ["mai", "napcat", "webui"])
+                    else:
+                        menu_options["5"] = ("主程序+适配器+控制面板", ["mai", "adapter", "webui"])
+                        menu_options["6"] = ("主程序+适配器+NapCat+控制面板", ["mai", "adapter", "napcat", "webui"])
         elif bot_type in {"MoFox-Core", "Neo-MoFox"}:
             menu_options = {
                 "1": ("主程序（内置适配器）+WebUI", ["mai"]),
@@ -980,10 +1008,13 @@ class MaiLauncher:
 
         advanced_options = {
             "1": ("主程序", "mai"),
-            "2": ("适配器", "adapter"),
-            "3": ("NapCatQQ", "napcat"),
-            "4": ("检查MongoDB", "mongodb"),
         }
+
+        if not (self._config and _is_plugin_adapter_config(self._config)):
+            advanced_options["2"] = ("适配器", "adapter")
+
+        advanced_options["3"] = ("NapCatQQ", "napcat")
+        advanced_options["4"] = ("检查MongoDB", "mongodb")
         
         # 对于MaiBot内置WebUI版本，添加控制面板选项
         if self._config:

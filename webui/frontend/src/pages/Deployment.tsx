@@ -83,6 +83,31 @@ function normalizeVersionList(payload: any): VersionInfo[] {
   })
 }
 
+function isVersionAtLeast(version: string, target: string): boolean {
+  const parse = (value: string) => {
+    const clean = value.trim().toLowerCase().replace(/^v/, '').split('-')[0]
+    const parts = clean.split('.').map(part => Number.parseInt(part, 10))
+    return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
+  }
+  const left = parse(version)
+  const right = parse(target)
+  for (let i = 0; i < 3; i += 1) {
+    if (left[i] > right[i]) return true
+    if (left[i] < right[i]) return false
+  }
+  return true
+}
+
+function hasBuiltinWebUI(version: string): boolean {
+  const clean = version.trim().toLowerCase()
+  return clean.includes('main') || clean.includes('dev') || isVersionAtLeast(clean, '0.12.2')
+}
+
+function usesPluginAdapter(version: string): boolean {
+  const clean = version.trim().toLowerCase()
+  return clean === 'main' || clean === 'dev' || clean === 'master' || isVersionAtLeast(clean, '1.0.0')
+}
+
 function CustomSelect({ value, onChange, options, placeholder, disabled }: {
   value: string; onChange: (v: string) => void
   options: SelectOption[]; placeholder?: string; disabled?: boolean
@@ -339,10 +364,14 @@ function DeployNewTab() {
 
   const versionObj = versions.find(v => v.name === selectedVersion)
   const napcatObj = napcatVersions.find(v => v.name === selectedNapcatVer || v.tag_name === selectedNapcatVer)
+  const selectedVersionName = versionObj?.name || selectedVersion
+  const adapterAsPlugin = botType === 'MaiBot' && usesPluginAdapter(selectedVersionName)
+  const webuiBuiltIn = botType !== 'MaiBot' || hasBuiltinWebUI(selectedVersionName)
 
   const canStep2 = botType && selectedVersion && nickname && installDir
   const serialNumber = nickname // 简化：用昵称作为序列号
-  const hasBuiltinWebUI = !!botType
+  const shouldInstallAdapter = botType === 'MaiBot' ? installAdapter : false
+  const shouldInstallWebUI = webuiBuiltIn
 
   const handleDeploy = async () => {
     try {
@@ -350,9 +379,9 @@ function DeployNewTab() {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          bot_type: botType, version: versionObj, install_adapter: botType === 'MaiBot' ? installAdapter : true,
+          bot_type: botType, version: versionObj, install_adapter: shouldInstallAdapter,
           install_napcat: installNapcat, napcat_version: napcatObj || null,
-          install_mongodb: installMongodb, install_webui: hasBuiltinWebUI,
+          install_mongodb: installMongodb, install_webui: shouldInstallWebUI,
           install_mofox_admin_ui: false, install_mofox_webui: false,
           install_dir: installDir, nickname, qq_account: qqAccount,
           serial_number: serialNumber,
@@ -437,7 +466,7 @@ function DeployNewTab() {
         <div className="flex flex-col gap-[16px] animate-fade-slide-up">
           <h3 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>组件选择</h3>
           <div className="flex flex-col gap-[12px]">
-            {botType === 'MaiBot' && <ToggleItem label="适配器" checked={installAdapter} onChange={setInstallAdapter} />}
+            {botType === 'MaiBot' && <ToggleItem label={adapterAsPlugin ? '适配器插件' : '适配器'} checked={installAdapter} onChange={setInstallAdapter} />}
             <ToggleItem label="NapCat" checked={installNapcat} onChange={setInstallNapcat} />
             {installNapcat && (
               <div className="ml-[40px]">
@@ -448,7 +477,7 @@ function DeployNewTab() {
             {botType === 'MaiBot' && <ToggleItem label="MongoDB" checked={installMongodb} onChange={setInstallMongodb} />}
             <div className="ml-[56px]">
               <span style={{ ...monoFont, fontSize: 18, color: 'var(--mc-text-muted)' }}>
-                WebUI 已内置，无需单独勾选
+                {webuiBuiltIn ? 'WebUI 已内置，无需单独勾选' : '当前版本未内置 WebUI，将跳过 WebUI 部署'}
               </span>
             </div>
           </div>
@@ -473,10 +502,10 @@ function DeployNewTab() {
               ['Bot 类型', botType], ['版本', versionObj?.display_name || selectedVersion],
               ['实例昵称', nickname], ['安装目录', installDir],
               ...(qqAccount ? [['QQ 账号', qqAccount]] : []),
-              ['适配器', botType === 'MaiBot' ? (installAdapter ? '外置适配器' : '使用内置/不安装') : '内置适配器'],
+              ['适配器', botType === 'MaiBot' ? (installAdapter ? (adapterAsPlugin ? '插件适配器' : '外置适配器') : '不安装') : '内置适配器'],
               ['NapCat', installNapcat ? (selectedNapcatVer || '是') : '否'],
               ...(botType === 'MaiBot' ? [['MongoDB', installMongodb ? '是' : '否']] : []),
-              ['WebUI', '内置'],
+              ['WebUI', shouldInstallWebUI ? '内置' : '跳过'],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k} className="flex gap-[16px]">
                 <span className="shrink-0 w-[120px]" style={{ ...labelFont, color: 'var(--mc-text-primary)' }}>{k}</span>

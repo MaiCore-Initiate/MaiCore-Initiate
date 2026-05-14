@@ -94,6 +94,7 @@ def get_instances():
                 "mofox_path": cfg.get("mofox_path", ""),
                 "neo_mofox_path": cfg.get("neo_mofox_path", ""),
                 "adapter_path": cfg.get("adapter_path", ""),
+                "adapter_mode": cfg.get("adapter_mode", cfg.get("install_options", {}).get("adapter_mode", "")),
                 "napcat_path": cfg.get("napcat_path", ""),
                 "mongodb_path": cfg.get("mongodb_path", ""),
                 "webui_path": cfg.get("webui_path", ""),
@@ -159,7 +160,7 @@ def create_instance(req: CreateInstanceRequest):
 _UPDATABLE_FIELDS = {
     "serial_number", "nickname_path", "version_path", "bot_type",
     "qq_account", "mai_path", "mofox_path", "neo_mofox_path",
-    "adapter_path", "napcat_path", "venv_path", "mongodb_path", "webui_path",
+    "adapter_path", "adapter_mode", "napcat_path", "venv_path", "mongodb_path", "webui_path",
     "mod_binding", "deployment_profile", "component_bindings", "template_inputs",
 }
 

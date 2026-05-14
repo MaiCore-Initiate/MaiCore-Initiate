@@ -21,6 +21,7 @@ from ..utils.common import validate_path, open_files_in_editor
 from ..utils.version_detector import compare_versions
 from ..utils.notifier import windows_notifier, NotificationLogHandler
 from .mongodb_installer import mongodb_installer
+from .webui_installer import webui_installer
 from .deployment_mod import deployment_mod_executor
 from .deployment_core import (
     MaiBotDeployer,
@@ -444,6 +445,7 @@ class DeploymentManager:
         paths = {
             bot_path_key: "",
             "adapter_path": "",
+            "adapter_mode": "",
             "napcat_path": "",
             "venv_path": "",
             "webui_path": "",
@@ -477,17 +479,21 @@ class DeploymentManager:
         if deploy_config.get("install_adapter"):
             if bot_type == "MaiBot":
                 paths["adapter_path"] = self.maibot_deployer.install_adapter(deploy_config, paths[bot_path_key])
+                paths["adapter_mode"] = deploy_config.get("adapter_mode", "external")
                 _notify(2, "安装适配器", "completed", f"适配器安装完成，路径: {paths['adapter_path']}")
             else:
                 ui.console.print("\n[🔌 第二步：适配器配置]", style=ui.colors["primary"])
                 ui.print_info(f"{bot_type}已内置适配器，跳过外置适配器安装")
                 paths["adapter_path"] = self._get_builtin_adapter_path(bot_type, deploy_config["install_dir"], deploy_config.get("nickname", ""))
+                paths["adapter_mode"] = "builtin"
                 _notify(2, "安装适配器", "completed", f"{bot_type} 使用内置适配器，路径: {paths['adapter_path']}")
         elif bot_type in ["MoFox-Core", "Neo-MoFox"]:
             ui.print_info(f"检测到{bot_type}，将记录内置适配器路径")
             paths["adapter_path"] = self._get_builtin_adapter_path(bot_type, deploy_config["install_dir"], deploy_config.get("nickname", ""))
+            paths["adapter_mode"] = "builtin"
             _notify(2, "安装适配器", "completed", f"已记录内置适配器路径: {paths['adapter_path']}")
         elif not deploy_config.get("install_adapter"):
+            paths["adapter_mode"] = "none"
             _notify(2, "安装适配器", "warning", "未安装外置适配器")
         else:
             _notify(2, "安装适配器", "completed", "适配器处理完成")
@@ -511,7 +517,12 @@ class DeploymentManager:
             version_name = deploy_config["selected_version"].get("name", "")
             from ..utils.version_detector import has_builtin_webui
 
-            if has_builtin_webui(version_name):
+            if not deploy_config.get("install_webui", False):
+                ui.console.print("\n[🌐 第四步：WebUI配置]", style=ui.colors["primary"])
+                ui.print_info("未选择部署WebUI，跳过WebUI配置")
+                paths["webui_path"] = ""
+                _notify(4, "WebUI配置", "completed", "未选择部署WebUI，已跳过")
+            elif has_builtin_webui(version_name):
                 ui.console.print("\n[🌐 第四步：WebUI配置]", style=ui.colors["primary"])
                 ui.print_info(f"版本 {version_name} 内置WebUI，启动时将自动代理")
                 paths["webui_path"] = "builtin"
@@ -620,7 +631,12 @@ class DeploymentManager:
                 paths["venv_path"] = ""
                 _notify(5, "Python环境", "warning", "虚拟环境创建失败，将使用系统Python")
 
-            if bot_type == "MaiBot" and paths.get("webui_path") and paths.get("venv_path"):
+            if (
+                bot_type == "MaiBot"
+                and paths.get("webui_path")
+                and paths.get("webui_path") != "builtin"
+                and paths.get("venv_path")
+            ):
                 _notify(5, "Python环境", "running", "正在安装WebUI后端依赖...")
                 ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
                 webui_installer.install_webui_backend_dependencies(paths["webui_path"], paths["venv_path"])
@@ -684,6 +700,7 @@ class DeploymentManager:
         
         ui.console.print("\n[⚙️ 第七步：完成部署配置]", style=ui.colors["primary"])
         adapter_path = paths["adapter_path"]
+        adapter_mode = paths.get("adapter_mode") or deploy_config.get("adapter_mode", "")
         napcat_path = paths["napcat_path"]
         venv_path = paths["venv_path"]
         webui_path = paths["webui_path"]
@@ -695,9 +712,10 @@ class DeploymentManager:
         # 根据部署选项创建安装选项配置
         install_options = {
             "install_adapter": bool(adapter_path and adapter_path not in ["无需适配器", "跳过适配器安装"]),
+            "adapter_mode": adapter_mode or "none",
             "install_napcat": deploy_config.get("install_napcat", False),
             "install_mongodb": bool(deploy_config.get("mongodb_path", "")),
-            "install_webui": bool(deploy_config.get("install_webui", False) or webui_path == "builtin"),
+            "install_webui": bool(webui_path and webui_path != ""),
             "install_mofox_admin_ui": deploy_config.get("install_mofox_admin_ui", False),
             "install_mofox_webui": deploy_config.get("install_mofox_webui", False)
         }
@@ -716,6 +734,7 @@ class DeploymentManager:
             "qq_account": deploy_config.get("qq_account", ""),
             bot_path_key: bot_path,
             "adapter_path": adapter_path,
+            "adapter_mode": adapter_mode or "none",
             "napcat_path": napcat_path,
             "venv_path": venv_path,
             "mongodb_path": mongodb_path,

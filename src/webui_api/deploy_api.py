@@ -314,6 +314,7 @@ async def get_all_instances():
                 "mofox_path": config.get("mofox_path", ""),
                 "neo_mofox_path": config.get("neo_mofox_path", ""),
                 "adapter_path": config.get("adapter_path", ""),
+                "adapter_mode": config.get("adapter_mode", config.get("install_options", {}).get("adapter_mode", "")),
                 "napcat_path": config.get("napcat_path", ""),
                 "venv_path": config.get("venv_path", ""),
                 "mongodb_path": config.get("mongodb_path", ""),
@@ -356,6 +357,7 @@ async def get_instance_detail(serial_number: str):
                         "mofox_path": config.get("mofox_path", ""),
                         "neo_mofox_path": config.get("neo_mofox_path", ""),
                         "adapter_path": config.get("adapter_path", ""),
+                        "adapter_mode": config.get("adapter_mode", config.get("install_options", {}).get("adapter_mode", "")),
                         "napcat_path": config.get("napcat_path", ""),
                         "venv_path": config.get("venv_path", ""),
                         "mongodb_path": config.get("mongodb_path", ""),
@@ -394,7 +396,7 @@ async def update_instance(serial_number: str, updates: Dict[str, Any]):
         _UPDATABLE_FIELDS = {
             "serial_number", "nickname_path", "version_path", "bot_type",
             "qq_account", "mai_path", "mofox_path", "adapter_path",
-            "napcat_path", "venv_path", "webui_path",
+            "adapter_mode", "napcat_path", "venv_path", "webui_path",
         }
         current_config = configs[config_key]
         filtered = {k: v for k, v in updates.items() if k in _UPDATABLE_FIELDS}

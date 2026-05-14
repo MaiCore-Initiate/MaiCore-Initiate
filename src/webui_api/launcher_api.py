@@ -11,6 +11,7 @@ from datetime import datetime
 
 from ..modules.launcher import launcher
 from ..modules.config_manager import config_manager
+from ..utils.version_detector import is_plugin_adapter_version
 from .auth_core import require_action
 
 router = APIRouter()
@@ -64,6 +65,13 @@ def get_instance_launcher(serial_number: str):
 
     _instance_launchers[serial_number] = instance_launcher
     return instance_launcher
+
+
+def _is_plugin_adapter_config(config: Dict[str, Any]) -> bool:
+    install_options = config.get("install_options", {})
+    if install_options.get("adapter_mode") == "plugin" or config.get("adapter_mode") == "plugin":
+        return True
+    return is_plugin_adapter_version(config.get("version_path", ""), config.get("bot_type", "MaiBot"))
 
 
 # --- API端点 ---
@@ -150,6 +158,9 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
         for comp in request.components:
             if comp not in valid_components:
                 raise HTTPException(status_code=400, detail=f"无效的组件: {comp}")
+
+        if "adapter" in request.components and _is_plugin_adapter_config(config):
+            raise HTTPException(status_code=400, detail="当前适配器以插件形式加载，不能单独启动")
         
         # 创建启动器实例并启动
         instance_launcher = get_instance_launcher(serial_number)

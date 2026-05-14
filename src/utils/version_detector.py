@@ -190,7 +190,7 @@ def needs_adapter(version: str, bot_type: str = "MaiBot") -> bool:
 def get_adapter_version(version: str, bot_type: str = "MaiBot") -> str:
     """
     根据MaiBot版本确定适配器版本
-    统一使用最新版启动器（main分支）
+    MaiBot 1.0.0 之前使用 0.7.0 适配器；1.0.0 及之后使用 main 分支插件适配器。
     
     Args:
         version: MaiBot版本号
@@ -201,10 +201,27 @@ def get_adapter_version(version: str, bot_type: str = "MaiBot") -> str:
     """
     if is_legacy_version_with_bot_type(version, bot_type):
         return "无需适配器"
-    
-    # 统一使用main分支的最新适配器
-    logger.info("统一使用最新版启动器", version=version, adapter_version="main")
-    return "main"
+
+    if is_plugin_adapter_version(version, bot_type):
+        logger.info("使用插件适配器", version=version, adapter_version="main")
+        return "main"
+
+    logger.info("使用旧版外置适配器", version=version, adapter_version="0.7.0")
+    return "0.7.0"
+
+
+def is_plugin_adapter_version(version: str, bot_type: str = "MaiBot") -> bool:
+    """检测当前版本是否应使用插件形式的 NapCat 适配器。"""
+    if bot_type != "MaiBot" or not version:
+        return False
+
+    version_clean = version.lower().strip()
+    if version_clean in {"main", "dev", "master"}:
+        return True
+    if version_clean.startswith(("main ", "dev ", "master ")):
+        return True
+
+    return compare_versions(version_clean, "1.0.0") >= 0
 
 
 def parse_version(version: str) -> Tuple[int, int, int]:
@@ -257,6 +274,7 @@ def get_version_requirements(version: str, bot_type: str = "MaiBot") -> Dict[str
         "needs_mongodb": needs_mongodb(version, bot_type),
         "needs_adapter": needs_adapter(version, bot_type),
         "adapter_version": get_adapter_version(version, bot_type),
+        "adapter_mode": "plugin" if is_plugin_adapter_version(version, bot_type) else ("external" if needs_adapter(version, bot_type) else "none"),
         "has_builtin_webui": has_builtin_webui(version),
         "parsed_version": parse_version(version),
         "version_display": version
