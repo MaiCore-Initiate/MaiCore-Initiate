@@ -244,6 +244,15 @@ def pack_instance(
         packed_plugins = (pack_filter.only_plugins if pack_filter.only_plugins
                           else [p.name for p in plugins_dir.iterdir() if p.is_dir()])
 
+    # 记录各路径相对于 nickname_dir 的位置（若在其中），便于目标机器还原
+    def _rel_if_under(abs_path: str, base: Path) -> str:
+        if not abs_path:
+            return ""
+        try:
+            return Path(abs_path).relative_to(base).as_posix()
+        except ValueError:
+            return ""  # 不在 base 下，无法相对化
+
     meta = {
         "meta": {
             "name": cfg.get("nickname_path", cfg_name),
@@ -259,6 +268,21 @@ def pack_instance(
             "plugins": packed_plugins,
             "pack-source": "MaiCoreStart",
             "zip_file": zip_fname,
+            "venv_packed": pack_venv and venv_dir is not None,
+            "instance_config": {
+                "qq_account": cfg.get("qq_account", ""),
+                "napcat_version": cfg.get("napcat_version", ""),
+                "webui_path": cfg.get("webui_path", ""),
+                # 以下路径记录相对于 nickname_dir 的位置（若在其中）
+                # 目标机器导入时可按 extract_dir 还原；若为空则须手动填写
+                "adapter_path_rel": _rel_if_under(cfg.get("adapter_path", ""), nickname_dir),
+                "napcat_path_rel":  _rel_if_under(cfg.get("napcat_path", ""),  nickname_dir),
+                "venv_path_rel":    _rel_if_under(cfg.get("venv_path", ""),    nickname_dir),
+                "mongodb_path_rel": _rel_if_under(cfg.get("mongodb_path", ""), nickname_dir),
+                # 原始绝对路径保留作参考（不用于自动还原）
+                "napcat_path_orig":  cfg.get("napcat_path", ""),
+                "adapter_path_orig": cfg.get("adapter_path", ""),
+            },
         }
     }
     meta_data = json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8")
@@ -372,28 +396,51 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
         path_key = "mai_path"
 
     bot_dir = os.path.join(extract_dir, bot_type)
+
+    # 还原保存在 meta 中的相对路径
+    def _restore_path(rel: str, base: str) -> str:
+        if not rel:
+            return ""
+        candidate = os.path.normpath(os.path.join(base, rel))
+        return candidate if os.path.exists(candidate) else ""
+
     instance_name = meta_info.get("name") or serial
     cfg_key = instance_name
     existing = config_manager.get_all_configurations()
     if cfg_key in existing:
         cfg_key = f"{instance_name}_{serial}"
 
+    adapter_path = _restore_path(meta_info.get("adapter_path_rel", ""), extract_dir)
+    napcat_path  = _restore_path(meta_info.get("napcat_path_rel", ""), extract_dir)
+    venv_path    = _restore_path(meta_info.get("venv_path_rel", ""), extract_dir)
+    mongodb_path = _restore_path(meta_info.get("mongodb_path_rel", ""), extract_dir)
+    webui_path   = _restore_path(meta_info.get("webui_path_rel", ""), extract_dir)
+
     config_manager.add_configuration(cfg_key, {
         "serial_number": serial,
         "nickname_path": instance_name,
         "version_path": meta_info.get("version", ""),
         "bot_type": bot_type,
-        "qq_account": "",
+        "qq_account": meta_info.get("qq_account", ""),
         path_key: bot_dir,
-        "adapter_path": "",
-        "napcat_path": "",
-        "venv_path": "",
-        "mongodb_path": "",
-        "webui_path": "",
+        "adapter_path": adapter_path,
+        "napcat_path": napcat_path,
+        "venv_path": venv_path,
+        "mongodb_path": mongodb_path,
+        "webui_path": webui_path,
         "source": "import",
         "absolute_serial_number": config_manager.generate_unique_serial(),
     })
     config_manager.save()
 
     console.print(f"[green]✓ 实例已导入到 {extract_dir}，配置集名称：{cfg_key}[/green]")
+
+    # 虚拟环境提示
+    has_venv = bool(venv_path) or bool(_detect_venv(Path(bot_dir)))
+    if not has_venv:
+        console.print("[yellow]⚠ 未检测到虚拟环境，请在实例目录下手动创建并安装依赖：[/yellow]")
+        console.print(f"  [cyan]cd {bot_dir}[/cyan]")
+        console.print("  [cyan]python -m venv .venv[/cyan]")
+        console.print("  [cyan].venv\\Scripts\\pip install -r requirements.txt[/cyan]")
+
     return extract_dir
