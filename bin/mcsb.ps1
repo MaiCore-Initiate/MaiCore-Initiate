@@ -67,6 +67,10 @@ function Show-Version {
     Write-Host "  mcsb uninstall PATH     - Execute template uninstall stage"
     Write-Host "  mcsb test PATH          - Execute template syntax validation"
     Write-Host "  mcsb -v|version         - Show version"
+    Write-Host "  mcsb -o SERIAL          - Pack instance to .mcsins"
+    Write-Host "  mcsb output SERIAL      - Pack instance to .mcsins"
+    Write-Host "  mcsb import FILE        - Import .mcsins instance"
+    Write-Host "  mcsb -in FILE           - Import .mcsins instance"
     Write-Host ""
 }
 
@@ -135,6 +139,18 @@ if ($args.Count -gt 0) {
         '^uninstall$' { Invoke-TemplateMode $first $args[1] }
         '^test$' { Invoke-TemplateTest $args[1] }
         '^login$' { Invoke-LoginProvider $args[1] }
+        '^-o$|^output$' {
+            $pythonExe = Resolve-Python
+            Set-Location $parentDir
+            & $pythonExe -m src.cli.mcsb_cli output @($args | Select-Object -Skip 1)
+            exit $LASTEXITCODE
+        }
+        '^import$|^-in$' {
+            $pythonExe = Resolve-Python
+            Set-Location $parentDir
+            & $pythonExe -m src.cli.mcsb_cli import @($args | Select-Object -Skip 1)
+            exit $LASTEXITCODE
+        }
         '^--version$' {
             Write-Host "$($meta["APP_NAME"]) version $($meta["APP_VERSION"])"
             exit 0
