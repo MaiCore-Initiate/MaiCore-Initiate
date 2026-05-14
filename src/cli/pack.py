@@ -435,12 +435,39 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
 
     console.print(f"[green]✓ 实例已导入到 {extract_dir}，配置集名称：{cfg_key}[/green]")
 
-    # 虚拟环境提示
+    # 虚拟环境：若包内未携带则自动创建并安装依赖
     has_venv = bool(venv_path) or bool(_detect_venv(Path(bot_dir)))
-    if not has_venv:
-        console.print("[yellow]⚠ 未检测到虚拟环境，请在实例目录下手动创建并安装依赖：[/yellow]")
-        console.print(f"  [cyan]cd {bot_dir}[/cyan]")
-        console.print("  [cyan]python -m venv .venv[/cyan]")
-        console.print("  [cyan].venv\\Scripts\\pip install -r requirements.txt[/cyan]")
+    if not has_venv and os.path.isdir(bot_dir):
+        requirements_path = os.path.join(bot_dir, "requirements.txt")
+        if os.path.exists(requirements_path):
+            if Confirm.ask("[yellow]未检测到虚拟环境，是否自动创建并安装依赖？[/yellow]", default=True):
+                if bot_type in ("MoFox-Core", "MoFox_bot"):
+                    from src.modules.deployment_core.mofox_deployer import MoFoxBotDeployer
+                    deployer = MoFoxBotDeployer()
+                elif bot_type == "Neo-MoFox":
+                    from src.modules.deployment_core.mofox_deployer import MoFoxBotDeployer
+                    deployer = MoFoxBotDeployer()
+                else:
+                    from src.modules.deployment_core.maibot_deployer import MaiBotDeployer
+                    deployer = MaiBotDeployer()
+
+                console.print("[cyan]正在创建虚拟环境...[/cyan]")
+                ok, result = deployer.create_virtual_environment(bot_dir)
+                if ok:
+                    console.print(f"[green]✓ 虚拟环境已创建：{result}[/green]")
+                    console.print("[cyan]正在安装依赖（可能需要几分钟）...[/cyan]")
+                    if deployer.install_dependencies_in_venv(result, requirements_path):
+                        console.print("[green]✓ 依赖安装完成[/green]")
+                        # 更新已注册配置中的 venv_path
+                        configs = config_manager.get_all_configurations()
+                        if cfg_key in configs:
+                            configs[cfg_key]["venv_path"] = result
+                            config_manager.save()
+                    else:
+                        console.print("[yellow]⚠ 依赖安装失败，请手动安装[/yellow]")
+                else:
+                    console.print(f"[red]✗ 虚拟环境创建失败：{result}[/red]")
+        else:
+            console.print("[yellow]⚠ 未检测到虚拟环境且包内无 requirements.txt，请手动配置运行环境[/yellow]")
 
     return extract_dir
