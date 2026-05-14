@@ -103,6 +103,7 @@ def get_instances():
                 "deployment_profile": cfg.get("deployment_profile", {}),
                 "component_bindings": cfg.get("component_bindings", []),
                 "template_inputs": cfg.get("template_inputs", {}),
+                "source": cfg.get("source", "register"),
             }
             for name, cfg in configs.items()
         },

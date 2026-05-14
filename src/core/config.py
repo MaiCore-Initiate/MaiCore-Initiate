@@ -39,7 +39,8 @@ class Config:
                 "deployment_profile": {},
                 "component_bindings": [],
                 "template_inputs": {},
-                "qq_account": ""
+                "qq_account": "",
+                "source": "register"  # register / deploy / import / onekey
             }
         }
     }

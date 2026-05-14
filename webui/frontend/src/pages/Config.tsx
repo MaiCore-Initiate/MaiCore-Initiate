@@ -19,6 +19,7 @@ interface Instance {
   mongodbPath?: string
   webuiPath?: string
   venvPath?: string
+  source?: string
 }
 
 interface RegisterForm {
@@ -99,6 +100,34 @@ function PillButton({ label, selected, onClick }: { label: string; selected?: bo
   )
 }
 
+const SOURCE_BADGE: Record<string, { label: string; bg: string; border: string }> = {
+  register: { label: '本地注册', bg: 'rgba(179,220,255,0.55)', border: 'rgba(80,160,240,0.6)' },
+  deploy:   { label: '联网部署', bg: 'rgba(179,255,195,0.55)', border: 'rgba(60,190,100,0.6)' },
+  import:   { label: '导入',     bg: 'rgba(255,230,150,0.55)', border: 'rgba(210,160,40,0.6)' },
+  onekey:   { label: '一键部署', bg: 'rgba(220,179,255,0.55)', border: 'rgba(150,80,240,0.6)' },
+}
+
+function SourceBadge({ source }: { source?: string }) {
+  const s = source || 'register'
+  const badge = SOURCE_BADGE[s] ?? SOURCE_BADGE.register
+  return (
+    <span
+      style={{
+        fontSize: 18,
+        fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
+        background: badge.bg,
+        border: `1.5px solid ${badge.border}`,
+        borderRadius: 10,
+        padding: '1px 10px',
+        color: 'var(--mc-text-secondary)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {badge.label}
+    </span>
+  )
+}
+
 /* 实例选择用的小卡片 */
 function InstanceCard({ instance, selected, onClick, index }: {
   instance: Instance; selected: boolean; onClick: () => void; index: number
@@ -116,8 +145,11 @@ function InstanceCard({ instance, selected, onClick, index }: {
         onClick={onClick}
       >
         <div className="px-[24px] py-[18px]">
-          <div className="text-black truncate" style={{ fontSize: 32, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
-            {title}
+          <div className="flex items-center gap-[8px] mb-[2px]">
+            <div className="text-black truncate" style={{ fontSize: 32, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+              {title}
+            </div>
+            <SourceBadge source={instance.source} />
           </div>
           <div className="mt-[4px] flex flex-col gap-[2px]">
             <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>序列号：{instance.serial}</span>
@@ -279,19 +311,20 @@ function EditPanel({ instance, onSaved, onClose }: { instance: Instance; onSaved
           {/* 短字段 */}
           <FieldRow label="实例序列号" value={form.serial_number} onChange={v => setForm(p => ({ ...p, serial_number: v }))} index={0} />
           <FieldRow label="实例绝对序列号" value={String(instance.absoluteSerial)} disabled index={1} />
-          <FieldRow label="实例昵称" value={form.nickname_path} onChange={v => setForm(p => ({ ...p, nickname_path: v }))} index={2} />
-          <FieldRow label="实例版本" value={form.version_path} onChange={v => setForm(p => ({ ...p, version_path: v }))} index={3} />
-          <FieldRow label="实例类型" index={4}>
+          <FieldRow label="来源" value={SOURCE_BADGE[instance.source || 'register']?.label ?? instance.source} disabled index={2} />
+          <FieldRow label="实例昵称" value={form.nickname_path} onChange={v => setForm(p => ({ ...p, nickname_path: v }))} index={3} />
+          <FieldRow label="实例版本" value={form.version_path} onChange={v => setForm(p => ({ ...p, version_path: v }))} index={4} />
+          <FieldRow label="实例类型" index={5}>
             <TypeToggle options={BOT_TYPE_OPTIONS} value={form.bot_type} onChange={v => setForm(p => switchBotTypeWithMainPath(p, v))} />
           </FieldRow>
-          <FieldRow label="QQ账号" value={form.qq_account} onChange={v => setForm(p => ({ ...p, qq_account: v }))} index={5} />
+          <FieldRow label="QQ账号" value={form.qq_account} onChange={v => setForm(p => ({ ...p, qq_account: v }))} index={6} />
 
           {/* 长路径字段 */}
-          <FieldRow label="主程序路径" value={mainPath} onChange={setMainPath} wide index={6} placeholder="bot.py 所在根目录" />
-          <FieldRow label="适配器目录" value={form.adapter_path} onChange={v => setForm(p => ({ ...p, adapter_path: v }))} wide index={7} placeholder="main.py 所在根目录" />
-          <FieldRow label="NapCat路径" value={form.napcat_path} onChange={v => setForm(p => ({ ...p, napcat_path: v }))} wide index={8} placeholder="NapCatWinBootMain.exe 文件路径" />
-          <FieldRow label="虚拟环境路径" value={form.venv_path} onChange={v => setForm(p => ({ ...p, venv_path: v }))} wide index={9} />
-          <FieldRow label="WebUI路径" value={form.webui_path} onChange={v => setForm(p => ({ ...p, webui_path: v }))} wide index={10} />
+          <FieldRow label="主程序路径" value={mainPath} onChange={setMainPath} wide index={7} placeholder="bot.py 所在根目录" />
+          <FieldRow label="适配器目录" value={form.adapter_path} onChange={v => setForm(p => ({ ...p, adapter_path: v }))} wide index={8} placeholder="main.py 所在根目录" />
+          <FieldRow label="NapCat路径" value={form.napcat_path} onChange={v => setForm(p => ({ ...p, napcat_path: v }))} wide index={9} placeholder="NapCatWinBootMain.exe 文件路径" />
+          <FieldRow label="虚拟环境路径" value={form.venv_path} onChange={v => setForm(p => ({ ...p, venv_path: v }))} wide index={10} />
+          <FieldRow label="WebUI路径" value={form.webui_path} onChange={v => setForm(p => ({ ...p, webui_path: v }))} wide index={11} placeholder='若您部署的实例自带WebUI，则无需填写此字段' />
         </div>
 
         <div className="mt-auto pt-[16px] flex justify-end animate-fade-slide-up" style={{ animationDelay: '400ms' }}>
@@ -423,6 +456,7 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
           mongodbPath: cfg.mongodb_path,
           webuiPath: cfg.webui_path,
           venvPath: cfg.venv_path,
+          source: cfg.source || 'register',
         }))
         setInstances(list)
         if (d?.next_serial != null) setNextSerial(d.next_serial)
