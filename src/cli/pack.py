@@ -439,7 +439,12 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
     has_venv = bool(venv_path) or bool(_detect_venv(Path(bot_dir)))
     if not has_venv and os.path.isdir(bot_dir):
         requirements_path = os.path.join(bot_dir, "requirements.txt")
-        if os.path.exists(requirements_path):
+        pyproject_path = os.path.join(bot_dir, "pyproject.toml")
+        can_auto_setup = (
+            os.path.exists(requirements_path)
+            or (bot_type == "Neo-MoFox" and os.path.exists(pyproject_path))
+        )
+        if can_auto_setup:
             if Confirm.ask("[yellow]未检测到虚拟环境，是否自动创建并安装依赖？[/yellow]", default=True):
                 if bot_type in ("MoFox-Core", "MoFox_bot"):
                     from src.modules.deployment_core.mofox_deployer import MoFoxBotDeployer
