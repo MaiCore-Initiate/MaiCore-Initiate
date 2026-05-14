@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ACTION_PERMISSION_LABELS,
   ACTION_PERMISSION_ORDER,
@@ -358,6 +359,84 @@ export default function AccountManagementPanel() {
       setCloseSubmitting(false)
     }
   }
+
+  const closeAccountConfirmDialog = closeConfirmTarget
+    ? createPortal(
+      <div className="fixed inset-0 z-[70] flex items-center justify-center px-[20px]">
+        <div
+          className="absolute inset-0 backdrop-blur-[6px]"
+          style={{ background: 'rgba(0,0,0,0.38)' }}
+          onClick={() => {
+            if (!closeSubmitting) setCloseConfirmTarget(null)
+          }}
+        />
+        <div
+          className="relative w-full max-w-[560px] rounded-[24px] border-2 p-[26px] backdrop-blur-[34px]"
+          style={{
+            borderColor: 'var(--mc-border-muted)',
+            background: 'var(--mc-panel-solid)',
+            boxShadow: '0 24px 70px var(--mc-shadow-soft)',
+            color: 'var(--mc-text-primary)',
+          }}
+          onClick={event => event.stopPropagation()}
+        >
+          <h2 style={{ ...titleFont, fontSize: 30, color: 'var(--mc-text-primary)' }}>确认注销账号</h2>
+          <p className="mt-[12px]" style={{ ...titleFont, fontSize: 20, lineHeight: 1.55, color: 'var(--mc-text-muted)' }}>
+            {closeConfirmTarget.kind === 'self'
+              ? '注销后会删除当前系统账号、待处理申请和登录验证码，并立即退出登录。'
+              : '管理员注销后会删除该系统账号、待处理申请和登录验证码。'}
+          </p>
+          <div
+            className="mt-[16px] rounded-[18px] border-2 px-[16px] py-[12px]"
+            style={{
+              borderColor: 'var(--mc-border-soft)',
+              background: 'var(--mc-control-bg-soft)',
+            }}
+          >
+            <div className="truncate" style={{ ...titleFont, fontSize: 22, color: 'var(--mc-text-primary)' }}>
+              {closeConfirmTarget.name}
+            </div>
+            <div className="truncate" style={{ ...monoFont, fontSize: 15, color: 'var(--mc-text-muted)' }}>
+              {closeConfirmTarget.email}
+            </div>
+          </div>
+          <div className="mt-[22px] flex flex-wrap justify-end gap-[12px]">
+            <button
+              type="button"
+              disabled={closeSubmitting}
+              onClick={() => setCloseConfirmTarget(null)}
+              className="cursor-pointer rounded-[18px] border-2 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                borderColor: 'var(--mc-border-soft)',
+                background: 'var(--mc-control-bg-soft)',
+                color: 'var(--mc-text-secondary)',
+                ...titleFont,
+                fontSize: 20,
+              }}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              disabled={closeSubmitting}
+              onClick={() => void handleConfirmCloseAccount()}
+              className="cursor-pointer rounded-[18px] border-2 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                borderColor: 'rgba(255, 92, 92, 0.5)',
+                background: 'rgba(255, 92, 92, 0.22)',
+                color: 'var(--mc-text-primary)',
+                ...titleFont,
+                fontSize: 20,
+              }}
+            >
+              {closeSubmitting ? '注销中...' : '确认注销'}
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    )
+    : null
 
   return (
     <div className="space-y-[18px]">
@@ -751,80 +830,7 @@ export default function AccountManagementPanel() {
         </div>
       ) : null}
 
-      {closeConfirmTarget ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center px-[20px]">
-          <div
-            className="absolute inset-0 backdrop-blur-[6px]"
-            style={{ background: 'rgba(0,0,0,0.38)' }}
-            onClick={() => {
-              if (!closeSubmitting) setCloseConfirmTarget(null)
-            }}
-          />
-          <div
-            className="relative w-full max-w-[560px] rounded-[24px] border-2 p-[26px] backdrop-blur-[34px]"
-            style={{
-              borderColor: 'var(--mc-border-muted)',
-              background: 'var(--mc-panel-solid)',
-              boxShadow: '0 24px 70px var(--mc-shadow-soft)',
-              color: 'var(--mc-text-primary)',
-            }}
-            onClick={event => event.stopPropagation()}
-          >
-            <h2 style={{ ...titleFont, fontSize: 30, color: 'var(--mc-text-primary)' }}>确认注销账号</h2>
-            <p className="mt-[12px]" style={{ ...titleFont, fontSize: 20, lineHeight: 1.55, color: 'var(--mc-text-muted)' }}>
-              {closeConfirmTarget.kind === 'self'
-                ? '注销后会删除当前系统账号、待处理申请和登录验证码，并立即退出登录。'
-                : '管理员注销后会删除该系统账号、待处理申请和登录验证码。'}
-            </p>
-            <div
-              className="mt-[16px] rounded-[18px] border-2 px-[16px] py-[12px]"
-              style={{
-                borderColor: 'var(--mc-border-soft)',
-                background: 'var(--mc-control-bg-soft)',
-              }}
-            >
-              <div className="truncate" style={{ ...titleFont, fontSize: 22, color: 'var(--mc-text-primary)' }}>
-                {closeConfirmTarget.name}
-              </div>
-              <div className="truncate" style={{ ...monoFont, fontSize: 15, color: 'var(--mc-text-muted)' }}>
-                {closeConfirmTarget.email}
-              </div>
-            </div>
-            <div className="mt-[22px] flex flex-wrap justify-end gap-[12px]">
-              <button
-                type="button"
-                disabled={closeSubmitting}
-                onClick={() => setCloseConfirmTarget(null)}
-                className="cursor-pointer rounded-[18px] border-2 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
-                style={{
-                  borderColor: 'var(--mc-border-soft)',
-                  background: 'var(--mc-control-bg-soft)',
-                  color: 'var(--mc-text-secondary)',
-                  ...titleFont,
-                  fontSize: 20,
-                }}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                disabled={closeSubmitting}
-                onClick={() => void handleConfirmCloseAccount()}
-                className="cursor-pointer rounded-[18px] border-2 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
-                style={{
-                  borderColor: 'rgba(255, 92, 92, 0.5)',
-                  background: 'rgba(255, 92, 92, 0.22)',
-                  color: 'var(--mc-text-primary)',
-                  ...titleFont,
-                  fontSize: 20,
-                }}
-              >
-                {closeSubmitting ? '注销中...' : '确认注销'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {closeAccountConfirmDialog}
     </div>
   )
 }
