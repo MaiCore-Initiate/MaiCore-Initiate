@@ -445,26 +445,39 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
                     from src.modules.deployment_core.mofox_deployer import MoFoxBotDeployer
                     deployer = MoFoxBotDeployer()
                 elif bot_type == "Neo-MoFox":
-                    from src.modules.deployment_core.mofox_deployer import MoFoxBotDeployer
-                    deployer = MoFoxBotDeployer()
+                    from src.modules.deployment_core.neo_mofox_deployer import NeoMoFoxDeployer
+                    deployer = NeoMoFoxDeployer()
                 else:
                     from src.modules.deployment_core.maibot_deployer import MaiBotDeployer
                     deployer = MaiBotDeployer()
 
                 console.print("[cyan]正在创建虚拟环境...[/cyan]")
-                ok, result = deployer.create_virtual_environment(bot_dir)
-                if ok:
-                    console.print(f"[green]✓ 虚拟环境已创建：{result}[/green]")
-                    console.print("[cyan]正在安装依赖（可能需要几分钟）...[/cyan]")
-                    if deployer.install_dependencies_in_venv(result, requirements_path):
-                        console.print("[green]✓ 依赖安装完成[/green]")
-                        # 更新已注册配置中的 venv_path
-                        configs = config_manager.get_all_configurations()
-                        if cfg_key in configs:
-                            configs[cfg_key]["venv_path"] = result
-                            config_manager.save()
+                if bot_type == "Neo-MoFox":
+                    # NeoMoFox: instance_dir 是 Neo-MoFox 的父目录，用 uv venv + uv sync
+                    ok, result = deployer.create_virtual_environment(extract_dir)
+                    if ok:
+                        console.print(f"[green]✓ 虚拟环境已创建：{result}[/green]")
+                        console.print("[cyan]正在用 uv sync 安装依赖...[/cyan]")
+                        dep_ok = deployer.install_dependencies(extract_dir)
                     else:
-                        console.print("[yellow]⚠ 依赖安装失败，请手动安装[/yellow]")
+                        dep_ok = False
+                else:
+                    ok, result = deployer.create_virtual_environment(bot_dir)
+                    if ok:
+                        console.print(f"[green]✓ 虚拟环境已创建：{result}[/green]")
+                        console.print("[cyan]正在安装依赖（可能需要几分钟）...[/cyan]")
+                        dep_ok = deployer.install_dependencies_in_venv(result, requirements_path)
+                    else:
+                        dep_ok = False
+
+                if ok and dep_ok:
+                    console.print("[green]✓ 依赖安装完成[/green]")
+                    configs = config_manager.get_all_configurations()
+                    if cfg_key in configs:
+                        configs[cfg_key]["venv_path"] = result
+                        config_manager.save()
+                elif ok:
+                    console.print("[yellow]⚠ 依赖安装失败，请手动安装[/yellow]")
                 else:
                     console.print(f"[red]✗ 虚拟环境创建失败：{result}[/red]")
         else:
