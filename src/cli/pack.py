@@ -267,7 +267,7 @@ def pack_instance(
 
     iso = pycdlib.PyCdlib()
     iso.new(joliet=3, sys_ident="MAICORESTART", vol_ident="MCSINS")
-    iso.add_fp(io.BytesIO(meta_data), len(meta_data), iso_path="/META.JSON;1", joliet_path="/meta.json")
+    iso.add_fp(io.BytesIO(meta_data), len(meta_data), iso_path="/META.JSN;1", joliet_path="/meta.json")
     iso.add_fp(io.BytesIO(zip_data), len(zip_data), iso_path=f"/{iso_zip_short};1", joliet_path=f"/{zip_fname}")
 
     out_path = os.path.abspath(output_path)

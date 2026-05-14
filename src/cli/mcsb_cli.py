@@ -50,18 +50,22 @@ def _parse_filter(filter_str: str, cfg: dict):
     if need_list_comp:
         available = list_components(cfg)
         if available:
-            print("请输入要打包的组件序号（逗号分隔），留空表示全部：")
+            print("请输入要打包的组件序号（逗号分隔），留空表示全部，输入 ! 表示全不选：")
             choice = input("> ").strip()
-            if choice:
+            if choice == "!":
+                pf.no_components = True
+            elif choice:
                 indices = [int(x.strip()) - 1 for x in choice.split(",") if x.strip().isdigit()]
                 pending_components.extend(available[i] for i in indices if 0 <= i < len(available))
 
     if need_list_plug:
         available = list_plugins(cfg)
         if available:
-            print("请输入要打包的插件序号（逗号分隔），留空表示全部：")
+            print("请输入要打包的插件序号（逗号分隔），留空表示全部，输入 ! 表示全不选：")
             choice = input("> ").strip()
-            if choice:
+            if choice == "!":
+                pf.no_plugins = True
+            elif choice:
                 indices = [int(x.strip()) - 1 for x in choice.split(",") if x.strip().isdigit()]
                 pending_plugins.extend(available[i] for i in indices if 0 <= i < len(available))
 
