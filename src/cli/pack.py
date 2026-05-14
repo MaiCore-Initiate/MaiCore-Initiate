@@ -258,6 +258,7 @@ def pack_instance(
             "components": packed_components,
             "plugins": packed_plugins,
             "pack-source": "MaiCoreStart",
+            "zip_file": zip_fname,
         }
     }
     meta_data = json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8")
@@ -327,18 +328,23 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
         iso.close()
         raise RuntimeError("用户取消导入")
 
-    # 查找 zip 文件（Joliet 路径）
-    zip_joliet_path: Optional[str] = None
-    for child in iso.list_children(joliet_path="/"):
-        if child.is_dot() or child.is_dotdot():
-            continue
-        try:
-            fname = child.file_identifier.decode("utf-16-be")
-        except Exception:
-            fname = str(child.file_identifier)
-        if fname.lower().endswith(".zip"):
-            zip_joliet_path = f"/{fname}"
-            break
+    # 从 meta.json 直接获取 zip 文件名（避免 ISO 9660/Joliet 路径解析歧义）
+    zip_fname_in_meta = meta_info.get("zip_file", "")
+    if zip_fname_in_meta:
+        zip_joliet_path = f"/{zip_fname_in_meta}"
+    else:
+        zip_joliet_path = None
+        for child in iso.list_children(joliet_path="/"):
+            if child.is_dot() or child.is_dotdot():
+                continue
+            raw = child.file_identifier
+            try:
+                fname = (raw.decode("utf-16-be") if isinstance(raw, bytes) else str(raw)).strip("\x00").split(";")[0]
+            except Exception:
+                fname = str(raw).split(";")[0]
+            if fname.lower().endswith(".zip"):
+                zip_joliet_path = f"/{fname}"
+                break
 
     if zip_joliet_path is None:
         iso.close()
