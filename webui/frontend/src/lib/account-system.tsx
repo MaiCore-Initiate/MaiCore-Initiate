@@ -175,6 +175,7 @@ interface AccountSystemContextValue {
   approveRequest: (requestId: string) => Promise<OperationResult>
   rejectRequest: (requestId: string) => Promise<OperationResult>
   setUserRole: (userId: string, role: Exclude<AccountRole, 'admin'>) => Promise<OperationResult>
+  closeUserAccount: (userId: string) => Promise<OperationResult>
   setRolePagePermission: (role: 'member' | 'guest', page: Page, allowed: boolean) => Promise<OperationResult>
   setRoleActionPermission: (role: 'member' | 'guest', action: ActionPermissionKey, allowed: boolean) => Promise<OperationResult>
   updateRegisterPolicy: (patch: Partial<RegisterPolicy>) => Promise<OperationResult>
@@ -1007,6 +1008,20 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const closeUserAccount = async (userId: string): Promise<OperationResult> => {
+    try {
+      const result = await requestJson<OperationResult>(`/api/account/users/${userId}/close-account`, {
+        method: 'POST',
+      })
+      if (result.success) {
+        await refreshState()
+      }
+      return result
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : '注销目标账号失败。' }
+    }
+  }
+
   const setRolePagePermission = async (role: 'member' | 'guest', page: Page, allowed: boolean): Promise<OperationResult> => {
     try {
       const result = await requestJson<OperationResult>('/api/account/permissions/page', {
@@ -1153,6 +1168,7 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     approveRequest,
     rejectRequest,
     setUserRole,
+    closeUserAccount,
     setRolePagePermission,
     setRoleActionPermission,
     updateRegisterPolicy,

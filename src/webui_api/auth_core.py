@@ -439,6 +439,17 @@ class AccountStore:
                 return user
         return None
 
+    def _remove_user_records(self, state: Dict[str, Any], user_id: str) -> None:
+        state["users"] = [item for item in state["users"] if item.get("id") != user_id]
+        state["requests"] = [
+            item for item in state.get("requests", [])
+            if item.get("applicant_id") != user_id
+        ]
+        state["verification_codes"] = {
+            key: value for key, value in state.get("verification_codes", {}).items()
+            if not key.startswith(f"login:{user_id}") and not key.startswith(f"sensitive:{user_id}:")
+        }
+
     def _public_user(self, user: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if not user:
             return None
@@ -848,17 +859,30 @@ class AccountStore:
                 return {"success": False, "message": "注销验证码错误或已过期。"}
 
             email = user.get("email", "")
-            state["users"] = [item for item in state["users"] if item.get("id") != user_id]
-            state["requests"] = [
-                item for item in state.get("requests", [])
-                if item.get("applicant_id") != user_id
-            ]
-            state["verification_codes"] = {
-                key: value for key, value in state.get("verification_codes", {}).items()
-                if not key.startswith(f"login:{user_id}") and not key.startswith(f"sensitive:{user_id}:")
-            }
+            self._remove_user_records(state, user_id)
             self._record_audit(state, "account-close", f"{email} 注销了账号")
             return {"success": True, "message": "账号已注销。"}
+
+        return self._mutate(mutator)
+
+    def close_user_account(self, admin_id: str, user_id: str) -> Dict[str, Any]:
+        def mutator(state: Dict[str, Any]):
+            admin = self._find_user(state, admin_id)
+            if not admin or admin.get("role") != "admin":
+                return {"success": False, "message": "只有管理员可以注销其他账号。"}
+            if admin_id == user_id:
+                return {"success": False, "message": "管理员不能通过名册注销自己，请先转让管理员权限。"}
+            user = self._find_user(state, user_id)
+            if not user:
+                return {"success": False, "message": "目标账号不存在。"}
+            if user.get("role") == "admin":
+                return {"success": False, "message": "管理员账号不能直接注销，请先转让管理员权限。"}
+
+            email = user.get("email", "")
+            admin_email = admin.get("email", "")
+            self._remove_user_records(state, user_id)
+            self._record_audit(state, "admin-account-close", f"{admin_email} 注销了账号 {email}")
+            return {"success": True, "message": "目标账号已注销。"}
 
         return self._mutate(mutator)
 

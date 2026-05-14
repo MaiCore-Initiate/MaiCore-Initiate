@@ -650,6 +650,14 @@ async def set_user_role(
     return account_store.set_user_role(admin["id"], user_id, body.role)
 
 
+@router.post("/users/{user_id}/close-account")
+async def close_user_account(
+    user_id: str,
+    admin: Dict[str, Any] = Depends(require_admin),
+):
+    return account_store.close_user_account(admin["id"], user_id)
+
+
 @router.post("/permissions/page")
 async def set_page_permission(
     body: PagePermissionBody,

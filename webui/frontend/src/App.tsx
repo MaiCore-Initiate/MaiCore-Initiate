@@ -251,19 +251,25 @@ function GithubAdminTransferPrompt({ open, onClose }: { open: boolean; onClose: 
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center px-[20px]">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-[6px]" onClick={onClose} />
+      <div className="absolute inset-0 backdrop-blur-[6px]" style={{ background: 'rgba(0,0,0,0.38)' }} onClick={onClose} />
       <div
-        className="relative w-full max-w-[560px] rounded-[24px] border-2 border-black/25 bg-white/75 p-[26px] shadow-[0_24px_70px_rgba(0,0,0,0.28)] backdrop-blur-[34px]"
+        className="relative w-full max-w-[560px] rounded-[24px] border-2 p-[26px] backdrop-blur-[34px]"
+        style={{
+          borderColor: 'var(--mc-border-muted)',
+          background: 'var(--mc-panel-solid)',
+          boxShadow: '0 24px 70px var(--mc-shadow-soft)',
+          color: 'var(--mc-text-primary)',
+        }}
         onClick={event => event.stopPropagation()}
       >
-        <h2 className="text-black/82" style={{ ...titleFont, fontSize: 32 }}>移交管理员权限</h2>
+        <h2 style={{ ...titleFont, fontSize: 32, color: 'var(--mc-text-primary)' }}>移交管理员权限</h2>
         {mode === 'confirm' ? (
-          <p className="mt-[12px] text-black/58" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55 }}>
+          <p className="mt-[12px]" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55, color: 'var(--mc-text-muted)' }}>
             当前 GitHub 账号是除系统管理员外第一个注册的账号，是否将管理员权限移交至该账户？
           </p>
         ) : (
           <>
-            <p className="mt-[12px] text-black/58" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55 }}>
+            <p className="mt-[12px]" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55, color: 'var(--mc-text-muted)' }}>
               请输入系统初始化时生成的 Token。验证通过后，系统管理员会降为成员，当前 GitHub 账号会成为新的管理员。
             </p>
             <input
@@ -271,8 +277,15 @@ function GithubAdminTransferPrompt({ open, onClose }: { open: boolean; onClose: 
               onChange={event => setToken(event.target.value)}
               type="password"
               placeholder="系统初始化 Token"
-              className="mt-[20px] w-full rounded-[18px] border-2 border-black/20 bg-white/45 px-[18px] outline-none"
-              style={{ height: 54, ...monoFont, fontSize: 18 }}
+              className="mt-[20px] w-full rounded-[18px] border-2 px-[18px] outline-none"
+              style={{
+                height: 54,
+                borderColor: 'var(--mc-border-soft)',
+                background: 'var(--mc-control-bg)',
+                color: 'var(--mc-text-primary)',
+                ...monoFont,
+                fontSize: 18,
+              }}
               autoFocus
             />
           </>
@@ -289,8 +302,14 @@ function GithubAdminTransferPrompt({ open, onClose }: { open: boolean; onClose: 
               }
             }}
             disabled={submitting}
-            className="cursor-pointer rounded-[18px] border-2 border-black/18 bg-white/28 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ ...titleFont, fontSize: 20 }}
+            className="cursor-pointer rounded-[18px] border-2 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              borderColor: 'var(--mc-border-soft)',
+              background: 'var(--mc-control-bg-soft)',
+              color: 'var(--mc-text-secondary)',
+              ...titleFont,
+              fontSize: 20,
+            }}
           >
             {mode === 'token' ? '返回' : '不同意'}
           </button>
@@ -304,8 +323,14 @@ function GithubAdminTransferPrompt({ open, onClose }: { open: boolean; onClose: 
               void handleSubmit()
             }}
             disabled={submitting}
-            className="cursor-pointer rounded-[18px] border-2 border-black/30 bg-white/48 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ ...titleFont, fontSize: 20 }}
+            className="cursor-pointer rounded-[18px] border-2 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              borderColor: 'var(--mc-border-muted)',
+              background: 'var(--mc-control-bg)',
+              color: 'var(--mc-text-primary)',
+              ...titleFont,
+              fontSize: 20,
+            }}
           >
             {submitting ? '处理中...' : mode === 'confirm' ? '同意' : '验证并移交'}
           </button>
