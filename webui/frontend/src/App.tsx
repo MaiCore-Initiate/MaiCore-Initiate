@@ -209,17 +209,30 @@ function LoginTransitionOverlay({ loginTransition }: { loginTransition: 'cover-i
 function GithubAdminTransferPrompt({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { replaceGithubAdmin } = useAccountSystem()
   const { notify } = useNotification()
+  const [mode, setMode] = useState<'confirm' | 'token'>('confirm')
   const [token, setToken] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (open) {
+      setMode('confirm')
       setToken('')
       setSubmitting(false)
     }
   }, [open])
 
   if (!open) return null
+
+  const handleDecline = async () => {
+    setSubmitting(true)
+    try {
+      const result = await replaceGithubAdmin('', false)
+      notify(result.message, result.success ? 'info' : 'warning')
+      onClose()
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const handleSubmit = async () => {
     if (!token.trim()) {
@@ -244,36 +257,57 @@ function GithubAdminTransferPrompt({ open, onClose }: { open: boolean; onClose: 
         onClick={event => event.stopPropagation()}
       >
         <h2 className="text-black/82" style={{ ...titleFont, fontSize: 32 }}>移交管理员权限</h2>
-        <p className="mt-[12px] text-black/58" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55 }}>
-          当前 GitHub 账号是除系统管理员外第一个注册的账号。确认后，系统管理员会降为成员，当前账号会成为新的管理员。
-        </p>
-        <input
-          value={token}
-          onChange={event => setToken(event.target.value)}
-          type="password"
-          placeholder="系统初始化 Token"
-          className="mt-[20px] w-full rounded-[18px] border-2 border-black/20 bg-white/45 px-[18px] outline-none"
-          style={{ height: 54, ...monoFont, fontSize: 18 }}
-          autoFocus
-        />
+        {mode === 'confirm' ? (
+          <p className="mt-[12px] text-black/58" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55 }}>
+            当前 GitHub 账号是除系统管理员外第一个注册的账号，是否将管理员权限移交至该账户？
+          </p>
+        ) : (
+          <>
+            <p className="mt-[12px] text-black/58" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55 }}>
+              请输入系统初始化时生成的 Token。验证通过后，系统管理员会降为成员，当前 GitHub 账号会成为新的管理员。
+            </p>
+            <input
+              value={token}
+              onChange={event => setToken(event.target.value)}
+              type="password"
+              placeholder="系统初始化 Token"
+              className="mt-[20px] w-full rounded-[18px] border-2 border-black/20 bg-white/45 px-[18px] outline-none"
+              style={{ height: 54, ...monoFont, fontSize: 18 }}
+              autoFocus
+            />
+          </>
+        )}
         <div className="mt-[22px] flex flex-wrap justify-end gap-[12px]">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              if (mode === 'token') {
+                setMode('confirm')
+                setToken('')
+              } else {
+                void handleDecline()
+              }
+            }}
             disabled={submitting}
             className="cursor-pointer rounded-[18px] border-2 border-black/18 bg-white/28 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
             style={{ ...titleFont, fontSize: 20 }}
           >
-            暂不移交
+            {mode === 'token' ? '返回' : '不同意'}
           </button>
           <button
             type="button"
-            onClick={() => void handleSubmit()}
+            onClick={() => {
+              if (mode === 'confirm') {
+                setMode('token')
+                return
+              }
+              void handleSubmit()
+            }}
             disabled={submitting}
             className="cursor-pointer rounded-[18px] border-2 border-black/30 bg-white/48 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
             style={{ ...titleFont, fontSize: 20 }}
           >
-            {submitting ? '验证中...' : '确认移交'}
+            {submitting ? '处理中...' : mode === 'confirm' ? '同意' : '验证并移交'}
           </button>
         </div>
       </div>

@@ -362,9 +362,16 @@ class AccountStore:
         for user in state["users"]:
             if user.get("joined_via") == "github-oauth":
                 user["joined_via"] = "github"
+            if "password_generated" not in user:
+                user["password_generated"] = bool(user.get("joined_via") == "github" and user.get("github_id") and user.get("password"))
+            else:
+                user["password_generated"] = bool(user.get("password_generated", False))
+            user["github_admin_transfer_decided"] = bool(user.get("github_admin_transfer_decided", False))
             user["github_admin_transfer_pending"] = bool(user.get("github_admin_transfer_pending", False))
         if not any(user.get("role") == "admin" for user in state["users"]):
             state["users"].append(defaults["users"][0])
+        for user in state["users"]:
+            self._sync_github_admin_transfer_candidate(state, user)
 
         role_templates = raw.get("role_templates") if isinstance(raw.get("role_templates"), dict) else {}
         for role in ("member", "guest"):
@@ -450,6 +457,8 @@ class AccountStore:
             "last_login_at": user.get("last_login_at"),
             "login_code_enabled": bool(user.get("login_code_enabled", False)),
             "github_admin_transfer_pending": bool(user.get("github_admin_transfer_pending", False)),
+            "password_configured": bool(user.get("password")) and not bool(user.get("password_generated", False)),
+            "password_managed_by_github": bool(user.get("github_id")) and bool(user.get("password_generated", False)),
         }
         if user.get("github_id"):
             public_user["github"] = {
@@ -667,11 +676,13 @@ class AccountStore:
                     "email": email,
                     "avatar": github_user.get("avatar_url") or "",
                     "password": generate_local_password(),
+                    "password_generated": True,
                     "created_at": now_iso(),
                     "joined_via": "github",
                     "last_login_at": None,
                     "login_code_enabled": False,
                     "github_admin_transfer_pending": transfer_candidate,
+                    "github_admin_transfer_decided": False,
                 }
                 state["users"].append(user)
             else:
@@ -683,13 +694,17 @@ class AccountStore:
                     user["joined_via"] = "github"
                 if not user.get("password"):
                     user["password"] = generate_local_password()
-                user["github_admin_transfer_pending"] = bool(user.get("github_admin_transfer_pending", False))
+                    user["password_generated"] = True
+                elif "password_generated" not in user:
+                    user["password_generated"] = bool(user.get("joined_via") == "github")
+                user["github_admin_transfer_decided"] = bool(user.get("github_admin_transfer_decided", False))
 
             user["github_id"] = github_id
             user["github_login"] = github_login
             user["github_url"] = github_user.get("html_url") or ""
             user["github_email_verified"] = bool(email_verified)
             user["last_login_at"] = now_iso()
+            self._sync_github_admin_transfer_candidate(state, user)
             self._record_audit(state, "github-oauth-login", f"{user['email']} 通过 GitHub OAuth 登录")
             return {
                 "success": True,
@@ -700,16 +715,30 @@ class AccountStore:
 
         return self._mutate(mutator)
 
-    def _is_github_admin_transfer_candidate(self, state: Dict[str, Any], user: Optional[Dict[str, Any]]) -> bool:
+    def _is_github_admin_transfer_eligible(self, state: Dict[str, Any], user: Optional[Dict[str, Any]]) -> bool:
         if not user or user.get("role") == "admin" or user.get("status") != "active":
             return False
-        if not user.get("github_id") or not user.get("github_admin_transfer_pending"):
+        if not user.get("github_id"):
             return False
         other_registered_users = [
             item for item in state["users"]
             if item.get("id") != user.get("id") and item.get("role") != "admin"
         ]
         return len(other_registered_users) == 0
+
+    def _sync_github_admin_transfer_candidate(self, state: Dict[str, Any], user: Dict[str, Any]) -> None:
+        if not user.get("github_id"):
+            user["github_admin_transfer_pending"] = False
+            return
+        if user.get("github_admin_transfer_decided") or not self._is_github_admin_transfer_eligible(state, user):
+            user["github_admin_transfer_pending"] = False
+            return
+        user["github_admin_transfer_pending"] = True
+
+    def _is_github_admin_transfer_candidate(self, state: Dict[str, Any], user: Optional[Dict[str, Any]]) -> bool:
+        if not user or user.get("github_admin_transfer_decided"):
+            return False
+        return self._is_github_admin_transfer_eligible(state, user) and bool(user.get("github_admin_transfer_pending"))
 
     def can_replace_admin_with_github_user(self, user_id: str) -> bool:
         state = self._read()
@@ -718,7 +747,15 @@ class AccountStore:
 
     def replace_admin_with_github_user(self, user_id: str, confirm: bool, token: str) -> Dict[str, Any]:
         if not confirm:
-            return {"success": False, "message": "已取消替换管理员账号。"}
+            def decline_mutator(state: Dict[str, Any]):
+                target = self._find_user(state, user_id)
+                if target and target.get("github_id"):
+                    target["github_admin_transfer_pending"] = False
+                    target["github_admin_transfer_decided"] = True
+                    self._record_audit(state, "github-admin-transfer-decline", f"{target['email']} 暂不接收管理员权限")
+                return {"success": True, "message": "已保留当前管理员。之后可以登录管理员账号，在 [设置]->[账号与成员管理] 中转让。"}
+
+            return self._mutate(decline_mutator)
 
         def mutator(state: Dict[str, Any]):
             target = self._find_user(state, user_id)
@@ -733,6 +770,7 @@ class AccountStore:
                     user["role"] = "admin"
                     user["status"] = "active"
                     user["github_admin_transfer_pending"] = False
+                    user["github_admin_transfer_decided"] = True
                 elif user.get("role") == "admin":
                     user["role"] = "member"
                     user["status"] = "active"
@@ -776,7 +814,9 @@ class AccountStore:
                 return {"success": False, "message": "账号不存在。"}
             if user.get("role") == "admin":
                 return {"success": False, "message": "管理员账号使用系统 Token 登录，不在这里修改密码。"}
-            if user.get("password") != (payload.get("current_password") or ""):
+            current_password = payload.get("current_password") or ""
+            first_github_password_setup = bool(user.get("github_id")) and bool(user.get("password_generated")) and not current_password
+            if not first_github_password_setup and user.get("password") != current_password:
                 return {"success": False, "message": "当前密码不正确。"}
             next_password = payload.get("next_password") or ""
             if not is_strong_password(next_password):
@@ -784,8 +824,9 @@ class AccountStore:
             if not self._consume_code(state, f"sensitive:{user_id}:password", payload.get("code") or ""):
                 return {"success": False, "message": "安全验证码错误或已过期。"}
             user["password"] = next_password
+            user["password_generated"] = False
             self._record_audit(state, "password-change", f"{user['email']} 修改了登录密码")
-            return {"success": True, "message": "登录密码已更新。"}
+            return {"success": True, "message": "本地登录密码已设置。" if first_github_password_setup else "登录密码已更新。"}
 
         return self._mutate(mutator)
 

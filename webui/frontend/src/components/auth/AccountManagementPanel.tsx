@@ -213,6 +213,10 @@ export default function AccountManagementPanel() {
   }
 
   const handleChangePassword = async () => {
+    if (currentUser?.passwordManagedByGithub && currentPassword.trim()) {
+      notify('GitHub 注册账号首次设置本地密码时，当前密码留空即可。', 'info')
+      return
+    }
     const result = await pushResult(changePassword({
       currentPassword,
       nextPassword,
@@ -309,8 +313,13 @@ export default function AccountManagementPanel() {
           </div>
         ) : (
           <>
+            {currentUser.passwordManagedByGithub ? (
+              <div className="mt-[12px] rounded-[18px] border-2 border-black/10 bg-white/24 px-[16px] py-[12px] text-black/55" style={{ ...titleFont, fontSize: 20 }}>
+                GitHub 注册账号默认通过 GitHub 登录，系统不会展示随机本地密码。首次设置本地登录密码时，“当前密码”留空即可。
+              </div>
+            ) : null}
             <div className="mt-[14px] grid grid-cols-1 gap-[12px] xl:grid-cols-[1fr,1fr,1.1fr]">
-              <input value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} type="password" placeholder="当前密码" className="bg-white/40 border-2 border-black/20 rounded-[18px] px-[18px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
+              <input value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} type="password" placeholder={currentUser.passwordManagedByGithub ? '当前密码（首次设置留空）' : '当前密码'} className="bg-white/40 border-2 border-black/20 rounded-[18px] px-[18px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
               <input value={nextPassword} onChange={event => setNextPassword(event.target.value)} type="password" placeholder="新密码（至少8位，含字母和数字）" className="bg-white/40 border-2 border-black/20 rounded-[18px] px-[18px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
               <div className="flex gap-[10px]">
                 <input value={passwordCode} onChange={event => setPasswordCode(event.target.value)} placeholder="安全验证码" className="flex-1 bg-white/40 border-2 border-black/20 rounded-[18px] px-[18px] outline-none" style={{ height: 50, ...monoFont, fontSize: 18 }} />
@@ -321,7 +330,7 @@ export default function AccountManagementPanel() {
             </div>
             <div className="mt-[10px] flex items-center justify-between gap-[12px] flex-wrap">
               <div className="text-black/45" style={{ ...monoFont, fontSize: 15 }}>
-                {passwordHint || '修改密码前需要通过安全验证码校验。'}
+                {passwordHint || (currentUser.passwordManagedByGithub ? '设置后可使用邮箱/账号名 + 本地密码登录，也仍可继续使用 GitHub 登录。' : '修改密码前需要通过安全验证码校验。')}
               </div>
               <button type="button" onClick={handleChangePassword} className="cursor-pointer rounded-[18px] px-[16px] py-[10px]" style={{ border: '2px solid rgba(0,0,0,0.3)', background: 'rgba(255,255,255,0.34)', ...titleFont, fontSize: 20 }}>
                 更新密码

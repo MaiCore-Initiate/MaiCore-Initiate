@@ -47,6 +47,8 @@ export interface AccountUser {
   lastLoginAt?: string
   loginCodeEnabled: boolean
   githubAdminTransferPending: boolean
+  passwordConfigured: boolean
+  passwordManagedByGithub: boolean
 }
 
 export interface VerificationRecord {
@@ -172,7 +174,7 @@ interface AccountSystemContextValue {
   updateAppearancePolicy: (patch: Partial<AppearancePolicy>) => Promise<OperationResult>
   transferAdmin: (targetUserId: string, token: string, code: string) => Promise<OperationResult>
   refreshAccountState: () => Promise<OperationResult<{ currentUser: AccountUser | null }>>
-  replaceGithubAdmin: (token: string) => Promise<OperationResult>
+  replaceGithubAdmin: (token: string, confirm?: boolean) => Promise<OperationResult>
 }
 
 interface BackendAccountUser {
@@ -187,6 +189,8 @@ interface BackendAccountUser {
   last_login_at?: string
   login_code_enabled?: boolean
   github_admin_transfer_pending?: boolean
+  password_configured?: boolean
+  password_managed_by_github?: boolean
 }
 
 interface BackendApprovalRequest {
@@ -449,6 +453,8 @@ function createDefaultState(): AccountSystemState {
         joinedVia: 'seed',
         loginCodeEnabled: false,
         githubAdminTransferPending: false,
+        passwordConfigured: false,
+        passwordManagedByGithub: false,
       },
     ],
     currentUserId: null,
@@ -566,6 +572,8 @@ function mapBackendUser(user: BackendAccountUser | null | undefined): AccountUse
     lastLoginAt: user.last_login_at ?? undefined,
     loginCodeEnabled: Boolean(user.login_code_enabled),
     githubAdminTransferPending: Boolean(user.github_admin_transfer_pending),
+    passwordConfigured: Boolean(user.password_configured),
+    passwordManagedByGithub: Boolean(user.password_managed_by_github),
   }
 }
 
@@ -1069,11 +1077,11 @@ export function AccountSystemProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const replaceGithubAdmin = async (token: string): Promise<OperationResult> => {
+  const replaceGithubAdmin = async (token: string, confirm = true): Promise<OperationResult> => {
     try {
       const result = await requestJson<OperationResult>('/api/account/github/replace-admin', {
         method: 'POST',
-        body: JSON.stringify({ confirm: true, token }),
+        body: JSON.stringify({ confirm, token }),
       })
       if (result.success) {
         await refreshState({ clearAdminToken: true })
