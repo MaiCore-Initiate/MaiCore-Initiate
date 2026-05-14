@@ -33,6 +33,7 @@ if /i "%1"=="config" goto deploy_template
 if /i "%1"=="component" goto deploy_template
 if /i "%1"=="uninstall" goto deploy_template
 if /i "%1"=="test" goto test_template
+if /i "%1"=="login" goto login_provider
 
 :: 检查版本参数
 if /i "%1"=="-v" goto show_version
@@ -104,6 +105,21 @@ set "MCSB_CALLER_CWD=%cd%"
 cd /d "%PARENT_DIR%"
 echo Starting template syntax validation...
 "%PYTHON_EXE%" "%PARENT_DIR%\deployment_mod_test.py" "%TEMPLATE_PATH%"
+exit /b %errorlevel%
+
+:login_provider
+if "%~2"=="" (
+    echo Missing login provider. Usage: mcsb login github.com
+    exit /b 1
+)
+if /i not "%~2"=="github.com" (
+    echo Unsupported login provider: %~2
+    echo Supported provider: github.com
+    exit /b 1
+)
+
+cd /d "%PARENT_DIR%"
+"%PYTHON_EXE%" "%PARENT_DIR%\main_refactored.py" login "%~2"
 exit /b %errorlevel%
 
 :show_version

@@ -40,8 +40,10 @@ function Show-Usage {
     Write-Host "       mcsb component <DeploymentMOD path>"
     Write-Host "       mcsb uninstall <DeploymentMOD path>"
     Write-Host "       mcsb test <DeploymentMOD path>"
+    Write-Host "       mcsb login github.com"
     Write-Host ""
     Write-Host "You can pass either a template directory or a DeploymentMOD.toml file path."
+    Write-Host "Use login github.com to start GitHub account authorization."
 }
 
 function Show-Version {
@@ -101,6 +103,22 @@ function Invoke-TemplateTest([string]$templatePath) {
     exit $LASTEXITCODE
 }
 
+function Invoke-LoginProvider([string]$provider) {
+    if ([string]::IsNullOrWhiteSpace($provider)) {
+        Show-Usage
+        exit 1
+    }
+    if ($provider.ToLowerInvariant() -ne "github.com") {
+        Write-Host "Unsupported login provider: $provider"
+        Write-Host "Supported provider: github.com"
+        exit 1
+    }
+
+    $pythonExe = Resolve-Python
+    & $pythonExe $mainScript login $provider
+    exit $LASTEXITCODE
+}
+
 if ($args.Count -gt 0) {
     $first = [string]$args[0]
     switch -Regex ($first.ToLowerInvariant()) {
@@ -116,6 +134,7 @@ if ($args.Count -gt 0) {
         '^component$' { Invoke-TemplateMode $first $args[1] }
         '^uninstall$' { Invoke-TemplateMode $first $args[1] }
         '^test$' { Invoke-TemplateTest $args[1] }
+        '^login$' { Invoke-LoginProvider $args[1] }
         '^--version$' {
             Write-Host "$($meta["APP_NAME"]) version $($meta["APP_VERSION"])"
             exit 0

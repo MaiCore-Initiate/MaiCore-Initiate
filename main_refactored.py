@@ -1482,21 +1482,204 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["deploy", "launch", "config", "component", "uninstall", "test"],
-        help="模板命令别名，可配合模板路径使用。",
+        choices=["deploy", "launch", "config", "component", "uninstall", "test", "login"],
+        help="模板命令别名，或 login 登录命令。",
     )
     parser.add_argument(
         "command_template",
         nargs="?",
         default="",
-        help="command 模式下的模板路径。",
+        help="command 模式下的模板路径，或 login 模式下的登录提供商。",
     )
     return parser
 
 
-def _run_cli_mode(args: argparse.Namespace) -> int | None:
-    from src.modules.deployment_mod import deployment_mod_cli_runner, deployment_mod_test_cli_runner
+def _coerce_positive_int(value: Any, fallback: int) -> int:
+    try:
+        parsed = int(value)
+        return parsed if parsed > 0 else fallback
+    except (TypeError, ValueError):
+        return fallback
 
+
+def _prompt_yes_no(prompt: str) -> bool | None:
+    while True:
+        try:
+            answer = input(f"{prompt} [y/N]: ").strip().lower()
+        except EOFError:
+            return None
+        if answer in {"", "n", "no"}:
+            return False
+        if answer in {"y", "yes"}:
+            return True
+        print("请输入 y 或 n。")
+
+
+def _prompt_secret(prompt: str) -> str:
+    if sys.stdin.isatty():
+        try:
+            import getpass
+            return getpass.getpass(prompt)
+        except Exception:
+            pass
+    try:
+        return input(prompt)
+    except EOFError:
+        return ""
+
+
+def _handle_github_admin_transfer(user_id: str) -> int:
+    from src.webui_api.auth_core import account_store
+
+    print("")
+    print("当前 GitHub 账号是除系统管理员外第一个注册的账号。")
+    choice = _prompt_yes_no("是否将管理员权限移交至该账户？")
+    if choice is None:
+        print("当前终端无法读取确认输入，本次暂不处理管理员权限移交。")
+        print("之后可以登录管理员账户，在 [设置]->[账号与成员管理] 中转让。")
+        return 0
+
+    if not choice:
+        result = account_store.replace_admin_with_github_user(user_id, False, "")
+        print(result.get("message") or "已保留当前管理员。")
+        print("之后可以登录管理员账户，在 [设置]->[账号与成员管理] 中转让。")
+        return 0
+
+    for attempt in range(1, 4):
+        token = _prompt_secret("请输入系统初始化时生成的 Token: ").strip()
+        if not token:
+            print("Token 不能为空。")
+            continue
+        result = account_store.replace_admin_with_github_user(user_id, True, token)
+        print(result.get("message") or ("管理员权限已移交。" if result.get("success") else "管理员权限移交失败。"))
+        if result.get("success"):
+            return 0
+        if attempt < 3:
+            print("请重新输入 Token。")
+
+    return 1
+
+
+def _run_github_login() -> int:
+    import urllib.parse
+
+    from src.webui_api.auth_api import (
+        GITHUB_EMAILS_URL,
+        GITHUB_USER_URL,
+        _github_api_json,
+        _github_client_id,
+        _github_config,
+        _github_status_payload,
+        _poll_access_token,
+        _request_device_code,
+        _select_github_email,
+    )
+    from src.webui_api.auth_core import account_store
+
+    config = _github_config()
+    status = _github_status_payload()
+    if not status.get("enabled"):
+        print("GitHub Device Flow 未启用。")
+        return 1
+
+    try:
+        device_response = _request_device_code(_github_client_id(config), str(status.get("scope") or "read:user user:email"))
+    except Exception as exc:
+        print(f"GitHub Device Flow 启动失败：{exc}")
+        return 1
+
+    device_code = str(device_response.get("device_code") or "").strip()
+    user_code = str(device_response.get("user_code") or "").strip()
+    verification_uri = str(device_response.get("verification_uri") or "https://github.com/login/device").strip()
+    authorization_url = str(device_response.get("verification_uri_complete") or "").strip()
+    if not authorization_url and user_code:
+        authorization_url = f"{verification_uri}?user_code={urllib.parse.quote(user_code)}"
+    interval = _coerce_positive_int(device_response.get("interval"), 5)
+    expires_in = _coerce_positive_int(device_response.get("expires_in"), 900)
+
+    if not device_code or not user_code or not verification_uri:
+        print("GitHub 未返回完整授权信息，请稍后重试。")
+        return 1
+
+    print("请在浏览器中打开下面的 GitHub 授权链接，并输入授权代码。")
+    print(f"授权链接：{authorization_url or verification_uri}")
+    print(f"授权代码：{user_code}")
+    print("已开始在后台静默轮询授权状态，请保持此窗口打开。")
+
+    access_token = ""
+    deadline = time.monotonic() + expires_in
+    client_id = _github_client_id(config)
+    while time.monotonic() < deadline:
+        time.sleep(interval)
+        try:
+            token_response = _poll_access_token(client_id, device_code)
+        except Exception:
+            continue
+
+        error = str(token_response.get("error") or "").strip()
+        if error == "authorization_pending":
+            continue
+        if error == "slowdown":
+            interval = max(interval + 5, _coerce_positive_int(token_response.get("interval"), interval + 5))
+            continue
+        if error == "expired_token":
+            print("GitHub 授权已过期，请重新执行 mcsb login github.com。")
+            return 1
+        if error == "access_denied":
+            print("GitHub 授权已被取消。")
+            return 1
+        if error:
+            print(f"GitHub 授权失败：{error}")
+            return 1
+
+        access_token = str(token_response.get("access_token") or "").strip()
+        if access_token:
+            break
+
+    if not access_token:
+        print("等待 GitHub 授权超时，请重新执行 mcsb login github.com。")
+        return 1
+
+    try:
+        github_user = _github_api_json(GITHUB_USER_URL, access_token)
+        github_emails = _github_api_json(GITHUB_EMAILS_URL, access_token)
+    except Exception as exc:
+        print(f"GitHub 用户信息请求失败：{exc}")
+        return 1
+
+    primary_email, email_verified = _select_github_email(github_user, github_emails)
+    result = account_store.upsert_github_user(github_user, primary_email, email_verified)
+    if not result.get("success"):
+        print(result.get("message") or "GitHub 登录失败。")
+        return 1
+
+    user = result.get("user") or {}
+    print("")
+    print(f"GitHub 登录成功：{user.get('name') or user.get('email')}")
+    print(f"系统账号：{user.get('email', '')}")
+    print("账号已注册到系统。" if result.get("created") else "已登录现有系统账号。")
+    if user.get("password_managed_by_github"):
+        print("该 GitHub 账号默认不展示随机本地密码；之后可在 [设置]->[账号与成员管理] 中首次设置本地密码。")
+
+    if user.get("github_admin_transfer_pending"):
+        return _handle_github_admin_transfer(str(user.get("id") or ""))
+
+    return 0
+
+
+def _run_login_cli(provider: str) -> int:
+    normalized_provider = provider.strip().lower()
+    if not normalized_provider:
+        print("缺少登录提供商。用法：mcsb login github.com")
+        return 1
+    if normalized_provider != "github.com":
+        print(f"暂不支持登录提供商：{provider}")
+        print("当前支持：mcsb login github.com")
+        return 1
+    return _run_github_login()
+
+
+def _run_cli_mode(args: argparse.Namespace) -> int | None:
     cli_actions = [
         ("deploy", str(getattr(args, "deploy_template", "") or "").strip()),
         ("launch", str(getattr(args, "launch_template", "") or "").strip()),
@@ -1506,6 +1689,13 @@ def _run_cli_mode(args: argparse.Namespace) -> int | None:
         ("test", str(getattr(args, "test_template", "") or "").strip()),
     ]
 
+    command = str(getattr(args, "command", "") or "").strip().lower()
+    command_template = str(getattr(args, "command_template", "") or "").strip()
+    if command == "login":
+        return _run_login_cli(command_template)
+
+    from src.modules.deployment_mod import deployment_mod_cli_runner, deployment_mod_test_cli_runner
+
     for mode, template_path in cli_actions:
         if not template_path:
             continue
@@ -1514,8 +1704,6 @@ def _run_cli_mode(args: argparse.Namespace) -> int | None:
             return deployment_mod_test_cli_runner.run(template_path)
         return deployment_mod_cli_runner.run(template_path, mode=mode)
 
-    command = str(getattr(args, "command", "") or "").strip().lower()
-    command_template = str(getattr(args, "command_template", "") or "").strip()
     if command:
         if not command_template:
             raise ValueError(f"命令 {command} 需要提供部署模板路径")

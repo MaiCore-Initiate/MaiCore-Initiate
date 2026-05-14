@@ -67,6 +67,10 @@ static int is_help_mode(const char *arg) {
            _stricmp(arg, "/?") == 0;
 }
 
+static int is_login_mode(const char *arg) {
+    return _stricmp(arg, "login") == 0;
+}
+
 static void init_meta_defaults(MetaInfo *meta) {
     strcpy_s(meta->app_name, sizeof(meta->app_name), "MaiCoreStart");
     strcpy_s(meta->app_version, sizeof(meta->app_version), "v5.0.0-beta");
@@ -151,14 +155,17 @@ static void show_usage(const MetaInfo *meta) {
     puts("       mcsb component <DeploymentMOD path>");
     puts("       mcsb uninstall <DeploymentMOD path>");
     puts("       mcsb test <DeploymentMOD path>");
+    puts("       mcsb login github.com");
     puts("");
     puts("You can pass either a template directory or a DeploymentMOD.toml file path.");
+    puts("Use login github.com to start GitHub account authorization.");
 }
 
 static void show_version_detail(const MetaInfo *meta) {
     printf("%s version %s\n", meta->app_name, meta->app_version);
     printf("build date: %s\n", meta->build_date);
     printf("authors: %s\n", meta->app_authors);
+    puts("login: mcsb login github.com");
 }
 
 static int needs_quotes(const char *text) {
@@ -278,6 +285,21 @@ int main(int argc, char *argv[]) {
             SetEnvironmentVariableA("MCSB_CALLER_CWD", caller_cwd);
         }
         build_python_command(command_line, sizeof(command_line), python_exe, test_script, argc, argv, 2);
+        return run_process(command_line, parent_dir);
+    }
+
+    if (argc > 1 && is_login_mode(argv[1])) {
+        if (argc < 3) {
+            fputs("Missing login provider. Usage: mcsb login github.com\n", stderr);
+            show_usage(&meta);
+            return 1;
+        }
+        if (_stricmp(argv[2], "github.com") != 0) {
+            fprintf(stderr, "Unsupported login provider: %s\n", argv[2]);
+            fputs("Supported provider: github.com\n", stderr);
+            return 1;
+        }
+        build_python_command(command_line, sizeof(command_line), python_exe, main_script, argc, argv, 1);
         return run_process(command_line, parent_dir);
     }
 

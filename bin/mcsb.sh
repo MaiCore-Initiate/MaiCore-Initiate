@@ -42,8 +42,10 @@ Usage: mcsb -d <DeploymentMOD path>
        mcsb component <DeploymentMOD path>
        mcsb uninstall <DeploymentMOD path>
        mcsb test <DeploymentMOD path>
+       mcsb login github.com
 
 You can pass either a template directory or a DeploymentMOD.toml file path.
+Use login github.com to start GitHub account authorization.
 EOF
 }
 
@@ -96,6 +98,23 @@ run_template_test() {
   "${python_exe}" "${TEST_SCRIPT}" "${template_path}"
 }
 
+run_login_provider() {
+  local provider="${1:-}"
+  if [[ -z "${provider}" ]]; then
+    show_usage
+    exit 1
+  fi
+  if [[ "${provider,,}" != "github.com" ]]; then
+    printf 'Unsupported login provider: %s\n' "${provider}" >&2
+    printf '%s\n' "Supported provider: github.com" >&2
+    exit 1
+  fi
+
+  local python_exe
+  python_exe="$(resolve_python)"
+  "${python_exe}" "${MAIN_SCRIPT}" login "${provider}"
+}
+
 first_arg="${1:-}"
 case "${first_arg}" in
   -d|-l|-c|-com|-u|deploy|launch|config|component|uninstall)
@@ -103,6 +122,9 @@ case "${first_arg}" in
     ;;
   -t|test)
     run_template_test "${2:-}"
+    ;;
+  login)
+    run_login_provider "${2:-}"
     ;;
   -v|version|--version|Version)
     show_version
