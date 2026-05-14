@@ -126,6 +126,20 @@ case "${first_arg}" in
   login)
     run_login_provider "${2:-}"
     ;;
+  -o|output)
+    shift
+    python_exe="$(resolve_python)"
+    cd -- "${PARENT_DIR}"
+    "${python_exe}" -m src.cli.mcsb_cli output "$@"
+    exit $?
+    ;;
+  import|-in)
+    shift
+    python_exe="$(resolve_python)"
+    cd -- "${PARENT_DIR}"
+    "${python_exe}" -m src.cli.mcsb_cli import "$@"
+    exit $?
+    ;;
   -v|version|--version|Version)
     show_version
     exit 0

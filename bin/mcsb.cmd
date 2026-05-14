@@ -34,6 +34,10 @@ if /i "%1"=="component" goto deploy_template
 if /i "%1"=="uninstall" goto deploy_template
 if /i "%1"=="test" goto test_template
 if /i "%1"=="login" goto login_provider
+if /i "%1"=="-o" goto pack_instance
+if /i "%1"=="output" goto pack_instance
+if /i "%1"=="import" goto import_instance
+if /i "%1"=="-in" goto import_instance
 
 :: 检查版本参数
 if /i "%1"=="-v" goto show_version
@@ -122,6 +126,18 @@ cd /d "%PARENT_DIR%"
 "%PYTHON_EXE%" "%PARENT_DIR%\main_refactored.py" login "%~2"
 exit /b %errorlevel%
 
+:pack_instance
+shift
+cd /d "%PARENT_DIR%"
+"%PYTHON_EXE%" -m src.cli.mcsb_cli output %*
+exit /b %errorlevel%
+
+:import_instance
+shift
+cd /d "%PARENT_DIR%"
+"%PYTHON_EXE%" -m src.cli.mcsb_cli import %*
+exit /b %errorlevel%
+
 :show_version
 echo.
 echo ========================================
@@ -156,6 +172,10 @@ echo "  mcsb -v           - 显示版本及信息"
 echo "  mcsb Version      - 显示版本及信息"
 echo "  mcsb version      - 显示版本及信息"
 echo "  mcsb --version    - 显示版本"
+echo "  mcsb -o 序列号    - 打包实例为 .mcsins"
+echo "  mcsb output 序列号 - 打包实例为 .mcsins"
+echo "  mcsb import 文件  - 导入 .mcsins 实例"
+echo "  mcsb -in 文件     - 导入 .mcsins 实例"
 echo.
 echo ========================================
 echo.
