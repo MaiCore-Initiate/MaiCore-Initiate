@@ -240,6 +240,11 @@ html.theme-animating *::after {
   --dfw-dot: rgba(128, 128, 128, 0.34);
   --dfw-control-bg: rgba(255, 255, 255, 0.76);
   --dfw-control-hover: rgba(0, 0, 0, 0.06);
+  --dfw-sidebar-bg: #ffffff;
+  --dfw-sidebar-border: #000000;
+  --dfw-outline-muted: #7f7f7f;
+  --dfw-outline-selected-bg: rgba(0, 132, 255, 0.3);
+  --dfw-blue: #0084ff;
 }
 
 .dark .deployment-flow-workbench,
@@ -250,6 +255,11 @@ html.theme-animating *::after {
   --dfw-dot: rgba(128, 128, 128, 0.44);
   --dfw-control-bg: rgba(0, 0, 0, 0.68);
   --dfw-control-hover: rgba(255, 255, 255, 0.08);
+  --dfw-sidebar-bg: #000000;
+  --dfw-sidebar-border: #ffffff;
+  --dfw-outline-muted: #7f7f7f;
+  --dfw-outline-selected-bg: rgba(0, 132, 255, 0.38);
+  --dfw-blue: #0084ff;
 }
 
 .deployment-flow-workbench-grid {
