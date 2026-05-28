@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import {
+  ArrowLeft,
   CirclePlus,
   Clock,
   File,
@@ -285,6 +286,38 @@ function ProjectList({
   )
 }
 
+function DeploymentFlowWorkbench({
+  item,
+  onBackToLibrary,
+}: {
+  item: TemplateWorkbenchItem
+  onBackToLibrary: () => void
+}) {
+  return (
+    <div className="deployment-flow-workbench relative h-full w-full overflow-hidden" style={{ background: 'var(--dfw-bg)', color: 'var(--dfw-text)' }}>
+      <div className="deployment-flow-workbench-grid absolute inset-0" aria-hidden />
+      <button
+        type="button"
+        onClick={onBackToLibrary}
+        className="absolute left-[24px] top-[24px] z-10 flex h-[42px] items-center gap-[8px] rounded-[8px] border px-[12px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+        style={{
+          borderColor: 'var(--dfw-border)',
+          background: 'var(--dfw-control-bg)',
+          color: 'var(--dfw-text)',
+          fontFamily: font,
+          fontSize: 18,
+          fontWeight: 500,
+        }}
+        aria-label={`返回${item.name}所在的项目列表`}
+        title="返回项目列表"
+      >
+        <ArrowLeft size={22} strokeWidth={1.8} />
+        <span>项目列表</span>
+      </button>
+    </div>
+  )
+}
+
 function ContentHeader({
   layoutMode,
   onToggleLayout,
@@ -430,11 +463,28 @@ export default function TemplateWorkbench({
 }: TemplateWorkbenchProps) {
   const [activeSection, setActiveSection] = useState<TemplateWorkbenchSection>('my-templates')
   const [layoutMode, setLayoutMode] = useState<TemplateWorkbenchLayout>('card')
+  const [activeWorkbenchItem, setActiveWorkbenchItem] = useState<TemplateWorkbenchItem | null>(null)
   const projectItems = items ?? defaultItems
 
   const selectSection = (section: TemplateWorkbenchSection) => {
     setActiveSection(section)
     onSelectSection?.(section)
+  }
+
+  const openItem = (item: TemplateWorkbenchItem) => {
+    onOpenItem?.(item)
+    if (item.type === 'deployment-flow') {
+      setActiveWorkbenchItem(item)
+    }
+  }
+
+  if (activeWorkbenchItem) {
+    return (
+      <DeploymentFlowWorkbench
+        item={activeWorkbenchItem}
+        onBackToLibrary={() => setActiveWorkbenchItem(null)}
+      />
+    )
   }
 
   return (
@@ -576,12 +626,12 @@ export default function TemplateWorkbench({
             item={item}
             left={cardPositions[index].left}
             top={cardPositions[index].top}
-            onOpen={onOpenItem}
+            onOpen={openItem}
           />
         ))}
 
         {layoutMode === 'list' && (
-          <ProjectList items={projectItems} onOpen={onOpenItem} />
+          <ProjectList items={projectItems} onOpen={openItem} />
         )}
 
         {slots?.contentTrailing}

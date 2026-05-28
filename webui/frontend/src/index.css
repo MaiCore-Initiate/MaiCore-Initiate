@@ -233,6 +233,31 @@ html.theme-animating *::after {
   --twb-folder-border: #ffd500;
 }
 
+.deployment-flow-workbench {
+  --dfw-bg: #ffffff;
+  --dfw-text: #000000;
+  --dfw-border: rgba(0, 0, 0, 0.28);
+  --dfw-dot: rgba(128, 128, 128, 0.34);
+  --dfw-control-bg: rgba(255, 255, 255, 0.76);
+  --dfw-control-hover: rgba(0, 0, 0, 0.06);
+}
+
+.dark .deployment-flow-workbench,
+.theme-dark .deployment-flow-workbench {
+  --dfw-bg: #000000;
+  --dfw-text: #ffffff;
+  --dfw-border: rgba(255, 255, 255, 0.28);
+  --dfw-dot: rgba(128, 128, 128, 0.44);
+  --dfw-control-bg: rgba(0, 0, 0, 0.68);
+  --dfw-control-hover: rgba(255, 255, 255, 0.08);
+}
+
+.deployment-flow-workbench-grid {
+  background-image: radial-gradient(circle, var(--dfw-dot) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+}
+
 .dark .text-black,
 .dark [class~="text-black/90"] { color: rgba(255, 255, 255, 0.92) !important; }
 .dark [class~="text-black/80"] { color: rgba(255, 255, 255, 0.82) !important; }
