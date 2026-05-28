@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent, type ReactNode, type WheelEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import {
   ArrowLeft,
   CirclePlus,
@@ -325,6 +325,7 @@ function DeploymentFlowWorkbench({
 }) {
   const [viewport, setViewport] = useState({ scale: 1, x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
+  const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const grid = resolveGridSpacing(viewport.scale)
   const gridStyle = {
@@ -332,22 +333,45 @@ function DeploymentFlowWorkbench({
     backgroundPosition: `${positiveModulo(viewport.x, grid.screenSpacing)}px ${positiveModulo(viewport.y, grid.screenSpacing)}px`,
   }
 
-  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    const rect = event.currentTarget.getBoundingClientRect()
-    const pointerX = event.clientX - rect.left
-    const pointerY = event.clientY - rect.top
+  useEffect(() => {
+    const workbench = workbenchRef.current
+    if (!workbench) return
 
-    setViewport(prev => {
-      const nextScale = clamp(prev.scale * Math.exp(-event.deltaY * 0.0012), workbenchMinZoom, workbenchMaxZoom)
-      const scaleRatio = nextScale / prev.scale
-      return {
-        scale: nextScale,
-        x: pointerX - (pointerX - prev.x) * scaleRatio,
-        y: pointerY - (pointerY - prev.y) * scaleRatio,
-      }
-    })
-  }
+    const handleNativeWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      const rect = workbench.getBoundingClientRect()
+      const pointerX = event.clientX - rect.left
+      const pointerY = event.clientY - rect.top
+
+      setViewport(prev => {
+        const nextScale = clamp(prev.scale * Math.exp(-event.deltaY * 0.0012), workbenchMinZoom, workbenchMaxZoom)
+        const scaleRatio = nextScale / prev.scale
+        return {
+          scale: nextScale,
+          x: pointerX - (pointerX - prev.x) * scaleRatio,
+          y: pointerY - (pointerY - prev.y) * scaleRatio,
+        }
+      })
+    }
+
+    workbench.addEventListener('wheel', handleNativeWheel, { passive: false })
+    return () => workbench.removeEventListener('wheel', handleNativeWheel)
+  }, [])
+
+  useEffect(() => {
+    const preventBrowserGestureZoom = (event: Event) => {
+      event.preventDefault()
+    }
+
+    document.addEventListener('gesturestart', preventBrowserGestureZoom)
+    document.addEventListener('gesturechange', preventBrowserGestureZoom)
+    return () => {
+      document.removeEventListener('gesturestart', preventBrowserGestureZoom)
+      document.removeEventListener('gesturechange', preventBrowserGestureZoom)
+    }
+  }, [])
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || event.target !== event.currentTarget) return
@@ -384,8 +408,8 @@ function DeploymentFlowWorkbench({
 
   return (
     <div
+      ref={workbenchRef}
       className="deployment-flow-workbench relative h-full w-full overflow-hidden"
-      onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={stopPanning}
