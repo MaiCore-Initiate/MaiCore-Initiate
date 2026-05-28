@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type PointerEvent, type ReactNode, type WheelEvent } from 'react'
 import {
   ArrowLeft,
   CirclePlus,
@@ -64,6 +64,36 @@ const cardPositions = [
 ]
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
+const gridBaseSpacing = 32
+const gridMinScreenSpacing = 16
+const gridMaxScreenSpacing = 48
+const workbenchMinZoom = 0.08
+const workbenchMaxZoom = 8
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function positiveModulo(value: number, divisor: number) {
+  return ((value % divisor) + divisor) % divisor
+}
+
+function resolveGridSpacing(scale: number) {
+  let logicalSpacing = gridBaseSpacing
+  let screenSpacing = logicalSpacing * scale
+
+  while (screenSpacing < gridMinScreenSpacing) {
+    logicalSpacing *= 2
+    screenSpacing *= 2
+  }
+
+  while (screenSpacing > gridMaxScreenSpacing) {
+    logicalSpacing /= 2
+    screenSpacing /= 2
+  }
+
+  return { logicalSpacing, screenSpacing }
+}
 
 function typeLabel(type: TemplateWorkbenchItemType) {
   const labels: Record<TemplateWorkbenchItemType, string> = {
@@ -293,13 +323,85 @@ function DeploymentFlowWorkbench({
   item: TemplateWorkbenchItem
   onBackToLibrary: () => void
 }) {
+  const [viewport, setViewport] = useState({ scale: 1, x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
+  const grid = resolveGridSpacing(viewport.scale)
+  const gridStyle = {
+    backgroundSize: `${grid.screenSpacing}px ${grid.screenSpacing}px`,
+    backgroundPosition: `${positiveModulo(viewport.x, grid.screenSpacing)}px ${positiveModulo(viewport.y, grid.screenSpacing)}px`,
+  }
+
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const rect = event.currentTarget.getBoundingClientRect()
+    const pointerX = event.clientX - rect.left
+    const pointerY = event.clientY - rect.top
+
+    setViewport(prev => {
+      const nextScale = clamp(prev.scale * Math.exp(-event.deltaY * 0.0012), workbenchMinZoom, workbenchMaxZoom)
+      const scaleRatio = nextScale / prev.scale
+      return {
+        scale: nextScale,
+        x: pointerX - (pointerX - prev.x) * scaleRatio,
+        y: pointerY - (pointerY - prev.y) * scaleRatio,
+      }
+    })
+  }
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || event.target !== event.currentTarget) return
+    panStartRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      viewportX: viewport.x,
+      viewportY: viewport.y,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setIsPanning(true)
+  }
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const start = panStartRef.current
+    if (!start || start.pointerId !== event.pointerId) return
+    setViewport(prev => ({
+      ...prev,
+      x: start.viewportX + event.clientX - start.x,
+      y: start.viewportY + event.clientY - start.y,
+    }))
+  }
+
+  const stopPanning = (event: PointerEvent<HTMLDivElement>) => {
+    const start = panStartRef.current
+    if (!start || start.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    panStartRef.current = null
+    setIsPanning(false)
+  }
+
   return (
-    <div className="deployment-flow-workbench relative h-full w-full overflow-hidden" style={{ background: 'var(--dfw-bg)', color: 'var(--dfw-text)' }}>
-      <div className="deployment-flow-workbench-grid absolute inset-0" aria-hidden />
+    <div
+      className="deployment-flow-workbench relative h-full w-full overflow-hidden"
+      onWheel={handleWheel}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={stopPanning}
+      onPointerCancel={stopPanning}
+      style={{
+        background: 'var(--dfw-bg)',
+        color: 'var(--dfw-text)',
+        cursor: isPanning ? 'grabbing' : 'grab',
+        touchAction: 'none',
+      }}
+    >
+      <div className="deployment-flow-workbench-grid absolute inset-0 pointer-events-none" style={gridStyle} aria-hidden />
       <button
         type="button"
         onClick={onBackToLibrary}
-        className="absolute left-[24px] top-[24px] z-10 flex h-[42px] items-center gap-[8px] rounded-[8px] border px-[12px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+        className="absolute left-[24px] top-[24px] z-10 flex h-[42px] cursor-pointer items-center gap-[8px] rounded-[8px] border px-[12px] transition-colors hover:bg-[var(--dfw-control-hover)]"
         style={{
           borderColor: 'var(--dfw-border)',
           background: 'var(--dfw-control-bg)',

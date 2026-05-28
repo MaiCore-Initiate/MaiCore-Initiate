@@ -253,9 +253,7 @@ html.theme-animating *::after {
 }
 
 .deployment-flow-workbench-grid {
-  background-image: radial-gradient(circle, var(--dfw-dot) 1.5px, transparent 1.5px);
-  background-size: 24px 24px;
-  background-position: 0 0;
+  background-image: radial-gradient(circle, var(--dfw-dot) 1.5px, transparent 1.6px);
 }
 
 .dark .text-black,
