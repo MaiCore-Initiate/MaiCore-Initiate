@@ -1,6 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
+const fieldLineHeight = 30
+const fieldVerticalPadding = 7
+const fieldMinWidth = 142
+const fieldMaxWidth = 553
+const fieldMaxCollapsedLines = 5
+
 export const rightSidebarExpandedWidth = 600
 export const rightSidebarCollapsedWidth = 70
 
@@ -24,59 +30,116 @@ function TextAlignRightGlyph() {
   )
 }
 
-function FieldLabel({ children, top }: { children: string; top: number }) {
-  return (
-    <label
-      className="absolute left-[20px] h-[36px] leading-[36px]"
-      style={{ top, fontFamily: font, fontSize: 30, fontWeight: 600 }}
-    >
-      {children}
-    </label>
-  )
-}
-
-function roundedInputPath(width: number, height: number) {
-  const radius = height / 2
-  const right = Math.max(radius, width - radius)
-  return `M0,0H${right}a${radius},${radius},0,0,1,${radius},${radius}v0a${radius},${radius},0,0,1,-${radius},${radius}H${radius}A${radius},${radius},0,0,1,0,${radius}V0A0,0,0,0,1,0,0Z`
-}
-
-function InputFrame({
-  left,
-  top,
-  width,
-  height = 44,
-  selected = false,
-}: {
-  left: number
-  top: number
-  width: number
-  height?: number
-  selected?: boolean
-}) {
-  return (
-    <svg
-      className="pointer-events-none absolute"
-      style={{ left, top, width, height }}
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      aria-hidden
-    >
-      <path
-        d={roundedInputPath(width, height)}
-        fill={selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)'}
-        stroke={selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)'}
-      />
-    </svg>
-  )
-}
-
 function parseTags(value: string) {
   return value
     .split('#')
     .map(tag => tag.trim())
     .filter(Boolean)
+}
+
+function measureTextWidth(value: string) {
+  let width = 0
+
+  for (const char of value || ' ') {
+    width += /[\u4e00-\u9fff]/.test(char) ? 20 : 11
+  }
+
+  return width
+}
+
+function resolveFieldMetrics(value: string) {
+  const desiredWidth = measureTextWidth(value) + 30
+  const width = Math.min(fieldMaxWidth, Math.max(fieldMinWidth, desiredWidth))
+  const textWidth = Math.max(1, width - 20)
+  const lines = Math.max(1, Math.ceil(measureTextWidth(value) / textWidth))
+
+  return { width, lines }
+}
+
+function FieldLabel({ children }: { children: string }) {
+  return (
+    <label className="block h-[36px] leading-[36px]" style={{ fontFamily: font, fontSize: 30, fontWeight: 600 }}>
+      {children}
+    </label>
+  )
+}
+
+function AutoGrowTextField({
+  value,
+  onChange,
+  ariaLabel,
+  selected = false,
+  onCommit,
+}: {
+  value: string
+  onChange: (value: string) => void
+  ariaLabel: string
+  selected?: boolean
+  onCommit?: () => void
+}) {
+  const [focused, setFocused] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const metrics = useMemo(() => resolveFieldMetrics(value), [value])
+  const naturalLines = metrics.lines
+  const visibleLines = expanded ? naturalLines : Math.min(naturalLines, fieldMaxCollapsedLines)
+  const fieldHeight = fieldVerticalPadding * 2 + visibleLines * fieldLineHeight
+  const canCollapse = naturalLines > fieldMaxCollapsedLines
+  const active = focused || selected
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      event.currentTarget.blur()
+    }
+  }
+
+  return (
+    <div className="max-w-full">
+      <div
+        className="relative max-w-full rounded-[22px] rounded-tl-none border transition-[background-color,border-color,width,height] duration-150"
+        style={{
+          width: metrics.width,
+          height: fieldHeight,
+          borderColor: active ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+          background: active ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+        }}
+      >
+        <textarea
+          value={value}
+          onChange={event => onChange(event.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false)
+            onCommit?.()
+          }}
+          onKeyDown={handleKeyDown}
+          rows={visibleLines}
+          className="absolute inset-x-[10px] top-[7px] resize-none overflow-hidden bg-transparent text-[20px] font-light leading-[30px] outline-none"
+          style={{
+            height: visibleLines * fieldLineHeight,
+            fontFamily: font,
+            whiteSpace: 'pre-wrap',
+          }}
+          aria-label={ariaLabel}
+        />
+      </div>
+
+      {canCollapse && (
+        <button
+          type="button"
+          onClick={() => setExpanded(prev => !prev)}
+          className="mt-[8px] h-[30px] rounded-[15px] border px-[10px] text-[16px] leading-[28px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+          style={{
+            borderColor: 'var(--dfw-sidebar-border)',
+            background: 'var(--dfw-sidebar-bg)',
+            fontFamily: font,
+          }}
+        >
+          {expanded ? '收起' : '展开'}
+        </button>
+      )}
+    </div>
+  )
 }
 
 export default function WorkbenchRightSidebar({
@@ -177,61 +240,54 @@ export default function WorkbenchRightSidebar({
       </button>
 
       <div className="absolute left-[19.5px] right-[20.5px] top-[102px] bottom-[24px] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="relative h-[954px] min-w-[560px]">
-          <FieldLabel top={0} children="作者" />
-          <InputFrame left={0.5} top={40} width={142} />
-          <input
-            value={author}
-            onChange={event => setAuthor(event.target.value)}
-            className="absolute left-[10.5px] top-[40px] h-[44px] w-[122px] bg-transparent text-[20px] font-light outline-none"
-            style={{ fontFamily: font }}
-            aria-label="作者"
-          />
+        <div className="flex min-h-[954px] w-[560px] flex-col gap-[20px]">
+          <section>
+            <FieldLabel>作者</FieldLabel>
+            <AutoGrowTextField
+              value={author}
+              onChange={setAuthor}
+              ariaLabel="作者"
+            />
+          </section>
 
-          <FieldLabel top={85} children="标签" />
-          <InputFrame left={0.5} top={125} width={142} selected />
-          <input
-            value={tagInput}
-            onChange={event => setTagInput(event.target.value)}
-            onBlur={commitTags}
-            onKeyDown={event => {
-              if (event.key !== 'Enter') return
-              event.currentTarget.blur()
-            }}
-            className="absolute left-[10.5px] top-[125px] h-[44px] w-[122px] bg-transparent text-[20px] font-light outline-none"
-            style={{ fontFamily: font }}
-            aria-label="标签"
-          />
-          <div className="absolute left-[0.5px] top-[189px] flex max-w-[553px] flex-wrap gap-[8px]">
-            {tags.map(tag => (
-              <span
-                key={tag}
-                className="h-[30px] max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap rounded-[5px] border px-[6px] text-[20px] font-light leading-[30px]"
-                style={{
-                  borderColor: 'var(--dfw-sidebar-border)',
-                  background: 'var(--dfw-sidebar-bg)',
-                  fontFamily: font,
-                }}
-                title={tag}
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
+          <section>
+            <FieldLabel>标签</FieldLabel>
+            <AutoGrowTextField
+              value={tagInput}
+              onChange={setTagInput}
+              onCommit={commitTags}
+              ariaLabel="标签"
+            />
+            <div className="mt-[28px] flex max-w-[553px] flex-wrap gap-[8px]">
+              {tags.map(tag => (
+                <span
+                  key={tag}
+                  className="h-[30px] max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap rounded-[5px] border px-[6px] text-[20px] font-light leading-[28px]"
+                  style={{
+                    borderColor: 'var(--dfw-sidebar-border)',
+                    background: 'var(--dfw-sidebar-bg)',
+                    fontFamily: font,
+                  }}
+                  title={tag}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </section>
 
-          <FieldLabel top={235} children="模板描述" />
-          <InputFrame left={0.5} top={275} width={553} />
-          <input
-            value={description}
-            onChange={event => setDescription(event.target.value)}
-            className="absolute left-[10.5px] top-[275px] h-[44px] w-[533px] bg-transparent text-[20px] font-light outline-none"
-            style={{ fontFamily: font }}
-            aria-label="模板描述"
-          />
+          <section>
+            <FieldLabel>模板描述</FieldLabel>
+            <AutoGrowTextField
+              value={description}
+              onChange={setDescription}
+              ariaLabel="模板描述"
+            />
+          </section>
 
           <div
-            className="absolute left-[6.5px] top-[358px] h-[36px] leading-[36px]"
-            style={{ fontFamily: font, fontSize: 20, fontWeight: 300 }}
+            className="pt-[26px] text-[20px] font-light leading-[36px]"
+            style={{ fontFamily: font }}
           >
             省略其他条目......
           </div>
