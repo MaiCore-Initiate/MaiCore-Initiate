@@ -244,6 +244,7 @@ html.theme-animating *::after {
   --dfw-sidebar-border: #000000;
   --dfw-outline-muted: #7f7f7f;
   --dfw-outline-selected-bg: rgba(0, 132, 255, 0.3);
+  --dfw-outline-hover: rgba(0, 0, 0, 0.05);
   --dfw-blue: #0084ff;
 }
 
@@ -259,11 +260,23 @@ html.theme-animating *::after {
   --dfw-sidebar-border: #ffffff;
   --dfw-outline-muted: #7f7f7f;
   --dfw-outline-selected-bg: rgba(0, 132, 255, 0.38);
+  --dfw-outline-hover: rgba(255, 255, 255, 0.08);
   --dfw-blue: #0084ff;
 }
 
 .deployment-flow-workbench-grid {
   background-image: radial-gradient(circle, var(--dfw-dot) 1.5px, transparent 1.6px);
+}
+
+@keyframes dfw-outline-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .dark .text-black,
