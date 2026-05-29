@@ -519,6 +519,15 @@ function PlusGlyph() {
   )
 }
 
+function DeleteGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <path d="M4.5 4.5L13.5 13.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M13.5 4.5L4.5 13.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  )
+}
+
 function DenoPermissionInput({
   value,
   onChange,
@@ -557,7 +566,7 @@ function DenoPermissionInput({
       onBlur={onBlur}
       onKeyDown={handleKeyDown}
       rows={1}
-      className="min-h-[30px] flex-1 resize-none overflow-hidden bg-transparent py-[5px] pr-[8px] text-[18px] font-light leading-[24px] outline-none"
+      className="min-h-[30px] min-w-0 flex-1 resize-none overflow-hidden bg-transparent py-[5px] pr-[8px] text-[18px] font-light leading-[24px] outline-none"
       style={{
         color: 'var(--dfw-text)',
         fontFamily: font,
@@ -652,6 +661,15 @@ function DenoPermissionListField({
       itemIndex === index ? { ...item, value: nextValue } : item
     ))
     commitItems(nextItems)
+  }
+
+  const deletePermission = (index: number) => {
+    setFocusedIndex(current => {
+      if (current === null) return null
+      if (current === index) return null
+      return current > index ? current - 1 : current
+    })
+    commitItems(itemsRef.current.filter((_, itemIndex) => itemIndex !== index), true)
   }
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
@@ -760,6 +778,20 @@ function DenoPermissionListField({
                 onBlur={() => setFocusedIndex(current => (current === index ? null : current))}
                 ariaLabel={`Deno权限参数${index + 1}`}
               />
+              <button
+                type="button"
+                className="flex min-h-[40px] w-[30px] shrink-0 items-center justify-center rounded-r-[5px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+                style={{ color: 'var(--dfw-outline-muted)' }}
+                onPointerDown={event => event.stopPropagation()}
+                onClick={event => {
+                  event.stopPropagation()
+                  deletePermission(index)
+                }}
+                aria-label={`删除第${index + 1}条Deno权限参数`}
+                title="删除"
+              >
+                <DeleteGlyph />
+              </button>
             </div>
           )
         })}
