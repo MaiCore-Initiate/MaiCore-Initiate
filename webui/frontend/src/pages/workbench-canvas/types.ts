@@ -4,8 +4,8 @@ export const workbenchCanvasFont = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 
 export interface WorkbenchCanvasViewport {
   scale: number
-  x: number
-  y: number
+  canvasX: number
+  canvasY: number
 }
 
 export interface WorkbenchBlockMeta {

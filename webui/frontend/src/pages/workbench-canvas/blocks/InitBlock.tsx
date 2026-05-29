@@ -1,11 +1,22 @@
 import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockMeta, type WorkbenchPoint } from '../types'
 
+const inputPortOffset: WorkbenchPoint = { x: 5, y: 115.5 }
+
 function AddConnectorButton() {
   return (
     <g>
       <circle cx="12" cy="12" r="12" transform="translate(294 104)" fill="var(--dfw-bg)" stroke="currentColor" strokeWidth="2" />
       <path d="M301,116h10" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
       <path d="M306,111v10" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </g>
+  )
+}
+
+function InputPort() {
+  return (
+    <g transform={`translate(${inputPortOffset.x - 2.5} ${inputPortOffset.y - 2.5})`}>
+      <circle cx="2.5" cy="2.5" r="2.5" fill="var(--dfw-bg)" stroke="currentColor" strokeWidth="2" />
+      <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke="currentColor" strokeWidth="2" />
     </g>
   )
 }
@@ -56,6 +67,7 @@ export default function InitBlock({
       <TextLine y={193} label="模板名 ： " value={meta.templateName} />
       <text x="21" y="211" fontSize="20" fontFamily={workbenchCanvasFont} fontWeight="500">......</text>
       <AddConnectorButton />
+      <InputPort />
       <g
         className="cursor-grab active:cursor-grabbing"
         onPointerDown={dragHandlers?.onHeaderPointerDown}
