@@ -23,7 +23,7 @@ const outlineBaseTextLeft = 25.84
 const outlineIconTextGap = 19.84
 const bottomBarZoomAnimationMs = 180
 
-type WorkbenchViewport = { scale: number; x: number; y: number; canvasX: number; canvasY: number }
+type WorkbenchViewport = { scale: number; x: number; y: number }
 
 export type OutlineIconType = 'boolean' | 'array' | 'object' | 'string' | 'number'
 export type OutlineNodeTone = 'normal' | 'locked' | 'note'
@@ -540,7 +540,7 @@ export default function DeploymentFlowWorkbench({
   onBackToLibrary,
   outline = defaultOutline,
 }: DeploymentFlowWorkbenchProps) {
-  const [viewport, setViewport] = useState<WorkbenchViewport>({ scale: 1, x: 0, y: 0, canvasX: 0, canvasY: 0 })
+  const [viewport, setViewport] = useState<WorkbenchViewport>({ scale: 1, x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(leftSidebarDefaultWidth)
@@ -583,8 +583,6 @@ export default function DeploymentFlowWorkbench({
         scale: start.scale + (target.scale - start.scale) * eased,
         x: start.x + (target.x - start.x) * eased,
         y: start.y + (target.y - start.y) * eased,
-        canvasX: start.canvasX + (target.canvasX - start.canvasX) * eased,
-        canvasY: start.canvasY + (target.canvasY - start.canvasY) * eased,
       })
 
       if (progress < 1) {
@@ -621,8 +619,6 @@ export default function DeploymentFlowWorkbench({
           scale: nextScale,
           x: pointerX - (pointerX - prev.x) * scaleRatio,
           y: pointerY - (pointerY - prev.y) * scaleRatio,
-          canvasX: pointerX - (pointerX - prev.canvasX) * scaleRatio,
-          canvasY: pointerY - (pointerY - prev.canvasY) * scaleRatio,
         }
       })
     }
@@ -697,8 +693,6 @@ export default function DeploymentFlowWorkbench({
       scale: nextScale,
       x: pointerX - (pointerX - current.x) * scaleRatio,
       y: pointerY - (pointerY - current.y) * scaleRatio,
-      canvasX: pointerX - (pointerX - current.canvasX) * scaleRatio,
-      canvasY: pointerY - (pointerY - current.canvasY) * scaleRatio,
     })
   }
 

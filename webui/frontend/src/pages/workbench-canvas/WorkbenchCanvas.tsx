@@ -109,7 +109,7 @@ export default function WorkbenchCanvas({
     <div
       className="absolute left-0 top-0 z-0 h-[1920px] w-[1920px] origin-top-left"
       style={{
-        transform: `translate(${viewport.canvasX}px, ${viewport.canvasY}px) scale(${viewport.scale})`,
+        transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
         color: 'var(--dfw-text)',
         fontFamily: workbenchCanvasFont,
       }}
