@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ArrowLeft, Plus } from 'lucide-react'
 import WorkbenchBottomBar from './WorkbenchBottomBar'
+import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
@@ -542,6 +543,7 @@ export default function DeploymentFlowWorkbench({
   const [isPanning, setIsPanning] = useState(false)
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(leftSidebarDefaultWidth)
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -693,6 +695,7 @@ export default function DeploymentFlowWorkbench({
   }
 
   const leftSidebarRight = leftSidebarCollapsed ? leftSidebarCollapsedWidth : leftSidebarWidth
+  const rightSidebarLeft = rightSidebarCollapsed ? rightSidebarCollapsedWidth : rightSidebarExpandedWidth
 
   return (
     <div
@@ -721,6 +724,11 @@ export default function DeploymentFlowWorkbench({
       <WorkbenchTopTabs
         onBackToLibrary={onBackToLibrary}
         leftBoundary={leftSidebarRight}
+        rightReservedWidth={rightSidebarLeft}
+      />
+      <WorkbenchRightSidebar
+        collapsed={rightSidebarCollapsed}
+        onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
       />
       <WorkbenchBottomBar
         scale={viewport.scale}
