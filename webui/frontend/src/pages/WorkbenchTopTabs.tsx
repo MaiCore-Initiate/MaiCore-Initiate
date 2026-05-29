@@ -4,7 +4,6 @@ import { CircleX, House, Plus } from 'lucide-react'
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const topTabsChromeWidth = 180
 const topTabsGap = 9
-const topTabsMinWidth = 407
 
 export interface WorkbenchTab {
   id: string
@@ -45,6 +44,8 @@ export default function WorkbenchTopTabs({
 }: WorkbenchTopTabsProps) {
   const [tabs, setTabs] = useState<WorkbenchTab[]>(initialTabs)
   const [activeId, setActiveId] = useState(initialTabs[0]?.id ?? '')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
   const nextTabIndexRef = useRef(initialTabs.length)
   const tabsScrollerRef = useRef<HTMLDivElement | null>(null)
 
@@ -56,7 +57,7 @@ export default function WorkbenchTopTabs({
   const tabsWidth = tabs.reduce((total, tab, index) => {
     return total + tabWidth(tab.title) + (index > 0 ? topTabsGap : 0)
   }, 0)
-  const toolbarWidth = Math.max(topTabsMinWidth, topTabsChromeWidth + tabsWidth)
+  const toolbarWidth = topTabsChromeWidth + tabsWidth
 
   const createTab = () => {
     const index = nextTabIndexRef.current
@@ -87,6 +88,19 @@ export default function WorkbenchTopTabs({
       const nextActive = nextTabs[Math.min(closingIndex, nextTabs.length - 1)]
       setActiveId(nextActive?.id ?? '')
     }
+  }
+
+  const startRename = (tab: WorkbenchTab) => {
+    setActiveId(tab.id)
+    setEditingId(tab.id)
+    setEditingTitle(tab.title)
+  }
+
+  const commitRename = () => {
+    if (!editingId) return
+    const title = editingTitle.trim() || '未命名'
+    setTabs(prev => prev.map(tab => tab.id === editingId ? { ...tab, title } : tab))
+    setEditingId(null)
   }
 
   return (
@@ -127,7 +141,7 @@ export default function WorkbenchTopTabs({
           <House size={30} strokeWidth={2} />
         </button>
 
-        <span className="absolute left-[70.5px] top-[15.5px]">
+        <span className="absolute left-[70.5px] top-[15.5px] flex h-[30px] items-center">
           <Divider />
         </span>
 
@@ -150,19 +164,36 @@ export default function WorkbenchTopTabs({
                   background: selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
                   animation: 'dfw-top-tab-enter 0.16s ease-out both',
                 }}
+                onDoubleClick={() => startRename(tab)}
               >
-                <button
-                  type="button"
-                  onClick={() => setActiveId(tab.id)}
-                  className="absolute inset-0 rounded-[20px] text-left transition-colors hover:bg-[var(--dfw-control-hover)]"
-                  aria-selected={selected}
-                  role="tab"
-                  title={tab.title}
-                >
-                  <span className="absolute left-[14px] right-[38px] top-0 block h-[40px] overflow-hidden whitespace-nowrap leading-[40px]">
-                    {tab.title}
-                  </span>
-                </button>
+                {editingId === tab.id ? (
+                  <input
+                    value={editingTitle}
+                    onChange={event => setEditingTitle(event.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') commitRename()
+                      if (event.key === 'Escape') setEditingId(null)
+                    }}
+                    onClick={event => event.stopPropagation()}
+                    className="absolute left-[14px] right-[38px] top-0 h-[40px] bg-transparent outline-none"
+                    style={{ fontFamily: font }}
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveId(tab.id)}
+                    className="absolute inset-0 rounded-[20px] text-left transition-colors hover:bg-[var(--dfw-control-hover)]"
+                    aria-selected={selected}
+                    role="tab"
+                    title={tab.title}
+                  >
+                    <span className="absolute left-[14px] right-[38px] top-0 block h-[40px] overflow-hidden whitespace-nowrap leading-[40px]">
+                      {tab.title}
+                    </span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={event => {
@@ -180,7 +211,7 @@ export default function WorkbenchTopTabs({
           })}
         </div>
 
-        <span className="absolute right-[70.5px] top-[15.5px]">
+        <span className="absolute right-[70.5px] top-[15.5px] flex h-[30px] items-center">
           <Divider />
         </span>
 

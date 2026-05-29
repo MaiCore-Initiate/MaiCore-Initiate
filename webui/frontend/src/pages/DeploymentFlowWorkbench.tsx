@@ -4,6 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
+import type { WorkbenchBlockId } from './workbench-canvas/types'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const gridBaseSpacing = 32
@@ -22,6 +23,10 @@ const outlineBaseIconLeft = 36
 const outlineBaseTextLeft = 25.84
 const outlineIconTextGap = 19.84
 const bottomBarZoomAnimationMs = 180
+const blockNames: Record<WorkbenchBlockId, string> = {
+  start: '起始端点',
+  init: '初始化块',
+}
 
 type WorkbenchViewport = { scale: number; x: number; y: number }
 
@@ -555,6 +560,7 @@ export default function DeploymentFlowWorkbench({
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(rightSidebarExpandedWidth)
   const [projectInfo, setProjectInfo] = useState<WorkbenchProjectInfo | null>(null)
+  const [selectedBlockId, setSelectedBlockId] = useState<WorkbenchBlockId | null>(null)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -753,7 +759,11 @@ export default function DeploymentFlowWorkbench({
       }}
     >
       <div className="deployment-flow-workbench-grid absolute inset-0 pointer-events-none" style={gridStyle} aria-hidden />
-      <WorkbenchCanvas viewport={viewport} />
+      <WorkbenchCanvas
+        viewport={viewport}
+        selectedBlockId={selectedBlockId}
+        onSelectedBlockChange={setSelectedBlockId}
+      />
       <WorkbenchLeftSidebar
         collapsed={leftSidebarCollapsed}
         width={leftSidebarWidth}
@@ -773,7 +783,7 @@ export default function DeploymentFlowWorkbench({
         width={rightSidebarWidth}
         onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
         onResize={setRightSidebarWidth}
-        selectedName={projectInfo?.mod_name || '初始化块'}
+        selectedName={selectedBlockId ? blockNames[selectedBlockId] : '无'}
       />
       <WorkbenchBottomBar
         scale={viewport.scale}
