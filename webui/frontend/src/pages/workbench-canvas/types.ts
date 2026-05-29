@@ -20,6 +20,8 @@ export interface WorkbenchBlockMeta {
   fileImport: boolean | null
   fileImportList: string[]
   runtime: string
+  denoNet: boolean | null
+  denoResd: boolean | null
   platforms: string[]
   schemaVersion: string
 }

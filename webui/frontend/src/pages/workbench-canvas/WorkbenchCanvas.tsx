@@ -15,7 +15,9 @@ const defaultBlockMeta: WorkbenchBlockMeta = {
   maxVersion: '',
   fileImport: null,
   fileImportList: [],
-  runtime: '',
+  runtime: 'powershell',
+  denoNet: null,
+  denoResd: null,
   platforms: [],
   schemaVersion: '',
 }

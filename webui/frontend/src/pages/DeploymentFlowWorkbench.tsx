@@ -70,7 +70,9 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   maxVersion: '',
   fileImport: null,
   fileImportList: [],
-  runtime: '',
+  runtime: 'powershell',
+  denoNet: null,
+  denoResd: null,
   platforms: [],
   schemaVersion: '',
 }
@@ -112,6 +114,12 @@ function createModInfoOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
       ? [createStringArrayOutlineNode('modinfo-file-import-list', 'file_import_list', meta.fileImportList)]
       : []),
     { id: 'modinfo-runtime', label: `runtime = ${formatTomlString(meta.runtime)}`, icon: 'string' },
+    ...(meta.runtime === 'deno'
+      ? [
+        { id: 'modinfo-deno-net', label: `deno_net = ${meta.denoNet === null ? '' : meta.denoNet ? 'true' : 'false'}`, icon: 'boolean' as const },
+        { id: 'modinfo-deno-resd', label: `deno_resd = ${meta.denoResd === null ? '' : meta.denoResd ? 'true' : 'false'}`, icon: 'boolean' as const },
+      ]
+      : []),
     createStringArrayOutlineNode('modinfo-platforms', 'platforms', meta.platforms, true),
     { id: 'modinfo-schema-version', label: `schema_version = ${formatTomlString(meta.schemaVersion)}`, icon: 'string' },
   ]
@@ -666,6 +674,8 @@ export default function DeploymentFlowWorkbench({
     fileImport: meta.fileImport,
     fileImportList: meta.fileImportList,
     runtime: meta.runtime,
+    denoNet: meta.denoNet,
+    denoResd: meta.denoResd,
     platforms: meta.platforms,
     schemaVersion: meta.schemaVersion,
   }), [meta])

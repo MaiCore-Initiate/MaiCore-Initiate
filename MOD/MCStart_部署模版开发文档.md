@@ -1,6 +1,6 @@
 
 
-# MCStart 部署模版开发文档 V2.3
+# MCStart 部署模版开发文档 V2.4
 
 ---
 
@@ -124,6 +124,7 @@ MCStart 引擎读取该模版后，会按照模版中声明的流程自动或半
 | `2.1` | 新增组件检查正则匹配逻辑 `check_version_regex`，并补充 `mcsb` 模板快捷命令使用说明 | [4.3.3 版本检查模块](#433-版本检查模块)、[2.3 使用 mcsb 快捷执行模板](#23-使用-mcsb-快捷执行模板) |
 | `2.2` | 新增模板语法检测模块与 `mcsb -t` / `mcsb test` 使用说明 | [2.4 使用 mcsb 检测模板语法](#24-使用-mcsb-检测模板语法) |
 | `2.3` | 新增命令运行输出增强、命令检视模式，以及表数组级 `runtime` / `command_theme` 键 | [2.5 命令输出与命令检视模式](#25-命令输出与命令检视模式)、[4.2.1 表数组级运行时与命令显示键](#421-表数组级运行时与命令显示键) |
+| `2.4` | 新增 `deno` 运行时，以及 `deno_net` / `deno_resd` 权限声明键 | [4.2 [MODINFO] — 模版元信息](#42-modinfo--模版元信息) |
 
 ---
 
@@ -150,7 +151,7 @@ file_import = false
 file_import_list = []
 runtime = "powershell"
 platforms = ["windows"]
-schema_version = "2.3"
+schema_version = "2.4"
 ```
 
 ### 2.2 文件组织结构
@@ -327,6 +328,8 @@ MCStart = true
 | `file_import` | Boolean | **是** | — | 是否启用文件导入功能 |
 | `file_import_list` | Array\[String\] | 条件必填 | `[]` | 需要导入的文件列表，仅当 `file_import = true` 时需要提供 |
 | `runtime` | String | **是** | — | 模版运行时环境，见下表 |
+| `deno_net` | Boolean | 条件必填 | `false` | 是否允许 Deno 脚本访问网络，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_resd` | Boolean | 条件必填 | `false` | 是否允许 Deno 脚本读取本地文件，仅当 `runtime = "deno"` 时需要提供 |
 | `platforms` | Array\[String\] | **是** | — | 平台限制，为空数组时不限制平台 |
 | `schema_version` | String | **是** | — | 模版格式版本号 |
 
@@ -343,6 +346,32 @@ MCStart = true
 | `"python3"` | 使用当前 Python 3 解释器执行脚本 |
 | `"python"` | 使用环境变量中的 `python` 执行脚本 |
 | `"node"` | 使用 Node.js 执行脚本 |
+| `"deno"` | 使用 Deno 执行 TypeScript 脚本，命令形如 `deno run xxx.ts` |
+
+#### Deno 权限声明
+
+当 `runtime = "deno"` 时，模版必须显式声明 Deno 脚本所需的权限。Deno 默认不允许脚本访问网络或读取本地文件，缺少权限参数时命令会执行失败。
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `deno_net` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-net`，允许脚本访问网络 |
+| `deno_resd` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-read`，允许脚本读取本地文件 |
+
+示例：
+
+```toml
+[MODINFO]
+runtime = "deno"
+deno_net = true
+deno_resd = true
+schema_version = "2.4"
+```
+
+对应命令应显式带上所需权限：
+
+```bash
+deno run --allow-net --allow-read xxx.ts
+```
 
 #### 4.2.1 表数组级运行时与命令显示键
 
@@ -1911,6 +1940,8 @@ version_formatting_formula = [
 | `file_import` | Boolean | ✅ | 是否启用文件导入 |
 | `file_import_list` | Array\[String\] | 📎 | 文件列表（`file_import=true` 时） |
 | `runtime` | String | ✅ | 运行环境 |
+| `deno_net` | Boolean | 📎 | Deno 网络权限（`runtime="deno"` 时） |
+| `deno_resd` | Boolean | 📎 | Deno 本地文件读取权限（`runtime="deno"` 时） |
 | `platforms` | Array\[String\] | ✅ | 平台限制 |
 | `schema_version` | String | ✅ | 格式版本 |
 

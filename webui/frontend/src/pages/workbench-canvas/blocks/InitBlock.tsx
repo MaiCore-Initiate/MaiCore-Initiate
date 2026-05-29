@@ -92,6 +92,12 @@ export default function InitBlock({
     { label: '启用文件导入：', value: formatTomlBoolean(meta.fileImport) },
     ...(meta.fileImport === true ? [{ label: '文件导入列表：', value: formatTomlArray(meta.fileImportList) }] : []),
     { label: '运行时环境：', value: formatTomlString(meta.runtime) },
+    ...(meta.runtime === 'deno'
+      ? [
+        { label: 'Deno网络权限：', value: formatTomlBoolean(meta.denoNet) },
+        { label: 'Deno读取权限：', value: formatTomlBoolean(meta.denoResd) },
+      ]
+      : []),
     { label: '平台限制：', value: formatTomlArray(meta.platforms) },
     { label: '模版格式版本：', value: formatTomlString(meta.schemaVersion) },
   ]

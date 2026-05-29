@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -12,7 +12,7 @@ export const rightSidebarCollapsedWidth = 70
 export const rightSidebarMinWidth = 200
 export const rightSidebarMaxWidth = 760
 
-const runtimeOptions = ['powershell', 'pwsh', 'cmd', 'bash', 'python3', 'python', 'node']
+const runtimeOptions = ['powershell', 'pwsh', 'cmd', 'bash', 'python3', 'python', 'node', 'deno']
 const platformOptions = ['windows', 'linux', 'macos']
 
 export interface WorkbenchModInfoMeta {
@@ -27,6 +27,8 @@ export interface WorkbenchModInfoMeta {
   fileImport: boolean | null
   fileImportList: string[]
   runtime: string
+  denoNet: boolean | null
+  denoResd: boolean | null
   platforms: string[]
   schemaVersion: string
 }
@@ -42,7 +44,9 @@ const emptyModInfoMeta: WorkbenchModInfoMeta = {
   maxVersion: '',
   fileImport: null,
   fileImportList: [],
-  runtime: '',
+  runtime: 'powershell',
+  denoNet: null,
+  denoResd: null,
   platforms: [],
   schemaVersion: '',
 }
@@ -359,6 +363,33 @@ function RuntimeSelectField({
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+function ConditionalField({
+  show,
+  children,
+}: {
+  show: boolean
+  children: ReactNode
+}) {
+  return (
+    <div
+      className="grid transition-[grid-template-rows,opacity,transform,margin] duration-200 ease-out"
+      style={{
+        gridTemplateRows: show ? '1fr' : '0fr',
+        opacity: show ? 1 : 0,
+        transform: show ? 'translateY(0)' : 'translateY(-6px)',
+        marginTop: show ? 0 : -18,
+        marginBottom: show ? 0 : -18,
+        pointerEvents: show ? 'auto' : 'none',
+      }}
+      aria-hidden={!show}
+    >
+      <div className="overflow-hidden">
+        {children}
+      </div>
     </div>
   )
 }
@@ -682,7 +713,7 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          {meta.fileImport === true && (
+          <ConditionalField show={meta.fileImport === true}>
             <section>
               <FieldLabel>文件导入列表</FieldLabel>
               <AutoGrowTextField
@@ -695,7 +726,7 @@ export default function WorkbenchRightSidebar({
               />
               <ValueChips values={meta.fileImportList} />
             </section>
-          )}
+          </ConditionalField>
 
           <section>
             <FieldLabel>运行时环境</FieldLabel>
@@ -704,6 +735,26 @@ export default function WorkbenchRightSidebar({
               onChange={runtime => updateMeta({ runtime })}
             />
           </section>
+
+          <ConditionalField show={meta.runtime === 'deno'}>
+            <div className="flex flex-col gap-[18px]">
+              <section>
+                <FieldLabel>Deno网络权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoNet}
+                  onChange={denoNet => updateMeta({ denoNet })}
+                />
+              </section>
+
+              <section>
+                <FieldLabel>Deno读取权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoResd}
+                  onChange={denoResd => updateMeta({ denoResd })}
+                />
+              </section>
+            </div>
+          </ConditionalField>
 
           <section>
             <FieldLabel>平台限制</FieldLabel>
