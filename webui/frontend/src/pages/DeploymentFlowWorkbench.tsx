@@ -18,6 +18,9 @@ const outlineBaseCaretLeft = 8
 const outlineBaseIconLeft = 36
 const outlineBaseTextLeft = 25.84
 const outlineIconTextGap = 19.84
+const bottomBarZoomAnimationMs = 180
+
+type WorkbenchViewport = { scale: number; x: number; y: number }
 
 export type OutlineIconType = 'boolean' | 'array' | 'object' | 'string' | 'number'
 export type OutlineNodeTone = 'normal' | 'locked' | 'note'
@@ -534,17 +537,60 @@ export default function DeploymentFlowWorkbench({
   onBackToLibrary,
   outline = defaultOutline,
 }: DeploymentFlowWorkbenchProps) {
-  const [viewport, setViewport] = useState({ scale: 1, x: 0, y: 0 })
+  const [viewport, setViewport] = useState<WorkbenchViewport>({ scale: 1, x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(leftSidebarDefaultWidth)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
+  const viewportRef = useRef<WorkbenchViewport>(viewport)
+  const viewportAnimationFrameRef = useRef<number | null>(null)
   const grid = resolveGridSpacing(viewport.scale)
   const gridStyle = {
     backgroundSize: `${grid.screenSpacing}px ${grid.screenSpacing}px`,
     backgroundPosition: `${positiveModulo(viewport.x, grid.screenSpacing)}px ${positiveModulo(viewport.y, grid.screenSpacing)}px`,
   }
+
+  const cancelViewportAnimation = () => {
+    if (viewportAnimationFrameRef.current === null) return
+    cancelAnimationFrame(viewportAnimationFrameRef.current)
+    viewportAnimationFrameRef.current = null
+  }
+
+  const updateViewport = (nextViewport: WorkbenchViewport | ((current: WorkbenchViewport) => WorkbenchViewport)) => {
+    setViewport(prev => {
+      const next = typeof nextViewport === 'function' ? nextViewport(prev) : nextViewport
+      viewportRef.current = next
+      return next
+    })
+  }
+
+  const animateViewportTo = (target: WorkbenchViewport) => {
+    cancelViewportAnimation()
+
+    const start = viewportRef.current
+    const startedAt = performance.now()
+
+    const step = (now: number) => {
+      const progress = clamp((now - startedAt) / bottomBarZoomAnimationMs, 0, 1)
+      const eased = 1 - (1 - progress) ** 3
+      updateViewport({
+        scale: start.scale + (target.scale - start.scale) * eased,
+        x: start.x + (target.x - start.x) * eased,
+        y: start.y + (target.y - start.y) * eased,
+      })
+
+      if (progress < 1) {
+        viewportAnimationFrameRef.current = requestAnimationFrame(step)
+      } else {
+        viewportAnimationFrameRef.current = null
+      }
+    }
+
+    viewportAnimationFrameRef.current = requestAnimationFrame(step)
+  }
+
+  useEffect(() => () => cancelViewportAnimation(), [])
 
   useEffect(() => {
     const workbench = workbenchRef.current
@@ -553,6 +599,7 @@ export default function DeploymentFlowWorkbench({
     const handleNativeWheel = (event: WheelEvent) => {
       if (event.target instanceof Element && event.target.closest('[data-workbench-ui]')) return
 
+      cancelViewportAnimation()
       event.preventDefault()
       event.stopPropagation()
 
@@ -560,7 +607,7 @@ export default function DeploymentFlowWorkbench({
       const pointerX = event.clientX - rect.left
       const pointerY = event.clientY - rect.top
 
-      setViewport(prev => {
+      updateViewport(prev => {
         const nextScale = clamp(prev.scale * Math.exp(-event.deltaY * 0.0012), workbenchMinZoom, workbenchMaxZoom)
         const scaleRatio = nextScale / prev.scale
         return {
@@ -591,6 +638,7 @@ export default function DeploymentFlowWorkbench({
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     if (event.target instanceof Element && event.target.closest('[data-workbench-ui]')) return
+    cancelViewportAnimation()
     panStartRef.current = {
       pointerId: event.pointerId,
       x: event.clientX,
@@ -605,7 +653,7 @@ export default function DeploymentFlowWorkbench({
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const start = panStartRef.current
     if (!start || start.pointerId !== event.pointerId) return
-    setViewport(prev => ({
+    updateViewport(prev => ({
       ...prev,
       x: start.viewportX + event.clientX - start.x,
       y: start.viewportY + event.clientY - start.y,
@@ -625,7 +673,7 @@ export default function DeploymentFlowWorkbench({
   const setScaleFromBottomBar = (scale: number) => {
     const workbench = workbenchRef.current
     if (!workbench) {
-      setViewport(prev => ({ ...prev, scale: clamp(scale, workbenchMinZoom, workbenchMaxZoom) }))
+      updateViewport(prev => ({ ...prev, scale: clamp(scale, workbenchMinZoom, workbenchMaxZoom) }))
       return
     }
 
@@ -633,14 +681,13 @@ export default function DeploymentFlowWorkbench({
     const pointerX = rect.width / 2
     const pointerY = rect.height / 2
 
-    setViewport(prev => {
-      const nextScale = clamp(scale, workbenchMinZoom, workbenchMaxZoom)
-      const scaleRatio = nextScale / prev.scale
-      return {
-        scale: nextScale,
-        x: pointerX - (pointerX - prev.x) * scaleRatio,
-        y: pointerY - (pointerY - prev.y) * scaleRatio,
-      }
+    const current = viewportRef.current
+    const nextScale = clamp(scale, workbenchMinZoom, workbenchMaxZoom)
+    const scaleRatio = nextScale / current.scale
+    animateViewportTo({
+      scale: nextScale,
+      x: pointerX - (pointerX - current.x) * scaleRatio,
+      y: pointerY - (pointerY - current.y) * scaleRatio,
     })
   }
 

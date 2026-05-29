@@ -44,45 +44,54 @@ export default function WorkbenchBottomBar({
   const [zoomOpen, setZoomOpen] = useState(false)
   const zoomLabel = useMemo(() => formatZoom(scale), [scale])
 
-  if (collapsed) {
-    return (
-      <div
-        data-workbench-ui
-        className="absolute bottom-[30px] z-30 h-[61px] w-[61px]"
-        style={{ left: collapsedLeft }}
-      >
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          className="flex h-[61px] w-[61px] items-center justify-center rounded-full border transition-colors hover:bg-[var(--dfw-control-hover)]"
-          style={{
-            borderColor: 'var(--dfw-sidebar-border)',
-            background: 'var(--dfw-sidebar-bg)',
-            color: 'var(--dfw-text)',
-          }}
-          aria-label="展开底栏"
-          title="展开底栏"
-        >
-          <TextAlignCenterGlyph />
-        </button>
-      </div>
-    )
-  }
-
   return (
     <div
       data-workbench-ui
-      className="absolute bottom-[30px] left-1/2 z-30 flex h-[61px] w-[589px] max-w-[calc(100%-32px)] -translate-x-1/2 items-center overflow-visible rounded-[30px] border px-[10px]"
+      className="absolute bottom-[30px] z-30 h-[61px] border transition-[left,width,max-width,border-radius,transform,background-color] duration-200 ease-out"
       style={{
+        left: collapsed ? collapsedLeft : '50%',
+        width: collapsed ? 61 : 589,
+        maxWidth: collapsed ? 61 : 'calc(100% - 32px)',
+        transform: collapsed ? 'translateX(0) scale(1)' : 'translateX(-50%) scale(1)',
+        borderRadius: collapsed ? 999 : 30,
         borderColor: 'var(--dfw-sidebar-border)',
         background: 'var(--dfw-sidebar-bg)',
         color: 'var(--dfw-text)',
         fontFamily: font,
+        overflow: zoomOpen && !collapsed ? 'visible' : 'hidden',
       }}
     >
       <button
         type="button"
-        onClick={() => setCollapsed(true)}
+        onClick={() => setCollapsed(false)}
+        className="absolute inset-0 flex items-center justify-center rounded-full transition-[opacity,transform,background-color] duration-150 hover:bg-[var(--dfw-control-hover)]"
+        style={{
+          opacity: collapsed ? 1 : 0,
+          transform: collapsed ? 'scale(1)' : 'scale(0.72)',
+          pointerEvents: collapsed ? 'auto' : 'none',
+        }}
+        aria-label="展开底栏"
+        title="展开底栏"
+      >
+        <TextAlignCenterGlyph />
+      </button>
+
+      <div
+        className="flex h-full w-full items-center px-[10px] transition-[opacity,transform] duration-150 ease-out"
+        style={{
+          opacity: collapsed ? 0 : 1,
+          transform: collapsed ? 'scale(0.86)' : 'scale(1)',
+          transformOrigin: 'left center',
+          pointerEvents: collapsed ? 'none' : 'auto',
+        }}
+        aria-hidden={collapsed}
+      >
+      <button
+        type="button"
+        onClick={() => {
+          setZoomOpen(false)
+          setCollapsed(true)
+        }}
         className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full border transition-colors hover:bg-[var(--dfw-control-hover)]"
         style={{
           borderColor: 'var(--dfw-sidebar-border)',
@@ -115,12 +124,13 @@ export default function WorkbenchBottomBar({
         </button>
 
         {zoomOpen && (
-          <div
-            className="absolute bottom-[48px] left-0 grid w-full min-w-[105px] overflow-hidden rounded-[12px] border py-[4px]"
+            <div
+            className="absolute bottom-[48px] left-0 grid w-full min-w-[105px] origin-bottom overflow-hidden rounded-[12px] border py-[4px]"
             style={{
               borderColor: 'var(--dfw-sidebar-border)',
               background: 'var(--dfw-sidebar-bg)',
               boxShadow: '0 10px 24px rgba(0, 0, 0, 0.16)',
+              animation: 'dfw-bottom-menu-in 0.14s ease-out both',
             }}
           >
             {zoomOptions.map(option => (
@@ -193,6 +203,7 @@ export default function WorkbenchBottomBar({
           <Play size={30} strokeWidth={2} className="shrink-0" />
           <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">试运行</span>
         </button>
+      </div>
       </div>
     </div>
   )
