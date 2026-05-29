@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ArrowLeft, Plus } from 'lucide-react'
 import WorkbenchBottomBar from './WorkbenchBottomBar'
+import WorkbenchTopTabs from './WorkbenchTopTabs'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const gridBaseSpacing = 32
@@ -716,6 +717,10 @@ export default function DeploymentFlowWorkbench({
         onResize={setLeftSidebarWidth}
         onBackToLibrary={onBackToLibrary}
         outline={outline}
+      />
+      <WorkbenchTopTabs
+        onBackToLibrary={onBackToLibrary}
+        leftBoundary={leftSidebarRight}
       />
       <WorkbenchBottomBar
         scale={viewport.scale}

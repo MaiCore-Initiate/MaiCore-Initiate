@@ -300,6 +300,17 @@ html.theme-animating *::after {
   }
 }
 
+@keyframes dfw-top-tab-enter {
+  from {
+    opacity: 0;
+    transform: translateX(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
 .dark .text-black,
 .dark [class~="text-black/90"] { color: rgba(255, 255, 255, 0.92) !important; }
 .dark [class~="text-black/80"] { color: rgba(255, 255, 255, 0.82) !important; }
