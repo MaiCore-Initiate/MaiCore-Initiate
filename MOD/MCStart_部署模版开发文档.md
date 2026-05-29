@@ -124,7 +124,7 @@ MCStart 引擎读取该模版后，会按照模版中声明的流程自动或半
 | `2.1` | 新增组件检查正则匹配逻辑 `check_version_regex`，并补充 `mcsb` 模板快捷命令使用说明 | [4.3.3 版本检查模块](#433-版本检查模块)、[2.3 使用 mcsb 快捷执行模板](#23-使用-mcsb-快捷执行模板) |
 | `2.2` | 新增模板语法检测模块与 `mcsb -t` / `mcsb test` 使用说明 | [2.4 使用 mcsb 检测模板语法](#24-使用-mcsb-检测模板语法) |
 | `2.3` | 新增命令运行输出增强、命令检视模式，以及表数组级 `runtime` / `command_theme` 键 | [2.5 命令输出与命令检视模式](#25-命令输出与命令检视模式)、[4.2.1 表数组级运行时与命令显示键](#421-表数组级运行时与命令显示键) |
-| `2.4` | 新增 `deno` 运行时，以及 `deno_net` / `deno_resd` 权限声明键 | [4.2 [MODINFO] — 模版元信息](#42-modinfo--模版元信息) |
+| `2.4` | 新增 `deno` 运行时，以及 Deno 权限声明键与自定义权限参数列表 | [4.2 [MODINFO] — 模版元信息](#42-modinfo--模版元信息) |
 
 ---
 
@@ -328,8 +328,17 @@ MCStart = true
 | `file_import` | Boolean | **是** | — | 是否启用文件导入功能 |
 | `file_import_list` | Array\[String\] | 条件必填 | `[]` | 需要导入的文件列表，仅当 `file_import = true` 时需要提供 |
 | `runtime` | String | **是** | — | 模版运行时环境，见下表 |
-| `deno_net` | Boolean | 条件必填 | `false` | 是否允许 Deno 脚本访问网络，仅当 `runtime = "deno"` 时需要提供 |
-| `deno_resd` | Boolean | 条件必填 | `false` | 是否允许 Deno 脚本读取本地文件，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_net` | Boolean | 条件必填 | — | 是否允许 Deno 脚本访问网络，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_read` | Boolean | 条件必填 | — | 是否允许 Deno 脚本读取本地文件，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_write` | Boolean | 条件必填 | — | 是否允许 Deno 脚本写入、创建、修改或删除文件，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_env` | Boolean | 条件必填 | — | 是否允许 Deno 脚本访问环境变量，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_run` | Boolean | 条件必填 | — | 是否允许 Deno 脚本执行子进程，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_hrtime` | Boolean | 条件必填 | — | 是否允许 Deno 脚本使用高精度时间测量，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_ffi` | Boolean | 条件必填 | — | 是否允许 Deno 脚本加载和调用动态库，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_sys` | Boolean | 条件必填 | — | 是否允许 Deno 脚本访问系统信息，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_all` | Boolean | 条件必填 | — | 是否允许 Deno 脚本获得全部权限，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_custom_permissions` | Boolean | 条件必填 | — | 是否启用自定义 Deno 权限参数列表，仅当 `runtime = "deno"` 时需要提供 |
+| `deno_permission_list` | Array\[String\] | 条件必填 | — | 自定义 Deno 权限参数列表，仅当 `runtime = "deno"` 且 `deno_custom_permissions = true` 时需要提供 |
 | `platforms` | Array\[String\] | **是** | — | 平台限制，为空数组时不限制平台 |
 | `schema_version` | String | **是** | — | 模版格式版本号 |
 
@@ -350,12 +359,32 @@ MCStart = true
 
 #### Deno 权限声明
 
-当 `runtime = "deno"` 时，模版必须显式声明 Deno 脚本所需的权限。Deno 默认不允许脚本访问网络或读取本地文件，缺少权限参数时命令会执行失败。
+当 `runtime = "deno"` 时，模版必须显式声明 Deno 脚本所需的权限。Deno 默认不允许脚本访问网络、读写文件、读取环境变量或访问其他系统资源，缺少权限参数时命令会执行失败。
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `deno_net` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-net`，允许脚本访问网络 |
-| `deno_resd` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-read`，允许脚本读取本地文件 |
+| `deno_read` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-read`，允许脚本读取本地文件 |
+| `deno_write` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-write`，允许脚本写入本地文件 |
+| `deno_env` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-env`，允许脚本访问环境变量 |
+| `deno_run` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-run`，允许脚本执行子进程 |
+| `deno_hrtime` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-hrtime`，允许脚本使用高精度时间测量 |
+| `deno_ffi` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-ffi`，允许脚本加载和调用动态库 |
+| `deno_sys` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-sys`，允许脚本访问系统信息 |
+| `deno_all` | Boolean | 条件必填 | 为 `true` 时，运行命令需要追加 `--allow-all`，等同于禁用 Deno 安全沙箱 |
+| `deno_custom_permissions` | Boolean | 条件必填 | 为 `true` 时，启用 `deno_permission_list` 中的自定义权限参数 |
+| `deno_permission_list` | Array\[String\] | 条件必填 | 自定义权限参数列表，每个元素是一段完整的 Deno 权限参数 |
+
+支持细粒度白名单的权限包括：
+
+| 权限 | 参数示例 | 说明 |
+|------|----------|------|
+| 文件读取 | `--allow-read=./config,./data` | 可指定多个文件夹或文件路径，使用英文逗号分隔 |
+| 文件写入 | `--allow-write=/var/logs,./output` | 可指定多个文件夹或文件路径，使用英文逗号分隔 |
+| 网络访问 | `--allow-net=api.example.com,cdn.example.com` | 可指定多个域名或 IP 地址，使用英文逗号分隔 |
+| 环境变量 | `--allow-env=DATABASE_URL,API_KEY` | 可指定多个环境变量名，使用英文逗号分隔 |
+
+只能整体开启、不能设置白名单的权限包括 `--allow-run`、`--allow-hrtime`、`--allow-ffi`、`--allow-sys` 和 `--allow-all`。其中 `--allow-all` 也可以简写为 `-A`，仅建议在开发调试时使用。
 
 示例：
 
@@ -363,14 +392,20 @@ MCStart = true
 [MODINFO]
 runtime = "deno"
 deno_net = true
-deno_resd = true
+deno_read = true
+deno_custom_permissions = true
+deno_permission_list = [
+  "--allow-net=api.example.com,cdn.example.com",
+  "--allow-read=./config,./data",
+  "--allow-env=DATABASE_URL,API_KEY",
+]
 schema_version = "2.4"
 ```
 
 对应命令应显式带上所需权限：
 
 ```bash
-deno run --allow-net --allow-read xxx.ts
+deno run --allow-net=api.example.com,cdn.example.com --allow-read=./config,./data --allow-env=DATABASE_URL,API_KEY xxx.ts
 ```
 
 #### 4.2.1 表数组级运行时与命令显示键
@@ -1941,7 +1976,16 @@ version_formatting_formula = [
 | `file_import_list` | Array\[String\] | 📎 | 文件列表（`file_import=true` 时） |
 | `runtime` | String | ✅ | 运行环境 |
 | `deno_net` | Boolean | 📎 | Deno 网络权限（`runtime="deno"` 时） |
-| `deno_resd` | Boolean | 📎 | Deno 本地文件读取权限（`runtime="deno"` 时） |
+| `deno_read` | Boolean | 📎 | Deno 本地文件读取权限（`runtime="deno"` 时） |
+| `deno_write` | Boolean | 📎 | Deno 本地文件写入权限（`runtime="deno"` 时） |
+| `deno_env` | Boolean | 📎 | Deno 环境变量权限（`runtime="deno"` 时） |
+| `deno_run` | Boolean | 📎 | Deno 子进程权限（`runtime="deno"` 时） |
+| `deno_hrtime` | Boolean | 📎 | Deno 高精度时间权限（`runtime="deno"` 时） |
+| `deno_ffi` | Boolean | 📎 | Deno 动态库权限（`runtime="deno"` 时） |
+| `deno_sys` | Boolean | 📎 | Deno 系统信息权限（`runtime="deno"` 时） |
+| `deno_all` | Boolean | 📎 | Deno 全部权限（`runtime="deno"` 时） |
+| `deno_custom_permissions` | Boolean | 📎 | 是否启用自定义 Deno 权限参数列表（`runtime="deno"` 时） |
+| `deno_permission_list` | Array\[String\] | 📎 | 自定义 Deno 权限参数列表（`runtime="deno"` 且 `deno_custom_permissions=true` 时） |
 | `platforms` | Array\[String\] | ✅ | 平台限制 |
 | `schema_version` | String | ✅ | 格式版本 |
 

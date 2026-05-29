@@ -95,7 +95,18 @@ export default function InitBlock({
     ...(meta.runtime === 'deno'
       ? [
         { label: 'Deno网络权限：', value: formatTomlBoolean(meta.denoNet) },
-        { label: 'Deno读取权限：', value: formatTomlBoolean(meta.denoResd) },
+        { label: 'Deno读取权限：', value: formatTomlBoolean(meta.denoRead) },
+        { label: 'Deno写入权限：', value: formatTomlBoolean(meta.denoWrite) },
+        { label: 'Deno环境变量权限：', value: formatTomlBoolean(meta.denoEnv) },
+        { label: 'Deno子进程权限：', value: formatTomlBoolean(meta.denoRun) },
+        { label: 'Deno高精度时间权限：', value: formatTomlBoolean(meta.denoHrtime) },
+        { label: 'Deno动态库权限：', value: formatTomlBoolean(meta.denoFfi) },
+        { label: 'Deno系统信息权限：', value: formatTomlBoolean(meta.denoSys) },
+        { label: 'Deno全部权限：', value: formatTomlBoolean(meta.denoAll) },
+        { label: '自定义Deno权限：', value: formatTomlBoolean(meta.denoCustomPermissions) },
+        ...(meta.denoCustomPermissions === true
+          ? [{ label: 'Deno自定义权限列表：', value: formatTomlArray(meta.denoPermissionList) }]
+          : []),
       ]
       : []),
     { label: '平台限制：', value: formatTomlArray(meta.platforms) },

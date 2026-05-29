@@ -21,7 +21,16 @@ export interface WorkbenchBlockMeta {
   fileImportList: string[]
   runtime: string
   denoNet: boolean | null
-  denoResd: boolean | null
+  denoRead: boolean | null
+  denoWrite: boolean | null
+  denoEnv: boolean | null
+  denoRun: boolean | null
+  denoHrtime: boolean | null
+  denoFfi: boolean | null
+  denoSys: boolean | null
+  denoAll: boolean | null
+  denoCustomPermissions: boolean | null
+  denoPermissionList: string[]
   platforms: string[]
   schemaVersion: string
 }

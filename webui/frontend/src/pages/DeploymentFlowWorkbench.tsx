@@ -72,7 +72,16 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   fileImportList: [],
   runtime: 'powershell',
   denoNet: null,
-  denoResd: null,
+  denoRead: null,
+  denoWrite: null,
+  denoEnv: null,
+  denoRun: null,
+  denoHrtime: null,
+  denoFfi: null,
+  denoSys: null,
+  denoAll: null,
+  denoCustomPermissions: null,
+  denoPermissionList: [],
   platforms: [],
   schemaVersion: '',
 }
@@ -83,6 +92,19 @@ function formatTomlString(value: string) {
 
 function formatTomlArray(values: string[]) {
   return `[${values.map(formatTomlString).join(', ')}]`
+}
+
+function formatTomlBoolean(value: boolean | null) {
+  if (value === null) return ''
+  return value ? 'true' : 'false'
+}
+
+function createBooleanOutlineNode(id: string, fieldName: string, value: boolean | null): OutlineNode {
+  return {
+    id,
+    label: `${fieldName} = ${formatTomlBoolean(value)}`,
+    icon: 'boolean',
+  }
 }
 
 function createStringArrayOutlineNode(id: string, fieldName: string, values: string[], defaultExpanded = false): OutlineNode {
@@ -97,6 +119,24 @@ function createStringArrayOutlineNode(id: string, fieldName: string, values: str
       icon: 'string' as const,
     })),
   }
+}
+
+function createDenoPermissionOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
+  return [
+    createBooleanOutlineNode('modinfo-deno-net', 'deno_net', meta.denoNet),
+    createBooleanOutlineNode('modinfo-deno-read', 'deno_read', meta.denoRead),
+    createBooleanOutlineNode('modinfo-deno-write', 'deno_write', meta.denoWrite),
+    createBooleanOutlineNode('modinfo-deno-env', 'deno_env', meta.denoEnv),
+    createBooleanOutlineNode('modinfo-deno-run', 'deno_run', meta.denoRun),
+    createBooleanOutlineNode('modinfo-deno-hrtime', 'deno_hrtime', meta.denoHrtime),
+    createBooleanOutlineNode('modinfo-deno-ffi', 'deno_ffi', meta.denoFfi),
+    createBooleanOutlineNode('modinfo-deno-sys', 'deno_sys', meta.denoSys),
+    createBooleanOutlineNode('modinfo-deno-all', 'deno_all', meta.denoAll),
+    createBooleanOutlineNode('modinfo-deno-custom-permissions', 'deno_custom_permissions', meta.denoCustomPermissions),
+    ...(meta.denoCustomPermissions === true
+      ? [createStringArrayOutlineNode('modinfo-deno-permission-list', 'deno_permission_list', meta.denoPermissionList)]
+      : []),
+  ]
 }
 
 function createModInfoOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
@@ -114,12 +154,7 @@ function createModInfoOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
       ? [createStringArrayOutlineNode('modinfo-file-import-list', 'file_import_list', meta.fileImportList)]
       : []),
     { id: 'modinfo-runtime', label: `runtime = ${formatTomlString(meta.runtime)}`, icon: 'string' },
-    ...(meta.runtime === 'deno'
-      ? [
-        { id: 'modinfo-deno-net', label: `deno_net = ${meta.denoNet === null ? '' : meta.denoNet ? 'true' : 'false'}`, icon: 'boolean' as const },
-        { id: 'modinfo-deno-resd', label: `deno_resd = ${meta.denoResd === null ? '' : meta.denoResd ? 'true' : 'false'}`, icon: 'boolean' as const },
-      ]
-      : []),
+    ...(meta.runtime === 'deno' ? createDenoPermissionOutlineChildren(meta) : []),
     createStringArrayOutlineNode('modinfo-platforms', 'platforms', meta.platforms, true),
     { id: 'modinfo-schema-version', label: `schema_version = ${formatTomlString(meta.schemaVersion)}`, icon: 'string' },
   ]
@@ -675,7 +710,16 @@ export default function DeploymentFlowWorkbench({
     fileImportList: meta.fileImportList,
     runtime: meta.runtime,
     denoNet: meta.denoNet,
-    denoResd: meta.denoResd,
+    denoRead: meta.denoRead,
+    denoWrite: meta.denoWrite,
+    denoEnv: meta.denoEnv,
+    denoRun: meta.denoRun,
+    denoHrtime: meta.denoHrtime,
+    denoFfi: meta.denoFfi,
+    denoSys: meta.denoSys,
+    denoAll: meta.denoAll,
+    denoCustomPermissions: meta.denoCustomPermissions,
+    denoPermissionList: meta.denoPermissionList,
     platforms: meta.platforms,
     schemaVersion: meta.schemaVersion,
   }), [meta])

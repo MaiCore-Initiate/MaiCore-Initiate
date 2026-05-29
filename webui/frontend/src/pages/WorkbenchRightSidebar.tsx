@@ -28,7 +28,16 @@ export interface WorkbenchModInfoMeta {
   fileImportList: string[]
   runtime: string
   denoNet: boolean | null
-  denoResd: boolean | null
+  denoRead: boolean | null
+  denoWrite: boolean | null
+  denoEnv: boolean | null
+  denoRun: boolean | null
+  denoHrtime: boolean | null
+  denoFfi: boolean | null
+  denoSys: boolean | null
+  denoAll: boolean | null
+  denoCustomPermissions: boolean | null
+  denoPermissionList: string[]
   platforms: string[]
   schemaVersion: string
 }
@@ -46,7 +55,16 @@ const emptyModInfoMeta: WorkbenchModInfoMeta = {
   fileImportList: [],
   runtime: 'powershell',
   denoNet: null,
-  denoResd: null,
+  denoRead: null,
+  denoWrite: null,
+  denoEnv: null,
+  denoRun: null,
+  denoHrtime: null,
+  denoFfi: null,
+  denoSys: null,
+  denoAll: null,
+  denoCustomPermissions: null,
+  denoPermissionList: [],
   platforms: [],
   schemaVersion: '',
 }
@@ -454,6 +472,215 @@ function ValueChips({ values }: { values: string[] }) {
   )
 }
 
+function reorderValues(values: string[], fromIndex: number, toIndex: number) {
+  if (fromIndex === toIndex) return values
+  const next = [...values]
+  const [moved] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, moved)
+  return next
+}
+
+function PlusGlyph() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden>
+      <path d="M11 4.5V17.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M4.5 11H17.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  )
+}
+
+function DenoPermissionInput({
+  value,
+  onChange,
+  onFocus,
+  onBlur,
+  ariaLabel,
+}: {
+  value: string
+  onChange: (value: string) => void
+  onFocus: () => void
+  onBlur: () => void
+  ariaLabel: string
+}) {
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  useEffect(() => {
+    const textArea = textAreaRef.current
+    if (!textArea) return
+    textArea.style.height = 'auto'
+    textArea.style.height = `${Math.max(30, textArea.scrollHeight)}px`
+  }, [value])
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      event.currentTarget.blur()
+    }
+  }
+
+  return (
+    <textarea
+      ref={textAreaRef}
+      value={value}
+      onChange={event => onChange(event.target.value.replace(/\r?\n/g, ''))}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      onKeyDown={handleKeyDown}
+      rows={1}
+      className="min-h-[30px] flex-1 resize-none overflow-hidden bg-transparent py-[5px] pr-[8px] text-[18px] font-light leading-[24px] outline-none"
+      style={{
+        color: 'var(--dfw-text)',
+        fontFamily: font,
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+      }}
+      aria-label={ariaLabel}
+    />
+  )
+}
+
+function DenoPermissionListField({
+  values,
+  onChange,
+  maxWidth,
+}: {
+  values: string[]
+  onChange: (values: string[]) => void
+  maxWidth: number
+}) {
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
+  const valuesRef = useRef(values)
+  const dragRef = useRef<{ pointerId: number; index: number; active: boolean; timer: number } | null>(null)
+
+  useEffect(() => {
+    valuesRef.current = values
+  }, [values])
+
+  const commitValues = (nextValues: string[]) => {
+    valuesRef.current = nextValues
+    onChange(nextValues)
+  }
+
+  const addPermission = () => {
+    commitValues([...valuesRef.current, ''])
+  }
+
+  const updatePermission = (index: number, nextValue: string) => {
+    const nextValues = [...valuesRef.current]
+    nextValues[index] = nextValue
+    commitValues(nextValues)
+  }
+
+  const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = {
+      pointerId: event.pointerId,
+      index,
+      active: false,
+      timer: window.setTimeout(() => {
+        if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return
+        dragRef.current.active = true
+      }, 180),
+    }
+  }
+
+  const moveDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId || !drag.active) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>('[data-deno-permission-index]')
+    if (!target) return
+
+    const targetIndex = Number(target.dataset.denoPermissionIndex)
+    if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= valuesRef.current.length) return
+    if (targetIndex === drag.index) return
+
+    commitValues(reorderValues(valuesRef.current, drag.index, targetIndex))
+    drag.index = targetIndex
+  }
+
+  const stopDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    window.clearTimeout(drag.timer)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    dragRef.current = null
+  }
+
+  return (
+    <div className="max-w-full">
+      <div className="flex h-[36px] max-w-full items-center justify-between" style={{ width: maxWidth }}>
+        <label className="block h-[36px] leading-[36px]" style={{ fontFamily: font, fontSize: 30, fontWeight: 600 }}>
+          Deno自定义权限列表
+        </label>
+        <button
+          type="button"
+          onClick={addPermission}
+          className="flex h-[30px] w-[30px] items-center justify-center rounded-[5px] border transition-colors hover:bg-[var(--dfw-control-hover)]"
+          style={{
+            borderColor: 'var(--dfw-sidebar-border)',
+            background: 'var(--dfw-sidebar-bg)',
+            color: 'var(--dfw-text)',
+          }}
+          aria-label="添加Deno权限参数"
+          title="添加Deno权限参数"
+        >
+          <PlusGlyph />
+        </button>
+      </div>
+
+      <div className="mt-[8px] flex max-w-full flex-col gap-[8px]" style={{ width: maxWidth }}>
+        {values.map((value, index) => {
+          const focused = focusedIndex === index
+          return (
+            <div
+              key={`${index}-${values.length}`}
+              data-deno-permission-index={index}
+              className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color,transform] duration-150"
+              style={{
+                borderColor: focused ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+                background: focused ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+                color: 'var(--dfw-text)',
+              }}
+            >
+              <button
+                type="button"
+                className="flex min-h-[40px] w-[30px] shrink-0 cursor-grab select-none items-center justify-center rounded-l-[5px] text-[18px] active:cursor-grabbing"
+                style={{ color: 'var(--dfw-outline-muted)', touchAction: 'none' }}
+                onPointerDown={event => startDrag(index, event)}
+                onPointerMove={moveDrag}
+                onPointerUp={stopDrag}
+                onPointerCancel={stopDrag}
+                aria-label={`拖拽排序第${index + 1}条Deno权限参数`}
+                title="长按拖拽排序"
+              >
+                ⠿
+              </button>
+              <DenoPermissionInput
+                value={value}
+                onChange={nextValue => updatePermission(index, nextValue)}
+                onFocus={() => setFocusedIndex(index)}
+                onBlur={() => setFocusedIndex(current => (current === index ? null : current))}
+                ariaLabel={`Deno权限参数${index + 1}`}
+              />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function WorkbenchRightSidebar({
   collapsed,
   width,
@@ -622,7 +849,7 @@ export default function WorkbenchRightSidebar({
 
       <div className="absolute left-[19.5px] right-[20.5px] top-[102px] bottom-[24px] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {shouldShowInitMeta ? (
-        <div className="flex min-h-[1260px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+        <div className="flex min-h-[1660px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
           <section>
             <FieldLabel>模版作者</FieldLabel>
             <AutoGrowTextField
@@ -749,10 +976,84 @@ export default function WorkbenchRightSidebar({
               <section>
                 <FieldLabel>Deno读取权限</FieldLabel>
                 <BooleanSwitchField
-                  value={meta.denoResd}
-                  onChange={denoResd => updateMeta({ denoResd })}
+                  value={meta.denoRead}
+                  onChange={denoRead => updateMeta({ denoRead })}
                 />
               </section>
+
+              <section>
+                <FieldLabel>Deno写入权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoWrite}
+                  onChange={denoWrite => updateMeta({ denoWrite })}
+                />
+              </section>
+
+              <section>
+                <FieldLabel>Deno环境变量权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoEnv}
+                  onChange={denoEnv => updateMeta({ denoEnv })}
+                />
+              </section>
+
+              <section>
+                <FieldLabel>Deno子进程权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoRun}
+                  onChange={denoRun => updateMeta({ denoRun })}
+                />
+              </section>
+
+              <section>
+                <FieldLabel>Deno高精度时间权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoHrtime}
+                  onChange={denoHrtime => updateMeta({ denoHrtime })}
+                />
+              </section>
+
+              <section>
+                <FieldLabel>Deno动态库权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoFfi}
+                  onChange={denoFfi => updateMeta({ denoFfi })}
+                />
+              </section>
+
+              <section>
+                <FieldLabel>Deno系统信息权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoSys}
+                  onChange={denoSys => updateMeta({ denoSys })}
+                />
+              </section>
+
+              <section>
+                <FieldLabel>Deno全部权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoAll}
+                  onChange={denoAll => updateMeta({ denoAll })}
+                />
+              </section>
+
+              <section>
+                <FieldLabel>自定义Deno权限</FieldLabel>
+                <BooleanSwitchField
+                  value={meta.denoCustomPermissions}
+                  onChange={denoCustomPermissions => updateMeta({ denoCustomPermissions })}
+                />
+              </section>
+
+              <ConditionalField show={meta.denoCustomPermissions === true}>
+                <section>
+                  <DenoPermissionListField
+                    values={meta.denoPermissionList}
+                    onChange={denoPermissionList => updateMeta({ denoPermissionList })}
+                    maxWidth={fieldAvailableWidth}
+                  />
+                </section>
+              </ConditionalField>
             </div>
           </ConditionalField>
 
