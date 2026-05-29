@@ -57,6 +57,22 @@ interface WorkbenchProjectInfo {
   path: string
 }
 
+interface WorkbenchMetaState {
+  author: string
+  tags: string[]
+  description: string
+  templateId: string
+  templateName: string
+}
+
+const defaultWorkbenchMeta: WorkbenchMetaState = {
+  author: 'MCStartTeam',
+  tags: ['test'],
+  description: '这是一个基于MCStart...',
+  templateId: 'MaiCore-Start.Deplo...',
+  templateName: '示例部署模组',
+}
+
 const defaultOutline: OutlineNode[] = [
   {
     id: 'mcstart',
@@ -112,6 +128,41 @@ const defaultOutline: OutlineNode[] = [
     ],
   },
 ]
+
+function createOutline(meta: WorkbenchMetaState): OutlineNode[] {
+  return [
+    {
+      id: 'mcstart',
+      label: '[MCStart]',
+      defaultExpanded: true,
+      tone: 'locked',
+      children: [
+        { id: 'mcstart-enabled', label: 'MCStart = true', icon: 'boolean', tone: 'locked' },
+      ],
+    },
+    {
+      id: 'modinfo',
+      label: '[MODINFO]',
+      defaultExpanded: true,
+      children: [
+        { id: 'modinfo-author', label: `author = "${meta.author}"`, icon: 'string' },
+        {
+          id: 'modinfo-tags',
+          label: 'tags',
+          icon: 'array',
+          defaultExpanded: true,
+          children: meta.tags.length
+            ? meta.tags.map((tag, index) => ({ id: `modinfo-tags-${index}`, label: `${index} = "${tag}"`, icon: 'string' as const }))
+            : [{ id: 'modinfo-tags-empty', label: '0 = ""', icon: 'string' }],
+        },
+        { id: 'modinfo-description', label: `description = "${meta.description}"`, icon: 'string' },
+        { id: 'modinfo-template-id', label: `template_id = "${meta.templateId}"`, icon: 'string' },
+        { id: 'modinfo-template-name', label: `template_name = "${meta.templateName}"`, icon: 'string' },
+      ],
+    },
+    ...defaultOutline.slice(2),
+  ]
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -322,6 +373,14 @@ function OutlineTree({
   const lineSegments = useMemo(() => collectOutlineLineSegments(flatNodes), [flatNodes])
   const rowWidth = Math.max(0, sidebarWidth - 27)
   const selectedWidth = Math.max(0, sidebarWidth - 40)
+
+  useEffect(() => {
+    setExpanded(prev => new Set([...prev, ...collectDefaultExpanded(nodes)]))
+    setSelectedId(prev => {
+      const hasCurrent = flattenOutline(nodes, collectDefaultExpanded(nodes)).some(item => item.node.id === prev)
+      return hasCurrent ? prev : firstSelectableNode(nodes)
+    })
+  }, [nodes])
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
@@ -550,7 +609,7 @@ function WorkbenchLeftSidebar({
 
 export default function DeploymentFlowWorkbench({
   onBackToLibrary,
-  outline = defaultOutline,
+  outline,
   projectSequence,
 }: DeploymentFlowWorkbenchProps) {
   const [viewport, setViewport] = useState<WorkbenchViewport>({ scale: 1, x: 0, y: 0 })
@@ -561,6 +620,7 @@ export default function DeploymentFlowWorkbench({
   const [rightSidebarWidth, setRightSidebarWidth] = useState(rightSidebarExpandedWidth)
   const [projectInfo, setProjectInfo] = useState<WorkbenchProjectInfo | null>(null)
   const [selectedBlockId, setSelectedBlockId] = useState<WorkbenchBlockId | null>(null)
+  const [meta, setMeta] = useState<WorkbenchMetaState>(defaultWorkbenchMeta)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -574,6 +634,14 @@ export default function DeploymentFlowWorkbench({
     id: 'workspace-0',
     title: projectInfo?.mod_name || '未命名',
   }], [projectInfo?.mod_name])
+  const effectiveOutline = useMemo(() => outline ?? createOutline(meta), [outline, meta])
+  const blockMeta = useMemo(() => ({
+    author: meta.author,
+    tags: meta.tags.join(' '),
+    description: meta.description,
+    templateId: meta.templateId,
+    templateName: meta.templateName,
+  }), [meta])
 
   const cancelViewportAnimation = () => {
     if (viewportAnimationFrameRef.current === null) return
@@ -628,7 +696,14 @@ export default function DeploymentFlowWorkbench({
         const response = await fetch(`/api/template-workbench/projects/${encodeURIComponent(projectSequence)}`, { credentials: 'include' })
         if (!response.ok) throw new Error(`加载工作台项目失败: ${response.status}`)
         const project = await response.json() as WorkbenchProjectInfo
-        if (!cancelled) setProjectInfo(project)
+        if (!cancelled) {
+          setProjectInfo(project)
+          setMeta(prev => ({
+            ...prev,
+            templateName: project.mod_name || prev.templateName,
+            templateId: project.path ? project.path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || prev.templateId : prev.templateId,
+          }))
+        }
       } catch (error) {
         console.error(error)
         if (!cancelled) setProjectInfo(null)
@@ -763,6 +838,7 @@ export default function DeploymentFlowWorkbench({
         viewport={viewport}
         selectedBlockId={selectedBlockId}
         onSelectedBlockChange={setSelectedBlockId}
+        blockMeta={blockMeta}
       />
       <WorkbenchLeftSidebar
         collapsed={leftSidebarCollapsed}
@@ -770,7 +846,7 @@ export default function DeploymentFlowWorkbench({
         onToggleCollapsed={() => setLeftSidebarCollapsed(prev => !prev)}
         onResize={setLeftSidebarWidth}
         onBackToLibrary={onBackToLibrary}
-        outline={outline}
+        outline={effectiveOutline}
       />
       <WorkbenchTopTabs
         onBackToLibrary={onBackToLibrary}
@@ -784,6 +860,12 @@ export default function DeploymentFlowWorkbench({
         onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
         onResize={setRightSidebarWidth}
         selectedName={selectedBlockId ? blockNames[selectedBlockId] : '无'}
+        author={meta.author}
+        tags={meta.tags}
+        description={meta.description}
+        onAuthorChange={author => setMeta(prev => ({ ...prev, author }))}
+        onTagsChange={tags => setMeta(prev => ({ ...prev, tags }))}
+        onDescriptionChange={description => setMeta(prev => ({ ...prev, description }))}
       />
       <WorkbenchBottomBar
         scale={viewport.scale}

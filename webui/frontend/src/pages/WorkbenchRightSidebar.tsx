@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -18,9 +18,12 @@ export interface WorkbenchRightSidebarProps {
   onToggleCollapsed: () => void
   onResize: (width: number) => void
   selectedName?: string
-  initialAuthor?: string
-  initialTags?: string[]
-  initialDescription?: string
+  author?: string
+  tags?: string[]
+  description?: string
+  onAuthorChange?: (value: string) => void
+  onTagsChange?: (value: string[]) => void
+  onDescriptionChange?: (value: string) => void
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -156,19 +159,28 @@ export default function WorkbenchRightSidebar({
   onToggleCollapsed,
   onResize,
   selectedName = '初始化块',
-  initialAuthor = 'MCStartTeam',
-  initialTags = ['test'],
-  initialDescription = '这是一个基于MCStart模块化部署功能的理念编写的概念模版',
+  author = 'MCStartTeam',
+  tags = ['test'],
+  description = '这是一个基于MCStart模块化部署功能的理念编写的概念模版',
+  onAuthorChange,
+  onTagsChange,
+  onDescriptionChange,
 }: WorkbenchRightSidebarProps) {
-  const [author, setAuthor] = useState(initialAuthor)
-  const [tagInput, setTagInput] = useState(`#${initialTags.join(' #')}`)
-  const [tags, setTags] = useState(initialTags)
-  const [description, setDescription] = useState(initialDescription)
+  const [tagInput, setTagInput] = useState(`#${tags.join(' #')}`)
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
+
+  useEffect(() => {
+    setTagInput(`#${tags.join(' #')}`)
+  }, [tags])
 
   const commitTags = () => {
     const parsedTags = parseTags(tagInput)
-    if (parsedTags.length) setTags(parsedTags)
+    onTagsChange?.(parsedTags)
+  }
+
+  const updateTagInput = (value: string) => {
+    setTagInput(value)
+    onTagsChange?.(parseTags(value))
   }
 
   const startResize = (event: PointerEvent<HTMLDivElement>) => {
@@ -291,7 +303,7 @@ export default function WorkbenchRightSidebar({
             <FieldLabel>作者</FieldLabel>
             <AutoGrowTextField
               value={author}
-              onChange={setAuthor}
+              onChange={onAuthorChange ?? (() => undefined)}
               ariaLabel="作者"
             />
           </section>
@@ -300,7 +312,7 @@ export default function WorkbenchRightSidebar({
             <FieldLabel>标签</FieldLabel>
             <AutoGrowTextField
               value={tagInput}
-              onChange={setTagInput}
+              onChange={updateTagInput}
               onCommit={commitTags}
               ariaLabel="标签"
             />
@@ -326,7 +338,7 @@ export default function WorkbenchRightSidebar({
             <FieldLabel>模板描述</FieldLabel>
             <AutoGrowTextField
               value={description}
-              onChange={setDescription}
+              onChange={onDescriptionChange ?? (() => undefined)}
               ariaLabel="模板描述"
             />
           </section>
