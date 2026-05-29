@@ -60,7 +60,7 @@ const defaultOutline: OutlineNode[] = [
         icon: 'array',
         defaultExpanded: true,
         children: [
-          { id: 'modinfo-tags-0', label: '0 = "test"', icon: 'number', defaultSelected: true },
+          { id: 'modinfo-tags-0', label: '0 = "test"', icon: 'string', defaultSelected: true },
         ],
       },
     ],
@@ -77,8 +77,8 @@ const defaultOutline: OutlineNode[] = [
         label: 'list',
         icon: 'array',
         children: [
-          { id: 'components-list-0', label: '0', icon: 'number' },
-          { id: 'components-list-1', label: '1', icon: 'number' },
+          { id: 'components-list-0', label: '0', icon: 'object' },
+          { id: 'components-list-1', label: '1', icon: 'object' },
         ],
       },
     ],
@@ -88,8 +88,8 @@ const defaultOutline: OutlineNode[] = [
     label: '[[Component]]',
     defaultExpanded: true,
     children: [
-      { id: 'component-array-0', label: '0', icon: 'number' },
-      { id: 'component-array-1', label: '1', icon: 'number' },
+      { id: 'component-array-0', label: '0', icon: 'object' },
+      { id: 'component-array-1', label: '1', icon: 'object' },
     ],
   },
 ]
