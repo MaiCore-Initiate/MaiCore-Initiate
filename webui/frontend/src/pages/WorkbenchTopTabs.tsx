@@ -2,6 +2,9 @@ import { useRef, useState } from 'react'
 import { CircleX, House, Plus } from 'lucide-react'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
+const topTabsChromeWidth = 180
+const topTabsGap = 9
+const topTabsMinWidth = 407
 
 export interface WorkbenchTab {
   id: string
@@ -20,18 +23,18 @@ const defaultTabs: WorkbenchTab[] = [
   { id: 'workspace-1', title: '未命名1' },
 ]
 
-function divider(left: number) {
+function Divider() {
   return (
     <span
-      className="absolute top-[15.5px] h-[30px] w-[2px] rounded-full"
-      style={{ left, background: 'var(--dfw-bottom-divider)' }}
+      className="h-[30px] w-[2px] shrink-0 rounded-full"
+      style={{ background: 'var(--dfw-bottom-divider)' }}
       aria-hidden
     />
   )
 }
 
 function tabWidth(title: string) {
-  return Math.min(126, Math.max(100, 46 + title.length * 18))
+  return Math.max(100, 62 + title.length * 18)
 }
 
 export default function WorkbenchTopTabs({
@@ -44,6 +47,10 @@ export default function WorkbenchTopTabs({
   const [activeId, setActiveId] = useState(initialTabs[0]?.id ?? '')
   const nextTabIndexRef = useRef(initialTabs.length)
   const tabsScrollerRef = useRef<HTMLDivElement | null>(null)
+  const tabsWidth = tabs.reduce((total, tab, index) => {
+    return total + tabWidth(tab.title) + (index > 0 ? topTabsGap : 0)
+  }, 0)
+  const toolbarWidth = Math.max(topTabsMinWidth, topTabsChromeWidth + tabsWidth)
 
   const createTab = () => {
     const index = nextTabIndexRef.current
@@ -88,7 +95,10 @@ export default function WorkbenchTopTabs({
       }}
       aria-label="工作区标签栏"
     >
-      <div className="pointer-events-auto relative mx-auto h-[61px] w-[407px]">
+      <div
+        className="pointer-events-auto relative mx-auto h-[61px] max-w-full transition-[width] duration-150 ease-out"
+        style={{ width: toolbarWidth }}
+      >
         <div
           className="absolute inset-0 rounded-[30px] border"
           style={{
@@ -111,11 +121,13 @@ export default function WorkbenchTopTabs({
           <House size={30} strokeWidth={2} />
         </button>
 
-        {divider(70.5)}
+        <span className="absolute left-[70.5px] top-[15.5px]">
+          <Divider />
+        </span>
 
         <div
           ref={tabsScrollerRef}
-          className="absolute left-[90px] top-[10px] flex h-[41px] w-[227px] items-center gap-[9px] overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="absolute left-[90px] right-[90px] top-[10px] flex h-[41px] items-center gap-[9px] overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           role="tablist"
         >
           {tabs.map(tab => {
@@ -141,7 +153,7 @@ export default function WorkbenchTopTabs({
                   role="tab"
                   title={tab.title}
                 >
-                  <span className="absolute left-[8px] right-[34px] top-0 block h-[40px] overflow-hidden text-ellipsis whitespace-nowrap leading-[40px]">
+                  <span className="absolute left-[14px] right-[38px] top-0 block h-[40px] overflow-hidden whitespace-nowrap leading-[40px]">
                     {tab.title}
                   </span>
                 </button>
@@ -162,12 +174,14 @@ export default function WorkbenchTopTabs({
           })}
         </div>
 
-        {divider(336.5)}
+        <span className="absolute right-[70.5px] top-[15.5px]">
+          <Divider />
+        </span>
 
         <button
           type="button"
           onClick={createTab}
-          className="absolute left-[356.5px] top-[10.5px] flex h-[40px] w-[40px] items-center justify-center rounded-full border-2 transition-colors hover:bg-[var(--dfw-control-hover)]"
+          className="absolute right-[10.5px] top-[10.5px] flex h-[40px] w-[40px] items-center justify-center rounded-full border-2 transition-colors hover:bg-[var(--dfw-control-hover)]"
           style={{
             borderColor: 'var(--dfw-sidebar-border)',
             background: 'var(--dfw-sidebar-bg)',
