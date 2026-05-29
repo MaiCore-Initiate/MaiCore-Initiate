@@ -90,7 +90,7 @@ export default function InitBlock({
     { label: '最低支持版本：', value: formatTomlString(meta.minVersion) },
     { label: '最高支持版本：', value: formatTomlString(meta.maxVersion) },
     { label: '启用文件导入：', value: formatTomlBoolean(meta.fileImport) },
-    { label: '文件导入列表：', value: formatTomlArray(meta.fileImportList) },
+    ...(meta.fileImport === true ? [{ label: '文件导入列表：', value: formatTomlArray(meta.fileImportList) }] : []),
     { label: '运行时环境：', value: formatTomlString(meta.runtime) },
     { label: '平台限制：', value: formatTomlArray(meta.platforms) },
     { label: '模版格式版本：', value: formatTomlString(meta.schemaVersion) },
@@ -118,6 +118,20 @@ export default function InitBlock({
           clipId={contentClipId}
         />
       ))}
+      <rect
+        x={bodyX}
+        y={bodyY}
+        width={bodyWidth}
+        height={bodyHeight}
+        rx="30"
+        fill="transparent"
+        className="cursor-pointer"
+        onClick={event => {
+          event.stopPropagation()
+          onSelect?.()
+        }}
+        onPointerDown={event => event.stopPropagation()}
+      />
       <g transform={`translate(${connectorX} ${connectorY})`}>
         <AddConnectorButton />
       </g>

@@ -594,18 +594,20 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          <section>
-            <FieldLabel>文件导入列表</FieldLabel>
-            <AutoGrowTextField
-              value={fileImportListInput}
-              onChange={updateFileImportListInput}
-              onCommit={commitFileImportList}
-              allowLineBreaks
-              maxWidth={fieldAvailableWidth}
-              ariaLabel="文件导入列表"
-            />
-            <ValueChips values={meta.fileImportList} />
-          </section>
+          {meta.fileImport === true && (
+            <section>
+              <FieldLabel>文件导入列表</FieldLabel>
+              <AutoGrowTextField
+                value={fileImportListInput}
+                onChange={updateFileImportListInput}
+                onCommit={commitFileImportList}
+                allowLineBreaks
+                maxWidth={fieldAvailableWidth}
+                ariaLabel="文件导入列表"
+              />
+              <ValueChips values={meta.fileImportList} />
+            </section>
+          )}
 
           <section>
             <FieldLabel>运行时环境</FieldLabel>

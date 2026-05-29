@@ -108,7 +108,9 @@ function createModInfoOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
     { id: 'modinfo-min-version', label: `min_version = ${formatTomlString(meta.minVersion)}`, icon: 'string' },
     { id: 'modinfo-max-version', label: `max_version = ${formatTomlString(meta.maxVersion)}`, icon: 'string' },
     { id: 'modinfo-file-import', label: `file_import = ${meta.fileImport === null ? '' : meta.fileImport ? 'true' : 'false'}`, icon: 'boolean' },
-    createStringArrayOutlineNode('modinfo-file-import-list', 'file_import_list', meta.fileImportList),
+    ...(meta.fileImport === true
+      ? [createStringArrayOutlineNode('modinfo-file-import-list', 'file_import_list', meta.fileImportList)]
+      : []),
     { id: 'modinfo-runtime', label: `runtime = ${formatTomlString(meta.runtime)}`, icon: 'string' },
     createStringArrayOutlineNode('modinfo-platforms', 'platforms', meta.platforms, true),
     { id: 'modinfo-schema-version', label: `schema_version = ${formatTomlString(meta.schemaVersion)}`, icon: 'string' },
