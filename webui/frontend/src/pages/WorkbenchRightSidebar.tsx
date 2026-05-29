@@ -53,6 +53,7 @@ export interface WorkbenchRightSidebarProps {
   onToggleCollapsed: () => void
   onResize: (width: number) => void
   selectedName?: string
+  selectedBlockId?: 'start' | 'init' | null
   meta?: WorkbenchModInfoMeta
   onMetaPatch?: (patch: Partial<WorkbenchModInfoMeta>) => void
 }
@@ -212,40 +213,37 @@ function AutoGrowTextField({
   )
 }
 
-function BooleanSegmentedField({
+function BooleanSwitchField({
   value,
   onChange,
 }: {
   value: boolean | null
   onChange: (value: boolean | null) => void
 }) {
-  const options: Array<{ label: string; value: boolean | null }> = [
-    { label: '空白', value: null },
-    { label: 'true', value: true },
-    { label: 'false', value: false },
-  ]
-
   return (
-    <div className="flex max-w-full flex-wrap gap-[8px]">
-      {options.map(option => {
-        const selected = value === option.value
-        return (
-          <button
-            key={option.label}
-            type="button"
-            onClick={() => onChange(option.value)}
-            className="h-[34px] rounded-[17px] border px-[12px] text-[18px] font-light leading-[32px] transition-colors hover:bg-[var(--dfw-control-hover)]"
-            style={{
-              borderColor: selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
-              background: selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
-              fontFamily: font,
-            }}
-          >
-            {option.label}
-          </button>
-        )
-      })}
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={value === true}
+      onClick={() => onChange(value === true ? false : true)}
+      className="flex h-[42px] w-[142px] items-center rounded-[21px] border px-[5px] transition-colors"
+      style={{
+        borderColor: value === true ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+        background: value === true ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+        fontFamily: font,
+      }}
+      title={value === null ? '未设置' : value ? '已启用' : '已关闭'}
+    >
+      <span
+        className="h-[30px] w-[30px] rounded-full border transition-transform duration-150 ease-out"
+        style={{
+          transform: value === true ? 'translateX(96px)' : 'translateX(0)',
+          borderColor: value === true ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+          background: value === true ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-bg)',
+        }}
+        aria-hidden
+      />
+    </button>
   )
 }
 
@@ -343,6 +341,7 @@ export default function WorkbenchRightSidebar({
   onToggleCollapsed,
   onResize,
   selectedName = '初始化块',
+  selectedBlockId = 'init',
   meta = emptyModInfoMeta,
   onMetaPatch,
 }: WorkbenchRightSidebarProps) {
@@ -420,6 +419,8 @@ export default function WorkbenchRightSidebar({
     }
     resizeStartRef.current = null
   }
+
+  const shouldShowInitMeta = selectedBlockId === 'init'
 
   if (collapsed) {
     return (
@@ -501,9 +502,10 @@ export default function WorkbenchRightSidebar({
       </button>
 
       <div className="absolute left-[19.5px] right-[20.5px] top-[102px] bottom-[24px] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {shouldShowInitMeta ? (
         <div className="flex min-h-[1260px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
           <section>
-            <FieldLabel>author</FieldLabel>
+            <FieldLabel>模版作者</FieldLabel>
             <AutoGrowTextField
               value={meta.author}
               onChange={author => updateMeta({ author })}
@@ -513,7 +515,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>tags</FieldLabel>
+            <FieldLabel>模版标签</FieldLabel>
             <AutoGrowTextField
               value={tagInput}
               onChange={updateTagInput}
@@ -525,7 +527,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>description</FieldLabel>
+            <FieldLabel>模版描述</FieldLabel>
             <AutoGrowTextField
               value={meta.description}
               onChange={description => updateMeta({ description })}
@@ -535,7 +537,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>mod_id</FieldLabel>
+            <FieldLabel>模版唯一ID</FieldLabel>
             <AutoGrowTextField
               value={meta.modId}
               onChange={modId => updateMeta({ modId })}
@@ -545,7 +547,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>mod_name</FieldLabel>
+            <FieldLabel>模版显示名称</FieldLabel>
             <AutoGrowTextField
               value={meta.modName}
               onChange={modName => updateMeta({ modName })}
@@ -555,7 +557,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>version</FieldLabel>
+            <FieldLabel>模版版本</FieldLabel>
             <AutoGrowTextField
               value={meta.version}
               onChange={version => updateMeta({ version })}
@@ -565,7 +567,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>min_version</FieldLabel>
+            <FieldLabel>最低支持版本</FieldLabel>
             <AutoGrowTextField
               value={meta.minVersion}
               onChange={minVersion => updateMeta({ minVersion })}
@@ -575,7 +577,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>max_version</FieldLabel>
+            <FieldLabel>最高支持版本</FieldLabel>
             <AutoGrowTextField
               value={meta.maxVersion}
               onChange={maxVersion => updateMeta({ maxVersion })}
@@ -585,15 +587,15 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>file_import</FieldLabel>
-            <BooleanSegmentedField
+            <FieldLabel>启用文件导入</FieldLabel>
+            <BooleanSwitchField
               value={meta.fileImport}
               onChange={fileImport => updateMeta({ fileImport })}
             />
           </section>
 
           <section>
-            <FieldLabel>file_import_list</FieldLabel>
+            <FieldLabel>文件导入列表</FieldLabel>
             <AutoGrowTextField
               value={fileImportListInput}
               onChange={updateFileImportListInput}
@@ -606,7 +608,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>runtime</FieldLabel>
+            <FieldLabel>运行时环境</FieldLabel>
             <RuntimeSelectField
               value={meta.runtime}
               onChange={runtime => updateMeta({ runtime })}
@@ -614,7 +616,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>platforms</FieldLabel>
+            <FieldLabel>平台限制</FieldLabel>
             <PlatformPicker
               value={meta.platforms}
               onChange={platforms => updateMeta({ platforms })}
@@ -622,7 +624,7 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>schema_version</FieldLabel>
+            <FieldLabel>模版格式版本</FieldLabel>
             <AutoGrowTextField
               value={meta.schemaVersion}
               onChange={schemaVersion => updateMeta({ schemaVersion })}
@@ -631,6 +633,14 @@ export default function WorkbenchRightSidebar({
             />
           </section>
         </div>
+        ) : (
+          <div
+            className="min-w-[160px] pt-[2px] text-[20px] font-light leading-[34px]"
+            style={{ width: Math.max(0, width - 40), fontFamily: font }}
+          >
+            {selectedBlockId === 'start' ? '起始端点暂无可编辑配置' : '未选中积木'}
+          </div>
+        )}
       </div>
       <div
         className="absolute bottom-[30px] left-[-5px] top-[30px] w-[10px] cursor-ew-resize"

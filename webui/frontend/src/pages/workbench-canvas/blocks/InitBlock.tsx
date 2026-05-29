@@ -81,19 +81,19 @@ export default function InitBlock({
   const connectorY = bodyY + bodyHeight / 2 - 12
   const contentClipId = 'dfw-init-block-content-clip'
   const rows = [
-    { label: 'author = ', value: formatTomlString(meta.author) },
-    { label: 'tags = ', value: formatTomlArray(meta.tags) },
-    { label: 'description = ', value: formatTomlString(meta.description) },
-    { label: 'mod_id = ', value: formatTomlString(meta.modId) },
-    { label: 'mod_name = ', value: formatTomlString(meta.modName) },
-    { label: 'version = ', value: formatTomlString(meta.version) },
-    { label: 'min_version = ', value: formatTomlString(meta.minVersion) },
-    { label: 'max_version = ', value: formatTomlString(meta.maxVersion) },
-    { label: 'file_import = ', value: formatTomlBoolean(meta.fileImport) },
-    { label: 'file_import_list = ', value: formatTomlArray(meta.fileImportList) },
-    { label: 'runtime = ', value: formatTomlString(meta.runtime) },
-    { label: 'platforms = ', value: formatTomlArray(meta.platforms) },
-    { label: 'schema_version = ', value: formatTomlString(meta.schemaVersion) },
+    { label: '模版作者：', value: formatTomlString(meta.author) },
+    { label: '模版标签：', value: formatTomlArray(meta.tags) },
+    { label: '模版描述：', value: formatTomlString(meta.description) },
+    { label: '模版唯一ID：', value: formatTomlString(meta.modId) },
+    { label: '模版显示名称：', value: formatTomlString(meta.modName) },
+    { label: '模版版本：', value: formatTomlString(meta.version) },
+    { label: '最低支持版本：', value: formatTomlString(meta.minVersion) },
+    { label: '最高支持版本：', value: formatTomlString(meta.maxVersion) },
+    { label: '启用文件导入：', value: formatTomlBoolean(meta.fileImport) },
+    { label: '文件导入列表：', value: formatTomlArray(meta.fileImportList) },
+    { label: '运行时环境：', value: formatTomlString(meta.runtime) },
+    { label: '平台限制：', value: formatTomlArray(meta.platforms) },
+    { label: '模版格式版本：', value: formatTomlString(meta.schemaVersion) },
   ]
 
   return (

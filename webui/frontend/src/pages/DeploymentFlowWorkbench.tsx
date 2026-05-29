@@ -885,6 +885,7 @@ export default function DeploymentFlowWorkbench({
         onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
         onResize={setRightSidebarWidth}
         selectedName={selectedBlockId ? blockNames[selectedBlockId] : '无'}
+        selectedBlockId={selectedBlockId}
         meta={meta}
         onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
       />
