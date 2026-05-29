@@ -1,3 +1,5 @@
+import type { PointerEvent } from 'react'
+
 export const workbenchCanvasFont = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 
 export interface WorkbenchCanvasViewport {
@@ -14,8 +16,20 @@ export interface WorkbenchBlockMeta {
   templateName: string
 }
 
+export interface WorkbenchPoint {
+  x: number
+  y: number
+}
+
 export interface WorkbenchCanvasProps {
   viewport: WorkbenchCanvasViewport
   selectedBlockId?: string
   blockMeta?: Partial<WorkbenchBlockMeta>
+}
+
+export interface WorkbenchBlockDragHandlers {
+  onHeaderPointerDown?: (event: PointerEvent<SVGGElement>) => void
+  onHeaderPointerMove?: (event: PointerEvent<SVGGElement>) => void
+  onHeaderPointerUp?: (event: PointerEvent<SVGGElement>) => void
+  onHeaderPointerCancel?: (event: PointerEvent<SVGGElement>) => void
 }

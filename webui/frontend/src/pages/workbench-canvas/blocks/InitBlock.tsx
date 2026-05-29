@@ -1,4 +1,4 @@
-import { workbenchCanvasFont, type WorkbenchBlockMeta } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockMeta, type WorkbenchPoint } from '../types'
 
 function AddConnectorButton() {
   return (
@@ -28,14 +28,18 @@ function TextLine({
 }
 
 export default function InitBlock({
+  position,
   selected,
   meta,
+  dragHandlers,
 }: {
+  position: WorkbenchPoint
   selected: boolean
   meta: WorkbenchBlockMeta
+  dragHandlers?: WorkbenchBlockDragHandlers
 }) {
   return (
-    <g transform="translate(829 359)">
+    <g transform={`translate(${position.x} ${position.y})`}>
       <rect x="5" y="5" width="301" height="221" rx="30" fill="var(--dfw-bg)" stroke="currentColor" strokeWidth="2" />
       {selected && (
         <path
@@ -52,6 +56,15 @@ export default function InitBlock({
       <TextLine y={193} label="模板名 ： " value={meta.templateName} />
       <text x="21" y="211" fontSize="20" fontFamily={workbenchCanvasFont} fontWeight="500">......</text>
       <AddConnectorButton />
+      <g
+        className="cursor-grab active:cursor-grabbing"
+        onPointerDown={dragHandlers?.onHeaderPointerDown}
+        onPointerMove={dragHandlers?.onHeaderPointerMove}
+        onPointerUp={dragHandlers?.onHeaderPointerUp}
+        onPointerCancel={dragHandlers?.onHeaderPointerCancel}
+      >
+        <path d="M30,0H271a30,30,0,0,1,30,30V53H0V30A30,30,0,0,1,30,0Z" transform="translate(5 5)" fill="transparent" />
+      </g>
     </g>
   )
 }
