@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   CirclePlus,
   Clock,
@@ -10,7 +10,6 @@ import {
   Upload,
 } from 'lucide-react'
 import { CardSquaresIcon, ListDashesIcon } from '../components/icons/SidebarIcons'
-import DeploymentFlowWorkbench from './DeploymentFlowWorkbench'
 
 export type TemplateWorkbenchSection = 'recent' | 'my-templates' | 'market' | 'starred'
 export type TemplateWorkbenchItemType = 'deployment-flow' | 'folder' | 'script' | 'archive'
@@ -22,6 +21,14 @@ export interface TemplateWorkbenchItem {
   type: TemplateWorkbenchItemType
   updatedAt: string
   childCount?: number
+  templatePath?: string
+  sequence?: string
+}
+
+interface WorkbenchProjectIndex {
+  sequence: string
+  mod_name: string
+  path: string
 }
 
 export interface TemplateWorkbenchSlots {
@@ -39,14 +46,16 @@ export interface TemplateWorkbenchProps {
   onUploadProject?: () => void
   onImportProject?: () => void
   onOpenItem?: (item: TemplateWorkbenchItem) => void
+  onOpenWorkbenchCanvas?: (sequence: string) => void
   onSelectSection?: (section: TemplateWorkbenchSection) => void
   onReturnToSource?: () => void
 }
 
+const defaultTemplatePath = 'D:\\project\\MaiCoreStart\\MaiCore-Start\\MOD\\MaiCore-Start.DeploymentMOD\\DeploymentMOD.toml'
 const defaultItems: TemplateWorkbenchItem[] = [
-  { id: 'draft-1', name: '未命名', type: 'deployment-flow', updatedAt: '20分钟前' },
-  { id: 'draft-2', name: '未命名1', type: 'deployment-flow', updatedAt: '22分钟前' },
-  { id: 'draft-3', name: '未命名2', type: 'deployment-flow', updatedAt: '30分钟前' },
+  { id: 'draft-1', name: '未命名', type: 'deployment-flow', updatedAt: '20分钟前', templatePath: defaultTemplatePath },
+  { id: 'draft-2', name: '未命名1', type: 'deployment-flow', updatedAt: '22分钟前', templatePath: defaultTemplatePath },
+  { id: 'draft-3', name: '未命名2', type: 'deployment-flow', updatedAt: '30分钟前', templatePath: defaultTemplatePath },
   { id: 'folder-abc', name: 'abc', type: 'folder', updatedAt: '昨天', childCount: 3 },
 ]
 
@@ -426,32 +435,100 @@ export default function TemplateWorkbench({
   onUploadProject,
   onImportProject,
   onOpenItem,
+  onOpenWorkbenchCanvas,
   onSelectSection,
   onReturnToSource,
 }: TemplateWorkbenchProps) {
   const [activeSection, setActiveSection] = useState<TemplateWorkbenchSection>('my-templates')
   const [layoutMode, setLayoutMode] = useState<TemplateWorkbenchLayout>('card')
-  const [activeWorkbenchItem, setActiveWorkbenchItem] = useState<TemplateWorkbenchItem | null>(null)
-  const projectItems = items ?? defaultItems
+  const [registeredProjects, setRegisteredProjects] = useState<WorkbenchProjectIndex[]>([])
+  const projectItems = useMemo(() => {
+    if (items) return items
+    if (!registeredProjects.length) return defaultItems
+
+    return [
+      ...registeredProjects.map(project => ({
+        id: project.sequence,
+        name: project.mod_name || '未命名',
+        type: 'deployment-flow' as const,
+        updatedAt: '已保存',
+        templatePath: project.path,
+        sequence: project.sequence,
+      })),
+      defaultItems.find(item => item.type === 'folder') ?? defaultItems[defaultItems.length - 1],
+    ]
+  }, [items, registeredProjects])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadProjects = async () => {
+      try {
+        const response = await fetch('/api/template-workbench/projects', { credentials: 'include' })
+        if (!response.ok) return
+        const projects = await response.json() as WorkbenchProjectIndex[]
+        if (!cancelled) setRegisteredProjects(projects)
+      } catch (error) {
+        console.error(error)
+      }
+    }
+
+    void loadProjects()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const selectSection = (section: TemplateWorkbenchSection) => {
     setActiveSection(section)
     onSelectSection?.(section)
   }
 
-  const openItem = (item: TemplateWorkbenchItem) => {
-    onOpenItem?.(item)
-    if (item.type === 'deployment-flow') {
-      setActiveWorkbenchItem(item)
+  const createProjectIndex = async (modName: string, templatePath: string) => {
+    const existing = registeredProjects.find(project => project.mod_name === modName && project.path === templatePath)
+    if (existing) return existing
+
+    const response = await fetch('/api/template-workbench/projects', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mod_name: modName,
+        path: templatePath,
+      }),
+    })
+    if (!response.ok) throw new Error(`创建工作台项目失败: ${response.status}`)
+    const project = await response.json() as WorkbenchProjectIndex
+    setRegisteredProjects(prev => prev.some(item => item.sequence === project.sequence) ? prev : [...prev, project])
+    return project
+  }
+
+  const createDeploymentProject = async () => {
+    onCreateProject?.()
+    try {
+      const name = `未命名${registeredProjects.length ? registeredProjects.length : ''}`
+      const project = await createProjectIndex(name, defaultTemplatePath)
+      onOpenWorkbenchCanvas?.(project.sequence)
+    } catch (error) {
+      console.error(error)
     }
   }
 
-  if (activeWorkbenchItem) {
-    return (
-      <DeploymentFlowWorkbench
-        onBackToLibrary={() => setActiveWorkbenchItem(null)}
-      />
-    )
+  const openItem = async (item: TemplateWorkbenchItem) => {
+    onOpenItem?.(item)
+    if (item.type !== 'deployment-flow') return
+
+    try {
+      if (item.sequence) {
+        onOpenWorkbenchCanvas?.(item.sequence)
+        return
+      }
+
+      const project = await createProjectIndex(item.name, item.templatePath ?? '')
+      onOpenWorkbenchCanvas?.(project.sequence)
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   return (
@@ -580,7 +657,7 @@ export default function TemplateWorkbench({
         />
 
         <QuickActions
-          onCreateProject={onCreateProject}
+          onCreateProject={createDeploymentProject}
           onCreateFolder={onCreateFolder}
           onUploadProject={onUploadProject}
         />

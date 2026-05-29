@@ -13,6 +13,7 @@ import Settings from './pages/Settings'
 import Misc from './pages/Misc'
 import ComponentDownload from './pages/ComponentDownload'
 import TemplateWorkbench from './pages/TemplateWorkbench'
+import DeploymentFlowWorkbench from './pages/DeploymentFlowWorkbench'
 import AuthPortal from './components/auth/AuthPortal'
 import AccessGuard from './components/ui/AccessGuard'
 import { NotificationProvider, useNotification } from './components/ui/Notification'
@@ -52,6 +53,7 @@ export const pageRoutes = {
   settings: '/settings',
   'component-download': '/component-download',
   'template-workbench': '/template-workbench',
+  'workbench-canvas': '/workbench-canvas',
 } as const satisfies Record<Page, `/${string}`>
 
 const pageByRoute = Object.fromEntries(
@@ -67,11 +69,12 @@ function normalizeRouteSearch(search: Record<string, unknown>): SubPageParams | 
   if (isOneOf(search.miscTab, miscTabs)) params.miscTab = search.miscTab
   if (isOneOf(search.configAction, configActions)) params.configAction = search.configAction
   if (isOneOf(search.logSource, logSources)) params.logSource = search.logSource
+  if (typeof search.sequence === 'string') params.sequence = search.sequence
   return Object.keys(params).length ? params : undefined
 }
 
 function paramsKey(params?: SubPageParams) {
-  return `${params?.miscTab ?? ''}|${params?.configAction ?? ''}|${params?.logSource ?? ''}`
+  return `${params?.miscTab ?? ''}|${params?.configAction ?? ''}|${params?.logSource ?? ''}|${params?.sequence ?? ''}`
 }
 
 function routeSearch(params?: SubPageParams) {
@@ -79,12 +82,20 @@ function routeSearch(params?: SubPageParams) {
     ...(params?.miscTab ? { miscTab: params.miscTab } : {}),
     ...(params?.configAction ? { configAction: params.configAction } : {}),
     ...(params?.logSource ? { logSource: params.logSource } : {}),
+    ...(params?.sequence ? { sequence: params.sequence } : {}),
   }
 }
 
 function resolveRoutePage(pathname: string): Page {
   const normalized = pathname === '/' ? '/' : `/${pathname.replace(/^\/+|\/+$/g, '')}`
+  if (normalized.startsWith('/workbench-canvas/')) return 'workbench-canvas'
   return pageByRoute[normalized] ?? 'home'
+}
+
+function resolveWorkbenchCanvasSequence(pathname: string, search: Record<string, unknown>): string | undefined {
+  const match = pathname.match(/^\/?workbench-canvas\/([^/?#]+)/)
+  if (match?.[1]) return decodeURIComponent(match[1])
+  return typeof search.sequence === 'string' ? search.sequence : undefined
 }
 
 let tabCounter = 1
@@ -159,6 +170,7 @@ function PageContent({
     case 'misc': return <Misc initialTab={params?.miscTab} onNavigate={onNavigate} />
     case 'component-download': return <ComponentDownload />
     case 'template-workbench': return <TemplateWorkbench onReturnToSource={onReturnFromWorkbench} />
+    case 'workbench-canvas': return <DeploymentFlowWorkbench projectSequence={params?.sequence} onBackToLibrary={() => onNavigate?.('template-workbench')} />
     default:
       return (
         <div className="flex items-center justify-center h-full">
@@ -351,7 +363,12 @@ function AppRootRoute() {
 function RoutedAppShell() {
   const location = useRouterState({ select: state => state.location })
   const routePage = resolveRoutePage(location.pathname)
-  const routeParams = normalizeRouteSearch(location.search as Record<string, unknown>)
+  const routeSearchParams = location.search as Record<string, unknown>
+  const routeParams = normalizeRouteSearch(routeSearchParams)
+  if (routePage === 'workbench-canvas') {
+    const sequence = resolveWorkbenchCanvasSequence(location.pathname, routeSearchParams)
+    return <AppShell routePage={routePage} routeParams={{ ...routeParams, sequence }} />
+  }
   return <AppShell routePage={routePage} routeParams={routeParams} />
 }
 
@@ -366,8 +383,12 @@ const appPageRoutes = Object.entries(pageRoutes)
     getParentRoute: () => rootRoute,
     path: routePath.slice(1),
   }))
+const workbenchCanvasSequenceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'workbench-canvas/$sequence',
+})
 
-const routeTree = rootRoute.addChildren([indexRoute, ...appPageRoutes])
+const routeTree = rootRoute.addChildren([indexRoute, ...appPageRoutes, workbenchCanvasSequenceRoute])
 
 export const router = createRouter({
   routeTree,
@@ -412,8 +433,12 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
     navigateToPage(target.page, target.params)
   }, [navigateToPage])
 
+  const navigateToWorkbenchCanvas = useCallback((sequence: string) => {
+    void navigate({ to: '/workbench-canvas/$sequence', params: { sequence } } as never)
+  }, [navigate])
+
   useEffect(() => {
-    if (routePage !== 'template-workbench') {
+    if (routePage !== 'template-workbench' && routePage !== 'workbench-canvas') {
       workbenchReturnTarget.current = { page: routePage, params: routeParams }
     }
   }, [routePage, routeParams, routeParamsKey])
@@ -562,14 +587,24 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
             <DynamicBackground />
             <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
 
-            {currentUser && routePage === 'template-workbench' ? (
+            {currentUser && (routePage === 'template-workbench' || routePage === 'workbench-canvas') ? (
               <div className="relative z-10 h-full">
                 <AccessGuard
                   allowed={canAccessPage('template-workbench')}
                   className="h-full min-h-full"
                   detail={`${pageLabels['template-workbench']} 对当前 ${currentUser.role === 'guest' ? '访客' : '成员'} 模板未开放。`}
                 >
-                  <TemplateWorkbench onReturnToSource={handleReturnFromWorkbench} />
+                  {routePage === 'workbench-canvas' ? (
+                    <DeploymentFlowWorkbench
+                      projectSequence={routeParams?.sequence}
+                      onBackToLibrary={() => navigateToPage('template-workbench')}
+                    />
+                  ) : (
+                    <TemplateWorkbench
+                      onReturnToSource={handleReturnFromWorkbench}
+                      onOpenWorkbenchCanvas={navigateToWorkbenchCanvas}
+                    />
+                  )}
                 </AccessGuard>
               </div>
             ) : currentUser && (

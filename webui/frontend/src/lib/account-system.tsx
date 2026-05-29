@@ -287,6 +287,7 @@ export const PAGE_PERMISSION_ORDER: Page[] = [
   'logs',
   'misc',
   'template-workbench',
+  'workbench-canvas',
   'settings',
   'component-download',
 ]
@@ -303,6 +304,7 @@ export const PAGE_PERMISSION_LABELS: Record<Page, string> = {
   logs: '日志查看器',
   misc: '杂项',
   'template-workbench': '模板工作台',
+  'workbench-canvas': '工作台画布',
   settings: '设置',
   'component-download': '组件下载',
 }
@@ -393,6 +395,7 @@ function createDefaultRoleTemplates(): Record<'member' | 'guest', RolePermission
   memberPages.logs = true
   memberPages.misc = true
   memberPages['template-workbench'] = true
+  memberPages['workbench-canvas'] = true
   memberPages.settings = true
   memberPages['component-download'] = true
 

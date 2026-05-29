@@ -43,6 +43,13 @@ export interface OutlineNode {
 export interface DeploymentFlowWorkbenchProps {
   onBackToLibrary: () => void
   outline?: OutlineNode[]
+  projectSequence?: string
+}
+
+interface WorkbenchProjectInfo {
+  sequence: string
+  mod_name: string
+  path: string
 }
 
 const defaultOutline: OutlineNode[] = [
@@ -539,6 +546,7 @@ function WorkbenchLeftSidebar({
 export default function DeploymentFlowWorkbench({
   onBackToLibrary,
   outline = defaultOutline,
+  projectSequence,
 }: DeploymentFlowWorkbenchProps) {
   const [viewport, setViewport] = useState<WorkbenchViewport>({ scale: 1, x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
@@ -546,6 +554,7 @@ export default function DeploymentFlowWorkbench({
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(leftSidebarDefaultWidth)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
   const [rightSidebarWidth, setRightSidebarWidth] = useState(rightSidebarExpandedWidth)
+  const [projectInfo, setProjectInfo] = useState<WorkbenchProjectInfo | null>(null)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -555,6 +564,10 @@ export default function DeploymentFlowWorkbench({
     backgroundSize: `${grid.screenSpacing}px ${grid.screenSpacing}px`,
     backgroundPosition: `${positiveModulo(viewport.x, grid.screenSpacing)}px ${positiveModulo(viewport.y, grid.screenSpacing)}px`,
   }
+  const topTabs = useMemo(() => [{
+    id: 'workspace-0',
+    title: projectInfo?.mod_name || '未命名',
+  }], [projectInfo?.mod_name])
 
   const cancelViewportAnimation = () => {
     if (viewportAnimationFrameRef.current === null) return
@@ -596,6 +609,31 @@ export default function DeploymentFlowWorkbench({
   }
 
   useEffect(() => () => cancelViewportAnimation(), [])
+
+  useEffect(() => {
+    if (!projectSequence) {
+      setProjectInfo(null)
+      return
+    }
+
+    let cancelled = false
+    const loadProject = async () => {
+      try {
+        const response = await fetch(`/api/template-workbench/projects/${encodeURIComponent(projectSequence)}`, { credentials: 'include' })
+        if (!response.ok) throw new Error(`加载工作台项目失败: ${response.status}`)
+        const project = await response.json() as WorkbenchProjectInfo
+        if (!cancelled) setProjectInfo(project)
+      } catch (error) {
+        console.error(error)
+        if (!cancelled) setProjectInfo(null)
+      }
+    }
+
+    void loadProject()
+    return () => {
+      cancelled = true
+    }
+  }, [projectSequence])
 
   useEffect(() => {
     const workbench = workbenchRef.current
@@ -728,12 +766,14 @@ export default function DeploymentFlowWorkbench({
         onBackToLibrary={onBackToLibrary}
         leftBoundary={leftSidebarRight}
         rightReservedWidth={rightSidebarLeft}
+        initialTabs={topTabs}
       />
       <WorkbenchRightSidebar
         collapsed={rightSidebarCollapsed}
         width={rightSidebarWidth}
         onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
         onResize={setRightSidebarWidth}
+        selectedName={projectInfo?.mod_name || '初始化块'}
       />
       <WorkbenchBottomBar
         scale={viewport.scale}

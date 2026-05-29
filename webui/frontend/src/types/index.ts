@@ -1,4 +1,4 @@
-export type Page = 'home' | 'instances' | 'config' | 'knowledge' | 'db-migration' | 'plugins' | 'deploy' | 'status' | 'logs' | 'misc' | 'settings' | 'component-download' | 'template-workbench'
+export type Page = 'home' | 'instances' | 'config' | 'knowledge' | 'db-migration' | 'plugins' | 'deploy' | 'status' | 'logs' | 'misc' | 'settings' | 'component-download' | 'template-workbench' | 'workbench-canvas'
 export type MiscTab = 'about' | 'author' | 'tech' | 'libs' | 'license' | 'components' | 'webshell' | 'screensaver' | 'desktop-pet' | 'custom-console'
 
 // 子页面参数类型
@@ -6,6 +6,7 @@ export interface SubPageParams {
   miscTab?: MiscTab
   configAction?: 'edit' | 'open-config' | 'open-folder'
   logSource?: 'main' | 'webui' | 'desktop_pet'
+  sequence?: string
 }
 
 export interface Tab {

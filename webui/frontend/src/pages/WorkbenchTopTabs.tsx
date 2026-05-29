@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CircleX, House, Plus } from 'lucide-react'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
@@ -47,6 +47,12 @@ export default function WorkbenchTopTabs({
   const [activeId, setActiveId] = useState(initialTabs[0]?.id ?? '')
   const nextTabIndexRef = useRef(initialTabs.length)
   const tabsScrollerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    setTabs(initialTabs)
+    setActiveId(initialTabs[0]?.id ?? '')
+    nextTabIndexRef.current = initialTabs.length
+  }, [initialTabs])
   const tabsWidth = tabs.reduce((total, tab, index) => {
     return total + tabWidth(tab.title) + (index > 0 ? topTabsGap : 0)
   }, 0)
