@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from 'react'
+import { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -9,14 +9,22 @@ const fieldMaxCollapsedLines = 5
 
 export const rightSidebarExpandedWidth = 600
 export const rightSidebarCollapsedWidth = 70
+export const rightSidebarMinWidth = 200
+export const rightSidebarMaxWidth = 760
 
 export interface WorkbenchRightSidebarProps {
   collapsed: boolean
+  width: number
   onToggleCollapsed: () => void
+  onResize: (width: number) => void
   selectedName?: string
   initialAuthor?: string
   initialTags?: string[]
   initialDescription?: string
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
 }
 
 function TextAlignRightGlyph() {
@@ -144,7 +152,9 @@ function AutoGrowTextField({
 
 export default function WorkbenchRightSidebar({
   collapsed,
+  width,
   onToggleCollapsed,
+  onResize,
   selectedName = '初始化块',
   initialAuthor = 'MCStartTeam',
   initialTags = ['test'],
@@ -154,10 +164,46 @@ export default function WorkbenchRightSidebar({
   const [tagInput, setTagInput] = useState(`#${initialTags.join(' #')}`)
   const [tags, setTags] = useState(initialTags)
   const [description, setDescription] = useState(initialDescription)
+  const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
 
   const commitTags = () => {
     const parsedTags = parseTags(tagInput)
     if (parsedTags.length) setTags(parsedTags)
+  }
+
+  const startResize = (event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    resizeStartRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      width,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const resize = (event: PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current
+    if (!start || start.pointerId !== event.pointerId) return
+    const nextWidth = start.width + start.x - event.clientX
+    if (nextWidth < rightSidebarMinWidth - 24) {
+      resizeStartRef.current = null
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      onToggleCollapsed()
+      return
+    }
+    onResize(clamp(nextWidth, rightSidebarMinWidth, rightSidebarMaxWidth))
+  }
+
+  const stopResize = (event: PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current
+    if (!start || start.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    resizeStartRef.current = null
   }
 
   if (collapsed) {
@@ -198,7 +244,7 @@ export default function WorkbenchRightSidebar({
     <aside
       data-workbench-ui
       className="absolute right-0 top-0 z-20 h-full transition-[width] duration-150 ease-out"
-      style={{ width: rightSidebarExpandedWidth, color: 'var(--dfw-text)', fontFamily: font }}
+      style={{ width, color: 'var(--dfw-text)', fontFamily: font }}
     >
       <div
         className="absolute inset-0 border"
@@ -240,7 +286,7 @@ export default function WorkbenchRightSidebar({
       </button>
 
       <div className="absolute left-[19.5px] right-[20.5px] top-[102px] bottom-[24px] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex min-h-[954px] w-[560px] flex-col gap-[20px]">
+        <div className="flex min-h-[954px] min-w-[160px] flex-col gap-[20px]" style={{ width: Math.max(0, width - 40) }}>
           <section>
             <FieldLabel>作者</FieldLabel>
             <AutoGrowTextField
@@ -293,6 +339,15 @@ export default function WorkbenchRightSidebar({
           </div>
         </div>
       </div>
+      <div
+        className="absolute bottom-[30px] left-[-5px] top-[30px] w-[10px] cursor-ew-resize"
+        onPointerDown={startResize}
+        onPointerMove={resize}
+        onPointerUp={stopResize}
+        onPointerCancel={stopResize}
+        aria-label="调整右侧边栏宽度"
+        title="调整右侧边栏宽度"
+      />
     </aside>
   )
 }

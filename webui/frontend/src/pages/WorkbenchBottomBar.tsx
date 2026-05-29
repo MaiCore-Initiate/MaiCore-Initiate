@@ -7,6 +7,8 @@ const zoomOptions = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4]
 
 export interface WorkbenchBottomBarProps {
   scale: number
+  leftBoundary: number
+  rightReservedWidth: number
   collapsedLeft: number
   onScaleChange?: (scale: number) => void
   onAddNode?: () => void
@@ -34,6 +36,8 @@ function TextAlignCenterGlyph({ size = 30 }: { size?: number }) {
 
 export default function WorkbenchBottomBar({
   scale,
+  leftBoundary,
+  rightReservedWidth,
   collapsedLeft,
   onScaleChange,
   onAddNode,
@@ -47,28 +51,27 @@ export default function WorkbenchBottomBar({
   return (
     <div
       data-workbench-ui
-      className="absolute bottom-[30px] z-30 h-[61px] border transition-[left,width,max-width,border-radius,transform,background-color] duration-200 ease-out"
+      className="absolute bottom-[30px] z-30 h-[61px] transition-[left,right,width,max-width,transform] duration-200 ease-out"
       style={{
-        left: collapsed ? collapsedLeft : '50%',
-        width: collapsed ? 61 : 589,
-        maxWidth: collapsed ? 61 : 'calc(100% - 32px)',
-        transform: collapsed ? 'translateX(0) scale(1)' : 'translateX(-50%) scale(1)',
-        borderRadius: collapsed ? 999 : 30,
-        borderColor: 'var(--dfw-sidebar-border)',
-        background: 'var(--dfw-sidebar-bg)',
+        left: collapsed ? collapsedLeft : leftBoundary,
+        right: collapsed ? 'auto' : rightReservedWidth,
+        width: collapsed ? 61 : 'auto',
+        maxWidth: collapsed ? 61 : 'none',
+        transform: 'scale(1)',
         color: 'var(--dfw-text)',
         fontFamily: font,
-        overflow: zoomOpen && !collapsed ? 'visible' : 'hidden',
       }}
     >
       <button
         type="button"
         onClick={() => setCollapsed(false)}
-        className="absolute inset-0 flex items-center justify-center rounded-full transition-[opacity,transform,background-color] duration-150 hover:bg-[var(--dfw-control-hover)]"
+        className="absolute left-0 top-0 flex h-[61px] w-[61px] items-center justify-center rounded-full border transition-[opacity,transform,background-color] duration-150 hover:bg-[var(--dfw-control-hover)]"
         style={{
           opacity: collapsed ? 1 : 0,
           transform: collapsed ? 'scale(1)' : 'scale(0.72)',
           pointerEvents: collapsed ? 'auto' : 'none',
+          borderColor: 'var(--dfw-sidebar-border)',
+          background: 'var(--dfw-sidebar-bg)',
         }}
         aria-label="展开底栏"
         title="展开底栏"
@@ -77,12 +80,15 @@ export default function WorkbenchBottomBar({
       </button>
 
       <div
-        className="flex h-full w-full items-center px-[10px] transition-[opacity,transform] duration-150 ease-out"
+        className="mx-auto flex h-full w-[589px] max-w-full items-center overflow-hidden rounded-[30px] border px-[10px] transition-[opacity,transform,background-color] duration-150 ease-out"
         style={{
           opacity: collapsed ? 0 : 1,
           transform: collapsed ? 'scale(0.86)' : 'scale(1)',
-          transformOrigin: 'left center',
+          transformOrigin: 'center center',
           pointerEvents: collapsed ? 'none' : 'auto',
+          borderColor: 'var(--dfw-sidebar-border)',
+          background: 'var(--dfw-sidebar-bg)',
+          overflow: zoomOpen && !collapsed ? 'visible' : 'hidden',
         }}
         aria-hidden={collapsed}
       >

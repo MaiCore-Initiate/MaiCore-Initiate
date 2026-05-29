@@ -544,6 +544,7 @@ export default function DeploymentFlowWorkbench({
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(leftSidebarDefaultWidth)
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false)
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(rightSidebarExpandedWidth)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -695,7 +696,7 @@ export default function DeploymentFlowWorkbench({
   }
 
   const leftSidebarRight = leftSidebarCollapsed ? leftSidebarCollapsedWidth : leftSidebarWidth
-  const rightSidebarLeft = rightSidebarCollapsed ? rightSidebarCollapsedWidth : rightSidebarExpandedWidth
+  const rightSidebarLeft = rightSidebarCollapsed ? rightSidebarCollapsedWidth : rightSidebarWidth
 
   return (
     <div
@@ -728,10 +729,14 @@ export default function DeploymentFlowWorkbench({
       />
       <WorkbenchRightSidebar
         collapsed={rightSidebarCollapsed}
+        width={rightSidebarWidth}
         onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
+        onResize={setRightSidebarWidth}
       />
       <WorkbenchBottomBar
         scale={viewport.scale}
+        leftBoundary={leftSidebarRight}
+        rightReservedWidth={rightSidebarLeft}
         collapsedLeft={leftSidebarRight + 30}
         onScaleChange={setScaleFromBottomBar}
       />
