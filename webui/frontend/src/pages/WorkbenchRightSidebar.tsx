@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -14,6 +14,8 @@ export const rightSidebarMaxWidth = 760
 
 const runtimeOptions = ['powershell', 'pwsh', 'cmd', 'bash', 'python3', 'python', 'node', 'deno']
 const platformOptions = ['windows', 'linux', 'macos']
+
+let denoPermissionItemId = 0
 
 export interface WorkbenchModInfoMeta {
   author: string
@@ -392,11 +394,29 @@ function ConditionalField({
   show: boolean
   children: ReactNode
 }) {
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const [height, setHeight] = useState(0)
+
+  useLayoutEffect(() => {
+    const content = contentRef.current
+    if (!content) return
+
+    const updateHeight = () => {
+      setHeight(content.scrollHeight)
+    }
+
+    updateHeight()
+
+    const resizeObserver = new ResizeObserver(updateHeight)
+    resizeObserver.observe(content)
+    return () => resizeObserver.disconnect()
+  }, [])
+
   return (
     <div
-      className="grid transition-[grid-template-rows,opacity,transform,margin] duration-200 ease-out"
+      className="overflow-hidden transition-[height,opacity,transform,margin] duration-200 ease-out"
       style={{
-        gridTemplateRows: show ? '1fr' : '0fr',
+        height: show ? height : 0,
         opacity: show ? 1 : 0,
         transform: show ? 'translateY(0)' : 'translateY(-6px)',
         marginTop: show ? 0 : -18,
@@ -405,7 +425,7 @@ function ConditionalField({
       }}
       aria-hidden={!show}
     >
-      <div className="overflow-hidden">
+      <div ref={contentRef}>
         {children}
       </div>
     </div>
@@ -472,7 +492,17 @@ function ValueChips({ values }: { values: string[] }) {
   )
 }
 
-function reorderValues(values: string[], fromIndex: number, toIndex: number) {
+interface DenoPermissionItem {
+  id: string
+  value: string
+}
+
+function createDenoPermissionItem(value: string): DenoPermissionItem {
+  denoPermissionItemId += 1
+  return { id: `deno-permission-${denoPermissionItemId}`, value }
+}
+
+function reorderItems<T>(values: T[], fromIndex: number, toIndex: number) {
   if (fromIndex === toIndex) return values
   const next = [...values]
   const [moved] = next.splice(fromIndex, 1)
@@ -549,26 +579,79 @@ function DenoPermissionListField({
   maxWidth: number
 }) {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
-  const valuesRef = useRef(values)
+  const [items, setItems] = useState<DenoPermissionItem[]>(() => values.map(createDenoPermissionItem))
+  const itemsRef = useRef(items)
+  const rowRefs = useRef(new Map<string, HTMLDivElement>())
+  const previousRectsRef = useRef<Map<string, DOMRect> | null>(null)
   const dragRef = useRef<{ pointerId: number; index: number; active: boolean; timer: number } | null>(null)
 
   useEffect(() => {
-    valuesRef.current = values
+    setItems(currentItems => {
+      const currentValues = currentItems.map(item => item.value)
+      if (arraysEqual(currentValues, values)) return currentItems
+
+      const nextItems = values.map((value, index) => ({
+        id: currentItems[index]?.id ?? createDenoPermissionItem(value),
+        value,
+      }))
+      itemsRef.current = nextItems
+      return nextItems
+    })
   }, [values])
 
-  const commitValues = (nextValues: string[]) => {
-    valuesRef.current = nextValues
-    onChange(nextValues)
+  useLayoutEffect(() => {
+    const previousRects = previousRectsRef.current
+    if (!previousRects) return
+
+    for (const item of items) {
+      const element = rowRefs.current.get(item.id)
+      const previousRect = previousRects.get(item.id)
+      if (!element || !previousRect) continue
+
+      const currentRect = element.getBoundingClientRect()
+      const deltaY = previousRect.top - currentRect.top
+      if (Math.abs(deltaY) < 1) continue
+
+      element.animate(
+        [
+          { transform: `translateY(${deltaY}px)` },
+          { transform: 'translateY(0)' },
+        ],
+        {
+          duration: 180,
+          easing: 'cubic-bezier(0.2, 0, 0, 1)',
+        },
+      )
+    }
+
+    previousRectsRef.current = null
+  }, [items])
+
+  const captureRowRects = () => {
+    const rects = new Map<string, DOMRect>()
+    for (const item of itemsRef.current) {
+      const element = rowRefs.current.get(item.id)
+      if (element) rects.set(item.id, element.getBoundingClientRect())
+    }
+    previousRectsRef.current = rects
+  }
+
+  const commitItems = (nextItems: DenoPermissionItem[], animate = false) => {
+    if (animate) captureRowRects()
+    itemsRef.current = nextItems
+    setItems(nextItems)
+    onChange(nextItems.map(item => item.value))
   }
 
   const addPermission = () => {
-    commitValues([...valuesRef.current, ''])
+    commitItems([...itemsRef.current, createDenoPermissionItem('')], true)
   }
 
   const updatePermission = (index: number, nextValue: string) => {
-    const nextValues = [...valuesRef.current]
-    nextValues[index] = nextValue
-    commitValues(nextValues)
+    const nextItems = itemsRef.current.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, value: nextValue } : item
+    ))
+    commitItems(nextItems)
   }
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
@@ -598,10 +681,10 @@ function DenoPermissionListField({
     if (!target) return
 
     const targetIndex = Number(target.dataset.denoPermissionIndex)
-    if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= valuesRef.current.length) return
+    if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= itemsRef.current.length) return
     if (targetIndex === drag.index) return
 
-    commitValues(reorderValues(valuesRef.current, drag.index, targetIndex))
+    commitItems(reorderItems(itemsRef.current, drag.index, targetIndex), true)
     drag.index = targetIndex
   }
 
@@ -640,13 +723,17 @@ function DenoPermissionListField({
       </div>
 
       <div className="mt-[8px] flex max-w-full flex-col gap-[8px]" style={{ width: maxWidth }}>
-        {values.map((value, index) => {
+        {items.map((item, index) => {
           const focused = focusedIndex === index
           return (
             <div
-              key={`${index}-${values.length}`}
+              key={item.id}
+              ref={node => {
+                if (node) rowRefs.current.set(item.id, node)
+                else rowRefs.current.delete(item.id)
+              }}
               data-deno-permission-index={index}
-              className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color,transform] duration-150"
+              className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
               style={{
                 borderColor: focused ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
                 background: focused ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
@@ -667,7 +754,7 @@ function DenoPermissionListField({
                 ⠿
               </button>
               <DenoPermissionInput
-                value={value}
+                value={item.value}
                 onChange={nextValue => updatePermission(index, nextValue)}
                 onFocus={() => setFocusedIndex(index)}
                 onBlur={() => setFocusedIndex(current => (current === index ? null : current))}
