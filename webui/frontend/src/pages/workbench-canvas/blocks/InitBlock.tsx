@@ -58,6 +58,7 @@ export default function InitBlock({
   size,
   selected,
   onSelect,
+  onAddConnectorClick,
   meta,
   dragHandlers,
   resizeHandlers,
@@ -66,6 +67,7 @@ export default function InitBlock({
   size: WorkbenchSize
   selected: boolean
   onSelect?: () => void
+  onAddConnectorClick?: () => void
   meta: WorkbenchBlockMeta
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
@@ -149,7 +151,15 @@ export default function InitBlock({
         }}
         onPointerDown={event => event.stopPropagation()}
       />
-      <g transform={`translate(${connectorX} ${connectorY})`}>
+      <g
+        transform={`translate(${connectorX} ${connectorY})`}
+        className="cursor-pointer"
+        onClick={event => {
+          event.stopPropagation()
+          onAddConnectorClick?.()
+        }}
+        onPointerDown={event => event.stopPropagation()}
+      >
         <AddConnectorButton />
       </g>
       <InputPort />

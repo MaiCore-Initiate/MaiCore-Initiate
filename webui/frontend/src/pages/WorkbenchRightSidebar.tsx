@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import type { WorkbenchBlockId } from './workbench-canvas/types'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -77,7 +78,7 @@ export interface WorkbenchRightSidebarProps {
   onToggleCollapsed: () => void
   onResize: (width: number) => void
   selectedName?: string
-  selectedBlockId?: 'start' | 'init' | null
+  selectedBlockId?: WorkbenchBlockId | null
   meta?: WorkbenchModInfoMeta
   onMetaPatch?: (patch: Partial<WorkbenchModInfoMeta>) => void
 }
@@ -1199,7 +1200,7 @@ export default function WorkbenchRightSidebar({
             className="min-w-[160px] pt-[2px] text-[20px] font-light leading-[34px]"
             style={{ width: Math.max(0, width - 40), fontFamily: font }}
           >
-            {selectedBlockId === 'start' ? '起始端点暂无可编辑配置' : '未选中积木'}
+            {selectedBlockId ? `${selectedName}暂无可编辑配置` : '未选中积木'}
           </div>
         )}
       </div>

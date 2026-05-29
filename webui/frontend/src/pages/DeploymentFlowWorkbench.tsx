@@ -26,6 +26,7 @@ const bottomBarZoomAnimationMs = 180
 const blockNames: Record<WorkbenchBlockId, string> = {
   start: '起始端点',
   init: '初始化块',
+  components: '[COMPONENTS]',
 }
 
 type WorkbenchViewport = { scale: number; x: number; y: number }

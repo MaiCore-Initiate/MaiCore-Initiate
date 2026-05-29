@@ -52,7 +52,7 @@ export interface WorkbenchCanvasProps {
   blockMeta?: Partial<WorkbenchBlockMeta>
 }
 
-export type WorkbenchBlockId = 'start' | 'init'
+export type WorkbenchBlockId = 'start' | 'init' | 'components'
 
 export interface WorkbenchBlockDragHandlers {
   onHeaderPointerDown?: (event: PointerEvent<SVGGElement>) => void
