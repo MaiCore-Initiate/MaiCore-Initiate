@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ArrowLeft, Plus } from 'lucide-react'
 import WorkbenchBottomBar from './WorkbenchBottomBar'
-import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth } from './WorkbenchRightSidebar'
+import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
 import type { WorkbenchBlockId } from './workbench-canvas/types'
@@ -57,20 +57,62 @@ interface WorkbenchProjectInfo {
   path: string
 }
 
-interface WorkbenchMetaState {
-  author: string
-  tags: string[]
-  description: string
-  templateId: string
-  templateName: string
-}
+type WorkbenchMetaState = WorkbenchModInfoMeta
 
 const defaultWorkbenchMeta: WorkbenchMetaState = {
-  author: 'MCStartTeam',
-  tags: ['test'],
-  description: '这是一个基于MCStart...',
-  templateId: 'MaiCore-Start.Deplo...',
-  templateName: '示例部署模组',
+  author: '',
+  tags: [],
+  description: '',
+  modId: '',
+  modName: '',
+  version: '',
+  minVersion: '',
+  maxVersion: '',
+  fileImport: null,
+  fileImportList: [],
+  runtime: '',
+  platforms: [],
+  schemaVersion: '',
+}
+
+function formatTomlString(value: string) {
+  return value ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : ''
+}
+
+function formatTomlArray(values: string[]) {
+  return `[${values.map(formatTomlString).join(', ')}]`
+}
+
+function createStringArrayOutlineNode(id: string, fieldName: string, values: string[], defaultExpanded = false): OutlineNode {
+  return {
+    id,
+    label: `${fieldName} = ${values.length ? formatTomlArray(values) : ''}`,
+    icon: 'array',
+    defaultExpanded,
+    children: values.map((value, index) => ({
+      id: `${id}-${index}`,
+      label: `${index} = ${formatTomlString(value)}`,
+      icon: 'string' as const,
+    })),
+  }
+}
+
+function createModInfoOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
+  return [
+    { id: 'modinfo-author', label: `author = ${formatTomlString(meta.author)}`, icon: 'string' },
+    createStringArrayOutlineNode('modinfo-tags', 'tags', meta.tags, true),
+    { id: 'modinfo-description', label: `description = ${formatTomlString(meta.description)}`, icon: 'string' },
+    { id: 'modinfo-mod-id', label: `mod_id = ${formatTomlString(meta.modId)}`, icon: 'string' },
+    { id: 'modinfo-mod-name', label: `mod_name = ${formatTomlString(meta.modName)}`, icon: 'string' },
+    { id: 'modinfo-version', label: `version = ${formatTomlString(meta.version)}`, icon: 'string' },
+    { id: 'modinfo-min-version', label: `min_version = ${formatTomlString(meta.minVersion)}`, icon: 'string' },
+    { id: 'modinfo-max-version', label: `max_version = ${formatTomlString(meta.maxVersion)}`, icon: 'string' },
+    { id: 'modinfo-file-import', label: `file_import = ${meta.fileImport === null ? '' : meta.fileImport ? 'true' : 'false'}`, icon: 'boolean' },
+    createStringArrayOutlineNode('modinfo-file-import-list', 'file_import_list', meta.fileImportList),
+    { id: 'modinfo-runtime', label: `runtime = ${formatTomlString(meta.runtime)}`, icon: 'string' },
+    createStringArrayOutlineNode('modinfo-platforms', 'platforms', meta.platforms, true),
+    { id: 'modinfo-schema-version', label: `schema_version = ${formatTomlString(meta.schemaVersion)}`, icon: 'string' },
+  ]
 }
 
 const defaultOutline: OutlineNode[] = [
@@ -87,18 +129,7 @@ const defaultOutline: OutlineNode[] = [
     id: 'modinfo',
     label: '[MODINFO]',
     defaultExpanded: true,
-    children: [
-      { id: 'modinfo-author', label: 'author = "MCStartTeam"', icon: 'string' },
-      {
-        id: 'modinfo-tags',
-        label: 'tags',
-        icon: 'array',
-        defaultExpanded: true,
-        children: [
-          { id: 'modinfo-tags-0', label: '0 = "test"', icon: 'string', defaultSelected: true },
-        ],
-      },
-    ],
+    children: createModInfoOutlineChildren(defaultWorkbenchMeta),
   },
   {
     id: 'components',
@@ -144,21 +175,7 @@ function createOutline(meta: WorkbenchMetaState): OutlineNode[] {
       id: 'modinfo',
       label: '[MODINFO]',
       defaultExpanded: true,
-      children: [
-        { id: 'modinfo-author', label: `author = "${meta.author}"`, icon: 'string' },
-        {
-          id: 'modinfo-tags',
-          label: 'tags',
-          icon: 'array',
-          defaultExpanded: true,
-          children: meta.tags.length
-            ? meta.tags.map((tag, index) => ({ id: `modinfo-tags-${index}`, label: `${index} = "${tag}"`, icon: 'string' as const }))
-            : [{ id: 'modinfo-tags-empty', label: '0 = ""', icon: 'string' }],
-        },
-        { id: 'modinfo-description', label: `description = "${meta.description}"`, icon: 'string' },
-        { id: 'modinfo-template-id', label: `template_id = "${meta.templateId}"`, icon: 'string' },
-        { id: 'modinfo-template-name', label: `template_name = "${meta.templateName}"`, icon: 'string' },
-      ],
+      children: createModInfoOutlineChildren(meta),
     },
     ...defaultOutline.slice(2),
   ]
@@ -637,10 +654,18 @@ export default function DeploymentFlowWorkbench({
   const effectiveOutline = useMemo(() => outline ?? createOutline(meta), [outline, meta])
   const blockMeta = useMemo(() => ({
     author: meta.author,
-    tags: meta.tags.join(' '),
+    tags: meta.tags,
     description: meta.description,
-    templateId: meta.templateId,
-    templateName: meta.templateName,
+    modId: meta.modId,
+    modName: meta.modName,
+    version: meta.version,
+    minVersion: meta.minVersion,
+    maxVersion: meta.maxVersion,
+    fileImport: meta.fileImport,
+    fileImportList: meta.fileImportList,
+    runtime: meta.runtime,
+    platforms: meta.platforms,
+    schemaVersion: meta.schemaVersion,
   }), [meta])
 
   const cancelViewportAnimation = () => {
@@ -700,8 +725,8 @@ export default function DeploymentFlowWorkbench({
           setProjectInfo(project)
           setMeta(prev => ({
             ...prev,
-            templateName: project.mod_name || prev.templateName,
-            templateId: project.path ? project.path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || prev.templateId : prev.templateId,
+            modName: project.mod_name || prev.modName,
+            modId: project.path ? project.path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || prev.modId : prev.modId,
           }))
         }
       } catch (error) {
@@ -860,12 +885,8 @@ export default function DeploymentFlowWorkbench({
         onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
         onResize={setRightSidebarWidth}
         selectedName={selectedBlockId ? blockNames[selectedBlockId] : '无'}
-        author={meta.author}
-        tags={meta.tags}
-        description={meta.description}
-        onAuthorChange={author => setMeta(prev => ({ ...prev, author }))}
-        onTagsChange={tags => setMeta(prev => ({ ...prev, tags }))}
-        onDescriptionChange={description => setMeta(prev => ({ ...prev, description }))}
+        meta={meta}
+        onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
       />
       <WorkbenchBottomBar
         scale={viewport.scale}

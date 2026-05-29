@@ -5,17 +5,25 @@ import StartEndpointBlock from './blocks/StartEndpointBlock'
 import { workbenchCanvasFont, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize } from './types'
 
 const defaultBlockMeta: WorkbenchBlockMeta = {
-  author: 'MCStartTeam',
-  tags: 'test',
-  description: '这是一个基于MCStart...',
-  templateId: 'MaiCore-Start.Deplo...',
-  templateName: '示例部署模组',
+  author: '',
+  tags: [],
+  description: '',
+  modId: '',
+  modName: '',
+  version: '',
+  minVersion: '',
+  maxVersion: '',
+  fileImport: null,
+  fileImportList: [],
+  runtime: '',
+  platforms: [],
+  schemaVersion: '',
 }
 
 const initBlockInputOffset: WorkbenchPoint = { x: 5, y: 115.5 }
 const startEndpointOutputOffset: WorkbenchPoint = { x: 95.711, y: 70.711 }
 const longPressMs = 220
-const initBlockMinSize: WorkbenchSize = { width: 301, height: 221 }
+const initBlockMinSize: WorkbenchSize = { width: 421, height: 431 }
 type DraggableBlockId = 'init' | 'start'
 
 export default function WorkbenchCanvas({

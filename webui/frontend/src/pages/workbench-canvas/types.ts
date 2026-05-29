@@ -10,10 +10,18 @@ export interface WorkbenchCanvasViewport {
 
 export interface WorkbenchBlockMeta {
   author: string
-  tags: string
+  tags: string[]
   description: string
-  templateId: string
-  templateName: string
+  modId: string
+  modName: string
+  version: string
+  minVersion: string
+  maxVersion: string
+  fileImport: boolean | null
+  fileImportList: string[]
+  runtime: string
+  platforms: string[]
+  schemaVersion: string
 }
 
 export interface WorkbenchPoint {

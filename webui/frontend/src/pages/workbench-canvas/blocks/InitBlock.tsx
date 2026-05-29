@@ -25,17 +25,32 @@ function TextLine({
   y,
   label,
   value,
+  clipId,
 }: {
   y: number
   label: string
   value: string
+  clipId: string
 }) {
   return (
-    <text x="15" y={y} fontSize="20" fontFamily={workbenchCanvasFont} fontWeight="500">
+    <text x="15" y={y} fontSize="18" fontFamily={workbenchCanvasFont} fontWeight="500" clipPath={`url(#${clipId})`}>
       <tspan>{label}</tspan>
       <tspan fontWeight="300">{value}</tspan>
     </text>
   )
+}
+
+function formatTomlString(value: string) {
+  return value ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : ''
+}
+
+function formatTomlArray(values: string[]) {
+  return values.length ? `[${values.map(value => formatTomlString(value)).join(', ')}]` : ''
+}
+
+function formatTomlBoolean(value: boolean | null) {
+  if (value === null) return ''
+  return value ? 'true' : 'false'
 }
 
 export default function InitBlock({
@@ -64,6 +79,22 @@ export default function InitBlock({
   const headerWidth = bodyWidth
   const connectorX = bodyX + bodyWidth
   const connectorY = bodyY + bodyHeight / 2 - 12
+  const contentClipId = 'dfw-init-block-content-clip'
+  const rows = [
+    { label: 'author = ', value: formatTomlString(meta.author) },
+    { label: 'tags = ', value: formatTomlArray(meta.tags) },
+    { label: 'description = ', value: formatTomlString(meta.description) },
+    { label: 'mod_id = ', value: formatTomlString(meta.modId) },
+    { label: 'mod_name = ', value: formatTomlString(meta.modName) },
+    { label: 'version = ', value: formatTomlString(meta.version) },
+    { label: 'min_version = ', value: formatTomlString(meta.minVersion) },
+    { label: 'max_version = ', value: formatTomlString(meta.maxVersion) },
+    { label: 'file_import = ', value: formatTomlBoolean(meta.fileImport) },
+    { label: 'file_import_list = ', value: formatTomlArray(meta.fileImportList) },
+    { label: 'runtime = ', value: formatTomlString(meta.runtime) },
+    { label: 'platforms = ', value: formatTomlArray(meta.platforms) },
+    { label: 'schema_version = ', value: formatTomlString(meta.schemaVersion) },
+  ]
 
   return (
     <g transform={`translate(${position.x} ${position.y})`}>
@@ -72,13 +103,21 @@ export default function InitBlock({
       )}
       <rect x={bodyX} y={bodyY} width={bodyWidth} height={bodyHeight} rx="30" fill="var(--dfw-bg)" stroke="currentColor" strokeWidth="2" />
       <path d={`M30,0H${headerWidth - 30}a30,30,0,0,1,30,30V53H0V30A30,30,0,0,1,30,0Z`} transform="translate(5 5)" fill="var(--dfw-bg)" stroke="currentColor" strokeWidth="2" />
+      <defs>
+        <clipPath id={contentClipId}>
+          <rect x="15" y="64" width={bodyWidth - 30} height={bodyHeight - 84} />
+        </clipPath>
+      </defs>
       <text x="20" y="42" fontSize="25" fontFamily={workbenchCanvasFont} fontWeight="500">初始化块</text>
-      <TextLine y={89} label="作者：" value={meta.author} />
-      <TextLine y={115} label="标签 ： " value={meta.tags} />
-      <TextLine y={141} label="描述 ： " value={meta.description} />
-      <TextLine y={167} label="模板ID ： " value={meta.templateId} />
-      <TextLine y={193} label="模板名 ： " value={meta.templateName} />
-      <text x="21" y="211" fontSize="20" fontFamily={workbenchCanvasFont} fontWeight="500">......</text>
+      {rows.map((row, index) => (
+        <TextLine
+          key={row.label}
+          y={89 + index * 24}
+          label={row.label}
+          value={row.value}
+          clipId={contentClipId}
+        />
+      ))}
       <g transform={`translate(${connectorX} ${connectorY})`}>
         <AddConnectorButton />
       </g>
