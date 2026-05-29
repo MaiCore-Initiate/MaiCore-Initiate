@@ -60,10 +60,9 @@ const defaultOutline: OutlineNode[] = [
         icon: 'array',
         defaultExpanded: true,
         children: [
-          { id: 'modinfo-tags-0', label: '0 = "test"', icon: 'string', defaultSelected: true },
+          { id: 'modinfo-tags-0', label: '0 = "test"', icon: 'number', defaultSelected: true },
         ],
       },
-      { id: 'modinfo-more', label: '......', selectable: false, tone: 'note' },
     ],
   },
   {
@@ -78,8 +77,8 @@ const defaultOutline: OutlineNode[] = [
         label: 'list',
         icon: 'array',
         children: [
-          { id: 'components-list-0', label: '0', icon: 'object' },
-          { id: 'components-list-1', label: '1', icon: 'object' },
+          { id: 'components-list-0', label: '0', icon: 'number' },
+          { id: 'components-list-1', label: '1', icon: 'number' },
         ],
       },
     ],
@@ -89,17 +88,9 @@ const defaultOutline: OutlineNode[] = [
     label: '[[Component]]',
     defaultExpanded: true,
     children: [
-      { id: 'component-array-0', label: '0', icon: 'object' },
-      { id: 'component-array-1', label: '1', icon: 'object' },
+      { id: 'component-array-0', label: '0', icon: 'number' },
+      { id: 'component-array-1', label: '1', icon: 'number' },
     ],
-  },
-  { id: 'outline-more', label: '......', selectable: false, tone: 'note' },
-  {
-    id: 'outline-note-number',
-    label: '特殊说明，数字键的图标是',
-    trailingIcon: 'number',
-    selectable: false,
-    tone: 'note',
   },
 ]
 
@@ -155,17 +146,52 @@ function firstSelectableNode(nodes: OutlineNode[]): string {
   return ''
 }
 
+interface FlattenedOutlineNode {
+  node: OutlineNode
+  depth: number
+  hasChildren: boolean
+  expanded: boolean
+}
+
+interface OutlineLineSegment {
+  id: string
+  depth: number
+  startIndex: number
+  endIndex: number
+}
+
 function flattenOutline(
   nodes: OutlineNode[],
   expanded: Set<string>,
   depth = 0,
-): Array<{ node: OutlineNode; depth: number; hasChildren: boolean; expanded: boolean }> {
+): FlattenedOutlineNode[] {
   return nodes.flatMap(node => {
     const hasChildren = Boolean(node.children?.length)
     const isExpanded = hasChildren && expanded.has(node.id)
     const current = [{ node, depth, hasChildren, expanded: isExpanded }]
     if (!isExpanded || !node.children) return current
     return [...current, ...flattenOutline(node.children, expanded, depth + 1)]
+  })
+}
+
+function collectOutlineLineSegments(flatNodes: FlattenedOutlineNode[]): OutlineLineSegment[] {
+  return flatNodes.flatMap((item, index) => {
+    if (!item.expanded) return []
+
+    let lastDescendantIndex = index
+    for (let nextIndex = index + 1; nextIndex < flatNodes.length; nextIndex += 1) {
+      if (flatNodes[nextIndex].depth <= item.depth) break
+      lastDescendantIndex = nextIndex
+    }
+
+    if (lastDescendantIndex === index) return []
+
+    return [{
+      id: `${item.node.id}-outline-line`,
+      depth: item.depth,
+      startIndex: index + 1,
+      endIndex: lastDescendantIndex,
+    }]
   })
 }
 
@@ -274,6 +300,7 @@ function OutlineTree({
   const [expanded, setExpanded] = useState(() => collectDefaultExpanded(nodes))
   const [selectedId, setSelectedId] = useState(() => firstSelectableNode(nodes))
   const flatNodes = useMemo(() => flattenOutline(nodes, expanded), [nodes, expanded])
+  const lineSegments = useMemo(() => collectOutlineLineSegments(flatNodes), [flatNodes])
   const rowWidth = Math.max(0, sidebarWidth - 27)
   const selectedWidth = Math.max(0, sidebarWidth - 40)
 
@@ -296,6 +323,20 @@ function OutlineTree({
       </span>
 
       <div className="absolute left-0 right-0 top-[45px] bottom-0 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 z-10" aria-hidden>
+          {lineSegments.map(segment => (
+            <span
+              key={segment.id}
+              className="absolute w-px transition-[top,height,opacity] duration-150 ease-out"
+              style={{
+                left: outlineBaseCaretLeft + 8 + segment.depth * outlineIndent,
+                top: segment.startIndex * outlineRowHeight,
+                height: Math.max(0, (segment.endIndex - segment.startIndex + 1) * outlineRowHeight - 2),
+                background: 'var(--dfw-text)',
+              }}
+            />
+          ))}
+        </div>
         {flatNodes.map(({ node, depth, hasChildren, expanded: isExpanded }, index) => {
           const depthOffset = depth * outlineIndent
           const iconLeft = outlineBaseIconLeft + depthOffset
@@ -334,7 +375,7 @@ function OutlineTree({
               )}
               {hasChildren && (
                 <span
-                  className="absolute top-[4px] flex h-[16px] w-[16px] items-center justify-center transition-transform duration-150 ease-out"
+                  className="absolute top-[4px] z-20 flex h-[16px] w-[16px] items-center justify-center transition-transform duration-150 ease-out"
                   style={{
                     left: outlineBaseCaretLeft + depthOffset,
                     transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
@@ -346,12 +387,12 @@ function OutlineTree({
                 </span>
               )}
               {node.icon && (
-                <span className="absolute top-[2px] flex h-[20px] w-[20px] items-center justify-center" style={{ left: iconLeft }}>
+                <span className="absolute top-[2px] z-20 flex h-[20px] w-[20px] items-center justify-center" style={{ left: iconLeft }}>
                   <OutlineTypeIcon type={node.icon} />
                 </span>
               )}
               <span
-                className="absolute top-0 block h-[24px] overflow-hidden text-ellipsis whitespace-nowrap leading-[24px]"
+                className="absolute top-0 z-20 block h-[24px] overflow-hidden text-ellipsis whitespace-nowrap leading-[24px]"
                 style={{
                   left: textLeft,
                   right: node.trailingIcon ? 32 : 4,
@@ -363,7 +404,7 @@ function OutlineTree({
                 {node.label}
               </span>
               {node.trailingIcon && (
-                <span className="absolute right-[14px] top-[2px] flex h-[20px] w-[20px] items-center justify-center">
+                <span className="absolute right-[14px] top-[2px] z-20 flex h-[20px] w-[20px] items-center justify-center">
                   <OutlineTypeIcon type={node.trailingIcon} />
                 </span>
               )}
