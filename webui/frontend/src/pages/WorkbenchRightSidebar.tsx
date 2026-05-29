@@ -99,7 +99,21 @@ function arraysEqual(left: string[], right: string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
+let textMeasureContext: CanvasRenderingContext2D | null | undefined
+
+function getTextMeasureContext() {
+  if (textMeasureContext !== undefined) return textMeasureContext
+  if (typeof document === 'undefined') return null
+  const canvas = document.createElement('canvas')
+  textMeasureContext = canvas.getContext('2d')
+  if (textMeasureContext) textMeasureContext.font = `300 20px ${font}`
+  return textMeasureContext
+}
+
 function measureTextWidth(value: string) {
+  const context = getTextMeasureContext()
+  if (context) return Math.ceil(context.measureText(value || ' ').width)
+
   let width = 0
 
   for (const char of value || ' ') {
@@ -109,15 +123,30 @@ function measureTextWidth(value: string) {
   return width
 }
 
+function countWrappedLines(value: string, textWidth: number) {
+  let lines = 1
+  let lineWidth = 0
+
+  for (const char of Array.from(value || ' ')) {
+    const charWidth = measureTextWidth(char)
+    if (lineWidth > 0 && lineWidth + charWidth > textWidth) {
+      lines += 1
+      lineWidth = charWidth
+    } else {
+      lineWidth += charWidth
+    }
+  }
+
+  return lines
+}
+
 function resolveFieldMetrics(value: string, maxWidth = fieldMaxWidth) {
   const lines = value.split('\n')
   const longestLineWidth = Math.max(...lines.map(line => measureTextWidth(line)))
   const desiredWidth = longestLineWidth + 30
   const width = Math.min(maxWidth, Math.max(fieldMinWidth, desiredWidth))
   const textWidth = Math.max(1, width - 20)
-  const wrappedLines = lines.reduce((total, line) => {
-    return total + Math.max(1, Math.ceil(measureTextWidth(line) / textWidth))
-  }, 0)
+  const wrappedLines = lines.reduce((total, line) => total + countWrappedLines(line, textWidth), 0)
 
   return { width, lines: wrappedLines }
 }
@@ -254,24 +283,83 @@ function RuntimeSelectField({
   value: string
   onChange: (value: string) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const options = ['', ...runtimeOptions]
+  const displayValue = value || '空白'
+
   return (
-    <select
-      value={value}
-      onChange={event => onChange(event.target.value)}
-      className="h-[42px] max-w-full rounded-[21px] border bg-transparent px-[14px] text-[20px] font-light outline-none transition-colors focus:border-[var(--dfw-blue)]"
-      style={{
-        width: fieldMinWidth,
-        borderColor: 'var(--dfw-sidebar-border)',
-        color: 'var(--dfw-text)',
-        fontFamily: font,
+    <div
+      className="relative w-[190px] max-w-full"
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false)
+        }
       }}
-      aria-label="运行时"
     >
-      <option value="">空白</option>
-      {runtimeOptions.map(option => (
-        <option key={option} value={option}>{option}</option>
-      ))}
-    </select>
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        className="flex h-[42px] w-full items-center justify-between rounded-[21px] border px-[14px] text-[20px] font-light outline-none transition-colors hover:bg-[var(--dfw-control-hover)] focus:border-[var(--dfw-blue)]"
+        style={{
+          borderColor: open ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+          background: open ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+          color: 'var(--dfw-text)',
+          fontFamily: font,
+        }}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label="运行时"
+      >
+        <span className="overflow-hidden whitespace-nowrap">{displayValue}</span>
+        <svg
+          className="ml-[8px] shrink-0 transition-transform duration-150"
+          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden
+        >
+          <path d="M3.5 6L8 10.5L12.5 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 top-[48px] z-40 w-full overflow-hidden rounded-[14px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.12)]"
+          style={{
+            borderColor: 'var(--dfw-sidebar-border)',
+            background: 'var(--dfw-sidebar-bg)',
+            color: 'var(--dfw-text)',
+            fontFamily: font,
+          }}
+          role="listbox"
+        >
+          {options.map(option => {
+            const selected = option === value
+            return (
+              <button
+                key={option || 'empty'}
+                type="button"
+                onMouseDown={event => event.preventDefault()}
+                onClick={() => {
+                  onChange(option)
+                  setOpen(false)
+                }}
+                className="block h-[34px] w-full px-[12px] text-left text-[18px] font-light leading-[34px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+                style={{
+                  background: selected ? 'var(--dfw-outline-selected-bg)' : 'transparent',
+                }}
+                role="option"
+                aria-selected={selected}
+              >
+                {option || '空白'}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 

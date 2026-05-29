@@ -6,7 +6,7 @@ import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
 import type { WorkbenchBlockId } from './workbench-canvas/types'
 
-const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
+const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
 const gridMinScreenSpacing = 16
 const gridMaxScreenSpacing = 48
@@ -414,7 +414,7 @@ function OutlineTree({
     <div className="absolute" style={{ left: 13.16, top: 128.32, width: rowWidth, bottom: 16 }}>
       <span
         className="absolute leading-[24px]"
-        style={{ left: 5.84, top: 0, color: 'var(--dfw-text)', fontFamily: font, fontSize: 20, fontWeight: 400 }}
+        style={{ left: 5.84, top: 0, color: 'var(--dfw-text)', fontFamily: outlineFont, fontSize: 20, fontWeight: 400 }}
       >
         大纲
       </span>
@@ -493,7 +493,7 @@ function OutlineTree({
                 style={{
                   left: textLeft,
                   right: node.trailingIcon ? 32 : 4,
-                  fontFamily: font,
+                  fontFamily: outlineFont,
                   fontSize: 20,
                   fontWeight: 300,
                 }}
