@@ -40,6 +40,11 @@ export interface WorkbenchPoint {
   y: number
 }
 
+export interface WorkbenchAddNodeAnchor {
+  id: number
+  point: WorkbenchPoint
+}
+
 export interface WorkbenchSize {
   width: number
   height: number
@@ -47,6 +52,7 @@ export interface WorkbenchSize {
 
 export interface WorkbenchCanvasProps {
   viewport: WorkbenchCanvasViewport
+  addNodeAnchor?: WorkbenchAddNodeAnchor | null
   selectedBlockId?: WorkbenchBlockId | null
   onSelectedBlockChange?: (blockId: WorkbenchBlockId | null) => void
   blockMeta?: Partial<WorkbenchBlockMeta>

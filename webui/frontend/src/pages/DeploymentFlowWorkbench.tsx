@@ -4,7 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchBlockId } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -683,6 +683,7 @@ export default function DeploymentFlowWorkbench({
   const [rightSidebarWidth, setRightSidebarWidth] = useState(rightSidebarExpandedWidth)
   const [projectInfo, setProjectInfo] = useState<WorkbenchProjectInfo | null>(null)
   const [selectedBlockId, setSelectedBlockId] = useState<WorkbenchBlockId | null>(null)
+  const [addNodeAnchor, setAddNodeAnchor] = useState<WorkbenchAddNodeAnchor | null>(null)
   const [meta, setMeta] = useState<WorkbenchMetaState>(defaultWorkbenchMeta)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
@@ -899,6 +900,25 @@ export default function DeploymentFlowWorkbench({
 
   const leftSidebarRight = leftSidebarCollapsed ? leftSidebarCollapsedWidth : leftSidebarWidth
   const rightSidebarLeft = rightSidebarCollapsed ? rightSidebarCollapsedWidth : rightSidebarWidth
+  const openAddNodeFromBottomBar = () => {
+    const workbench = workbenchRef.current
+    if (!workbench) return
+
+    const current = viewportRef.current
+    const rect = workbench.getBoundingClientRect()
+    const visibleLeft = leftSidebarRight
+    const visibleRight = Math.max(visibleLeft, rect.width - rightSidebarLeft)
+    const screenX = visibleLeft + (visibleRight - visibleLeft) / 2
+    const screenY = rect.height / 2
+
+    setAddNodeAnchor(prev => ({
+      id: (prev?.id ?? 0) + 1,
+      point: {
+        x: (screenX - current.x) / current.scale,
+        y: (screenY - current.y) / current.scale,
+      },
+    }))
+  }
 
   return (
     <div
@@ -918,6 +938,7 @@ export default function DeploymentFlowWorkbench({
       <div className="deployment-flow-workbench-grid absolute inset-0 pointer-events-none" style={gridStyle} aria-hidden />
       <WorkbenchCanvas
         viewport={viewport}
+        addNodeAnchor={addNodeAnchor}
         selectedBlockId={selectedBlockId}
         onSelectedBlockChange={setSelectedBlockId}
         blockMeta={blockMeta}
@@ -952,6 +973,7 @@ export default function DeploymentFlowWorkbench({
         rightReservedWidth={rightSidebarLeft}
         collapsedLeft={leftSidebarRight + 30}
         onScaleChange={setScaleFromBottomBar}
+        onAddNode={openAddNodeFromBottomBar}
       />
     </div>
   )

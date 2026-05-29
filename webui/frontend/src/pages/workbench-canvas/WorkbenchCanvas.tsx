@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import AddNodePopover from './AddNodePopover'
 import CanvasConnectionLayer from './CanvasConnectionLayer'
 import ComponentsBlock, { componentsBlockInputOffset, componentsBlockMinSize, resolveComponentsBlockOutputOffset } from './blocks/ComponentsBlock'
@@ -49,6 +49,7 @@ function resolveInitBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
 
 export default function WorkbenchCanvas({
   viewport,
+  addNodeAnchor = null,
   selectedBlockId = null,
   onSelectedBlockChange,
   blockMeta,
@@ -236,6 +237,11 @@ export default function WorkbenchCanvas({
       y: position.y - 74,
     })
   }
+
+  useEffect(() => {
+    if (!addNodeAnchor) return
+    openAddNodePopover(addNodeAnchor.point)
+  }, [addNodeAnchor])
 
   const addComponentsBlock = () => {
     setComponentsBlockVisible(true)

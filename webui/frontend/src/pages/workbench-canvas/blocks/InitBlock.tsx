@@ -151,17 +151,6 @@ export default function InitBlock({
         }}
         onPointerDown={event => event.stopPropagation()}
       />
-      <g
-        transform={`translate(${connectorX} ${connectorY})`}
-        className="cursor-pointer"
-        onClick={event => {
-          event.stopPropagation()
-          onAddConnectorClick?.()
-        }}
-        onPointerDown={event => event.stopPropagation()}
-      >
-        <AddConnectorButton />
-      </g>
       <InputPort />
       <g
         className="cursor-grab active:cursor-grabbing"
@@ -212,6 +201,18 @@ export default function InitBlock({
         onPointerUp={resizeHandlers?.onResizePointerUp}
         onPointerCancel={resizeHandlers?.onResizePointerCancel}
       />
+      <g
+        transform={`translate(${connectorX} ${connectorY})`}
+        className="cursor-pointer"
+        onClick={event => {
+          event.stopPropagation()
+          onAddConnectorClick?.()
+        }}
+        onPointerDown={event => event.stopPropagation()}
+      >
+        <AddConnectorButton />
+        <circle cx="0" cy="12" r="18" fill="transparent" />
+      </g>
     </g>
   )
 }
