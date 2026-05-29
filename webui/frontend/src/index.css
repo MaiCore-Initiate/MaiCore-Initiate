@@ -245,6 +245,11 @@ html.theme-animating *::after {
   --dfw-outline-muted: #7f7f7f;
   --dfw-outline-selected-bg: rgba(0, 132, 255, 0.3);
   --dfw-outline-hover: rgba(0, 0, 0, 0.05);
+  --dfw-bottom-divider: #7f7f7f;
+  --dfw-bottom-add-bg: #b3daff;
+  --dfw-bottom-run-bg: #b3ffba;
+  --dfw-bottom-debug-bg: #cab3ff;
+  --dfw-bottom-action-text: #000000;
   --dfw-blue: #0084ff;
 }
 
@@ -261,6 +266,11 @@ html.theme-animating *::after {
   --dfw-outline-muted: #7f7f7f;
   --dfw-outline-selected-bg: rgba(0, 132, 255, 0.38);
   --dfw-outline-hover: rgba(255, 255, 255, 0.08);
+  --dfw-bottom-divider: #7f7f7f;
+  --dfw-bottom-add-bg: #b3daff;
+  --dfw-bottom-run-bg: #b3ffba;
+  --dfw-bottom-debug-bg: #cab3ff;
+  --dfw-bottom-action-text: #000000;
   --dfw-blue: #0084ff;
 }
 

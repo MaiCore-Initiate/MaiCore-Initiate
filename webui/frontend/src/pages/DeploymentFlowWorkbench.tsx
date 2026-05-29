@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ArrowLeft, Plus } from 'lucide-react'
+import WorkbenchBottomBar from './WorkbenchBottomBar'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const gridBaseSpacing = 32
@@ -621,6 +622,30 @@ export default function DeploymentFlowWorkbench({
     setIsPanning(false)
   }
 
+  const setScaleFromBottomBar = (scale: number) => {
+    const workbench = workbenchRef.current
+    if (!workbench) {
+      setViewport(prev => ({ ...prev, scale: clamp(scale, workbenchMinZoom, workbenchMaxZoom) }))
+      return
+    }
+
+    const rect = workbench.getBoundingClientRect()
+    const pointerX = rect.width / 2
+    const pointerY = rect.height / 2
+
+    setViewport(prev => {
+      const nextScale = clamp(scale, workbenchMinZoom, workbenchMaxZoom)
+      const scaleRatio = nextScale / prev.scale
+      return {
+        scale: nextScale,
+        x: pointerX - (pointerX - prev.x) * scaleRatio,
+        y: pointerY - (pointerY - prev.y) * scaleRatio,
+      }
+    })
+  }
+
+  const leftSidebarRight = leftSidebarCollapsed ? leftSidebarCollapsedWidth : leftSidebarWidth
+
   return (
     <div
       ref={workbenchRef}
@@ -644,6 +669,11 @@ export default function DeploymentFlowWorkbench({
         onResize={setLeftSidebarWidth}
         onBackToLibrary={onBackToLibrary}
         outline={outline}
+      />
+      <WorkbenchBottomBar
+        scale={viewport.scale}
+        collapsedLeft={leftSidebarRight + 30}
+        onScaleChange={setScaleFromBottomBar}
       />
     </div>
   )
