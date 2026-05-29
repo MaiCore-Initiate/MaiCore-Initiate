@@ -3,6 +3,7 @@ import { ArrowLeft, Plus } from 'lucide-react'
 import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
+import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const gridBaseSpacing = 32
@@ -714,6 +715,7 @@ export default function DeploymentFlowWorkbench({
       }}
     >
       <div className="deployment-flow-workbench-grid absolute inset-0 pointer-events-none" style={gridStyle} aria-hidden />
+      <WorkbenchCanvas viewport={viewport} />
       <WorkbenchLeftSidebar
         collapsed={leftSidebarCollapsed}
         width={leftSidebarWidth}
