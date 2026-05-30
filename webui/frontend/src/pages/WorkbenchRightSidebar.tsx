@@ -342,6 +342,12 @@ function resolveFieldMetrics(value: string, maxWidth = fieldMaxWidth) {
   return { width, lines: wrappedLines }
 }
 
+function resolveInlineTableCellWidth(value: string, minWidth: number, maxWidth: number, chromeWidth: number) {
+  const lines = value.split('\n')
+  const longestLineWidth = Math.max(...lines.map(line => measureTextWidth(line)))
+  return Math.min(maxWidth, Math.max(minWidth, longestLineWidth + chromeWidth))
+}
+
 function FieldLabel({ children }: { children: string }) {
   return (
     <label
@@ -1782,7 +1788,7 @@ function EnvVariableTableField({
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
   const previousRectsRef = useRef<Map<string, DOMRect> | null>(null)
   const dragRef = useRef<{ pointerId: number; index: number; itemId: string; lastClientY: number; active: boolean; timer: number } | null>(null)
-  const fieldWidth = Math.max(66, Math.floor((maxWidth - 8) / 2))
+  const cellMaxWidth = Math.max(66, maxWidth)
 
   useEffect(() => {
     setItems(currentItems => {
@@ -2121,6 +2127,9 @@ function EnvVariableTableField({
           const valueFocused = focusedCell?.index === index && focusedCell.key === 'value'
           const selected = selectedIds.includes(item.id)
           const dragLocked = activeDragId !== null && activeDragId !== item.id
+          const nameWidth = resolveInlineTableCellWidth(item.value.name, 132, cellMaxWidth, 76)
+          const valueWidth = resolveInlineTableCellWidth(item.value.value, 132, cellMaxWidth, 70)
+
           return (
             <div
               key={item.id}
@@ -2129,12 +2138,12 @@ function EnvVariableTableField({
                 else rowRefs.current.delete(item.id)
               }}
               data-env-variable-entry-index={index}
-              className="flex max-w-full items-start gap-[8px]"
+              className="flex max-w-full flex-wrap items-start gap-[8px]"
             >
               <div
                 className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
-                  width: fieldWidth,
+                  width: nameWidth,
                   borderColor: nameFocused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
                   background: nameFocused || selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
                   color: 'var(--dfw-text)',
@@ -2178,7 +2187,7 @@ function EnvVariableTableField({
               <div
                 className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
-                  width: fieldWidth,
+                  width: valueWidth,
                   borderColor: valueFocused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
                   background: valueFocused || selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
                   color: 'var(--dfw-text)',
