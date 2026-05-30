@@ -206,7 +206,10 @@ function resolveFieldMetrics(value: string, maxWidth = fieldMaxWidth) {
 
 function FieldLabel({ children }: { children: string }) {
   return (
-    <label className="block h-[36px] leading-[36px]" style={{ fontFamily: font, fontSize: 30, fontWeight: 600 }}>
+    <label
+      className="block min-h-[36px] leading-[36px]"
+      style={{ fontFamily: font, fontSize: 30, fontWeight: 600, overflowWrap: 'anywhere' }}
+    >
       {children}
     </label>
   )
@@ -787,8 +790,11 @@ function ArrayListField({
 
   return (
     <div className="max-w-full">
-      <div className="flex h-[36px] max-w-full items-center justify-between" style={{ width: maxWidth }}>
-        <label className="block h-[36px] leading-[36px]" style={{ fontFamily: font, fontSize: 30, fontWeight: 600 }}>
+      <div className="flex min-h-[36px] max-w-full items-start justify-between gap-[12px]" style={{ width: maxWidth }}>
+        <label
+          className="block min-h-[36px] min-w-0 flex-1 leading-[36px]"
+          style={{ fontFamily: font, fontSize: 30, fontWeight: 600, overflowWrap: 'anywhere' }}
+        >
           {label}
         </label>
         <button
