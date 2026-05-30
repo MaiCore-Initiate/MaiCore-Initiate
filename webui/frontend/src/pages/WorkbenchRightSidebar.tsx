@@ -668,7 +668,7 @@ function ArrayListInput({
     const textArea = textAreaRef.current
     if (!textArea) return
     textArea.style.height = 'auto'
-    textArea.style.height = `${Math.max(30, textArea.scrollHeight)}px`
+    textArea.style.height = `${Math.max(40, textArea.scrollHeight)}px`
   }, [value])
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -688,7 +688,7 @@ function ArrayListInput({
       onKeyDown={handleKeyDown}
       rows={1}
       placeholder={placeholder}
-      className="min-h-[30px] min-w-0 flex-1 resize-none overflow-hidden bg-transparent py-[5px] pr-[8px] text-[18px] font-light leading-[24px] outline-none"
+      className="min-h-[40px] min-w-0 flex-1 resize-none overflow-hidden bg-transparent py-[8px] pr-[8px] text-[18px] font-light leading-[24px] outline-none"
       style={{
         color: 'var(--dfw-text)',
         fontFamily: font,
