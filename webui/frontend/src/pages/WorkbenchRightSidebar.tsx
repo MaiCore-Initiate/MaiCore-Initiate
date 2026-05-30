@@ -1167,7 +1167,14 @@ function ArrayListField({
   }
 
   return (
-    <div className="max-w-full">
+    <div
+      className="max-w-full"
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setPresetOpen(false)
+        }
+      }}
+    >
       <div className="flex min-h-[36px] max-w-full items-start justify-between gap-[12px]" style={{ width: maxWidth }}>
         <label
           className="block min-h-[36px] min-w-0 flex-1 leading-[36px]"
@@ -1175,84 +1182,36 @@ function ArrayListField({
         >
           {label}
         </label>
-        <div
-          className="relative flex shrink-0 items-start gap-[6px]"
-          onBlur={event => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-              setPresetOpen(false)
-            }
-          }}
-        >
+        <div className="relative flex shrink-0 items-start gap-[6px]">
           {presetOptions.length > 0 ? (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setPresetOpen(current => !current)}
-                className="flex h-[30px] items-center gap-[5px] rounded-[5px] border px-[8px] text-[14px] font-light leading-[30px] transition-colors hover:bg-[var(--dfw-control-hover)]"
-                style={{
-                  borderColor: presetOpen ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
-                  background: presetOpen ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
-                  color: 'var(--dfw-text)',
-                  fontFamily: font,
-                }}
-                aria-expanded={presetOpen}
-                aria-haspopup="listbox"
-                aria-label={`${label}占位符`}
-                title="占位符"
+            <button
+              type="button"
+              onClick={() => setPresetOpen(current => !current)}
+              className="flex h-[30px] items-center gap-[5px] rounded-[5px] border px-[8px] text-[14px] font-light leading-[30px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+              style={{
+                borderColor: presetOpen ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+                background: presetOpen ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+                color: 'var(--dfw-text)',
+                fontFamily: font,
+              }}
+              aria-expanded={presetOpen}
+              aria-haspopup="listbox"
+              aria-label={`${label}占位符`}
+              title="占位符"
+            >
+              <span>占位符</span>
+              <svg
+                className="shrink-0 transition-transform duration-150"
+                style={{ transform: presetOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                aria-hidden
               >
-                <span>占位符</span>
-                <svg
-                  className="shrink-0 transition-transform duration-150"
-                  style={{ transform: presetOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
-                  width="12"
-                  height="12"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  aria-hidden
-                >
-                  <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-
-              {presetOpen ? (
-                <div
-                  className="absolute right-0 top-[36px] z-[60] max-h-[240px] overflow-auto rounded-[8px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.16)]"
-                  style={{
-                    width: Math.min(330, Math.max(210, maxWidth - 42)),
-                    borderColor: 'var(--dfw-sidebar-border)',
-                    background: 'var(--dfw-sidebar-bg)',
-                    color: 'var(--dfw-text)',
-                    fontFamily: font,
-                  }}
-                  role="listbox"
-                >
-                  {presetOptions.map(option => {
-                    const exists = presetValueExists(option.value)
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onMouseDown={event => event.preventDefault()}
-                        onClick={() => addPresetItem(option.value)}
-                        className="flex min-h-[34px] w-full items-center gap-[8px] px-[10px] text-left text-[15px] font-light transition-colors hover:bg-[var(--dfw-control-hover)]"
-                        style={{
-                          background: exists ? 'var(--dfw-blue)' : 'transparent',
-                          color: exists ? '#fff' : 'var(--dfw-text)',
-                        }}
-                        role="option"
-                        aria-selected={exists}
-                        title={exists ? '已存在于列表中' : option.value}
-                      >
-                        <span className="min-w-0 flex-1 truncate">{option.label ?? option.value}</span>
-                        {exists || option.description ? (
-                          <span className="shrink-0 text-[12px] opacity-75">{exists ? '已存在' : option.description}</span>
-                        ) : null}
-                      </button>
-                    )
-                  })}
-                </div>
-              ) : null}
-            </div>
+                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           ) : null}
 
           <button
@@ -1271,6 +1230,47 @@ function ArrayListField({
           </button>
         </div>
       </div>
+
+      {presetOpen && presetOptions.length > 0 ? (
+        <div className="mt-[8px] flex max-w-full justify-end" style={{ width: maxWidth }}>
+          <div
+            className="max-h-[240px] overflow-auto rounded-[8px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.16)]"
+            style={{
+              width: Math.min(330, Math.max(210, maxWidth - 42)),
+              borderColor: 'var(--dfw-sidebar-border)',
+              background: 'var(--dfw-sidebar-bg)',
+              color: 'var(--dfw-text)',
+              fontFamily: font,
+            }}
+            role="listbox"
+          >
+            {presetOptions.map(option => {
+              const exists = presetValueExists(option.value)
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={() => addPresetItem(option.value)}
+                  className="flex min-h-[34px] w-full items-center gap-[8px] px-[10px] text-left text-[15px] font-light transition-colors hover:bg-[var(--dfw-control-hover)]"
+                  style={{
+                    background: exists ? 'var(--dfw-blue)' : 'transparent',
+                    color: exists ? '#fff' : 'var(--dfw-text)',
+                  }}
+                  role="option"
+                  aria-selected={exists}
+                  title={exists ? '已存在于列表中' : option.value}
+                >
+                  <span className="min-w-0 flex-1 truncate">{option.label ?? option.value}</span>
+                  {exists || option.description ? (
+                    <span className="shrink-0 text-[12px] opacity-75">{exists ? '已存在' : option.description}</span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-[8px] flex max-w-full flex-col gap-[8px]" style={{ width: maxWidth }}>
         {items.map((item, index) => {
@@ -1338,7 +1338,6 @@ function ArrayListField({
     </div>
   )
 }
-
 function VersionFormattingRuleField({
   label,
   values,
