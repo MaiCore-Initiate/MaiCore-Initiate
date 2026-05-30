@@ -4,7 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -139,6 +139,14 @@ function formatTomlArray(values: string[]) {
   return `[${values.map(formatTomlString).join(', ')}]`
 }
 
+function formatTomlInlineTable(value: WorkbenchVersionFormattingRule) {
+  return `{match = ${formatTomlString(value.match)}, replace = ${formatTomlString(value.replace)}}`
+}
+
+function formatTomlInlineTableArray(values: WorkbenchVersionFormattingRule[]) {
+  return `[${values.map(formatTomlInlineTable).join(', ')}]`
+}
+
 function formatTomlBoolean(value: boolean | null) {
   if (value === null) return ''
   return value ? 'true' : 'false'
@@ -162,6 +170,33 @@ function createStringArrayOutlineNode(id: string, fieldName: string, values: str
       id: `${id}-${index}`,
       label: `${index} = ${formatTomlString(value)}`,
       icon: 'string' as const,
+    })),
+  }
+}
+
+function createVersionFormattingOutlineNode(id: string, values: WorkbenchVersionFormattingRule[]): OutlineNode {
+  return {
+    id,
+    label: `version_formatting_formula = ${values.length ? formatTomlInlineTableArray(values) : ''}`,
+    icon: 'object',
+    defaultExpanded: true,
+    children: values.map((value, index) => ({
+      id: `${id}-${index}`,
+      label: `${index}`,
+      icon: 'object' as const,
+      defaultExpanded: true,
+      children: [
+        {
+          id: `${id}-${index}-match`,
+          label: `match = ${formatTomlString(value.match)}`,
+          icon: 'string' as const,
+        },
+        {
+          id: `${id}-${index}-replace`,
+          label: `replace = ${formatTomlString(value.replace)}`,
+          icon: 'string' as const,
+        },
+      ],
     })),
   }
 }
@@ -259,7 +294,7 @@ function createComponentOutlineChildren(component: WorkbenchComponentMeta, index
           : []),
         createBooleanOutlineNode(id('format-version'), 'format_version', component.formatVersion),
         ...(component.formatVersion === true
-          ? [createStringArrayOutlineNode(id('version-formatting-formula'), 'version_formatting_formula', component.versionFormattingFormula)]
+          ? [createVersionFormattingOutlineNode(id('version-formatting-formula'), component.versionFormattingFormula)]
           : []),
         { id: id('splicing-link'), label: `splicing_link = ${formatTomlString(component.splicingLink)}`, icon: 'string' as const },
       ]

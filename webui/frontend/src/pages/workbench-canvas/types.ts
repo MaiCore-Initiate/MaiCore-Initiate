@@ -61,7 +61,7 @@ export interface WorkbenchComponentMeta {
   userChoose: boolean | null
   chooseList: string[]
   formatVersion: boolean | null
-  versionFormattingFormula: string[]
+  versionFormattingFormula: WorkbenchVersionFormattingRule[]
   installOperate: string
   installCustomList: string[]
   installPath: string
@@ -75,6 +75,11 @@ export interface WorkbenchComponentMeta {
   envOutputList: string[]
   envInput: boolean | null
   envInputList: string[]
+}
+
+export interface WorkbenchVersionFormattingRule {
+  match: string
+  replace: string
 }
 
 export interface WorkbenchPoint {

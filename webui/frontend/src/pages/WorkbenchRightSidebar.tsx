@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import type { WorkbenchBlockId, WorkbenchComponentMeta } from './workbench-canvas/types'
+import type { WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchVersionFormattingRule } from './workbench-canvas/types'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -150,6 +150,12 @@ function TextAlignRightGlyph() {
 
 function arraysEqual(left: string[], right: string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
+function formattingRulesEqual(left: WorkbenchVersionFormattingRule[], right: WorkbenchVersionFormattingRule[]) {
+  return left.length === right.length && left.every((value, index) => (
+    value.match === right[index].match && value.replace === right[index].replace
+  ))
 }
 
 function parseComponentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
@@ -597,9 +603,22 @@ interface ArrayListItem {
   value: string
 }
 
+interface VersionFormattingRuleItem {
+  id: string
+  value: WorkbenchVersionFormattingRule
+}
+
 function createArrayListItem(value: string): ArrayListItem {
   arrayListItemId += 1
   return { id: `array-list-item-${arrayListItemId}`, value }
+}
+
+function createVersionFormattingRuleItem(value: WorkbenchVersionFormattingRule): VersionFormattingRuleItem {
+  arrayListItemId += 1
+  return {
+    id: `version-formatting-rule-${arrayListItemId}`,
+    value: { match: value.match, replace: value.replace },
+  }
 }
 
 function reorderItems<T>(values: T[], fromIndex: number, toIndex: number) {
@@ -634,12 +653,14 @@ function ArrayListInput({
   onFocus,
   onBlur,
   ariaLabel,
+  placeholder,
 }: {
   value: string
   onChange: (value: string) => void
   onFocus: () => void
   onBlur: () => void
   ariaLabel: string
+  placeholder?: string
 }) {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -666,6 +687,7 @@ function ArrayListInput({
       onBlur={onBlur}
       onKeyDown={handleKeyDown}
       rows={1}
+      placeholder={placeholder}
       className="min-h-[30px] min-w-0 flex-1 resize-none overflow-hidden bg-transparent py-[5px] pr-[8px] text-[18px] font-light leading-[24px] outline-none"
       style={{
         color: 'var(--dfw-text)',
@@ -899,6 +921,285 @@ function ArrayListField({
               >
                 <DeleteGlyph />
               </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function VersionFormattingRuleField({
+  label,
+  values,
+  onChange,
+  maxWidth,
+}: {
+  label: string
+  values: WorkbenchVersionFormattingRule[]
+  onChange: (values: WorkbenchVersionFormattingRule[]) => void
+  maxWidth: number
+}) {
+  const [focusedCell, setFocusedCell] = useState<{ index: number; key: keyof WorkbenchVersionFormattingRule } | null>(null)
+  const [items, setItems] = useState<VersionFormattingRuleItem[]>(() => values.map(createVersionFormattingRuleItem))
+  const itemsRef = useRef(items)
+  const rowRefs = useRef(new Map<string, HTMLDivElement>())
+  const previousRectsRef = useRef<Map<string, DOMRect> | null>(null)
+  const dragRef = useRef<{ pointerId: number; index: number; active: boolean; timer: number } | null>(null)
+  const fieldWidth = Math.max(66, Math.floor((maxWidth - 8) / 2))
+
+  useEffect(() => {
+    setItems(currentItems => {
+      const currentValues = currentItems.map(item => item.value)
+      if (formattingRulesEqual(currentValues, values)) return currentItems
+
+      const nextItems = values.map((value, index) => ({
+        id: currentItems[index]?.id ?? createVersionFormattingRuleItem(value).id,
+        value: { match: value.match, replace: value.replace },
+      }))
+      itemsRef.current = nextItems
+      return nextItems
+    })
+  }, [values])
+
+  useLayoutEffect(() => {
+    const previousRects = previousRectsRef.current
+    if (!previousRects) return
+
+    for (const item of items) {
+      const element = rowRefs.current.get(item.id)
+      const previousRect = previousRects.get(item.id)
+      if (!element || !previousRect) continue
+
+      const currentRect = element.getBoundingClientRect()
+      const deltaY = previousRect.top - currentRect.top
+      if (Math.abs(deltaY) < 1) continue
+
+      element.animate(
+        [
+          { transform: `translateY(${deltaY}px)` },
+          { transform: 'translateY(0)' },
+        ],
+        {
+          duration: 180,
+          easing: 'cubic-bezier(0.2, 0, 0, 1)',
+        },
+      )
+    }
+
+    previousRectsRef.current = null
+  }, [items])
+
+  const captureRowRects = () => {
+    const rects = new Map<string, DOMRect>()
+    for (const item of itemsRef.current) {
+      const element = rowRefs.current.get(item.id)
+      if (element) rects.set(item.id, element.getBoundingClientRect())
+    }
+    previousRectsRef.current = rects
+  }
+
+  const commitItems = (nextItems: VersionFormattingRuleItem[], animate = false) => {
+    if (animate) captureRowRects()
+    itemsRef.current = nextItems
+    setItems(nextItems)
+    onChange(nextItems.map(item => item.value))
+  }
+
+  const addItem = () => {
+    commitItems([...itemsRef.current, createVersionFormattingRuleItem({ match: '', replace: '' })], true)
+  }
+
+  const updateItem = (index: number, key: keyof WorkbenchVersionFormattingRule, nextValue: string) => {
+    const nextItems = itemsRef.current.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, value: { ...item.value, [key]: nextValue } } : item
+    ))
+    commitItems(nextItems)
+  }
+
+  const deleteItem = (index: number) => {
+    setFocusedCell(current => {
+      if (current === null) return null
+      if (current.index === index) return null
+      return current.index > index ? { ...current, index: current.index - 1 } : current
+    })
+    commitItems(itemsRef.current.filter((_, itemIndex) => itemIndex !== index), true)
+  }
+
+  const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = {
+      pointerId: event.pointerId,
+      index,
+      active: false,
+      timer: window.setTimeout(() => {
+        if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return
+        dragRef.current.active = true
+      }, 180),
+    }
+  }
+
+  const moveDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId || !drag.active) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>('[data-formatting-rule-index]')
+    if (!target) return
+
+    const targetIndex = Number(target.dataset.formattingRuleIndex)
+    if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= itemsRef.current.length) return
+    if (targetIndex === drag.index) return
+
+    commitItems(reorderItems(itemsRef.current, drag.index, targetIndex), true)
+    setFocusedCell(current => {
+      if (current === null) return null
+      if (current.index === drag.index) return { ...current, index: targetIndex }
+      if (drag.index < targetIndex && current.index > drag.index && current.index <= targetIndex) {
+        return { ...current, index: current.index - 1 }
+      }
+      if (drag.index > targetIndex && current.index >= targetIndex && current.index < drag.index) {
+        return { ...current, index: current.index + 1 }
+      }
+      return current
+    })
+    drag.index = targetIndex
+  }
+
+  const stopDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    window.clearTimeout(drag.timer)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    dragRef.current = null
+  }
+
+  return (
+    <div className="max-w-full">
+      <div className="flex min-h-[36px] max-w-full items-start justify-between gap-[12px]" style={{ width: maxWidth }}>
+        <label
+          className="block min-h-[36px] min-w-0 flex-1 leading-[36px]"
+          style={{ fontFamily: font, fontSize: 30, fontWeight: 600, overflowWrap: 'anywhere' }}
+        >
+          {label}
+        </label>
+        <button
+          type="button"
+          onClick={addItem}
+          className="flex h-[30px] w-[30px] items-center justify-center rounded-[5px] border transition-colors hover:bg-[var(--dfw-control-hover)]"
+          style={{
+            borderColor: 'var(--dfw-sidebar-border)',
+            background: 'var(--dfw-sidebar-bg)',
+            color: 'var(--dfw-text)',
+          }}
+          aria-label={`添加${label}`}
+          title="添加"
+        >
+          <PlusGlyph />
+        </button>
+      </div>
+
+      <div className="mt-[8px] flex max-w-full flex-col gap-[8px]" style={{ width: maxWidth }}>
+        {items.map((item, index) => {
+          const matchFocused = focusedCell?.index === index && focusedCell.key === 'match'
+          const replaceFocused = focusedCell?.index === index && focusedCell.key === 'replace'
+          return (
+            <div
+              key={item.id}
+              ref={node => {
+                if (node) rowRefs.current.set(item.id, node)
+                else rowRefs.current.delete(item.id)
+              }}
+              data-formatting-rule-index={index}
+              className="flex max-w-full items-start gap-[8px]"
+            >
+              <div
+                className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
+                style={{
+                  width: fieldWidth,
+                  borderColor: matchFocused ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+                  background: matchFocused ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+                  color: 'var(--dfw-text)',
+                }}
+              >
+                <button
+                  type="button"
+                  className="flex min-h-[40px] w-[30px] shrink-0 cursor-grab select-none items-center justify-center rounded-l-[5px] text-[18px] active:cursor-grabbing"
+                  style={{ color: 'var(--dfw-outline-muted)', touchAction: 'none' }}
+                  onPointerDown={event => startDrag(index, event)}
+                  onPointerMove={moveDrag}
+                  onPointerUp={stopDrag}
+                  onPointerCancel={stopDrag}
+                  aria-label={`拖拽排序第${index + 1}条${label}`}
+                  title="长按拖拽排序"
+                >
+                  ⠿
+                </button>
+                <span
+                  className="shrink-0 pl-[2px] pr-[6px] text-[16px] font-light leading-[40px]"
+                  style={{ color: 'var(--dfw-outline-muted)', fontFamily: font }}
+                >
+                  匹配
+                </span>
+                <ArrayListInput
+                  value={item.value.match}
+                  onChange={nextValue => updateItem(index, 'match', nextValue)}
+                  onFocus={() => setFocusedCell({ index, key: 'match' })}
+                  onBlur={() => setFocusedCell(current => (
+                    current?.index === index && current.key === 'match' ? null : current
+                  ))}
+                  ariaLabel={`匹配${index + 1}`}
+                />
+              </div>
+
+              <div
+                className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
+                style={{
+                  width: fieldWidth,
+                  borderColor: replaceFocused ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+                  background: replaceFocused ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+                  color: 'var(--dfw-text)',
+                }}
+              >
+                <span
+                  className="shrink-0 pl-[10px] pr-[6px] text-[16px] font-light leading-[40px]"
+                  style={{ color: 'var(--dfw-outline-muted)', fontFamily: font }}
+                >
+                  替换
+                </span>
+                <ArrayListInput
+                  value={item.value.replace}
+                  onChange={nextValue => updateItem(index, 'replace', nextValue)}
+                  onFocus={() => setFocusedCell({ index, key: 'replace' })}
+                  onBlur={() => setFocusedCell(current => (
+                    current?.index === index && current.key === 'replace' ? null : current
+                  ))}
+                  ariaLabel={`替换${index + 1}`}
+                />
+                <button
+                  type="button"
+                  className="flex min-h-[40px] w-[30px] shrink-0 items-center justify-center rounded-r-[5px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+                  style={{ color: 'var(--dfw-outline-muted)' }}
+                  onPointerDown={event => event.stopPropagation()}
+                  onClick={event => {
+                    event.stopPropagation()
+                    deleteItem(index)
+                  }}
+                  aria-label={`删除第${index + 1}条${label}`}
+                  title="删除"
+                >
+                  <DeleteGlyph />
+                </button>
+              </div>
             </div>
           )
         })}
@@ -1492,12 +1793,11 @@ export default function WorkbenchRightSidebar({
 
                 <ConditionalField show={component.formatVersion === true}>
                   <section>
-                    <ArrayListField
+                    <VersionFormattingRuleField
                       label="格式化规则列表"
                       values={component.versionFormattingFormula}
                       onChange={versionFormattingFormula => updateComponent({ versionFormattingFormula })}
                       maxWidth={fieldAvailableWidth}
-                      itemAriaLabel="格式化规则"
                     />
                   </section>
                 </ConditionalField>

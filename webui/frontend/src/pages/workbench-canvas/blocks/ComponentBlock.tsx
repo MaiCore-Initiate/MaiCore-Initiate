@@ -1,4 +1,4 @@
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
 
 export const componentBlockMinSize: WorkbenchSize = { width: 520, height: 430 }
 export const componentBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -60,6 +60,14 @@ function formatTomlArray(values: string[]) {
   return values.length ? `[${values.map(formatTomlString).join(', ')}]` : ''
 }
 
+function formatTomlInlineTable(value: WorkbenchVersionFormattingRule) {
+  return `{match = ${formatTomlString(value.match)}, replace = ${formatTomlString(value.replace)}}`
+}
+
+function formatTomlInlineTableArray(values: WorkbenchVersionFormattingRule[]) {
+  return values.length ? `[${values.map(formatTomlInlineTable).join(', ')}]` : ''
+}
+
 function formatTomlBoolean(value: boolean | null) {
   if (value === null) return ''
   return value ? 'true' : 'false'
@@ -117,7 +125,7 @@ export default function ComponentBlock({
         ...(component.getVersion === 'github_repo' ? [{ label: 'GitHub仓库：', value: formatTomlString(component.githubRepo) }] : []),
         { label: '版本拼接链接：', value: formatTomlString(component.splicingLink) },
         { label: '格式化版本：', value: formatTomlBoolean(component.formatVersion) },
-        ...(component.formatVersion === true ? [{ label: '格式化规则：', value: formatTomlArray(component.versionFormattingFormula) }] : []),
+        ...(component.formatVersion === true ? [{ label: '格式化规则：', value: formatTomlInlineTableArray(component.versionFormattingFormula) }] : []),
       ]
       : []),
     ...(component.getMethod === 'get_link'
