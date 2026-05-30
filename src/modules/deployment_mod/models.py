@@ -67,6 +67,17 @@ class TemplateMetadata:
     file_import: bool = False
     file_import_list: List[str] = field(default_factory=list)
     runtime: str = "powershell"
+    deno_net: bool = False
+    deno_read: bool = False
+    deno_write: bool = False
+    deno_env: bool = False
+    deno_run: bool = False
+    deno_hrtime: bool = False
+    deno_ffi: bool = False
+    deno_sys: bool = False
+    deno_all: bool = False
+    deno_custom_permissions: bool = False
+    deno_permission_list: List[str] = field(default_factory=list)
     platforms: List[str] = field(default_factory=list)
     schema_version: str = "1.0"
     template_root: str = ""

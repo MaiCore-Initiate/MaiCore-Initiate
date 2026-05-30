@@ -784,10 +784,10 @@ class _TemplateExecutionDisplay:
 
     def _format_workdir(self, cwd: str, command_theme: str) -> str:
         normalized_theme = str(command_theme or "classical").strip().lower()
-        if normalized_theme == "oh-my-posh":
-            normalized_theme = "oh-my-push"
-        path = str(cwd or "")
         if normalized_theme == "oh-my-push":
+            normalized_theme = "oh-my-posh"
+        path = str(cwd or "")
+        if normalized_theme == "oh-my-posh":
             name = os.path.basename(path.rstrip("\\/")) or path
             return f"{path} [{name}]"
         return f"{path}>"

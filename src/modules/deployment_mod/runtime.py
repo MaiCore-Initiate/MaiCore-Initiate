@@ -142,6 +142,16 @@ class DeploymentModRuntime:
         "get_link_custom",
         "script_path",
     )
+    DENO_PERMISSION_FLAGS = (
+        ("deno_net", "--allow-net"),
+        ("deno_read", "--allow-read"),
+        ("deno_write", "--allow-write"),
+        ("deno_env", "--allow-env"),
+        ("deno_run", "--allow-run"),
+        ("deno_hrtime", "--allow-hrtime"),
+        ("deno_ffi", "--allow-ffi"),
+        ("deno_sys", "--allow-sys"),
+    )
 
     @staticmethod
     def _build_runtime_result(
@@ -1771,7 +1781,7 @@ class DeploymentModRuntime:
         script_path = os.path.join(script_dir, f"{timestamp}_{self._sanitize_filename(label)}{self._script_extension(runtime)}")
         resolved_commands = [self._resolve_text(state, command, scope) for command in commands]
         self._write_script(runtime, script_path, resolved_commands)
-        cmd = self._build_shell_command(runtime, script_path)
+        cmd = self._build_shell_command(runtime, script_path, state.template.metadata)
         env = os.environ.copy()
         env.update(state.env_pool)
         env.update(scope.env_values)
@@ -2504,12 +2514,13 @@ class DeploymentModRuntime:
             "python3": "python",
             "python": "python",
             "node": "node",
+            "deno": "deno",
         }.get(str(runtime or "").lower(), str(runtime or "shell"))
 
     @staticmethod
     def _normalize_runtime(runtime: str) -> str:
         normalized = str(runtime or "").strip().lower()
-        if normalized in {"powershell", "pwsh", "cmd", "bash", "python3", "python", "node"}:
+        if normalized in {"powershell", "pwsh", "cmd", "bash", "python3", "python", "node", "deno"}:
             return normalized
         raise RuntimeError(f"不支持的运行时: {runtime}")
 
@@ -2518,15 +2529,15 @@ class DeploymentModRuntime:
         normalized = str(command_theme or "").strip().lower()
         if not normalized:
             return ""
-        if normalized == "oh-my-posh":
-            return "oh-my-push"
-        if normalized in {"oh-my-push", "classical"}:
+        if normalized == "oh-my-push":
+            return "oh-my-posh"
+        if normalized in {"oh-my-posh", "classical"}:
             return normalized
         raise RuntimeError(f"不支持的命令主题: {command_theme}")
 
     @staticmethod
     def _default_command_theme() -> str:
-        return "oh-my-push" if shutil.which("oh-my-posh") or shutil.which("oh-my-push") else "classical"
+        return "oh-my-posh" if shutil.which("oh-my-posh") or shutil.which("oh-my-push") else "classical"
 
     @staticmethod
     def _script_extension(runtime: str) -> str:
@@ -2538,10 +2549,10 @@ class DeploymentModRuntime:
             "python3": ".py",
             "python": ".py",
             "node": ".js",
+            "deno": ".ts",
         }.get(runtime, ".txt")
 
-    @staticmethod
-    def _build_shell_command(runtime: str, script_path: str) -> List[str]:
+    def _build_shell_command(self, runtime: str, script_path: str, metadata: Any = None) -> List[str]:
         if runtime == "powershell":
             return ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
         if runtime == "pwsh":
@@ -2556,6 +2567,8 @@ class DeploymentModRuntime:
             return ["python", script_path]
         if runtime == "node":
             return ["node", script_path]
+        if runtime == "deno":
+            return ["deno", "run", *self._build_deno_permission_args(metadata), script_path]
         raise RuntimeError(f"不支持的运行时: {runtime}")
 
     def _write_script(self, runtime: str, script_path: str, commands: Sequence[str]) -> None:
@@ -2575,6 +2588,9 @@ class DeploymentModRuntime:
             return
         if runtime == "node":
             Path(script_path).write_text(self._build_node_script(commands), encoding="utf-8")
+            return
+        if runtime == "deno":
+            Path(script_path).write_text(self._build_deno_script(commands), encoding="utf-8")
             return
         raise RuntimeError(f"不支持的运行时: {runtime}")
 
@@ -2683,6 +2699,50 @@ class DeploymentModRuntime:
             ]
         )
 
+    def _build_deno_script(self, commands: Sequence[str]) -> str:
+        lines = [
+            "const __mcsbEmit = (prefix: string, payload = \"\"): void => {",
+            "  console.log(prefix + payload);",
+            "};",
+        ]
+        for index, command in enumerate(commands):
+            encoded = self._encode_command_marker_payload(command)
+            lines.append(f"__mcsbEmit({json.dumps(self.COMMAND_EVENT_BEGIN)}, {json.dumps(f'{index}|{encoded}')});")
+            lines.append(command)
+            lines.append(f"__mcsbEmit({json.dumps(self.COMMAND_EVENT_CWD)}, {json.dumps(f'{index}|')} + Deno.cwd());")
+            if self._command_triggers_clear(command, "deno"):
+                lines.append(f"__mcsbEmit({json.dumps(self.COMMAND_EVENT_CLEAR)}, {json.dumps(str(index))});")
+        return "\n".join(lines)
+
+    def _build_deno_permission_args(self, metadata: Any = None) -> List[str]:
+        args: List[str] = []
+        if metadata is None:
+            return args
+
+        if bool(getattr(metadata, "deno_all", False)):
+            args.append("--allow-all")
+            return args
+
+        custom_args: List[str] = []
+        if bool(getattr(metadata, "deno_custom_permissions", False)):
+            custom_args = [
+                str(item).strip()
+                for item in getattr(metadata, "deno_permission_list", []) or []
+                if str(item).strip()
+            ]
+            if any(item in {"-A", "--allow-all"} for item in custom_args):
+                return self._deduplicate_strings(custom_args)
+
+        args.extend(custom_args)
+        for field_name, flag in self.DENO_PERMISSION_FLAGS:
+            if bool(getattr(metadata, field_name, False)) and not self._deno_permission_list_has_flag(custom_args, flag):
+                args.append(flag)
+        return self._deduplicate_strings(args)
+
+    @staticmethod
+    def _deno_permission_list_has_flag(permission_args: Sequence[str], flag: str) -> bool:
+        return any(item == flag or item.startswith(f"{flag}=") for item in permission_args)
+
     @staticmethod
     def _encode_command_marker_payload(value: str) -> str:
         return base64.urlsafe_b64encode(str(value or "").encode("utf-8")).decode("ascii")
@@ -2728,14 +2788,14 @@ class DeploymentModRuntime:
             return bool(re.search(r"(^|[;&|])\s*(?:cls|clear)(?:\s|$)", text))
         if runtime in {"python", "python3"}:
             return "os.system" in text and ("'cls'" in text or '"cls"' in text or "'clear'" in text or '"clear"' in text)
-        if runtime == "node":
+        if runtime in {"node", "deno"}:
             return "console.clear(" in text
         return False
 
     @staticmethod
     def _normalize_extension(path: str) -> str:
         lower_name = path.lower()
-        for extension in (".tar.gz", ".tar.xz", ".tgz", ".zip", ".tar", ".gz", ".xz", ".msi", ".exe", ".ps1", ".bat", ".cmd", ".sh", ".py", ".js"):
+        for extension in (".tar.gz", ".tar.xz", ".tgz", ".zip", ".tar", ".gz", ".xz", ".msi", ".exe", ".ps1", ".bat", ".cmd", ".sh", ".py", ".js", ".ts"):
             if lower_name.endswith(extension):
                 return extension
         return Path(path).suffix.lower()

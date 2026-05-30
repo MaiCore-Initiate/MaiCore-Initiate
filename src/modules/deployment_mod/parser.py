@@ -34,8 +34,8 @@ class DeploymentModParser:
     """解析并规范化 DeploymentMOD.toml。"""
 
     ARRAY_SECTIONS = {"Component", "Deployment", "LaunchItem", "ConfigItem", "UninstallItem"}
-    VALID_RUNTIMES = {"powershell", "pwsh", "cmd", "bash", "python3", "python", "node"}
-    VALID_COMMAND_THEMES = {"", "oh-my-push", "oh-my-posh", "classical"}
+    VALID_RUNTIMES = {"powershell", "pwsh", "cmd", "bash", "python3", "python", "node", "deno"}
+    VALID_COMMAND_THEMES = {"", "oh-my-posh", "oh-my-push", "classical"}
 
     def parse_file(self, file_path: str) -> TemplateDefinition:
         with open(file_path, "r", encoding="utf-8") as handle:
@@ -60,12 +60,23 @@ class DeploymentModParser:
             file_import=bool(modinfo.get("file_import", False)),
             file_import_list=self._ensure_list(modinfo.get("file_import_list")),
             runtime=str(modinfo.get("runtime", "powershell") or "powershell").strip().lower(),
+            deno_net=bool(modinfo.get("deno_net", False)),
+            deno_read=bool(modinfo.get("deno_read", False)),
+            deno_write=bool(modinfo.get("deno_write", False)),
+            deno_env=bool(modinfo.get("deno_env", False)),
+            deno_run=bool(modinfo.get("deno_run", False)),
+            deno_hrtime=bool(modinfo.get("deno_hrtime", False)),
+            deno_ffi=bool(modinfo.get("deno_ffi", False)),
+            deno_sys=bool(modinfo.get("deno_sys", False)),
+            deno_all=bool(modinfo.get("deno_all", False)),
+            deno_custom_permissions=bool(modinfo.get("deno_custom_permissions", False)),
+            deno_permission_list=self._ensure_str_list(modinfo.get("deno_permission_list")),
             platforms=[str(item).strip().lower() for item in self._ensure_list(modinfo.get("platforms")) if str(item).strip()],
             schema_version=str(modinfo.get("schema_version", "") or "").strip(),
             template_root=template_root,
         )
 
-        self._validate_metadata(metadata)
+        self._validate_metadata(metadata, modinfo, self._raw_uses_runtime(raw, "deno", metadata.runtime))
 
         components_section = self._parse_stage_section(raw.get("COMPONENTS", {}))
         deployments_section = self._parse_stage_section(raw.get("DEPLOY", {}))
@@ -654,7 +665,7 @@ class DeploymentModParser:
         }
         return mapping.get(profile, "Custom")
 
-    def _validate_metadata(self, metadata: TemplateMetadata) -> None:
+    def _validate_metadata(self, metadata: TemplateMetadata, modinfo: Optional[Dict[str, Any]] = None, has_deno_runtime: bool = False) -> None:
         if not metadata.schema_version:
             raise ValueError("缺少必填字段: schema_version")
         if metadata.file_import and not metadata.file_import_list:
@@ -666,6 +677,8 @@ class DeploymentModParser:
                     raise ValueError(f"文件导入项不存在: {filename}")
         if metadata.runtime not in self.VALID_RUNTIMES:
             raise ValueError(f"暂不支持的 runtime: {metadata.runtime}")
+        if has_deno_runtime:
+            self._validate_deno_metadata(modinfo or {})
 
     def _validate_stage_ids(self, label: str, ordered_ids: List[str], actual_ids: List[str]) -> None:
         actual_set = set(actual_ids)
@@ -705,9 +718,47 @@ class DeploymentModParser:
         value = str(item.get("command_theme", "") or "").strip().lower()
         if value not in self.VALID_COMMAND_THEMES:
             raise ValueError(f"暂不支持的 command_theme: {value}")
-        if value == "oh-my-posh":
-            return "oh-my-push"
         return value
+
+    def _raw_uses_runtime(self, raw: Dict[str, Any], runtime: str, default_runtime: str = "") -> bool:
+        expected = str(runtime or "").strip().lower()
+        if str(default_runtime or "").strip().lower() == expected:
+            return True
+        for section_name in self.ARRAY_SECTIONS:
+            for item in self._ensure_list(raw.get(section_name)):
+                if isinstance(item, dict) and str(item.get("runtime", "") or "").strip().lower() == expected:
+                    return True
+        return False
+
+    @staticmethod
+    def _validate_deno_metadata(modinfo: Dict[str, Any]) -> None:
+        permission_fields = (
+            "deno_net",
+            "deno_read",
+            "deno_write",
+            "deno_env",
+            "deno_run",
+            "deno_hrtime",
+            "deno_ffi",
+            "deno_sys",
+            "deno_all",
+            "deno_custom_permissions",
+        )
+        for field_name in permission_fields:
+            if field_name not in modinfo:
+                raise ValueError(f"runtime=deno 时必须显式声明 {field_name}")
+            if not isinstance(modinfo.get(field_name), bool):
+                raise ValueError(f"runtime=deno 时 {field_name} 必须是布尔值")
+
+        permission_list = modinfo.get("deno_permission_list", [])
+        if modinfo.get("deno_custom_permissions") is True:
+            if not isinstance(permission_list, list) or not permission_list:
+                raise ValueError("deno_custom_permissions=true 时必须提供 deno_permission_list")
+            for item in permission_list:
+                if not str(item or "").strip():
+                    raise ValueError("deno_permission_list 中不能包含空权限参数")
+        elif "deno_permission_list" in modinfo and not isinstance(permission_list, list):
+            raise ValueError("deno_permission_list 必须是字符串数组")
 
     @staticmethod
     def _validate_enum_field(field_name: str, value: str, valid_options: List[str]) -> None:

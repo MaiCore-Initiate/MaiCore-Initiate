@@ -22,8 +22,8 @@ TABLE_SECTIONS = {"MCStart", "MODINFO", "COMPONENTS", "DEPLOY", "LAUNCH", "CONFI
 TOP_LEVEL_KEYS = TABLE_SECTIONS | ARRAY_SECTIONS
 ALLOWED_PLACEHOLDER_KINDS = {"key", "env", "install_path", "deploy_path", "version", "file_path", "file_key"}
 
-VALID_RUNTIMES = {"powershell", "pwsh", "cmd", "bash", "python3", "python", "node"}
-VALID_COMMAND_THEMES = {"oh-my-push", "oh-my-posh", "classical"}
+VALID_RUNTIMES = {"powershell", "pwsh", "cmd", "bash", "python3", "python", "node", "deno"}
+VALID_COMMAND_THEMES = {"oh-my-posh", "oh-my-push", "classical"}
 VALID_PLATFORMS = {"windows", "linux", "macos"}
 VALID_COMPONENT_GET_METHODS = {"direct", "get_version", "get_link"}
 VALID_DEPLOYMENT_GET_METHODS = {"get_version", "get_link"}
@@ -402,6 +402,17 @@ class DeploymentModTemplateChecker:
                 "file_import",
                 "file_import_list",
                 "runtime",
+                "deno_net",
+                "deno_read",
+                "deno_write",
+                "deno_env",
+                "deno_run",
+                "deno_hrtime",
+                "deno_ffi",
+                "deno_sys",
+                "deno_all",
+                "deno_custom_permissions",
+                "deno_permission_list",
                 "platforms",
                 "schema_version",
             },
@@ -469,6 +480,8 @@ class DeploymentModTemplateChecker:
         runtime = str(modinfo.get("runtime", "") or "").strip().lower()
         if runtime and runtime not in VALID_RUNTIMES:
             report.error("运行时声明非法", f"`MODINFO.runtime` 只支持: {', '.join(sorted(VALID_RUNTIMES))}。", source_map.table("MODINFO", "runtime"))
+        if self._raw_uses_runtime(raw, "deno", runtime):
+            self._validate_deno_permissions(modinfo, report, source_map)
 
         mod_id = str(modinfo.get("mod_id", "") or "").strip()
         if mod_id and not MOD_ID_PATTERN.match(mod_id):
@@ -1420,6 +1433,70 @@ class DeploymentModTemplateChecker:
                 "命令主题声明非法",
                 f"`{location.label}.command_theme` 只支持: {', '.join(sorted(VALID_COMMAND_THEMES))}。",
                 location,
+            )
+
+    @staticmethod
+    def _raw_uses_runtime(raw: Dict[str, Any], runtime: str, default_runtime: str = "") -> bool:
+        expected = str(runtime or "").strip().lower()
+        if str(default_runtime or "").strip().lower() == expected:
+            return True
+        for section_name in ARRAY_SECTIONS:
+            value = raw.get(section_name)
+            if not isinstance(value, list):
+                continue
+            for item in value:
+                if isinstance(item, dict) and str(item.get("runtime", "") or "").strip().lower() == expected:
+                    return True
+        return False
+
+    def _validate_deno_permissions(self, modinfo: Dict[str, Any], report: CheckReport, source_map: TomlSourceMap) -> None:
+        permission_keys = (
+            "deno_net",
+            "deno_read",
+            "deno_write",
+            "deno_env",
+            "deno_run",
+            "deno_hrtime",
+            "deno_ffi",
+            "deno_sys",
+            "deno_all",
+            "deno_custom_permissions",
+        )
+        for key in permission_keys:
+            if key not in modinfo:
+                report.error("缺少 Deno 权限声明", f"`runtime = \"deno\"` 时必须显式声明 `MODINFO.{key}`。", source_map.table("MODINFO", key))
+            elif not isinstance(modinfo.get(key), bool):
+                report.error("Deno 权限字段类型错误", f"`MODINFO.{key}` 必须是布尔值。", source_map.table("MODINFO", key))
+
+        custom_permissions = modinfo.get("deno_custom_permissions") is True
+        permission_list = modinfo.get("deno_permission_list", [])
+        if custom_permissions:
+            if not isinstance(permission_list, list) or not permission_list:
+                report.error(
+                    "Deno 自定义权限列表非法",
+                    "`deno_custom_permissions = true` 时 `MODINFO.deno_permission_list` 必须是非空字符串数组。",
+                    source_map.table("MODINFO", "deno_permission_list"),
+                )
+            else:
+                for item in permission_list:
+                    if not isinstance(item, str) or not item.strip():
+                        report.error(
+                            "Deno 自定义权限项非法",
+                            "`MODINFO.deno_permission_list` 中只能包含非空字符串。",
+                            source_map.table("MODINFO", "deno_permission_list"),
+                        )
+                        break
+                    if not item.strip().startswith("-"):
+                        report.warn(
+                            "Deno 自定义权限项可能无效",
+                            f"`{item}` 看起来不像 Deno 权限参数，通常应以 `--allow-` 或 `-A` 开头。",
+                            source_map.table("MODINFO", "deno_permission_list"),
+                        )
+        elif isinstance(permission_list, list) and permission_list:
+            report.warn(
+                "Deno 自定义权限列表将被忽略",
+                "`deno_custom_permissions = false` 时 `deno_permission_list` 不会追加到运行命令。",
+                source_map.table("MODINFO", "deno_permission_list"),
             )
 
     def _validate_text_placeholders(
