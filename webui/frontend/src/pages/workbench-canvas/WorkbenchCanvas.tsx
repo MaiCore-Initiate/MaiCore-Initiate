@@ -4,7 +4,45 @@ import CanvasConnectionLayer from './CanvasConnectionLayer'
 import ComponentsBlock, { componentsBlockInputOffset, componentsBlockMinSize, resolveComponentsBlockOutputOffset } from './blocks/ComponentsBlock'
 import InitBlock from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
-import { workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize } from './types'
+import { workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentMeta, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize } from './types'
+
+const defaultComponentMeta: WorkbenchComponentMeta = {
+  name: '',
+  id: '',
+  choose: null,
+  runtime: '',
+  commandTheme: '',
+  install: null,
+  check: null,
+  checkCommand: [],
+  checkVersionContains: [],
+  checkVersionRegex: [],
+  commandInstall: null,
+  installCommandList: [],
+  getMethod: '',
+  directLink: '',
+  getVersion: '',
+  githubRepo: '',
+  getLink: '',
+  getLinkProvideList: [],
+  userChoose: null,
+  chooseList: [],
+  formatVersion: null,
+  versionFormattingFormula: [],
+  installOperate: '',
+  installCustomList: [],
+  installPath: '',
+  customPath: '',
+  splicingLink: '',
+  beforeCommand: null,
+  beforeCommandList: [],
+  afterCommand: null,
+  afterCommandList: [],
+  envOutput: null,
+  envOutputList: [],
+  envInput: null,
+  envInputList: [],
+}
 
 const defaultBlockMeta: WorkbenchBlockMeta = {
   author: '',
@@ -31,6 +69,10 @@ const defaultBlockMeta: WorkbenchBlockMeta = {
   denoPermissionList: [],
   platforms: [],
   schemaVersion: '',
+  componentsEnvOutput: null,
+  componentsEnvInput: null,
+  componentsList: [],
+  component: defaultComponentMeta,
 }
 
 const initBlockInputOffset: WorkbenchPoint = { x: 5, y: 115.5 }
@@ -290,6 +332,10 @@ export default function WorkbenchCanvas({
             selected={selectedBlockId === 'components'}
             onSelect={() => onSelectedBlockChange?.('components')}
             onAddConnectorClick={() => openAddNodePopover(componentsBlockOutput)}
+            componentsEnvOutput={meta.componentsEnvOutput}
+            componentsEnvInput={meta.componentsEnvInput}
+            componentsList={meta.componentsList}
+            component={meta.component}
             dragHandlers={createDragHandlers('components', componentsBlockPosition)}
             resizeHandlers={createResizeHandlers('components')}
           />

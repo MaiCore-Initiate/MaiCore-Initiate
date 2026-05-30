@@ -4,7 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentMeta } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -44,6 +44,7 @@ export interface OutlineNode {
   defaultSelected?: boolean
   tone?: OutlineNodeTone
   selectable?: boolean
+  blockId?: WorkbenchBlockId
 }
 
 export interface DeploymentFlowWorkbenchProps {
@@ -59,6 +60,44 @@ interface WorkbenchProjectInfo {
 }
 
 type WorkbenchMetaState = WorkbenchModInfoMeta
+
+const defaultComponentMeta: WorkbenchComponentMeta = {
+  name: '',
+  id: '',
+  choose: null,
+  runtime: '',
+  commandTheme: '',
+  install: null,
+  check: null,
+  checkCommand: [],
+  checkVersionContains: [],
+  checkVersionRegex: [],
+  commandInstall: null,
+  installCommandList: [],
+  getMethod: '',
+  directLink: '',
+  getVersion: '',
+  githubRepo: '',
+  getLink: '',
+  getLinkProvideList: [],
+  userChoose: null,
+  chooseList: [],
+  formatVersion: null,
+  versionFormattingFormula: [],
+  installOperate: '',
+  installCustomList: [],
+  installPath: '',
+  customPath: '',
+  splicingLink: '',
+  beforeCommand: null,
+  beforeCommandList: [],
+  afterCommand: null,
+  afterCommandList: [],
+  envOutput: null,
+  envOutputList: [],
+  envInput: null,
+  envInputList: [],
+}
 
 const defaultWorkbenchMeta: WorkbenchMetaState = {
   author: '',
@@ -85,6 +124,10 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   denoPermissionList: [],
   platforms: [],
   schemaVersion: '',
+  componentsEnvOutput: null,
+  componentsEnvInput: null,
+  componentsList: [],
+  component: defaultComponentMeta,
 }
 
 function formatTomlString(value: string) {
@@ -161,50 +204,104 @@ function createModInfoOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
   ]
 }
 
-const defaultOutline: OutlineNode[] = [
-  {
-    id: 'mcstart',
-    label: '[MCStart]',
-    defaultExpanded: true,
-    tone: 'locked',
-    children: [
-      { id: 'mcstart-enabled', label: 'MCStart = true', icon: 'boolean', tone: 'locked' },
-    ],
-  },
-  {
-    id: 'modinfo',
-    label: '[MODINFO]',
-    defaultExpanded: true,
-    children: createModInfoOutlineChildren(defaultWorkbenchMeta),
-  },
-  {
-    id: 'components',
-    label: '[COMPONENTS]',
-    defaultExpanded: true,
-    children: [
-      { id: 'components-env-output', label: 'env_output = false', icon: 'boolean' },
-      { id: 'components-env-input', label: 'env_input = false', icon: 'boolean' },
-      {
-        id: 'components-list',
-        label: 'list',
-        icon: 'array',
-        children: [
-          { id: 'components-list-0', label: '0', icon: 'object' },
-          { id: 'components-list-1', label: '1', icon: 'object' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'component-array',
-    label: '[[Component]]',
-    defaultExpanded: true,
-    children: [
-      { id: 'component-array-0', label: '0', icon: 'object' },
-      { id: 'component-array-1', label: '1', icon: 'object' },
-    ],
-  },
-]
+function createComponentOutlineChildren(component: WorkbenchComponentMeta): OutlineNode[] {
+  return [
+    { id: 'component-name', label: `name = ${formatTomlString(component.name)}`, icon: 'string' },
+    { id: 'component-id', label: `id = ${formatTomlString(component.id)}`, icon: 'string' },
+    ...(component.install === true ? [createBooleanOutlineNode('component-choose', 'choose', component.choose)] : []),
+    { id: 'component-runtime', label: `runtime = ${formatTomlString(component.runtime)}`, icon: 'string' },
+    { id: 'component-command-theme', label: `command_theme = ${formatTomlString(component.commandTheme)}`, icon: 'string' },
+    createBooleanOutlineNode('component-install', 'install', component.install),
+    createBooleanOutlineNode('component-check', 'check', component.check),
+    ...(component.check === true
+      ? [
+        createStringArrayOutlineNode('component-check-command', 'check_command', component.checkCommand),
+        createStringArrayOutlineNode('component-check-version-contains', 'check_version_contains', component.checkVersionContains),
+        createStringArrayOutlineNode('component-check-version-regex', 'check_version_regex', component.checkVersionRegex),
+      ]
+      : []),
+    ...(component.install === true ? [createBooleanOutlineNode('component-command-install', 'command_install', component.commandInstall)] : []),
+    ...(component.commandInstall === true
+      ? [createStringArrayOutlineNode('component-install-command-list', 'install_command_list', component.installCommandList)]
+      : []),
+    { id: 'component-get-method', label: `get_method = ${formatTomlString(component.getMethod)}`, icon: 'string' },
+    ...(component.getMethod === 'direct'
+      ? [{ id: 'component-direct-link', label: `direct_link = ${formatTomlString(component.directLink)}`, icon: 'string' as const }]
+      : []),
+    ...(component.getMethod === 'get_version'
+      ? [
+        { id: 'component-get-version', label: `get_version = ${formatTomlString(component.getVersion)}`, icon: 'string' as const },
+        ...(component.getVersion === 'github_repo'
+          ? [{ id: 'component-github-repo', label: `github_repo = ${formatTomlString(component.githubRepo)}`, icon: 'string' as const }]
+          : []),
+        createBooleanOutlineNode('component-format-version', 'format_version', component.formatVersion),
+        ...(component.formatVersion === true
+          ? [createStringArrayOutlineNode('component-version-formatting-formula', 'version_formatting_formula', component.versionFormattingFormula)]
+          : []),
+        { id: 'component-splicing-link', label: `splicing_link = ${formatTomlString(component.splicingLink)}`, icon: 'string' as const },
+      ]
+      : []),
+    ...(component.getMethod === 'get_link'
+      ? [
+        { id: 'component-get-link', label: `get_link = ${formatTomlString(component.getLink)}`, icon: 'string' as const },
+        ...(component.getLink === 'filelink' || component.getLink === 'custom'
+          ? [createStringArrayOutlineNode('component-get-link-provide-list', 'get_link_provide_list', component.getLinkProvideList)]
+          : []),
+      ]
+      : []),
+    createBooleanOutlineNode('component-user-choose', 'user_choose', component.userChoose),
+    ...(component.userChoose === true ? [createStringArrayOutlineNode('component-choose-list', 'choose_list', component.chooseList)] : []),
+    ...(component.install === true && component.commandInstall === false
+      ? [
+        { id: 'component-install-operate', label: `install_operate = ${formatTomlString(component.installOperate)}`, icon: 'string' as const },
+        ...(component.installOperate === 'custom'
+          ? [createStringArrayOutlineNode('component-install-custom-list', 'install_custom_list', component.installCustomList)]
+          : []),
+      ]
+      : []),
+    ...(component.install === true
+      ? [
+        { id: 'component-install-path', label: `install_path = ${formatTomlString(component.installPath)}`, icon: 'string' as const },
+        ...(component.installPath === '$CustomPath'
+          ? [{ id: 'component-custom-path', label: `custom_path = ${formatTomlString(component.customPath)}`, icon: 'string' as const }]
+          : []),
+      ]
+      : []),
+    createBooleanOutlineNode('component-before-command', 'before_command', component.beforeCommand),
+    ...(component.beforeCommand === true
+      ? [createStringArrayOutlineNode('component-before-command-list', 'before_command_list', component.beforeCommandList)]
+      : []),
+    createBooleanOutlineNode('component-after-command', 'after_command', component.afterCommand),
+    ...(component.afterCommand === true
+      ? [createStringArrayOutlineNode('component-after-command-list', 'after_command_list', component.afterCommandList)]
+      : []),
+    createBooleanOutlineNode('component-env-output', 'env_output', component.envOutput),
+    ...(component.envOutput === true ? [createStringArrayOutlineNode('component-env-output-list', 'env_output_list', component.envOutputList)] : []),
+    createBooleanOutlineNode('component-env-input', 'env_input', component.envInput),
+    ...(component.envInput === true ? [createStringArrayOutlineNode('component-env-input-list', 'env_input_list', component.envInputList)] : []),
+  ]
+}
+
+function createComponentsOutlineNodes(meta: WorkbenchMetaState): OutlineNode[] {
+  return [
+    {
+      id: 'components',
+      label: '[COMPONENTS]',
+      defaultExpanded: true,
+      children: [
+        createBooleanOutlineNode('components-env-output', 'env_output', meta.componentsEnvOutput),
+        createBooleanOutlineNode('components-env-input', 'env_input', meta.componentsEnvInput),
+        createStringArrayOutlineNode('components-list', 'list', meta.componentsList, true),
+      ],
+    },
+    {
+      id: 'component-array',
+      label: '[[Component]]',
+      defaultExpanded: true,
+      children: createComponentOutlineChildren(meta.component),
+    },
+  ]
+}
 
 function createOutline(meta: WorkbenchMetaState): OutlineNode[] {
   return [
@@ -223,7 +320,7 @@ function createOutline(meta: WorkbenchMetaState): OutlineNode[] {
       defaultExpanded: true,
       children: createModInfoOutlineChildren(meta),
     },
-    ...defaultOutline.slice(2),
+    ...createComponentsOutlineNodes(meta),
   ]
 }
 
@@ -328,6 +425,32 @@ function collectOutlineLineSegments(flatNodes: FlattenedOutlineNode[]): OutlineL
   })
 }
 
+function resolveOutlineBlockId(node: OutlineNode): WorkbenchBlockId | null {
+  if (node.blockId) return node.blockId
+  if (node.id === 'mcstart' || node.id.startsWith('mcstart-')) return 'start'
+  if (node.id === 'modinfo' || node.id.startsWith('modinfo-')) return 'init'
+  if (
+    node.id === 'components'
+    || node.id.startsWith('components-')
+    || node.id === 'component-array'
+    || node.id.startsWith('component-')
+  ) {
+    return 'components'
+  }
+  return null
+}
+
+function findOutlineNodeIdForBlock(nodes: OutlineNode[], blockId: WorkbenchBlockId): string {
+  for (const node of nodes) {
+    if (resolveOutlineBlockId(node) === blockId) return node.id
+    if (node.children) {
+      const childId = findOutlineNodeIdForBlock(node.children, blockId)
+      if (childId) return childId
+    }
+  }
+  return ''
+}
+
 function SidebarToolButton({
   left,
   top = 20,
@@ -426,24 +549,36 @@ function OutlineTypeIcon({ type }: { type: OutlineIconType }) {
 function OutlineTree({
   nodes,
   sidebarWidth,
+  selectedBlockId,
+  onBlockSelect,
 }: {
   nodes: OutlineNode[]
   sidebarWidth: number
+  selectedBlockId: WorkbenchBlockId | null
+  onBlockSelect: (blockId: WorkbenchBlockId) => void
 }) {
   const [expanded, setExpanded] = useState(() => collectDefaultExpanded(nodes))
-  const [selectedId, setSelectedId] = useState(() => firstSelectableNode(nodes))
+  const [selectedId, setSelectedId] = useState(() => selectedBlockId ? findOutlineNodeIdForBlock(nodes, selectedBlockId) : '')
   const flatNodes = useMemo(() => flattenOutline(nodes, expanded), [nodes, expanded])
   const lineSegments = useMemo(() => collectOutlineLineSegments(flatNodes), [flatNodes])
   const rowWidth = Math.max(0, sidebarWidth - 27)
   const selectedWidth = Math.max(0, sidebarWidth - 40)
 
   useEffect(() => {
+    const defaultExpanded = collectDefaultExpanded(nodes)
     setExpanded(prev => new Set([...prev, ...collectDefaultExpanded(nodes)]))
     setSelectedId(prev => {
-      const hasCurrent = flattenOutline(nodes, collectDefaultExpanded(nodes)).some(item => item.node.id === prev)
+      if (selectedBlockId === null) return ''
+      const flatDefaultNodes = flattenOutline(nodes, defaultExpanded)
+      const currentNode = flatDefaultNodes.find(item => item.node.id === prev)?.node
+      const hasCurrent = Boolean(currentNode)
+      if (selectedBlockId && (!currentNode || resolveOutlineBlockId(currentNode) !== selectedBlockId)) {
+        const nextId = findOutlineNodeIdForBlock(nodes, selectedBlockId)
+        if (nextId) return nextId
+      }
       return hasCurrent ? prev : firstSelectableNode(nodes)
     })
-  }, [nodes])
+  }, [nodes, selectedBlockId])
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => {
@@ -492,7 +627,11 @@ function OutlineTree({
               type="button"
               onClick={() => {
                 if (hasChildren) toggleExpanded(node.id)
-                if (selectable) setSelectedId(node.id)
+                if (selectable) {
+                  setSelectedId(node.id)
+                  const blockId = resolveOutlineBlockId(node)
+                  if (blockId) onBlockSelect(blockId)
+                }
               }}
               className="absolute left-0 h-[24px] text-left transition-[top,background-color,opacity,transform] duration-150 ease-out hover:bg-[var(--dfw-outline-hover)]"
               style={{
@@ -564,6 +703,8 @@ function WorkbenchLeftSidebar({
   onBackToLibrary,
   onResize,
   outline,
+  selectedBlockId,
+  onBlockSelect,
 }: {
   collapsed: boolean
   width: number
@@ -571,6 +712,8 @@ function WorkbenchLeftSidebar({
   onBackToLibrary: () => void
   onResize: (width: number) => void
   outline: OutlineNode[]
+  selectedBlockId: WorkbenchBlockId | null
+  onBlockSelect: (blockId: WorkbenchBlockId) => void
 }) {
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
 
@@ -656,7 +799,12 @@ function WorkbenchLeftSidebar({
         style={{ left: 20, top: 109.5, width: Math.max(0, width - 40), background: 'var(--dfw-sidebar-border)' }}
         aria-hidden
       />
-      <OutlineTree nodes={outline} sidebarWidth={width} />
+      <OutlineTree
+        nodes={outline}
+        sidebarWidth={width}
+        selectedBlockId={selectedBlockId}
+        onBlockSelect={onBlockSelect}
+      />
       <div
         className="absolute bottom-[30px] right-[-5px] top-[30px] w-[10px] cursor-ew-resize"
         onPointerDown={startResize}
@@ -724,6 +872,10 @@ export default function DeploymentFlowWorkbench({
     denoPermissionList: meta.denoPermissionList,
     platforms: meta.platforms,
     schemaVersion: meta.schemaVersion,
+    componentsEnvOutput: meta.componentsEnvOutput,
+    componentsEnvInput: meta.componentsEnvInput,
+    componentsList: meta.componentsList,
+    component: meta.component,
   }), [meta])
 
   const cancelViewportAnimation = () => {
@@ -950,6 +1102,8 @@ export default function DeploymentFlowWorkbench({
         onResize={setLeftSidebarWidth}
         onBackToLibrary={onBackToLibrary}
         outline={effectiveOutline}
+        selectedBlockId={selectedBlockId}
+        onBlockSelect={setSelectedBlockId}
       />
       <WorkbenchTopTabs
         onBackToLibrary={onBackToLibrary}

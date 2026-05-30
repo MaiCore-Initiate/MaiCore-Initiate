@@ -33,6 +33,48 @@ export interface WorkbenchBlockMeta {
   denoPermissionList: string[]
   platforms: string[]
   schemaVersion: string
+  componentsEnvOutput: boolean | null
+  componentsEnvInput: boolean | null
+  componentsList: string[]
+  component: WorkbenchComponentMeta
+}
+
+export interface WorkbenchComponentMeta {
+  name: string
+  id: string
+  choose: boolean | null
+  runtime: string
+  commandTheme: string
+  install: boolean | null
+  check: boolean | null
+  checkCommand: string[]
+  checkVersionContains: string[]
+  checkVersionRegex: string[]
+  commandInstall: boolean | null
+  installCommandList: string[]
+  getMethod: string
+  directLink: string
+  getVersion: string
+  githubRepo: string
+  getLink: string
+  getLinkProvideList: string[]
+  userChoose: boolean | null
+  chooseList: string[]
+  formatVersion: boolean | null
+  versionFormattingFormula: string[]
+  installOperate: string
+  installCustomList: string[]
+  installPath: string
+  customPath: string
+  splicingLink: string
+  beforeCommand: boolean | null
+  beforeCommandList: string[]
+  afterCommand: boolean | null
+  afterCommandList: string[]
+  envOutput: boolean | null
+  envOutputList: string[]
+  envInput: boolean | null
+  envInputList: string[]
 }
 
 export interface WorkbenchPoint {

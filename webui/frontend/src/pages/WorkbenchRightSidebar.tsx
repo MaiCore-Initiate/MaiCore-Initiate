@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import type { WorkbenchBlockId } from './workbench-canvas/types'
+import type { WorkbenchBlockId, WorkbenchComponentMeta } from './workbench-canvas/types'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -15,6 +15,11 @@ export const rightSidebarMaxWidth = 760
 
 const runtimeOptions = ['powershell', 'pwsh', 'cmd', 'bash', 'python3', 'python', 'node', 'deno']
 const platformOptions = ['windows', 'linux', 'macos']
+const commandThemeOptions = ['oh-my-push', 'classical']
+const getMethodOptions = ['direct', 'get_version', 'get_link']
+const getVersionOptions = ['github_repo', 'filelink', 'custom']
+const getLinkOptions = ['filelink', 'custom', 'user_input']
+const installOperateOptions = ['auto', 'no', 'custom']
 
 let denoPermissionItemId = 0
 
@@ -43,6 +48,48 @@ export interface WorkbenchModInfoMeta {
   denoPermissionList: string[]
   platforms: string[]
   schemaVersion: string
+  componentsEnvOutput: boolean | null
+  componentsEnvInput: boolean | null
+  componentsList: string[]
+  component: WorkbenchComponentMeta
+}
+
+const emptyComponentMeta: WorkbenchComponentMeta = {
+  name: '',
+  id: '',
+  choose: null,
+  runtime: '',
+  commandTheme: '',
+  install: null,
+  check: null,
+  checkCommand: [],
+  checkVersionContains: [],
+  checkVersionRegex: [],
+  commandInstall: null,
+  installCommandList: [],
+  getMethod: '',
+  directLink: '',
+  getVersion: '',
+  githubRepo: '',
+  getLink: '',
+  getLinkProvideList: [],
+  userChoose: null,
+  chooseList: [],
+  formatVersion: null,
+  versionFormattingFormula: [],
+  installOperate: '',
+  installCustomList: [],
+  installPath: '',
+  customPath: '',
+  splicingLink: '',
+  beforeCommand: null,
+  beforeCommandList: [],
+  afterCommand: null,
+  afterCommandList: [],
+  envOutput: null,
+  envOutputList: [],
+  envInput: null,
+  envInputList: [],
 }
 
 const emptyModInfoMeta: WorkbenchModInfoMeta = {
@@ -70,6 +117,10 @@ const emptyModInfoMeta: WorkbenchModInfoMeta = {
   denoPermissionList: [],
   platforms: [],
   schemaVersion: '',
+  componentsEnvOutput: null,
+  componentsEnvInput: null,
+  componentsList: [],
+  component: emptyComponentMeta,
 }
 
 export interface WorkbenchRightSidebarProps {
@@ -388,6 +439,100 @@ function RuntimeSelectField({
   )
 }
 
+function OptionSelectField({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  width = 220,
+}: {
+  value: string
+  options: string[]
+  onChange: (value: string) => void
+  ariaLabel: string
+  width?: number
+}) {
+  const [open, setOpen] = useState(false)
+  const allOptions = ['', ...options]
+  const displayValue = value || '空白'
+
+  return (
+    <div
+      className="relative max-w-full"
+      style={{ width }}
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false)
+        }
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        className="flex h-[42px] w-full items-center justify-between rounded-[21px] border px-[14px] text-[20px] font-light outline-none transition-colors hover:bg-[var(--dfw-control-hover)] focus:border-[var(--dfw-blue)]"
+        style={{
+          borderColor: open ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+          background: open ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+          color: 'var(--dfw-text)',
+          fontFamily: font,
+        }}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+      >
+        <span className="overflow-hidden whitespace-nowrap">{displayValue}</span>
+        <svg
+          className="ml-[8px] shrink-0 transition-transform duration-150"
+          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden
+        >
+          <path d="M3.5 6L8 10.5L12.5 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 top-[48px] z-40 w-full overflow-hidden rounded-[14px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.12)]"
+          style={{
+            borderColor: 'var(--dfw-sidebar-border)',
+            background: 'var(--dfw-sidebar-bg)',
+            color: 'var(--dfw-text)',
+            fontFamily: font,
+          }}
+          role="listbox"
+        >
+          {allOptions.map(option => {
+            const selected = option === value
+            return (
+              <button
+                key={option || 'empty'}
+                type="button"
+                onMouseDown={event => event.preventDefault()}
+                onClick={() => {
+                  onChange(option)
+                  setOpen(false)
+                }}
+                className="block h-[34px] w-full px-[12px] text-left text-[18px] font-light leading-[34px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+                style={{
+                  background: selected ? 'var(--dfw-outline-selected-bg)' : 'transparent',
+                }}
+                role="option"
+                aria-selected={selected}
+              >
+                {option || '空白'}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ConditionalField({
   show,
   children,
@@ -490,6 +635,41 @@ function ValueChips({ values }: { values: string[] }) {
         </span>
       ))}
     </div>
+  )
+}
+
+function LineListField({
+  values,
+  onChange,
+  maxWidth,
+  ariaLabel,
+}: {
+  values: string[]
+  onChange: (values: string[]) => void
+  maxWidth: number
+  ariaLabel: string
+}) {
+  const [input, setInput] = useState(formatLineList(values))
+
+  useEffect(() => {
+    if (!arraysEqual(parseLineList(input), values)) {
+      setInput(formatLineList(values))
+    }
+  }, [values])
+
+  const updateInput = (value: string) => {
+    setInput(value)
+    onChange(parseLineList(value))
+  }
+
+  return (
+    <AutoGrowTextField
+      value={input}
+      onChange={updateInput}
+      allowLineBreaks
+      maxWidth={maxWidth}
+      ariaLabel={ariaLabel}
+    />
   )
 }
 
@@ -851,6 +1031,24 @@ export default function WorkbenchRightSidebar({
     updateMeta({ fileImportList: parseLineList(value) })
   }
 
+  const component = meta.component ?? emptyComponentMeta
+  const updateComponent = (patch: Partial<WorkbenchComponentMeta>) => {
+    updateMeta({ component: { ...component, ...patch } })
+  }
+
+  const updateComponentId = (id: string) => {
+    const previousId = component.id
+    const nextList = meta.componentsList.length === 0
+      ? (id ? [id] : [])
+      : meta.componentsList
+        .map(item => (item === previousId ? id : item))
+        .filter(Boolean)
+    updateMeta({
+      component: { ...component, id },
+      componentsList: arraysEqual(nextList, meta.componentsList) ? meta.componentsList : nextList,
+    })
+  }
+
   const startResize = (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()
@@ -887,6 +1085,7 @@ export default function WorkbenchRightSidebar({
   }
 
   const shouldShowInitMeta = selectedBlockId === 'init'
+  const shouldShowComponentsMeta = selectedBlockId === 'components'
 
   if (collapsed) {
     return (
@@ -1195,6 +1394,409 @@ export default function WorkbenchRightSidebar({
             />
           </section>
         </div>
+        ) : shouldShowComponentsMeta ? (
+          <div className="flex min-h-[3600px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+            <section>
+              <FieldLabel>[COMPONENTS] 环境变量导出</FieldLabel>
+              <BooleanSwitchField
+                value={meta.componentsEnvOutput}
+                onChange={componentsEnvOutput => updateMeta({ componentsEnvOutput })}
+              />
+            </section>
+
+            <section>
+              <FieldLabel>[COMPONENTS] 环境变量导入</FieldLabel>
+              <BooleanSwitchField
+                value={meta.componentsEnvInput}
+                onChange={componentsEnvInput => updateMeta({ componentsEnvInput })}
+              />
+            </section>
+
+            <section>
+              <FieldLabel>组件ID列表</FieldLabel>
+              <LineListField
+                values={meta.componentsList}
+                onChange={componentsList => updateMeta({ componentsList })}
+                maxWidth={fieldAvailableWidth}
+                ariaLabel="组件ID列表"
+              />
+              <ValueChips values={meta.componentsList} />
+            </section>
+
+            <section>
+              <FieldLabel>组件名称</FieldLabel>
+              <AutoGrowTextField
+                value={component.name}
+                onChange={name => updateComponent({ name })}
+                maxWidth={fieldAvailableWidth}
+                ariaLabel="组件名称"
+              />
+            </section>
+
+            <section>
+              <FieldLabel>组件ID</FieldLabel>
+              <AutoGrowTextField
+                value={component.id}
+                onChange={updateComponentId}
+                maxWidth={fieldAvailableWidth}
+                ariaLabel="组件ID"
+              />
+            </section>
+
+            <section>
+              <FieldLabel>需要安装</FieldLabel>
+              <BooleanSwitchField
+                value={component.install}
+                onChange={install => updateComponent({ install })}
+              />
+            </section>
+
+            <ConditionalField show={component.install === true}>
+              <section>
+                <FieldLabel>用户可选安装</FieldLabel>
+                <BooleanSwitchField
+                  value={component.choose}
+                  onChange={choose => updateComponent({ choose })}
+                />
+              </section>
+            </ConditionalField>
+
+            <section>
+              <FieldLabel>组件运行时</FieldLabel>
+              <RuntimeSelectField
+                value={component.runtime}
+                onChange={runtime => updateComponent({ runtime })}
+              />
+            </section>
+
+            <section>
+              <FieldLabel>命令主题</FieldLabel>
+              <OptionSelectField
+                value={component.commandTheme}
+                options={commandThemeOptions}
+                onChange={commandTheme => updateComponent({ commandTheme })}
+                ariaLabel="命令主题"
+              />
+            </section>
+
+            <section>
+              <FieldLabel>检查已安装</FieldLabel>
+              <BooleanSwitchField
+                value={component.check}
+                onChange={check => updateComponent({ check })}
+              />
+            </section>
+
+            <ConditionalField show={component.check === true}>
+              <div className="flex flex-col gap-[18px]">
+                <section>
+                  <FieldLabel>检查命令列表</FieldLabel>
+                  <LineListField
+                    values={component.checkCommand}
+                    onChange={checkCommand => updateComponent({ checkCommand })}
+                    maxWidth={fieldAvailableWidth}
+                    ariaLabel="检查命令列表"
+                  />
+                </section>
+
+                <section>
+                  <FieldLabel>版本关键字</FieldLabel>
+                  <LineListField
+                    values={component.checkVersionContains}
+                    onChange={checkVersionContains => updateComponent({ checkVersionContains })}
+                    maxWidth={fieldAvailableWidth}
+                    ariaLabel="版本关键字"
+                  />
+                </section>
+
+                <section>
+                  <FieldLabel>版本正则匹配</FieldLabel>
+                  <LineListField
+                    values={component.checkVersionRegex}
+                    onChange={checkVersionRegex => updateComponent({ checkVersionRegex })}
+                    maxWidth={fieldAvailableWidth}
+                    ariaLabel="版本正则匹配"
+                  />
+                </section>
+              </div>
+            </ConditionalField>
+
+            <section>
+              <FieldLabel>获取方法</FieldLabel>
+              <OptionSelectField
+                value={component.getMethod}
+                options={getMethodOptions}
+                onChange={getMethod => updateComponent({ getMethod })}
+                ariaLabel="获取方法"
+              />
+            </section>
+
+            <ConditionalField show={component.getMethod === 'direct'}>
+              <section>
+                <FieldLabel>直接下载链接</FieldLabel>
+                <AutoGrowTextField
+                  value={component.directLink}
+                  onChange={directLink => updateComponent({ directLink })}
+                  maxWidth={fieldAvailableWidth}
+                  ariaLabel="直接下载链接"
+                />
+              </section>
+            </ConditionalField>
+
+            <ConditionalField show={component.getMethod === 'get_version'}>
+              <div className="flex flex-col gap-[18px]">
+                <section>
+                  <FieldLabel>版本获取方式</FieldLabel>
+                  <OptionSelectField
+                    value={component.getVersion}
+                    options={getVersionOptions}
+                    onChange={getVersion => updateComponent({ getVersion })}
+                    ariaLabel="版本获取方式"
+                  />
+                </section>
+
+                <ConditionalField show={component.getVersion === 'github_repo'}>
+                  <section>
+                    <FieldLabel>GitHub仓库链接</FieldLabel>
+                    <AutoGrowTextField
+                      value={component.githubRepo}
+                      onChange={githubRepo => updateComponent({ githubRepo })}
+                      maxWidth={fieldAvailableWidth}
+                      ariaLabel="GitHub仓库链接"
+                    />
+                  </section>
+                </ConditionalField>
+
+                <section>
+                  <FieldLabel>版本拼接链接</FieldLabel>
+                  <AutoGrowTextField
+                    value={component.splicingLink}
+                    onChange={splicingLink => updateComponent({ splicingLink })}
+                    maxWidth={fieldAvailableWidth}
+                    ariaLabel="版本拼接链接"
+                  />
+                </section>
+
+                <section>
+                  <FieldLabel>格式化版本号</FieldLabel>
+                  <BooleanSwitchField
+                    value={component.formatVersion}
+                    onChange={formatVersion => updateComponent({ formatVersion })}
+                  />
+                </section>
+
+                <ConditionalField show={component.formatVersion === true}>
+                  <section>
+                    <FieldLabel>格式化规则列表</FieldLabel>
+                    <LineListField
+                      values={component.versionFormattingFormula}
+                      onChange={versionFormattingFormula => updateComponent({ versionFormattingFormula })}
+                      maxWidth={fieldAvailableWidth}
+                      ariaLabel="格式化规则列表"
+                    />
+                  </section>
+                </ConditionalField>
+              </div>
+            </ConditionalField>
+
+            <ConditionalField show={component.getMethod === 'get_link'}>
+              <div className="flex flex-col gap-[18px]">
+                <section>
+                  <FieldLabel>链接获取方式</FieldLabel>
+                  <OptionSelectField
+                    value={component.getLink}
+                    options={getLinkOptions}
+                    onChange={getLink => updateComponent({ getLink })}
+                    ariaLabel="链接获取方式"
+                  />
+                </section>
+
+                <ConditionalField show={component.getLink === 'filelink' || component.getLink === 'custom'}>
+                  <section>
+                    <FieldLabel>可选链接列表</FieldLabel>
+                    <LineListField
+                      values={component.getLinkProvideList}
+                      onChange={getLinkProvideList => updateComponent({ getLinkProvideList })}
+                      maxWidth={fieldAvailableWidth}
+                      ariaLabel="可选链接列表"
+                    />
+                  </section>
+                </ConditionalField>
+              </div>
+            </ConditionalField>
+
+            <section>
+              <FieldLabel>用户可选版本</FieldLabel>
+              <BooleanSwitchField
+                value={component.userChoose}
+                onChange={userChoose => updateComponent({ userChoose })}
+              />
+            </section>
+
+            <ConditionalField show={component.userChoose === true}>
+              <section>
+                <FieldLabel>版本选择列表</FieldLabel>
+                <LineListField
+                  values={component.chooseList}
+                  onChange={chooseList => updateComponent({ chooseList })}
+                  maxWidth={fieldAvailableWidth}
+                  ariaLabel="版本选择列表"
+                />
+              </section>
+            </ConditionalField>
+
+            <ConditionalField show={component.install === true}>
+              <div className="flex flex-col gap-[18px]">
+                <section>
+                  <FieldLabel>命令行安装</FieldLabel>
+                  <BooleanSwitchField
+                    value={component.commandInstall}
+                    onChange={commandInstall => updateComponent({ commandInstall })}
+                  />
+                </section>
+
+                <ConditionalField show={component.commandInstall === true}>
+                  <section>
+                    <FieldLabel>安装命令列表</FieldLabel>
+                    <LineListField
+                      values={component.installCommandList}
+                      onChange={installCommandList => updateComponent({ installCommandList })}
+                      maxWidth={fieldAvailableWidth}
+                      ariaLabel="安装命令列表"
+                    />
+                  </section>
+                </ConditionalField>
+
+                <ConditionalField show={component.commandInstall === false}>
+                  <div className="flex flex-col gap-[18px]">
+                    <section>
+                      <FieldLabel>安装操作方式</FieldLabel>
+                      <OptionSelectField
+                        value={component.installOperate}
+                        options={installOperateOptions}
+                        onChange={installOperate => updateComponent({ installOperate })}
+                        ariaLabel="安装操作方式"
+                      />
+                    </section>
+
+                    <ConditionalField show={component.installOperate === 'custom'}>
+                      <section>
+                        <FieldLabel>自定义安装规则</FieldLabel>
+                        <LineListField
+                          values={component.installCustomList}
+                          onChange={installCustomList => updateComponent({ installCustomList })}
+                          maxWidth={fieldAvailableWidth}
+                          ariaLabel="自定义安装规则"
+                        />
+                      </section>
+                    </ConditionalField>
+                  </div>
+                </ConditionalField>
+
+                <section>
+                  <FieldLabel>安装路径</FieldLabel>
+                  <AutoGrowTextField
+                    value={component.installPath}
+                    onChange={installPath => updateComponent({ installPath })}
+                    maxWidth={fieldAvailableWidth}
+                    ariaLabel="安装路径"
+                  />
+                </section>
+
+                <ConditionalField show={component.installPath === '$CustomPath'}>
+                  <section>
+                    <FieldLabel>自定义路径</FieldLabel>
+                    <AutoGrowTextField
+                      value={component.customPath}
+                      onChange={customPath => updateComponent({ customPath })}
+                      maxWidth={fieldAvailableWidth}
+                      ariaLabel="自定义路径"
+                    />
+                  </section>
+                </ConditionalField>
+              </div>
+            </ConditionalField>
+
+            <section>
+              <FieldLabel>安装前操作</FieldLabel>
+              <BooleanSwitchField
+                value={component.beforeCommand}
+                onChange={beforeCommand => updateComponent({ beforeCommand })}
+              />
+            </section>
+
+            <ConditionalField show={component.beforeCommand === true}>
+              <section>
+                <FieldLabel>安装前命令列表</FieldLabel>
+                <LineListField
+                  values={component.beforeCommandList}
+                  onChange={beforeCommandList => updateComponent({ beforeCommandList })}
+                  maxWidth={fieldAvailableWidth}
+                  ariaLabel="安装前命令列表"
+                />
+              </section>
+            </ConditionalField>
+
+            <section>
+              <FieldLabel>安装后操作</FieldLabel>
+              <BooleanSwitchField
+                value={component.afterCommand}
+                onChange={afterCommand => updateComponent({ afterCommand })}
+              />
+            </section>
+
+            <ConditionalField show={component.afterCommand === true}>
+              <section>
+                <FieldLabel>安装后命令列表</FieldLabel>
+                <LineListField
+                  values={component.afterCommandList}
+                  onChange={afterCommandList => updateComponent({ afterCommandList })}
+                  maxWidth={fieldAvailableWidth}
+                  ariaLabel="安装后命令列表"
+                />
+              </section>
+            </ConditionalField>
+
+            <section>
+              <FieldLabel>组件环境变量导出</FieldLabel>
+              <BooleanSwitchField
+                value={component.envOutput}
+                onChange={envOutput => updateComponent({ envOutput })}
+              />
+            </section>
+
+            <ConditionalField show={component.envOutput === true}>
+              <section>
+                <FieldLabel>导出变量列表</FieldLabel>
+                <LineListField
+                  values={component.envOutputList}
+                  onChange={envOutputList => updateComponent({ envOutputList })}
+                  maxWidth={fieldAvailableWidth}
+                  ariaLabel="导出变量列表"
+                />
+              </section>
+            </ConditionalField>
+
+            <section>
+              <FieldLabel>组件环境变量导入</FieldLabel>
+              <BooleanSwitchField
+                value={component.envInput}
+                onChange={envInput => updateComponent({ envInput })}
+              />
+            </section>
+
+            <ConditionalField show={component.envInput === true}>
+              <section>
+                <FieldLabel>导入变量列表</FieldLabel>
+                <LineListField
+                  values={component.envInputList}
+                  onChange={envInputList => updateComponent({ envInputList })}
+                  maxWidth={fieldAvailableWidth}
+                  ariaLabel="导入变量列表"
+                />
+              </section>
+            </ConditionalField>
+          </div>
         ) : (
           <div
             className="min-w-[160px] pt-[2px] text-[20px] font-light leading-[34px]"

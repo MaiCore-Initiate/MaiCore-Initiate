@@ -75,7 +75,7 @@ export default function AddNodePopover({
       </text>
 
       <ComponentNodeRow
-        y={48}
+        y={57}
         label="组件管理闸"
         code="[COMPONENTS]"
         swatchFill={componentsFill}
