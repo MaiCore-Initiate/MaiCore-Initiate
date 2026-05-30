@@ -14,11 +14,35 @@ export const rightSidebarMinWidth = 200
 export const rightSidebarMaxWidth = 760
 
 const runtimeOptions = ['powershell', 'pwsh', 'cmd', 'bash', 'python3', 'python', 'node', 'deno']
-const commandThemeOptions = ['oh-my-push', 'classical']
+const commandThemeOptions = ['oh-my-posh', 'classical']
 const getMethodOptions = ['direct', 'get_version', 'get_link']
 const getVersionOptions = ['github_repo', 'filelink', 'custom']
 const getLinkOptions = ['filelink', 'custom', 'user_input']
 const installOperateOptions = ['auto', 'no', 'custom']
+const platformOptions = ['windows', 'linux', 'macos']
+const optionLabels: Record<string, string> = {
+  powershell: 'PowerShell',
+  pwsh: 'PowerShell Core',
+  cmd: '命令提示符',
+  bash: 'Bash',
+  python3: 'Python 3',
+  python: 'Python',
+  node: 'Node.js',
+  deno: 'Deno',
+  classical: '经典',
+  direct: '直接获取',
+  get_version: '获取版本',
+  get_link: '获取链接',
+  github_repo: 'GitHub仓库',
+  filelink: '文件链接',
+  custom: '自定义',
+  user_input: '用户输入',
+  auto: '自动处理',
+  no: '不处理',
+  windows: 'Windows',
+  linux: 'Linux',
+  macos: 'macOS',
+}
 
 let arrayListItemId = 0
 
@@ -114,7 +138,7 @@ const emptyModInfoMeta: WorkbenchModInfoMeta = {
   denoAll: null,
   denoCustomPermissions: null,
   denoPermissionList: [],
-  platforms: [],
+  platforms: ['windows'],
   schemaVersion: '',
   componentsEnvOutput: null,
   componentsEnvInput: null,
@@ -387,7 +411,7 @@ function RuntimeSelectField({
         aria-haspopup="listbox"
         aria-label="运行时"
       >
-        <span className="overflow-hidden whitespace-nowrap">{displayValue}</span>
+        <span className="overflow-hidden whitespace-nowrap">{optionLabels[displayValue] ?? displayValue}</span>
         <svg
           className="ml-[8px] shrink-0 transition-transform duration-150"
           style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
@@ -439,7 +463,7 @@ function RuntimeSelectField({
                 role="option"
                 aria-selected={selected}
               >
-                {option}
+                {optionLabels[option] ?? option}
               </button>
             )
           })}
@@ -491,7 +515,7 @@ function OptionSelectField({
         aria-haspopup="listbox"
         aria-label={ariaLabel}
       >
-        <span className="overflow-hidden whitespace-nowrap">{displayValue}</span>
+        <span className="overflow-hidden whitespace-nowrap">{optionLabels[displayValue] ?? displayValue}</span>
         <svg
           className="ml-[8px] shrink-0 transition-transform duration-150"
           style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
@@ -543,7 +567,7 @@ function OptionSelectField({
                 role="option"
                 aria-selected={selected}
               >
-                {option}
+                {optionLabels[option] ?? option}
               </button>
             )
           })}
@@ -553,6 +577,122 @@ function OptionSelectField({
   )
 }
 
+function PlatformSelectField({
+  values,
+  onChange,
+  width = 220,
+}: {
+  values: string[]
+  onChange: (values: string[]) => void
+  width?: number
+}) {
+  const [open, setOpen] = useState(false)
+  const selectedValues = values.length ? values : ['windows']
+  const selectedSet = new Set(selectedValues)
+  const displayValue = selectedValues.map(value => optionLabels[value] ?? value).join('、')
+  const dropdownHeight = platformOptions.length * 34 + 10
+
+  const toggleOption = (option: string) => {
+    const next = selectedSet.has(option)
+      ? selectedValues.filter(value => value !== option)
+      : [...selectedValues, option]
+    onChange(next.length ? next : ['windows'])
+  }
+
+  return (
+    <div
+      className="relative max-w-full"
+      style={{ width }}
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false)
+        }
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        className="flex h-[42px] w-full items-center justify-between rounded-[21px] border px-[14px] text-[20px] font-light outline-none transition-colors hover:bg-[var(--dfw-control-hover)] focus:border-[var(--dfw-blue)]"
+        style={{
+          borderColor: open ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+          background: open ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+          color: 'var(--dfw-text)',
+          fontFamily: font,
+        }}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label="平台限制"
+      >
+        <span className="overflow-hidden whitespace-nowrap">{displayValue}</span>
+        <svg
+          className="ml-[8px] shrink-0 transition-transform duration-150"
+          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden
+        >
+          <path d="M3.5 6L8 10.5L12.5 6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      <div
+        className="mt-[6px] overflow-hidden transition-[height,opacity] duration-150 ease-out"
+        style={{
+          height: open ? dropdownHeight : 0,
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+        }}
+        aria-hidden={!open}
+      >
+        <div
+          className="w-full overflow-hidden rounded-[14px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.12)]"
+          style={{
+            borderColor: 'var(--dfw-sidebar-border)',
+            background: 'var(--dfw-sidebar-bg)',
+            color: 'var(--dfw-text)',
+            fontFamily: font,
+          }}
+          role="listbox"
+          aria-multiselectable="true"
+        >
+          {platformOptions.map(option => {
+            const selected = selectedSet.has(option)
+            return (
+              <button
+                key={option}
+                type="button"
+                tabIndex={open ? 0 : -1}
+                onMouseDown={event => event.preventDefault()}
+                onClick={() => toggleOption(option)}
+                className="flex h-[34px] w-full items-center gap-[8px] px-[12px] text-left text-[18px] font-light leading-[34px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+                style={{
+                  background: selected ? 'var(--dfw-outline-selected-bg)' : 'transparent',
+                }}
+                role="option"
+                aria-selected={selected}
+              >
+                <span
+                  className="flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-[4px] border"
+                  style={{
+                    borderColor: selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+                    background: selected ? 'var(--dfw-blue)' : 'transparent',
+                    color: 'var(--dfw-bg)',
+                  }}
+                  aria-hidden
+                >
+                  {selected ? '✓' : ''}
+                </span>
+                <span>{optionLabels[option] ?? option}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
 function ConditionalField({
   show,
   children,
@@ -1787,12 +1927,11 @@ export default function WorkbenchRightSidebar({
           </ConditionalField>
 
           <section>
-            <ArrayListField
-              label="平台限制列表"
+            <FieldLabel>平台限制列表</FieldLabel>
+            <PlatformSelectField
               values={meta.platforms}
               onChange={platforms => updateMeta({ platforms })}
-              maxWidth={fieldAvailableWidth}
-              itemAriaLabel="平台限制"
+              width={fieldAvailableWidth}
             />
           </section>
 
@@ -2080,7 +2219,7 @@ export default function WorkbenchRightSidebar({
                   </section>
                 </ConditionalField>
 
-                <ConditionalField show={component.commandInstall === false}>
+                <ConditionalField show={component.commandInstall !== true}>
                   <div className="flex flex-col gap-[18px]">
                     <section>
                       <FieldLabel>安装操作方式</FieldLabel>

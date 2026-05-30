@@ -68,7 +68,7 @@ const defaultBlockMeta: WorkbenchBlockMeta = {
   denoAll: null,
   denoCustomPermissions: null,
   denoPermissionList: [],
-  platforms: [],
+  platforms: ['windows'],
   schemaVersion: '',
   componentsEnvOutput: null,
   componentsEnvInput: null,

@@ -255,7 +255,7 @@ mcsb test .\MOD\MaiCoer-Start.DeploymentMOD\DeploymentMOD.toml
 工作目录显示风格由当前表数组的 `command_theme` 决定：
 
 - `"classical"`：使用类似 `D:\project>` 的经典风格
-- `"oh-my-push"`：使用更接近提示符主题的路径风格显示
+- `"oh-my-posh"`：使用更接近提示符主题的路径风格显示
 
 如果命令所属表数组额外声明了 `runtime`，则该命令会优先使用表数组内的运行时；否则回退到 `MODINFO.runtime`。
 
@@ -415,12 +415,12 @@ deno run --allow-net=api.example.com,cdn.example.com --allow-read=./config,./dat
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `runtime` | String | 回退到 `MODINFO.runtime` | 为当前表数组内的命令指定运行时；留空或缺失时，回退到 `MODINFO.runtime` |
-| `command_theme` | String | 自动判定 | 命令工作目录的显示主题。支持 `"oh-my-push"` 与 `"classical"`；未填写时，如环境中检测到 `oh-my-posh` / `oh-my-push`，则优先按 `oh-my-push` 显示，否则使用 `classical` |
+| `command_theme` | String | 自动判定 | 命令工作目录的显示主题。支持 `"oh-my-posh"` 与 `"classical"`；未填写时，如环境中检测到 `oh-my-posh`，则优先按 `oh-my-posh` 显示，否则使用 `classical` |
 
 补充说明：
 
 - `runtime` 的合法值与 `MODINFO.runtime` 完全一致
-- `command_theme = "oh-my-posh"` 会被兼容性地视作 `"oh-my-push"`
+- `command_theme = "oh-my-posh"` 使用 oh-my-posh 风格显示路径提示符
 - `ConfigItem` 当前没有命令执行流程，因此这两个键更多用于统一模板键格式和后续扩展；真正执行命令的阶段会立即生效
 
 示例：
@@ -2005,7 +2005,7 @@ version_formatting_formula = [
 | `id` | String | ✅ | — | 组件 ID |
 | `choose` | Boolean | 📎 | `install=true` | 用户可选安装 |
 | `runtime` | String | ❌ | — | 当前组件命令运行时，留空回退到 `MODINFO.runtime` |
-| `command_theme` | String | ❌ | — | 当前组件命令主题，支持 `oh-my-push` / `classical` |
+| `command_theme` | String | ❌ | — | 当前组件命令主题，支持 `oh-my-posh` / `classical` |
 | `install` | Boolean | ✅ | — | 是否安装 |
 | `check` | Boolean | ✅ | — | 是否检查已安装 |
 | `check_command` | Array\[String\] | 📎 | `check=true` | 检查命令 |
@@ -2055,7 +2055,7 @@ version_formatting_formula = [
 | `id` | String | ✅ | — | 部署项 ID |
 | `choose` | Boolean | ✅ | — | 用户可选部署 |
 | `runtime` | String | ❌ | — | 当前部署项命令运行时，留空回退到 `MODINFO.runtime` |
-| `command_theme` | String | ❌ | — | 当前部署项命令主题，支持 `oh-my-push` / `classical` |
+| `command_theme` | String | ❌ | — | 当前部署项命令主题，支持 `oh-my-posh` / `classical` |
 | `deploy` | Boolean | ✅ | — | 是否部署 |
 | `command_deploy` | Boolean | 📎 | `deploy=true` | 是否命令行部署 |
 | `deploy_command_list` | Array\[String\] | 📎 | `command_deploy=true` | 部署命令列表 |
@@ -2098,7 +2098,7 @@ version_formatting_formula = [
 | `name` | String | ✅ | — | 启动项名称 |
 | `choose` | Boolean | ✅ | — | 用户可选启动 |
 | `runtime` | String | ❌ | — | 当前启动项命令运行时，留空回退到 `MODINFO.runtime` |
-| `command_theme` | String | ❌ | — | 当前启动项命令主题，支持 `oh-my-push` / `classical` |
+| `command_theme` | String | ❌ | — | 当前启动项命令主题，支持 `oh-my-posh` / `classical` |
 | `launch` | Boolean | ✅ | — | 是否启动 |
 | `launch_command` | Array\[String\] | 📎 | `launch=true` | 启动命令列表 |
 | `env_output` | Boolean | ❌ | — | 导出环境变量 |
@@ -2143,7 +2143,7 @@ version_formatting_formula = [
 | `name` | String | ✅ | — | 卸载项名称 |
 | `choose` | Boolean | ✅ | — | 用户可选卸载 |
 | `runtime` | String | ❌ | — | 当前卸载项命令运行时，留空回退到 `MODINFO.runtime` |
-| `command_theme` | String | ❌ | — | 当前卸载项命令主题，支持 `oh-my-push` / `classical` |
+| `command_theme` | String | ❌ | — | 当前卸载项命令主题，支持 `oh-my-posh` / `classical` |
 | `uninstall` | Boolean | ✅ | — | 默认是否执行 |
 | `stop_before_uninstall` | Boolean | ❌ | — | 是否先执行停止命令 |
 | `stop_command_list` | Array\[String\] | 📎 | `stop_before_uninstall=true` | 停止命令列表 |

@@ -142,7 +142,7 @@ export default function ComponentBlock({
       ? [
         { label: '命令行安装：', value: formatTomlBoolean(component.commandInstall) },
         ...(component.commandInstall === true ? [{ label: '安装命令：', value: formatTomlArray(component.installCommandList) }] : []),
-        ...(component.commandInstall === false
+        ...(component.commandInstall !== true
           ? [
             { label: '安装操作：', value: formatTomlString(component.installOperate) },
             ...(component.installOperate === 'custom' ? [{ label: '自定义安装规则：', value: formatTomlArray(component.installCustomList) }] : []),

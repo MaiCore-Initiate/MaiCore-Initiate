@@ -123,7 +123,7 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   denoAll: null,
   denoCustomPermissions: null,
   denoPermissionList: [],
-  platforms: [],
+  platforms: ['windows'],
   schemaVersion: '',
   componentsEnvOutput: null,
   componentsEnvInput: null,
@@ -309,7 +309,7 @@ function createComponentOutlineChildren(component: WorkbenchComponentMeta, index
       : []),
     createBooleanOutlineNode(id('user-choose'), 'user_choose', component.userChoose),
     ...(component.userChoose === true ? [createStringArrayOutlineNode(id('choose-list'), 'choose_list', component.chooseList)] : []),
-    ...(component.install === true && component.commandInstall === false
+    ...(component.install === true && component.commandInstall !== true
       ? [
         { id: id('install-operate'), label: `install_operate = ${formatTomlString(component.installOperate)}`, icon: 'string' as const },
         ...(component.installOperate === 'custom'
