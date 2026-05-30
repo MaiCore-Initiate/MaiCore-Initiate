@@ -4,7 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -23,15 +23,14 @@ const outlineBaseIconLeft = 36
 const outlineBaseTextLeft = 25.84
 const outlineIconTextGap = 19.84
 const bottomBarZoomAnimationMs = 180
-const blockNames: Record<WorkbenchBlockId, string> = {
+const baseBlockNames = {
   start: '起始端点',
   init: '初始化块',
   components: '[COMPONENTS]',
-  component: '[[Component]]',
 }
 
 type WorkbenchViewport = { scale: number; x: number; y: number }
-const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, component: false }
+const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, componentCount: 0 }
 
 export type OutlineIconType = 'boolean' | 'array' | 'object' | 'string' | 'number'
 export type OutlineNodeTone = 'normal' | 'locked' | 'note'
@@ -129,7 +128,7 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   componentsEnvOutput: null,
   componentsEnvInput: null,
   componentsList: [],
-  component: defaultComponentMeta,
+  components: [],
 }
 
 function formatTomlString(value: string) {
@@ -165,6 +164,26 @@ function createStringArrayOutlineNode(id: string, fieldName: string, values: str
       icon: 'string' as const,
     })),
   }
+}
+
+function createComponentBlockId(index: number): WorkbenchComponentBlockId {
+  return `component:${index}`
+}
+
+function parseComponentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('component:')) return null
+  const index = Number(blockId.slice('component:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function formatSelectedBlockName(blockId: WorkbenchBlockId | null, meta: WorkbenchMetaState) {
+  if (!blockId) return '无'
+  const componentIndex = parseComponentBlockIndex(blockId)
+  if (componentIndex !== null) {
+    const componentName = meta.components[componentIndex]?.name
+    return componentName ? `[[Component]] 对象${componentIndex}：${componentName}` : `[[Component]] 对象${componentIndex}`
+  }
+  return baseBlockNames[blockId as keyof typeof baseBlockNames]
 }
 
 function createDenoPermissionOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
@@ -206,81 +225,83 @@ function createModInfoOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
   ]
 }
 
-function createComponentOutlineChildren(component: WorkbenchComponentMeta): OutlineNode[] {
+function createComponentOutlineChildren(component: WorkbenchComponentMeta, index: number): OutlineNode[] {
+  const id = (fieldName: string) => `component-${index}-${fieldName}`
+
   return [
-    { id: 'component-name', label: `name = ${formatTomlString(component.name)}`, icon: 'string' },
-    { id: 'component-id', label: `id = ${formatTomlString(component.id)}`, icon: 'string' },
-    ...(component.install === true ? [createBooleanOutlineNode('component-choose', 'choose', component.choose)] : []),
-    { id: 'component-runtime', label: `runtime = ${formatTomlString(component.runtime)}`, icon: 'string' },
-    { id: 'component-command-theme', label: `command_theme = ${formatTomlString(component.commandTheme)}`, icon: 'string' },
-    createBooleanOutlineNode('component-install', 'install', component.install),
-    createBooleanOutlineNode('component-check', 'check', component.check),
+    { id: id('name'), label: `name = ${formatTomlString(component.name)}`, icon: 'string' },
+    { id: id('id'), label: `id = ${formatTomlString(component.id)}`, icon: 'string' },
+    ...(component.install === true ? [createBooleanOutlineNode(id('choose'), 'choose', component.choose)] : []),
+    { id: id('runtime'), label: `runtime = ${formatTomlString(component.runtime)}`, icon: 'string' },
+    { id: id('command-theme'), label: `command_theme = ${formatTomlString(component.commandTheme)}`, icon: 'string' },
+    createBooleanOutlineNode(id('install'), 'install', component.install),
+    createBooleanOutlineNode(id('check'), 'check', component.check),
     ...(component.check === true
       ? [
-        createStringArrayOutlineNode('component-check-command', 'check_command', component.checkCommand),
-        createStringArrayOutlineNode('component-check-version-contains', 'check_version_contains', component.checkVersionContains),
-        createStringArrayOutlineNode('component-check-version-regex', 'check_version_regex', component.checkVersionRegex),
+        createStringArrayOutlineNode(id('check-command'), 'check_command', component.checkCommand),
+        createStringArrayOutlineNode(id('check-version-contains'), 'check_version_contains', component.checkVersionContains),
+        createStringArrayOutlineNode(id('check-version-regex'), 'check_version_regex', component.checkVersionRegex),
       ]
       : []),
-    ...(component.install === true ? [createBooleanOutlineNode('component-command-install', 'command_install', component.commandInstall)] : []),
+    ...(component.install === true ? [createBooleanOutlineNode(id('command-install'), 'command_install', component.commandInstall)] : []),
     ...(component.commandInstall === true
-      ? [createStringArrayOutlineNode('component-install-command-list', 'install_command_list', component.installCommandList)]
+      ? [createStringArrayOutlineNode(id('install-command-list'), 'install_command_list', component.installCommandList)]
       : []),
-    { id: 'component-get-method', label: `get_method = ${formatTomlString(component.getMethod)}`, icon: 'string' },
+    { id: id('get-method'), label: `get_method = ${formatTomlString(component.getMethod)}`, icon: 'string' },
     ...(component.getMethod === 'direct'
-      ? [{ id: 'component-direct-link', label: `direct_link = ${formatTomlString(component.directLink)}`, icon: 'string' as const }]
+      ? [{ id: id('direct-link'), label: `direct_link = ${formatTomlString(component.directLink)}`, icon: 'string' as const }]
       : []),
     ...(component.getMethod === 'get_version'
       ? [
-        { id: 'component-get-version', label: `get_version = ${formatTomlString(component.getVersion)}`, icon: 'string' as const },
+        { id: id('get-version'), label: `get_version = ${formatTomlString(component.getVersion)}`, icon: 'string' as const },
         ...(component.getVersion === 'github_repo'
-          ? [{ id: 'component-github-repo', label: `github_repo = ${formatTomlString(component.githubRepo)}`, icon: 'string' as const }]
+          ? [{ id: id('github-repo'), label: `github_repo = ${formatTomlString(component.githubRepo)}`, icon: 'string' as const }]
           : []),
-        createBooleanOutlineNode('component-format-version', 'format_version', component.formatVersion),
+        createBooleanOutlineNode(id('format-version'), 'format_version', component.formatVersion),
         ...(component.formatVersion === true
-          ? [createStringArrayOutlineNode('component-version-formatting-formula', 'version_formatting_formula', component.versionFormattingFormula)]
+          ? [createStringArrayOutlineNode(id('version-formatting-formula'), 'version_formatting_formula', component.versionFormattingFormula)]
           : []),
-        { id: 'component-splicing-link', label: `splicing_link = ${formatTomlString(component.splicingLink)}`, icon: 'string' as const },
+        { id: id('splicing-link'), label: `splicing_link = ${formatTomlString(component.splicingLink)}`, icon: 'string' as const },
       ]
       : []),
     ...(component.getMethod === 'get_link'
       ? [
-        { id: 'component-get-link', label: `get_link = ${formatTomlString(component.getLink)}`, icon: 'string' as const },
+        { id: id('get-link'), label: `get_link = ${formatTomlString(component.getLink)}`, icon: 'string' as const },
         ...(component.getLink === 'filelink' || component.getLink === 'custom'
-          ? [createStringArrayOutlineNode('component-get-link-provide-list', 'get_link_provide_list', component.getLinkProvideList)]
+          ? [createStringArrayOutlineNode(id('get-link-provide-list'), 'get_link_provide_list', component.getLinkProvideList)]
           : []),
       ]
       : []),
-    createBooleanOutlineNode('component-user-choose', 'user_choose', component.userChoose),
-    ...(component.userChoose === true ? [createStringArrayOutlineNode('component-choose-list', 'choose_list', component.chooseList)] : []),
+    createBooleanOutlineNode(id('user-choose'), 'user_choose', component.userChoose),
+    ...(component.userChoose === true ? [createStringArrayOutlineNode(id('choose-list'), 'choose_list', component.chooseList)] : []),
     ...(component.install === true && component.commandInstall === false
       ? [
-        { id: 'component-install-operate', label: `install_operate = ${formatTomlString(component.installOperate)}`, icon: 'string' as const },
+        { id: id('install-operate'), label: `install_operate = ${formatTomlString(component.installOperate)}`, icon: 'string' as const },
         ...(component.installOperate === 'custom'
-          ? [createStringArrayOutlineNode('component-install-custom-list', 'install_custom_list', component.installCustomList)]
+          ? [createStringArrayOutlineNode(id('install-custom-list'), 'install_custom_list', component.installCustomList)]
           : []),
       ]
       : []),
     ...(component.install === true
       ? [
-        { id: 'component-install-path', label: `install_path = ${formatTomlString(component.installPath)}`, icon: 'string' as const },
+        { id: id('install-path'), label: `install_path = ${formatTomlString(component.installPath)}`, icon: 'string' as const },
         ...(component.installPath === '$CustomPath'
-          ? [{ id: 'component-custom-path', label: `custom_path = ${formatTomlString(component.customPath)}`, icon: 'string' as const }]
+          ? [{ id: id('custom-path'), label: `custom_path = ${formatTomlString(component.customPath)}`, icon: 'string' as const }]
           : []),
       ]
       : []),
-    createBooleanOutlineNode('component-before-command', 'before_command', component.beforeCommand),
+    createBooleanOutlineNode(id('before-command'), 'before_command', component.beforeCommand),
     ...(component.beforeCommand === true
-      ? [createStringArrayOutlineNode('component-before-command-list', 'before_command_list', component.beforeCommandList)]
+      ? [createStringArrayOutlineNode(id('before-command-list'), 'before_command_list', component.beforeCommandList)]
       : []),
-    createBooleanOutlineNode('component-after-command', 'after_command', component.afterCommand),
+    createBooleanOutlineNode(id('after-command'), 'after_command', component.afterCommand),
     ...(component.afterCommand === true
-      ? [createStringArrayOutlineNode('component-after-command-list', 'after_command_list', component.afterCommandList)]
+      ? [createStringArrayOutlineNode(id('after-command-list'), 'after_command_list', component.afterCommandList)]
       : []),
-    createBooleanOutlineNode('component-env-output', 'env_output', component.envOutput),
-    ...(component.envOutput === true ? [createStringArrayOutlineNode('component-env-output-list', 'env_output_list', component.envOutputList)] : []),
-    createBooleanOutlineNode('component-env-input', 'env_input', component.envInput),
-    ...(component.envInput === true ? [createStringArrayOutlineNode('component-env-input-list', 'env_input_list', component.envInputList)] : []),
+    createBooleanOutlineNode(id('env-output'), 'env_output', component.envOutput),
+    ...(component.envOutput === true ? [createStringArrayOutlineNode(id('env-output-list'), 'env_output_list', component.envOutputList)] : []),
+    createBooleanOutlineNode(id('env-input'), 'env_input', component.envInput),
+    ...(component.envInput === true ? [createStringArrayOutlineNode(id('env-input-list'), 'env_input_list', component.envInputList)] : []),
   ]
 }
 
@@ -300,12 +321,20 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.component) {
+  if (visibleBlocks.componentCount > 0) {
     nodes.push({
       id: 'component-array',
       label: '[[Component]]',
       defaultExpanded: true,
-      children: createComponentOutlineChildren(meta.component),
+      selectable: false,
+      children: Array.from({ length: visibleBlocks.componentCount }, (_, index) => ({
+        id: `component-${index}`,
+        label: `对象${index}`,
+        icon: 'object' as const,
+        defaultExpanded: true,
+        blockId: createComponentBlockId(index),
+        children: createComponentOutlineChildren(meta.components[index] ?? defaultComponentMeta, index),
+      })),
     })
   }
 
@@ -438,13 +467,14 @@ function resolveOutlineBlockId(node: OutlineNode): WorkbenchBlockId | null {
   if (node.blockId) return node.blockId
   if (node.id === 'mcstart' || node.id.startsWith('mcstart-')) return 'start'
   if (node.id === 'modinfo' || node.id.startsWith('modinfo-')) return 'init'
+  const componentMatch = /^component-(\d+)(?:-|$)/.exec(node.id)
+  if (componentMatch) return createComponentBlockId(Number(componentMatch[1]))
   if (
     node.id === 'components'
     || node.id.startsWith('components-')
   ) {
     return 'components'
   }
-  if (node.id === 'component-array' || node.id.startsWith('component-')) return 'component'
   return null
 }
 
@@ -884,7 +914,7 @@ export default function DeploymentFlowWorkbench({
     componentsEnvOutput: meta.componentsEnvOutput,
     componentsEnvInput: meta.componentsEnvInput,
     componentsList: meta.componentsList,
-    component: meta.component,
+    components: meta.components,
   }), [meta])
 
   const cancelViewportAnimation = () => {
@@ -1127,7 +1157,7 @@ export default function DeploymentFlowWorkbench({
         width={rightSidebarWidth}
         onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
         onResize={setRightSidebarWidth}
-        selectedName={selectedBlockId ? blockNames[selectedBlockId] : '无'}
+        selectedName={formatSelectedBlockName(selectedBlockId, meta)}
         selectedBlockId={selectedBlockId}
         meta={meta}
         onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}

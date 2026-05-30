@@ -50,7 +50,7 @@ export interface WorkbenchModInfoMeta {
   componentsEnvOutput: boolean | null
   componentsEnvInput: boolean | null
   componentsList: string[]
-  component: WorkbenchComponentMeta
+  components: WorkbenchComponentMeta[]
 }
 
 const emptyComponentMeta: WorkbenchComponentMeta = {
@@ -119,7 +119,7 @@ const emptyModInfoMeta: WorkbenchModInfoMeta = {
   componentsEnvOutput: null,
   componentsEnvInput: null,
   componentsList: [],
-  component: emptyComponentMeta,
+  components: [],
 }
 
 export interface WorkbenchRightSidebarProps {
@@ -150,6 +150,20 @@ function TextAlignRightGlyph() {
 
 function arraysEqual(left: string[], right: string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
+function parseComponentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('component:')) return null
+  const index = Number(blockId.slice('component:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function fillComponentsToIndex(components: WorkbenchComponentMeta[], index: number) {
+  if (components.length > index) return [...components]
+  return [
+    ...components,
+    ...Array.from({ length: index - components.length + 1 }, () => ({ ...emptyComponentMeta })),
+  ]
 }
 
 let textMeasureContext: CanvasRenderingContext2D | null | undefined
@@ -890,20 +904,30 @@ export default function WorkbenchRightSidebar({
     onMetaPatch?.(patch)
   }
 
-  const component = meta.component ?? emptyComponentMeta
+  const selectedComponentIndex = parseComponentBlockIndex(selectedBlockId)
+  const component = selectedComponentIndex === null ? emptyComponentMeta : meta.components[selectedComponentIndex] ?? emptyComponentMeta
   const updateComponent = (patch: Partial<WorkbenchComponentMeta>) => {
-    updateMeta({ component: { ...component, ...patch } })
+    if (selectedComponentIndex === null) return
+    const nextComponents = fillComponentsToIndex(meta.components, selectedComponentIndex)
+    nextComponents[selectedComponentIndex] = { ...nextComponents[selectedComponentIndex], ...component, ...patch }
+    updateMeta({ components: nextComponents })
   }
 
   const updateComponentId = (id: string) => {
+    if (selectedComponentIndex === null) return
     const previousId = component.id
-    const nextList = meta.componentsList.length === 0
-      ? (id ? [id] : [])
-      : meta.componentsList
-        .map(item => (item === previousId ? id : item))
-        .filter(Boolean)
+    const nextComponents = fillComponentsToIndex(meta.components, selectedComponentIndex).map((item, index) => (
+      index === selectedComponentIndex ? { ...item, ...component, id } : item
+    ))
+    const componentIds = nextComponents.map(item => item.id).filter(Boolean)
+    const extraIds = meta.componentsList.filter(item => (
+      item
+      && item !== previousId
+      && !componentIds.includes(item)
+    ))
+    const nextList = [...componentIds, ...extraIds]
     updateMeta({
-      component: { ...component, id },
+      components: nextComponents,
       componentsList: arraysEqual(nextList, meta.componentsList) ? meta.componentsList : nextList,
     })
   }
@@ -945,7 +969,7 @@ export default function WorkbenchRightSidebar({
 
   const shouldShowInitMeta = selectedBlockId === 'init'
   const shouldShowComponentsMeta = selectedBlockId === 'components'
-  const shouldShowComponentMeta = selectedBlockId === 'component'
+  const shouldShowComponentMeta = selectedComponentIndex !== null
 
   if (collapsed) {
     return (

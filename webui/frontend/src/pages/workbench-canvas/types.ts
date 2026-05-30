@@ -36,7 +36,7 @@ export interface WorkbenchBlockMeta {
   componentsEnvOutput: boolean | null
   componentsEnvInput: boolean | null
   componentsList: string[]
-  component: WorkbenchComponentMeta
+  components: WorkbenchComponentMeta[]
 }
 
 export interface WorkbenchComponentMeta {
@@ -102,11 +102,12 @@ export interface WorkbenchCanvasProps {
   blockMeta?: Partial<WorkbenchBlockMeta>
 }
 
-export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'component'
+export type WorkbenchComponentBlockId = `component:${number}`
+export type WorkbenchBlockId = 'start' | 'init' | 'components' | WorkbenchComponentBlockId
 
 export interface WorkbenchVisibleBlocks {
   components: boolean
-  component: boolean
+  componentCount: number
 }
 
 export interface WorkbenchBlockDragHandlers {

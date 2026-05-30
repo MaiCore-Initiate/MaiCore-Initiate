@@ -66,6 +66,7 @@ function formatTomlBoolean(value: boolean | null) {
 }
 
 export default function ComponentBlock({
+  blockIndex,
   position,
   size,
   selected,
@@ -75,6 +76,7 @@ export default function ComponentBlock({
   dragHandlers,
   resizeHandlers,
 }: {
+  blockIndex: number
   position: WorkbenchPoint
   size: WorkbenchSize
   selected: boolean
@@ -89,7 +91,7 @@ export default function ComponentBlock({
   const selectWidth = bodyWidth + 10
   const selectHeight = bodyHeight + 10
   const headerHeight = 58
-  const contentClipId = 'dfw-component-block-content-clip'
+  const contentClipId = `dfw-component-block-content-clip-${blockIndex}`
   const outputOffset = resolveComponentBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
   const connectorY = outputOffset.y - 12
   const rows = [
@@ -169,7 +171,7 @@ export default function ComponentBlock({
       </defs>
 
       <text x="22" y="44" fontSize="25" fontFamily={workbenchCanvasFont} fontWeight="600" fill="currentColor" opacity="0.82">
-        [[Component]]
+        [[Component]] {blockIndex}
       </text>
       {rows.map((row, index) => (
         <TextLine

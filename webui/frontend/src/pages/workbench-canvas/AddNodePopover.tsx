@@ -54,14 +54,12 @@ function ComponentNodeRow({
 export default function AddNodePopover({
   position,
   componentsVisible,
-  componentVisible,
   onAddComponents,
   onAddComponent,
   onClose,
 }: {
   position: WorkbenchPoint
   componentsVisible: boolean
-  componentVisible: boolean
   onAddComponents: () => void
   onAddComponent: () => void
   onClose: () => void
@@ -93,7 +91,6 @@ export default function AddNodePopover({
         code="[[Component]]"
         swatchFill={componentFill}
         swatchStroke={componentAccent}
-        disabled={componentVisible}
         onClick={onAddComponent}
       />
 
