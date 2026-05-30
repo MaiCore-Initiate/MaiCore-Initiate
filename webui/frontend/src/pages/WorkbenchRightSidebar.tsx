@@ -621,12 +621,54 @@ function createVersionFormattingRuleItem(value: WorkbenchVersionFormattingRule):
   }
 }
 
-function reorderItems<T>(values: T[], fromIndex: number, toIndex: number) {
-  if (fromIndex === toIndex) return values
-  const next = [...values]
-  const [moved] = next.splice(fromIndex, 1)
-  next.splice(toIndex, 0, moved)
-  return next
+function clampSelectionIds<T extends { id: string }>(ids: string[], items: T[]) {
+  const itemIds = new Set(items.map(item => item.id))
+  return ids.filter(id => itemIds.has(id))
+}
+
+function resolveSelectionRange<T extends { id: string }>(items: T[], anchorId: string | null, targetIndex: number) {
+  const anchorIndex = anchorId ? items.findIndex(item => item.id === anchorId) : -1
+  const start = anchorIndex >= 0 ? anchorIndex : targetIndex
+  const from = Math.min(start, targetIndex)
+  const to = Math.max(start, targetIndex)
+  return items.slice(from, to + 1).map(item => item.id)
+}
+
+function resolveDragGroup<T extends { id: string }>(items: T[], selectedIds: string[], dragItemId: string) {
+  const selected = clampSelectionIds(selectedIds, items)
+  return selected.includes(dragItemId) ? selected : [dragItemId]
+}
+
+function resolveGroupBoundaryTarget<T extends { id: string }>(items: T[], groupIds: string[], direction: 1 | -1) {
+  const groupSet = new Set(groupIds)
+  const selectedIndices = items
+    .map((item, index) => (groupSet.has(item.id) ? index : -1))
+    .filter(index => index >= 0)
+  if (selectedIndices.length === 0) return null
+
+  const targetIndex = direction > 0
+    ? Math.max(...selectedIndices) + 1
+    : Math.min(...selectedIndices) - 1
+  const target = items[targetIndex]
+  return target && !groupSet.has(target.id) ? target : null
+}
+
+function moveItemGroup<T extends { id: string }>(items: T[], groupIds: string[], direction: 1 | -1) {
+  const target = resolveGroupBoundaryTarget(items, groupIds, direction)
+  if (!target) return items
+
+  const groupSet = new Set(groupIds)
+  const groupItems = items.filter(item => groupSet.has(item.id))
+  const restItems = items.filter(item => !groupSet.has(item.id))
+  const targetRestIndex = restItems.findIndex(item => item.id === target.id)
+  if (targetRestIndex < 0) return items
+
+  const insertIndex = direction > 0 ? targetRestIndex + 1 : targetRestIndex
+  return [
+    ...restItems.slice(0, insertIndex),
+    ...groupItems,
+    ...restItems.slice(insertIndex),
+  ]
 }
 
 function PlusGlyph() {
@@ -715,6 +757,8 @@ function ArrayListField({
 }) {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null)
   const [items, setItems] = useState<ArrayListItem[]>(() => values.map(createArrayListItem))
   const itemsRef = useRef(items)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
@@ -731,6 +775,8 @@ function ArrayListField({
         value,
       }))
       itemsRef.current = nextItems
+      setSelectedIds(current => clampSelectionIds(current, nextItems))
+      setSelectionAnchorId(current => (current && nextItems.some(item => item.id === current) ? current : null))
       return nextItems
     })
   }, [values])
@@ -791,18 +837,51 @@ function ArrayListField({
   }
 
   const deleteItem = (index: number) => {
+    const deletedId = itemsRef.current[index]?.id
     setFocusedIndex(current => {
       if (current === null) return null
       if (current === index) return null
       return current > index ? current - 1 : current
     })
+    if (deletedId) {
+      setSelectedIds(current => current.filter(id => id !== deletedId))
+      setSelectionAnchorId(current => (current === deletedId ? null : current))
+    }
     commitItems(itemsRef.current.filter((_, itemIndex) => itemIndex !== index), true)
+  }
+
+  const toggleSelection = (index: number, event: PointerEvent<HTMLButtonElement>) => {
+    const item = itemsRef.current[index]
+    if (!item) return
+
+    if (event.shiftKey) {
+      const rangeIds = resolveSelectionRange(itemsRef.current, selectionAnchorId, index)
+      setSelectedIds(rangeIds)
+      setSelectionAnchorId(current => current ?? item.id)
+      return
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      setSelectedIds(current => {
+        const next = current.includes(item.id)
+          ? current.filter(id => id !== item.id)
+          : [...current, item.id]
+        return next
+      })
+      setSelectionAnchorId(item.id)
+      return
+    }
+
+    setSelectedIds(current => (current.length === 1 && current[0] === item.id ? current : [item.id]))
+    setSelectionAnchorId(item.id)
   }
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
     const item = itemsRef.current[index]
     if (!item) return
+    toggleSelection(index, event)
+    if (event.shiftKey || event.ctrlKey || event.metaKey) return
     if (dragRef.current || (activeDragId !== null && activeDragId !== item.id)) return
     event.preventDefault()
     event.stopPropagation()
@@ -834,6 +913,7 @@ function ArrayListField({
     event.preventDefault()
     event.stopPropagation()
 
+    const dragGroupIds = resolveDragGroup(itemsRef.current, selectedIds, drag.itemId)
     const currentIndex = itemsRef.current.findIndex(item => item.id === drag.itemId)
     if (currentIndex < 0) {
       window.clearTimeout(drag.timer)
@@ -847,8 +927,7 @@ function ArrayListField({
     if (Math.abs(deltaY) < 1) return
 
     const direction = deltaY > 0 ? 1 : -1
-    const targetIndex = drag.index + direction
-    const targetItem = itemsRef.current[targetIndex]
+    const targetItem = resolveGroupBoundaryTarget(itemsRef.current, dragGroupIds, direction)
     if (!targetItem) {
       drag.lastClientY = event.clientY
       return
@@ -864,8 +943,9 @@ function ArrayListField({
     const targetMiddle = targetRect.top + targetRect.height / 2
     const shouldReorder = direction > 0 ? event.clientY > targetMiddle : event.clientY < targetMiddle
     if (shouldReorder) {
-      commitItems(reorderItems(itemsRef.current, drag.index, targetIndex), true)
-      drag.index = targetIndex
+      const nextItems = moveItemGroup(itemsRef.current, dragGroupIds, direction)
+      commitItems(nextItems, true)
+      drag.index = nextItems.findIndex(item => item.id === drag.itemId)
     }
     drag.lastClientY = event.clientY
   }
@@ -911,6 +991,7 @@ function ArrayListField({
       <div className="mt-[8px] flex max-w-full flex-col gap-[8px]" style={{ width: maxWidth }}>
         {items.map((item, index) => {
           const focused = focusedIndex === index
+          const selected = selectedIds.includes(item.id)
           const dragLocked = activeDragId !== null && activeDragId !== item.id
           return (
             <div
@@ -922,8 +1003,8 @@ function ArrayListField({
               data-array-list-index={index}
               className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
               style={{
-                borderColor: focused ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
-                background: focused ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+                borderColor: focused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+                background: focused || selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
                 color: 'var(--dfw-text)',
               }}
             >
@@ -987,6 +1068,8 @@ function VersionFormattingRuleField({
 }) {
   const [focusedCell, setFocusedCell] = useState<{ index: number; key: keyof WorkbenchVersionFormattingRule } | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null)
   const [items, setItems] = useState<VersionFormattingRuleItem[]>(() => values.map(createVersionFormattingRuleItem))
   const itemsRef = useRef(items)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
@@ -1004,6 +1087,8 @@ function VersionFormattingRuleField({
         value: { match: value.match, replace: value.replace },
       }))
       itemsRef.current = nextItems
+      setSelectedIds(current => clampSelectionIds(current, nextItems))
+      setSelectionAnchorId(current => (current && nextItems.some(item => item.id === current) ? current : null))
       return nextItems
     })
   }, [values])
@@ -1064,18 +1149,50 @@ function VersionFormattingRuleField({
   }
 
   const deleteItem = (index: number) => {
+    const deletedId = itemsRef.current[index]?.id
     setFocusedCell(current => {
       if (current === null) return null
       if (current.index === index) return null
       return current.index > index ? { ...current, index: current.index - 1 } : current
     })
+    if (deletedId) {
+      setSelectedIds(current => current.filter(id => id !== deletedId))
+      setSelectionAnchorId(current => (current === deletedId ? null : current))
+    }
     commitItems(itemsRef.current.filter((_, itemIndex) => itemIndex !== index), true)
+  }
+
+  const toggleSelection = (index: number, event: PointerEvent<HTMLButtonElement>) => {
+    const item = itemsRef.current[index]
+    if (!item) return
+
+    if (event.shiftKey) {
+      const rangeIds = resolveSelectionRange(itemsRef.current, selectionAnchorId, index)
+      setSelectedIds(rangeIds)
+      setSelectionAnchorId(current => current ?? item.id)
+      return
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      setSelectedIds(current => (
+        current.includes(item.id)
+          ? current.filter(id => id !== item.id)
+          : [...current, item.id]
+      ))
+      setSelectionAnchorId(item.id)
+      return
+    }
+
+    setSelectedIds(current => (current.length === 1 && current[0] === item.id ? current : [item.id]))
+    setSelectionAnchorId(item.id)
   }
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
     const item = itemsRef.current[index]
     if (!item) return
+    toggleSelection(index, event)
+    if (event.shiftKey || event.ctrlKey || event.metaKey) return
     if (dragRef.current || (activeDragId !== null && activeDragId !== item.id)) return
     event.preventDefault()
     event.stopPropagation()
@@ -1107,6 +1224,7 @@ function VersionFormattingRuleField({
     event.preventDefault()
     event.stopPropagation()
 
+    const dragGroupIds = resolveDragGroup(itemsRef.current, selectedIds, drag.itemId)
     const currentIndex = itemsRef.current.findIndex(item => item.id === drag.itemId)
     if (currentIndex < 0) {
       window.clearTimeout(drag.timer)
@@ -1120,8 +1238,7 @@ function VersionFormattingRuleField({
     if (Math.abs(deltaY) < 1) return
 
     const direction = deltaY > 0 ? 1 : -1
-    const targetIndex = drag.index + direction
-    const targetItem = itemsRef.current[targetIndex]
+    const targetItem = resolveGroupBoundaryTarget(itemsRef.current, dragGroupIds, direction)
     if (!targetItem) {
       drag.lastClientY = event.clientY
       return
@@ -1141,17 +1258,14 @@ function VersionFormattingRuleField({
       return
     }
 
-    commitItems(reorderItems(itemsRef.current, drag.index, targetIndex), true)
+    const nextItems = moveItemGroup(itemsRef.current, dragGroupIds, direction)
+    const targetIndex = nextItems.findIndex(item => item.id === drag.itemId)
+    commitItems(nextItems, true)
     setFocusedCell(current => {
       if (current === null) return null
-      if (current.index === drag.index) return { ...current, index: targetIndex }
-      if (drag.index < targetIndex && current.index > drag.index && current.index <= targetIndex) {
-        return { ...current, index: current.index - 1 }
-      }
-      if (drag.index > targetIndex && current.index >= targetIndex && current.index < drag.index) {
-        return { ...current, index: current.index + 1 }
-      }
-      return current
+      const focusedId = itemsRef.current[current.index]?.id
+      const nextIndex = focusedId ? nextItems.findIndex(item => item.id === focusedId) : -1
+      return nextIndex >= 0 ? { ...current, index: nextIndex } : null
     })
     drag.index = targetIndex
     drag.lastClientY = event.clientY
@@ -1199,6 +1313,7 @@ function VersionFormattingRuleField({
         {items.map((item, index) => {
           const matchFocused = focusedCell?.index === index && focusedCell.key === 'match'
           const replaceFocused = focusedCell?.index === index && focusedCell.key === 'replace'
+          const selected = selectedIds.includes(item.id)
           const dragLocked = activeDragId !== null && activeDragId !== item.id
           return (
             <div
@@ -1214,8 +1329,8 @@ function VersionFormattingRuleField({
                 className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
                   width: fieldWidth,
-                  borderColor: matchFocused ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
-                  background: matchFocused ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+                  borderColor: matchFocused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+                  background: matchFocused || selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
                   color: 'var(--dfw-text)',
                 }}
               >
@@ -1258,8 +1373,8 @@ function VersionFormattingRuleField({
                 className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
                   width: fieldWidth,
-                  borderColor: replaceFocused ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
-                  background: replaceFocused ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+                  borderColor: replaceFocused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+                  background: replaceFocused || selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
                   color: 'var(--dfw-text)',
                 }}
               >
