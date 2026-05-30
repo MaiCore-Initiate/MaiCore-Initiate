@@ -46,6 +46,12 @@ const optionLabels: Record<string, string> = {
 
 let arrayListItemId = 0
 
+interface ArrayListPresetOption {
+  value: string
+  label?: string
+  description?: string
+}
+
 export interface WorkbenchModInfoMeta {
   author: string
   tags: string[]
@@ -191,6 +197,30 @@ function hasJvmCustomSource(values: string[]) {
     const normalized = value.toLowerCase()
     return normalized.includes('.java') || normalized.includes('.jar')
   })
+}
+
+function extractEnvName(value: string) {
+  const inlineName = value.match(/name\s*=\s*"([^"]+)"/)
+  if (inlineName?.[1]) return inlineName[1]
+
+  const envPlaceholder = value.match(/\{\{env\|([^}]+)}}/)
+  if (envPlaceholder?.[1]) return envPlaceholder[1]
+
+  const trimmed = value.trim()
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed) ? trimmed : null
+}
+
+function uniquePresetOptions(options: ArrayListPresetOption[]) {
+  const seen = new Set<string>()
+  return options.filter(option => {
+    if (!option.value || seen.has(option.value)) return false
+    seen.add(option.value)
+    return true
+  })
+}
+
+function createEnvInputValue(name: string) {
+  return `{{env|${name}}}`
 }
 
 function formattingRulesEqual(left: WorkbenchVersionFormattingRule[], right: WorkbenchVersionFormattingRule[]) {
@@ -909,17 +939,20 @@ function ArrayListField({
   onChange,
   maxWidth,
   itemAriaLabel,
+  presetOptions = [],
 }: {
   label: string
   values: string[]
   onChange: (values: string[]) => void
   maxWidth: number
   itemAriaLabel?: string
+  presetOptions?: ArrayListPresetOption[]
 }) {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null)
+  const [presetOpen, setPresetOpen] = useState(false)
   const [items, setItems] = useState<ArrayListItem[]>(() => values.map(createArrayListItem))
   const itemsRef = useRef(items)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
@@ -988,6 +1021,15 @@ function ArrayListField({
 
   const addItem = () => {
     commitItems([...itemsRef.current, createArrayListItem('')], true)
+  }
+
+  const presetValueExists = (value: string) => itemsRef.current.some(item => (
+    item.value === value || item.value.includes(value)
+  ))
+
+  const addPresetItem = (value: string) => {
+    commitItems([...itemsRef.current, createArrayListItem(value)], true)
+    setPresetOpen(false)
   }
 
   const updateItem = (index: number, nextValue: string) => {
@@ -1133,20 +1175,101 @@ function ArrayListField({
         >
           {label}
         </label>
-        <button
-          type="button"
-          onClick={addItem}
-          className="flex h-[30px] w-[30px] items-center justify-center rounded-[5px] border transition-colors hover:bg-[var(--dfw-control-hover)]"
-          style={{
-            borderColor: 'var(--dfw-sidebar-border)',
-            background: 'var(--dfw-sidebar-bg)',
-            color: 'var(--dfw-text)',
+        <div
+          className="relative flex shrink-0 items-start gap-[6px]"
+          onBlur={event => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setPresetOpen(false)
+            }
           }}
-          aria-label={`添加${label}`}
-          title="添加"
         >
-          <PlusGlyph />
-        </button>
+          {presetOptions.length > 0 ? (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setPresetOpen(current => !current)}
+                className="flex h-[30px] items-center gap-[5px] rounded-[5px] border px-[8px] text-[14px] font-light leading-[30px] transition-colors hover:bg-[var(--dfw-control-hover)]"
+                style={{
+                  borderColor: presetOpen ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+                  background: presetOpen ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+                  color: 'var(--dfw-text)',
+                  fontFamily: font,
+                }}
+                aria-expanded={presetOpen}
+                aria-haspopup="listbox"
+                aria-label={`${label}占位符`}
+                title="占位符"
+              >
+                <span>占位符</span>
+                <svg
+                  className="shrink-0 transition-transform duration-150"
+                  style={{ transform: presetOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  aria-hidden
+                >
+                  <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+
+              {presetOpen ? (
+                <div
+                  className="absolute right-0 top-[36px] z-[60] max-h-[240px] overflow-auto rounded-[8px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.16)]"
+                  style={{
+                    width: Math.min(330, Math.max(210, maxWidth - 42)),
+                    borderColor: 'var(--dfw-sidebar-border)',
+                    background: 'var(--dfw-sidebar-bg)',
+                    color: 'var(--dfw-text)',
+                    fontFamily: font,
+                  }}
+                  role="listbox"
+                >
+                  {presetOptions.map(option => {
+                    const exists = presetValueExists(option.value)
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => addPresetItem(option.value)}
+                        className="flex min-h-[34px] w-full items-center gap-[8px] px-[10px] text-left text-[15px] font-light transition-colors hover:bg-[var(--dfw-control-hover)]"
+                        style={{
+                          background: exists ? 'var(--dfw-blue)' : 'transparent',
+                          color: exists ? '#fff' : 'var(--dfw-text)',
+                        }}
+                        role="option"
+                        aria-selected={exists}
+                        title={exists ? '已存在于列表中' : option.value}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{option.label ?? option.value}</span>
+                        {exists || option.description ? (
+                          <span className="shrink-0 text-[12px] opacity-75">{exists ? '已存在' : option.description}</span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={addItem}
+            className="flex h-[30px] w-[30px] items-center justify-center rounded-[5px] border transition-colors hover:bg-[var(--dfw-control-hover)]"
+            style={{
+              borderColor: 'var(--dfw-sidebar-border)',
+              background: 'var(--dfw-sidebar-bg)',
+              color: 'var(--dfw-text)',
+            }}
+            aria-label={`添加${label}`}
+            title="添加"
+          >
+            <PlusGlyph />
+          </button>
+        </div>
       </div>
 
       <div className="mt-[8px] flex max-w-full flex-col gap-[8px]" style={{ width: maxWidth }}>
@@ -1609,6 +1732,29 @@ export default function WorkbenchRightSidebar({
   const showVersionJvmOptions = hasJvmCustomSource(componentVersionCustom)
   const showLinkDenoPermissions = hasDenoCustomSource(componentLinkCustom)
   const showLinkJvmOptions = hasJvmCustomSource(componentLinkCustom)
+  const componentNameForPlaceholder = component.id || component.name || `组件${(selectedComponentIndex ?? 0) + 1}`
+  const builtinEnvNames = ['nickname', 'serial_number']
+  const previousEnvNames = selectedComponentIndex === null
+    ? []
+    : meta.components.slice(0, selectedComponentIndex).flatMap(item => (
+      (item.envOutputList ?? []).map(extractEnvName).filter((name): name is string => Boolean(name))
+    ))
+  const componentEnvOutputOptions = uniquePresetOptions([
+    { value: `{{install_path|${componentNameForPlaceholder}}}`, label: `安装路径：${componentNameForPlaceholder}` },
+    { value: `{{version|${componentNameForPlaceholder}}}`, label: `版本号：${componentNameForPlaceholder}` },
+    ...componentGetLinkProvideList.map((_, index) => ({
+      value: `{{key|Component.${componentNameForPlaceholder}.get_link_provide_list.${index}}}`,
+      label: `可选链接 ${index}`
+    })),
+    ...(meta.fileImport === true ? meta.fileImportList.filter(Boolean).map(fileName => ({
+      value: `{{file_path|${fileName}}}`,
+      label: `导入文件：${fileName}`,
+    })) : []),
+  ])
+  const componentEnvInputOptions = uniquePresetOptions([...builtinEnvNames, ...previousEnvNames].map(name => ({
+    value: createEnvInputValue(name),
+    label: name,
+  })))
   const updateComponent = (patch: Partial<WorkbenchComponentMeta>) => {
     if (selectedComponentIndex === null) return
     const nextComponents = fillComponentsToIndex(meta.components, selectedComponentIndex)
@@ -2456,6 +2602,7 @@ export default function WorkbenchRightSidebar({
                   onChange={envOutputList => updateComponent({ envOutputList })}
                   maxWidth={fieldAvailableWidth}
                   itemAriaLabel="导出变量"
+                  presetOptions={componentEnvOutputOptions}
                 />
               </section>
             </ConditionalField>
@@ -2476,6 +2623,7 @@ export default function WorkbenchRightSidebar({
                   onChange={envInputList => updateComponent({ envInputList })}
                   maxWidth={fieldAvailableWidth}
                   itemAriaLabel="导入变量"
+                  presetOptions={componentEnvInputOptions}
                 />
               </section>
             </ConditionalField>
