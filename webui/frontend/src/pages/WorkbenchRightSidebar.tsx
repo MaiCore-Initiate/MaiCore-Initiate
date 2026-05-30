@@ -799,6 +799,7 @@ function ArrayListField({
   }
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -815,7 +816,13 @@ function ArrayListField({
 
   const moveDrag = (event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current
-    if (!drag || drag.pointerId !== event.pointerId || !drag.active) return
+    if (!drag || drag.pointerId !== event.pointerId) return
+    if (event.buttons !== 1) {
+      window.clearTimeout(drag.timer)
+      dragRef.current = null
+      return
+    }
+    if (!drag.active) return
     event.preventDefault()
     event.stopPropagation()
 
@@ -1027,6 +1034,7 @@ function VersionFormattingRuleField({
   }
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -1043,7 +1051,13 @@ function VersionFormattingRuleField({
 
   const moveDrag = (event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current
-    if (!drag || drag.pointerId !== event.pointerId || !drag.active) return
+    if (!drag || drag.pointerId !== event.pointerId) return
+    if (event.buttons !== 1) {
+      window.clearTimeout(drag.timer)
+      dragRef.current = null
+      return
+    }
+    if (!drag.active) return
     event.preventDefault()
     event.stopPropagation()
 
