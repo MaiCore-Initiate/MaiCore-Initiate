@@ -1,36 +1,24 @@
 import { workbenchCanvasFont, type WorkbenchPoint } from './types'
 
-const accent = '#22b386'
+const componentsAccent = '#127439'
+const componentsFill = '#009200'
+const componentAccent = '#00d000'
+const componentFill = '#7fff9f'
 
-function PlusGlyph({ x, y, disabled = false }: { x: number; y: number; disabled?: boolean }) {
-  return (
-    <g transform={`translate(${x} ${y})`} opacity={disabled ? 0.42 : 1}>
-      <circle cx="11" cy="11" r="10" fill="var(--dfw-bg)" stroke={accent} strokeWidth="2" />
-      <path d="M6.5,11h9" fill="none" stroke={accent} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-      <path d="M11,6.5v9" fill="none" stroke={accent} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-    </g>
-  )
-}
-
-function CloseGlyph() {
-  return (
-    <g>
-      <path d="M7,7L17,17" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-      <path d="M17,7L7,17" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-    </g>
-  )
-}
-
-function NodeOption({
+function ComponentNodeRow({
   y,
-  title,
-  detail,
+  label,
+  code,
+  swatchFill,
+  swatchStroke,
   disabled = false,
   onClick,
 }: {
   y: number
-  title: string
-  detail: string
+  label: string
+  code: string
+  swatchFill: string
+  swatchStroke: string
   disabled?: boolean
   onClick?: () => void
 }) {
@@ -44,13 +32,20 @@ function NodeOption({
       }}
       onPointerDown={event => event.stopPropagation()}
     >
-      <rect x="12" y={y} width="236" height="52" rx="12" fill={accent} opacity="0.12" stroke={accent} strokeWidth="1.5" />
-      <PlusGlyph x={26} y={y + 15} disabled={disabled} />
-      <text x="62" y={y + 24} fontSize="18" fontFamily={workbenchCanvasFont} fontWeight="600" fill="currentColor">
-        {title}
-      </text>
-      <text x="62" y={y + 43} fontSize="14" fontFamily={workbenchCanvasFont} fontWeight="300" fill="currentColor" opacity="0.78">
-        {detail}
+      <rect
+        x="21"
+        y={y}
+        width="300"
+        height="28"
+        rx="5"
+        fill="var(--dfw-bg)"
+        stroke="var(--dfw-sidebar-border)"
+        strokeWidth="1"
+      />
+      <rect x="24.09" y={y + 3} width="22" height="22" rx="3" fill={swatchFill} stroke={swatchStroke} strokeWidth="2" opacity="0.7" />
+      <text x="49.79" y={y + 21.34} fontSize="20" fontFamily={workbenchCanvasFont} fontWeight="300" fill="currentColor">
+        <tspan>{label}</tspan>
+        <tspan fontSize="15" fill="var(--dfw-outline-muted)"> {code}</tspan>
       </text>
     </g>
   )
@@ -74,31 +69,39 @@ export default function AddNodePopover({
       onPointerDown={event => event.stopPropagation()}
       style={{ filter: 'drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18))' }}
     >
-      <rect x="0" y="0" width="260" height="154" rx="18" fill="var(--dfw-bg)" stroke={accent} strokeWidth="2" />
-      <text x="18" y="30" fontSize="20" fontFamily={workbenchCanvasFont} fontWeight="600" fill="currentColor">
-        新增节点
+      <rect x="1" y="1" width="350" height="500" rx="30" fill="var(--dfw-bg)" stroke="var(--dfw-sidebar-border)" strokeWidth="2" />
+      <text x="21" y="49.85" fontSize="30" fontFamily={workbenchCanvasFont} fontWeight="600" fill="currentColor">
+        组件
       </text>
+
+      <ComponentNodeRow
+        y={48}
+        label="组件管理闸"
+        code="[COMPONENTS]"
+        swatchFill={componentsFill}
+        swatchStroke={componentsAccent}
+        disabled={componentsVisible}
+        onClick={onAddComponents}
+      />
+      <ComponentNodeRow
+        y={92}
+        label="组件界定器"
+        code="[[Component]]"
+        swatchFill={componentFill}
+        swatchStroke={componentAccent}
+        disabled
+      />
+
       <g
         className="cursor-pointer"
-        transform="translate(224 12)"
         onClick={event => {
           event.stopPropagation()
           onClose()
         }}
         onPointerDown={event => event.stopPropagation()}
       >
-        <rect x="0" y="0" width="24" height="24" rx="7" fill="transparent" />
-        <CloseGlyph />
+        <rect x="321" y="0" width="31" height="31" rx="15.5" fill="transparent" />
       </g>
-
-      <NodeOption
-        y={48}
-        title="[COMPONENTS]"
-        detail={componentsVisible ? '已在画布中' : '组件配置区域'}
-        disabled={componentsVisible}
-        onClick={onAddComponents}
-      />
-      <NodeOption y={108} title="[[Deployment]]" detail="后续阶段接入" disabled />
     </g>
   )
 }

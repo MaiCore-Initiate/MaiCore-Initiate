@@ -234,7 +234,7 @@ export default function WorkbenchCanvas({
   const openAddNodePopover = (position: WorkbenchPoint) => {
     setAddNodePopoverPosition({
       x: position.x + 32,
-      y: position.y - 74,
+      y: position.y - 42,
     })
   }
 
