@@ -79,8 +79,14 @@ const defaultComponentMeta: WorkbenchComponentMeta = {
   directLink: '',
   getVersion: '',
   githubRepo: '',
+  versionFile: [],
+  versionCustom: [],
   getLink: '',
   getLinkProvideList: [],
+  linkFile: [],
+  linkCustom: [],
+  denoPermissions: [],
+  jvm: [],
   userChoose: null,
   chooseList: [],
   formatVersion: null,
@@ -137,6 +143,17 @@ function formatTomlString(value: string) {
 
 function formatTomlArray(values: string[]) {
   return `[${values.map(formatTomlString).join(', ')}]`
+}
+
+function hasDenoCustomSource(values: string[]) {
+  return values.some(value => value.toLowerCase().includes('.ts'))
+}
+
+function hasJvmCustomSource(values: string[]) {
+  return values.some(value => {
+    const normalized = value.toLowerCase()
+    return normalized.includes('.java') || normalized.includes('.jar')
+  })
 }
 
 function formatTomlInlineTable(value: WorkbenchVersionFormattingRule) {
@@ -262,6 +279,13 @@ function createModInfoOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
 
 function createComponentOutlineChildren(component: WorkbenchComponentMeta, index: number): OutlineNode[] {
   const id = (fieldName: string) => `component-${index}-${fieldName}`
+  const versionFile = component.versionFile ?? []
+  const versionCustom = component.versionCustom ?? []
+  const getLinkProvideList = component.getLinkProvideList ?? []
+  const linkFile = component.linkFile ?? []
+  const linkCustom = component.linkCustom ?? []
+  const denoPermissions = component.denoPermissions ?? []
+  const jvm = component.jvm ?? []
 
   return [
     { id: id('name'), label: `name = ${formatTomlString(component.name)}`, icon: 'string' },
@@ -292,6 +316,16 @@ function createComponentOutlineChildren(component: WorkbenchComponentMeta, index
         ...(component.getVersion === 'github_repo'
           ? [{ id: id('github-repo'), label: `github_repo = ${formatTomlString(component.githubRepo)}`, icon: 'string' as const }]
           : []),
+        ...(component.getVersion === 'filelink'
+          ? [createStringArrayOutlineNode(id('version-file'), 'version_file', versionFile)]
+          : []),
+        ...(component.getVersion === 'custom'
+          ? [
+            createStringArrayOutlineNode(id('version-custom'), 'version_custom', versionCustom),
+            ...(hasDenoCustomSource(versionCustom) ? [createStringArrayOutlineNode(id('deno-permissions'), 'deno_permissions', denoPermissions)] : []),
+            ...(hasJvmCustomSource(versionCustom) ? [createStringArrayOutlineNode(id('jvm'), 'JVM', jvm)] : []),
+          ]
+          : []),
         createBooleanOutlineNode(id('format-version'), 'format_version', component.formatVersion),
         ...(component.formatVersion === true
           ? [createVersionFormattingOutlineNode(id('version-formatting-formula'), component.versionFormattingFormula)]
@@ -303,7 +337,17 @@ function createComponentOutlineChildren(component: WorkbenchComponentMeta, index
       ? [
         { id: id('get-link'), label: `get_link = ${formatTomlString(component.getLink)}`, icon: 'string' as const },
         ...(component.getLink === 'filelink' || component.getLink === 'custom'
-          ? [createStringArrayOutlineNode(id('get-link-provide-list'), 'get_link_provide_list', component.getLinkProvideList)]
+          ? [createStringArrayOutlineNode(id('get-link-provide-list'), 'get_link_provide_list', getLinkProvideList)]
+          : []),
+        ...(component.getLink === 'filelink' && getLinkProvideList.length === 0
+          ? [createStringArrayOutlineNode(id('link-file'), 'link_file', linkFile)]
+          : []),
+        ...(component.getLink === 'custom' && getLinkProvideList.length === 0
+          ? [
+            createStringArrayOutlineNode(id('link-custom'), 'link_custom', linkCustom),
+            ...(hasDenoCustomSource(linkCustom) ? [createStringArrayOutlineNode(id('deno-permissions'), 'deno_permissions', denoPermissions)] : []),
+            ...(hasJvmCustomSource(linkCustom) ? [createStringArrayOutlineNode(id('jvm'), 'JVM', jvm)] : []),
+          ]
           : []),
       ]
       : []),

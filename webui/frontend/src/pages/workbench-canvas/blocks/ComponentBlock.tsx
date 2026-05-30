@@ -60,6 +60,17 @@ function formatTomlArray(values: string[]) {
   return values.length ? `[${values.map(formatTomlString).join(', ')}]` : ''
 }
 
+function hasDenoCustomSource(values: string[]) {
+  return values.some(value => value.toLowerCase().includes('.ts'))
+}
+
+function hasJvmCustomSource(values: string[]) {
+  return values.some(value => {
+    const normalized = value.toLowerCase()
+    return normalized.includes('.java') || normalized.includes('.jar')
+  })
+}
+
 function formatTomlInlineTable(value: WorkbenchVersionFormattingRule) {
   return `{match = ${formatTomlString(value.match)}, replace = ${formatTomlString(value.replace)}}`
 }
@@ -102,6 +113,13 @@ export default function ComponentBlock({
   const contentClipId = `dfw-component-block-content-clip-${blockIndex}`
   const outputOffset = resolveComponentBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
   const connectorY = outputOffset.y - 12
+  const versionFile = component.versionFile ?? []
+  const versionCustom = component.versionCustom ?? []
+  const getLinkProvideList = component.getLinkProvideList ?? []
+  const linkFile = component.linkFile ?? []
+  const linkCustom = component.linkCustom ?? []
+  const denoPermissions = component.denoPermissions ?? []
+  const jvm = component.jvm ?? []
   const rows = [
     { label: '组件名称：', value: formatTomlString(component.name) },
     { label: '组件ID：', value: formatTomlString(component.id) },
@@ -123,6 +141,14 @@ export default function ComponentBlock({
       ? [
         { label: '版本获取方式：', value: formatTomlString(component.getVersion) },
         ...(component.getVersion === 'github_repo' ? [{ label: 'GitHub仓库：', value: formatTomlString(component.githubRepo) }] : []),
+        ...(component.getVersion === 'filelink' ? [{ label: '版本文件来源：', value: formatTomlArray(versionFile) }] : []),
+        ...(component.getVersion === 'custom'
+          ? [
+            { label: '版本脚本来源：', value: formatTomlArray(versionCustom) },
+            ...(hasDenoCustomSource(versionCustom) ? [{ label: 'Deno权限参数：', value: formatTomlArray(denoPermissions) }] : []),
+            ...(hasJvmCustomSource(versionCustom) ? [{ label: 'JVM参数：', value: formatTomlArray(jvm) }] : []),
+          ]
+          : []),
         { label: '版本拼接链接：', value: formatTomlString(component.splicingLink) },
         { label: '格式化版本：', value: formatTomlBoolean(component.formatVersion) },
         ...(component.formatVersion === true ? [{ label: '格式化规则：', value: formatTomlInlineTableArray(component.versionFormattingFormula) }] : []),
@@ -132,7 +158,17 @@ export default function ComponentBlock({
       ? [
         { label: '链接获取方式：', value: formatTomlString(component.getLink) },
         ...(component.getLink === 'filelink' || component.getLink === 'custom'
-          ? [{ label: '可选链接：', value: formatTomlArray(component.getLinkProvideList) }]
+          ? [{ label: '可选链接：', value: formatTomlArray(getLinkProvideList) }]
+          : []),
+        ...(component.getLink === 'filelink' && getLinkProvideList.length === 0
+          ? [{ label: '链接文件来源：', value: formatTomlArray(linkFile) }]
+          : []),
+        ...(component.getLink === 'custom' && getLinkProvideList.length === 0
+          ? [
+            { label: '链接脚本来源：', value: formatTomlArray(linkCustom) },
+            ...(hasDenoCustomSource(linkCustom) ? [{ label: 'Deno权限参数：', value: formatTomlArray(denoPermissions) }] : []),
+            ...(hasJvmCustomSource(linkCustom) ? [{ label: 'JVM参数：', value: formatTomlArray(jvm) }] : []),
+          ]
           : []),
       ]
       : []),

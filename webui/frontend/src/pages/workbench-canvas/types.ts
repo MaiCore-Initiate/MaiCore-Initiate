@@ -56,8 +56,14 @@ export interface WorkbenchComponentMeta {
   directLink: string
   getVersion: string
   githubRepo: string
+  versionFile: string[]
+  versionCustom: string[]
   getLink: string
   getLinkProvideList: string[]
+  linkFile: string[]
+  linkCustom: string[]
+  denoPermissions: string[]
+  jvm: string[]
   userChoose: boolean | null
   chooseList: string[]
   formatVersion: boolean | null

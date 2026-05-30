@@ -94,8 +94,14 @@ const emptyComponentMeta: WorkbenchComponentMeta = {
   directLink: '',
   getVersion: '',
   githubRepo: '',
+  versionFile: [],
+  versionCustom: [],
   getLink: '',
   getLinkProvideList: [],
+  linkFile: [],
+  linkCustom: [],
+  denoPermissions: [],
+  jvm: [],
   userChoose: null,
   chooseList: [],
   formatVersion: null,
@@ -174,6 +180,17 @@ function TextAlignRightGlyph() {
 
 function arraysEqual(left: string[], right: string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
+function hasDenoCustomSource(values: string[]) {
+  return values.some(value => value.toLowerCase().includes('.ts'))
+}
+
+function hasJvmCustomSource(values: string[]) {
+  return values.some(value => {
+    const normalized = value.toLowerCase()
+    return normalized.includes('.java') || normalized.includes('.jar')
+  })
 }
 
 function formattingRulesEqual(left: WorkbenchVersionFormattingRule[], right: WorkbenchVersionFormattingRule[]) {
@@ -1578,7 +1595,20 @@ export default function WorkbenchRightSidebar({
   }
 
   const selectedComponentIndex = parseComponentBlockIndex(selectedBlockId)
-  const component = selectedComponentIndex === null ? emptyComponentMeta : meta.components[selectedComponentIndex] ?? emptyComponentMeta
+  const component = selectedComponentIndex === null
+    ? emptyComponentMeta
+    : { ...emptyComponentMeta, ...(meta.components[selectedComponentIndex] ?? {}) }
+  const componentVersionFile = component.versionFile ?? []
+  const componentVersionCustom = component.versionCustom ?? []
+  const componentLinkFile = component.linkFile ?? []
+  const componentLinkCustom = component.linkCustom ?? []
+  const componentGetLinkProvideList = component.getLinkProvideList ?? []
+  const componentDenoPermissions = component.denoPermissions ?? []
+  const componentJvm = component.jvm ?? []
+  const showVersionDenoPermissions = hasDenoCustomSource(componentVersionCustom)
+  const showVersionJvmOptions = hasJvmCustomSource(componentVersionCustom)
+  const showLinkDenoPermissions = hasDenoCustomSource(componentLinkCustom)
+  const showLinkJvmOptions = hasJvmCustomSource(componentLinkCustom)
   const updateComponent = (patch: Partial<WorkbenchComponentMeta>) => {
     if (selectedComponentIndex === null) return
     const nextComponents = fillComponentsToIndex(meta.components, selectedComponentIndex)
@@ -2125,6 +2155,54 @@ export default function WorkbenchRightSidebar({
                   </section>
                 </ConditionalField>
 
+                <ConditionalField show={component.getVersion === 'filelink'}>
+                  <section>
+                    <ArrayListField
+                      label="版本文件来源列表"
+                      values={componentVersionFile}
+                      onChange={versionFile => updateComponent({ versionFile })}
+                      maxWidth={fieldAvailableWidth}
+                      itemAriaLabel="版本文件来源"
+                    />
+                  </section>
+                </ConditionalField>
+
+                <ConditionalField show={component.getVersion === 'custom'}>
+                  <section>
+                    <ArrayListField
+                      label="版本脚本来源列表"
+                      values={componentVersionCustom}
+                      onChange={versionCustom => updateComponent({ versionCustom })}
+                      maxWidth={fieldAvailableWidth}
+                      itemAriaLabel="版本脚本来源"
+                    />
+                  </section>
+                </ConditionalField>
+
+                <ConditionalField show={component.getVersion === 'custom' && showVersionDenoPermissions}>
+                  <section>
+                    <ArrayListField
+                      label="Deno权限参数列表"
+                      values={componentDenoPermissions}
+                      onChange={denoPermissions => updateComponent({ denoPermissions })}
+                      maxWidth={fieldAvailableWidth}
+                      itemAriaLabel="Deno权限参数"
+                    />
+                  </section>
+                </ConditionalField>
+
+                <ConditionalField show={component.getVersion === 'custom' && showVersionJvmOptions}>
+                  <section>
+                    <ArrayListField
+                      label="JVM参数列表"
+                      values={componentJvm}
+                      onChange={jvm => updateComponent({ jvm })}
+                      maxWidth={fieldAvailableWidth}
+                      itemAriaLabel="JVM参数"
+                    />
+                  </section>
+                </ConditionalField>
+
                 <section>
                   <FieldLabel>版本拼接链接</FieldLabel>
                   <AutoGrowTextField
@@ -2172,10 +2250,58 @@ export default function WorkbenchRightSidebar({
                   <section>
                     <ArrayListField
                       label="可选链接列表"
-                      values={component.getLinkProvideList}
+                      values={componentGetLinkProvideList}
                       onChange={getLinkProvideList => updateComponent({ getLinkProvideList })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="可选链接"
+                    />
+                  </section>
+                </ConditionalField>
+
+                <ConditionalField show={component.getLink === 'filelink' && componentGetLinkProvideList.length === 0}>
+                  <section>
+                    <ArrayListField
+                      label="链接文件来源列表"
+                      values={componentLinkFile}
+                      onChange={linkFile => updateComponent({ linkFile })}
+                      maxWidth={fieldAvailableWidth}
+                      itemAriaLabel="链接文件来源"
+                    />
+                  </section>
+                </ConditionalField>
+
+                <ConditionalField show={component.getLink === 'custom' && componentGetLinkProvideList.length === 0}>
+                  <section>
+                    <ArrayListField
+                      label="链接脚本来源列表"
+                      values={componentLinkCustom}
+                      onChange={linkCustom => updateComponent({ linkCustom })}
+                      maxWidth={fieldAvailableWidth}
+                      itemAriaLabel="链接脚本来源"
+                    />
+                  </section>
+                </ConditionalField>
+
+                <ConditionalField show={component.getLink === 'custom' && componentGetLinkProvideList.length === 0 && showLinkDenoPermissions}>
+                  <section>
+                    <ArrayListField
+                      label="Deno权限参数列表"
+                      values={componentDenoPermissions}
+                      onChange={denoPermissions => updateComponent({ denoPermissions })}
+                      maxWidth={fieldAvailableWidth}
+                      itemAriaLabel="Deno权限参数"
+                    />
+                  </section>
+                </ConditionalField>
+
+                <ConditionalField show={component.getLink === 'custom' && componentGetLinkProvideList.length === 0 && showLinkJvmOptions}>
+                  <section>
+                    <ArrayListField
+                      label="JVM参数列表"
+                      values={componentJvm}
+                      onChange={jvm => updateComponent({ jvm })}
+                      maxWidth={fieldAvailableWidth}
+                      itemAriaLabel="JVM参数"
                     />
                   </section>
                 </ConditionalField>
