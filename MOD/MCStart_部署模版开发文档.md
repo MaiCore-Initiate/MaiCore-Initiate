@@ -562,7 +562,11 @@ check_version_regex = ["^v(\\d+\\.\\d+\\.\\d+)$"]
 | `get_version` | String | 条件必填 | `"github_repo"` / `"filelink"` / `"custom"` | 版本获取方式。仅当 `get_method = "get_version"` 时需要提供 |
 | `github_repo` | String | 条件必填 | — | 组件的 GitHub 仓库链接。仅当 `get_version = "github_repo"` 时需要提供。MCStart 通过 GitHub API 获取版本号 |
 | `get_link` | String | 条件必填 | `"filelink"` / `"custom"` / `"user_input"` | 链接获取方式。仅当 `get_method = "get_link"` 时需要提供 |
-| `get_link_provide_list` | Array\[String\] | 条件必填 | — | 可选链接列表，供用户选择。仅当 `get_method = "get_link"` 且 `get_link` 为 `"filelink"` 或 `"custom"` 时需要提供 |
+| `get_link_provide_list` | Array\[String\] | 否 | — | 直接提供可选下载链接列表。仅当 `get_method = "get_link"` 且 `get_link` 为 `"filelink"` 或 `"custom"` 时生效；有值时优先于来源字段 |
+| `get_version_file_link` | String | 条件必填 | — | 推荐的版本文件来源字段。仅当 `get_version = "filelink"` 时需要提供 |
+| `get_link_file_link` | String | 条件必填 | — | 推荐的链接文件来源字段。仅当 `get_link = "filelink"` 且未提供 `get_link_provide_list` 时需要提供 |
+| `get_version_script` | String | 条件必填 | — | 推荐的版本脚本来源字段。仅当 `get_version = "custom"` 时需要提供 |
+| `get_link_script` | String | 条件必填 | — | 推荐的链接脚本来源字段。仅当 `get_link = "custom"` 且未提供 `get_link_provide_list` 时需要提供 |
 
 ##### get_method 详解
 
@@ -577,16 +581,26 @@ check_version_regex = ["^v(\\d+\\.\\d+\\.\\d+)$"]
 | 值 | 行为 | 必须搭配的字段 |
 |----|------|---------------|
 | `"github_repo"` | 通过 GitHub API 获取仓库的最新 Release / Tag 版本号 | `github_repo` |
-| `"filelink"` | 通过远程或本地文件链接获取版本号，支持 `txt` / `json` / `xml` 等格式，也支持 `file:///` 协议 | 文件链接相关字段 |
-| `"custom"` | 通过自定义脚本获取版本号。支持 `.py` / `.bat` / `.exe` / `.ps1` / `.sh`（Windows 需 Git Bash）/ `.js`（需 Node.js）等脚本 | 脚本路径相关字段 |
+| `"filelink"` | 通过远程或本地文件链接获取版本号，支持 `txt` / `json` / `toml` / `xml` 等格式，也支持 `file:///` 协议 | 推荐 `get_version_file_link` |
+| `"custom"` | 通过自定义脚本获取版本号。支持 `.py` / `.bat` / `.exe` / `.ps1` / `.sh`（Windows 需 Git Bash）/ `.js`（需 Node.js）等脚本 | 推荐 `get_version_script` |
+
+`get_version = "filelink"` 时，运行时会按顺序读取以下字段作为文件或 URL 来源：`file_link`、`version_file_link`、`get_version_file_link`、`get_link_file_link`、`get_link_file`、`link_file`。写新模板时建议使用 `get_version_file_link`。
+
+`get_version = "custom"` 时，运行时会按顺序读取以下字段作为脚本来源：`custom_script`、`version_script`、`get_version_script`、`get_link_script`、`get_version_custom`、`get_link_custom`、`script_path`。写新模板时建议使用 `get_version_script`。
 
 ##### get_link 详解
 
 | 值 | 行为 | 说明 |
 |----|------|------|
-| `"filelink"` | 从远程或本地文件中读取下载链接列表，支持 `txt` / `json` / `xml` 等格式，每行一个链接 | 用户可像选择版本一样选择链接 |
+| `"filelink"` | 从远程或本地文件中读取下载链接列表，支持 `txt` / `json` / `toml` / `xml` 等格式，每行一个链接 | 用户可像选择版本一样选择链接 |
 | `"custom"` | 通过自定义脚本获取下载链接，脚本返回链接列表 | 支持 `.py` / `.bat` / `.exe` / `.ps1` / `.sh` / `.js` 等脚本 |
 | `"user_input"` | 由用户在运行时手动输入下载链接 | 适用于链接不固定的场景 |
+
+`get_link = "filelink"` 时，运行时会按顺序读取以下字段作为文件或 URL 来源：`file_link`、`version_file_link`、`get_version_file_link`、`get_link_file_link`、`get_link_file`、`link_file`。写新模板时建议使用 `get_link_file_link`。
+
+`get_link = "custom"` 时，运行时会按顺序读取以下字段作为脚本来源：`custom_script`、`version_script`、`get_version_script`、`get_link_script`、`get_version_custom`、`get_link_custom`、`script_path`。写新模板时建议使用 `get_link_script`。
+
+如果已经提供非空的 `get_link_provide_list`，MCStart 会直接使用这个列表作为可选下载链接，不再读取 `filelink` 或 `custom` 的来源字段。
 
 **示例 — 直接下载**：
 
@@ -602,6 +616,23 @@ get_method = "get_version"
 get_version = "github_repo"
 github_repo = "https://github.com/pawelsalawa/sqlitestudio"
 splicing_link = "https://sqlitestudio.pl/files/sqlitestudio-{{version|SQLiteStudio}}-portable.zip"
+```
+
+**示例 — 从文件获取版本拼接链接**：
+
+```toml
+get_method = "get_version"
+get_version = "filelink"
+get_version_file_link = "versions.txt"
+splicing_link = "https://example.com/app-{{version|App}}.zip"
+```
+
+**示例 — 从脚本获取完整链接**：
+
+```toml
+get_method = "get_link"
+get_link = "custom"
+get_link_script = "{{file_path|GetLinks.py}}"
 ```
 
 ---
@@ -916,11 +947,19 @@ git clone -b v1.2.0 --depth 1 https://github.com/Mai-with-u/MaiBot.git
 | `get_version` | String | 条件必填 | `"github_repo"` / `"filelink"` / `"custom"` | 版本获取方式 |
 | `github_repo` | String | 条件必填 | — | GitHub 仓库链接 |
 | `get_link` | String | 条件必填 | `"filelink"` / `"custom"` / `"user_input"` | 链接获取方式 |
-| `get_link_provide_list` | Array\[String\] | 条件必填 | — | 可选链接列表 |
+| `get_link_provide_list` | Array\[String\] | 否 | — | 直接提供可选下载链接列表；有值时优先于来源字段 |
+| `get_version_file_link` | String | 条件必填 | — | 推荐的版本文件来源字段。仅当 `get_version = "filelink"` 时需要提供 |
+| `get_link_file_link` | String | 条件必填 | — | 推荐的链接文件来源字段。仅当 `get_link = "filelink"` 且未提供 `get_link_provide_list` 时需要提供 |
+| `get_version_script` | String | 条件必填 | — | 推荐的版本脚本来源字段。仅当 `get_version = "custom"` 时需要提供 |
+| `get_link_script` | String | 条件必填 | — | 推荐的链接脚本来源字段。仅当 `get_link = "custom"` 且未提供 `get_link_provide_list` 时需要提供 |
 | `user_choose` | Boolean | 否 | — | 是否让用户选择版本 |
 | `choose_list` | Array | 条件必填 | — | 版本选择列表（规则同组件的 `choose_list`） |
 | `format_version` | Boolean | 条件必填 | — | 是否格式化版本号 |
 | `version_formatting_formula` | Array\[InlineTable\] | 条件必填 | — | 格式化规则（同组件） |
+
+`get_version = "filelink"` / `get_link = "filelink"` 的文件来源字段、`get_version = "custom"` / `get_link = "custom"` 的脚本来源字段，与 `[[Component]]` 中的规则完全一致。写新模板时推荐分别使用 `get_version_file_link`、`get_link_file_link`、`get_version_script`、`get_link_script`。
+
+如果 `get_link_provide_list` 是非空数组，部署项会直接使用该列表作为链接候选，不再读取 `filelink` 或 `custom` 对应的来源字段。
 
 ```toml
 get_method = "get_version"
@@ -929,6 +968,12 @@ github_repo = "https://github.com/Mai-with-u/MaiBot"
 user_choose = true
 choose_list = [15]            # 展示最近 15 个版本
 format_version = false
+```
+
+```toml
+get_method = "get_link"
+get_link = "filelink"
+get_link_file_link = "deploy-links.json"
 ```
 
 ---
@@ -1717,23 +1762,31 @@ MCStart 支持三种版本获取方式，适用于 `[[Component]]` 和 `[[Deploy
 │  │
 │  ├─ get_version = "filelink"
 │  │  → 从远程/本地文件中读取版本号
-│  │  → 支持 txt/json/xml 等格式
+│  │  → 支持 txt/json/toml/xml 等格式
 │  │  → 支持 file:/// 本地协议
+│  │  → 推荐通过 get_version_file_link 指定来源
 │  │
 │  └─ get_version = "custom"
 │     → 运行自定义脚本获取版本号
 │     → 支持 .py/.bat/.exe/.ps1/.sh/.js
+│     → 推荐通过 get_version_script 指定来源
 │
 └─ get_method = "get_link"
    ├─ get_link = "filelink"
    │  → 从文件中读取链接列表，用户选择
+   │  → 推荐通过 get_link_file_link 指定来源
    │
    ├─ get_link = "custom"
    │  → 运行脚本获取链接列表，用户选择
+   │  → 推荐通过 get_link_script 指定来源
    │
    └─ get_link = "user_input"
       → 用户手动输入下载链接
 ```
+
+`filelink` 来源可以写成 `http://` / `https://` URL、`file:///` 本地文件 URL、绝对路径或相对路径。相对路径以当前模板目录为基准解析。文件内容支持纯文本逐行读取，也支持从 `json` / `toml` / `xml` 中提取字符串值。
+
+`custom` 来源填写脚本文件路径。脚本输出会按行解析为候选版本或候选链接，空行会被忽略。
 
 ### 8.2 版本号格式化
 
@@ -2018,7 +2071,11 @@ version_formatting_formula = [
 | `get_version` | String | 📎 | `get_method="get_version"` | 版本获取方式 |
 | `github_repo` | String | 📎 | `get_version="github_repo"` | GitHub 仓库链接 |
 | `get_link` | String | 📎 | `get_method="get_link"` | 链接获取方式 |
-| `get_link_provide_list` | Array\[String\] | 📎 | `get_link="filelink"/"custom"` | 可选链接列表 |
+| `get_link_provide_list` | Array\[String\] | ❌ | `get_link="filelink"/"custom"` | 可选链接列表，有值时优先于来源字段 |
+| `get_version_file_link` | String | 📎 | `get_version="filelink"` | 推荐的版本文件来源 |
+| `get_link_file_link` | String | 📎 | `get_link="filelink"` | 未提供 `get_link_provide_list` 时推荐的链接文件来源 |
+| `get_version_script` | String | 📎 | `get_version="custom"` | 推荐的版本脚本来源 |
+| `get_link_script` | String | 📎 | `get_link="custom"` | 未提供 `get_link_provide_list` 时推荐的链接脚本来源 |
 | `user_choose` | Boolean | ❌ | — | 用户可选版本 |
 | `choose_list` | Array | 📎 | `user_choose=true` | 版本选择列表 |
 | `format_version` | Boolean | 📎 | `get_method="get_version"` | 是否格式化版本号 |
@@ -2067,7 +2124,11 @@ version_formatting_formula = [
 | `get_version` | String | 📎 | `get_method="get_version"` | 版本获取方式 |
 | `github_repo` | String | 📎 | `get_version="github_repo"` | GitHub 仓库链接 |
 | `get_link` | String | 📎 | `get_method="get_link"` | 链接获取方式 |
-| `get_link_provide_list` | Array\[String\] | 📎 | `get_link="filelink"/"custom"` | 可选链接列表 |
+| `get_link_provide_list` | Array\[String\] | ❌ | `get_link="filelink"/"custom"` | 可选链接列表，有值时优先于来源字段 |
+| `get_version_file_link` | String | 📎 | `get_version="filelink"` | 推荐的版本文件来源 |
+| `get_link_file_link` | String | 📎 | `get_link="filelink"` | 未提供 `get_link_provide_list` 时推荐的链接文件来源 |
+| `get_version_script` | String | 📎 | `get_version="custom"` | 推荐的版本脚本来源 |
+| `get_link_script` | String | 📎 | `get_link="custom"` | 未提供 `get_link_provide_list` 时推荐的链接脚本来源 |
 | `user_choose` | Boolean | ❌ | — | 用户可选版本 |
 | `choose_list` | Array | 📎 | `user_choose=true` | 版本选择列表 |
 | `format_version` | Boolean | 📎 | `get_method="get_version"` | 是否格式化版本号 |
@@ -2081,6 +2142,10 @@ version_formatting_formula = [
 | `env_output_list` | Array\[InlineTable\] | 📎 | `env_output=true` | 导出变量列表 |
 | `env_input` | Boolean | ❌ | — | 导入环境变量 |
 | `env_input_list` | Array\[InlineTable\] | 📎 | `env_input=true` | 导入变量列表 |
+
+`filelink` 来源字段兼容别名：`file_link`、`version_file_link`、`get_version_file_link`、`get_link_file_link`、`get_link_file`、`link_file`。
+
+`custom` 脚本来源字段兼容别名：`custom_script`、`version_script`、`get_version_script`、`get_link_script`、`get_version_custom`、`get_link_custom`、`script_path`。
 
 ### [LAUNCH]
 

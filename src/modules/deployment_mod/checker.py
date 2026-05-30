@@ -31,6 +31,24 @@ VALID_GET_VERSION_SOURCES = {"github_repo", "filelink", "custom"}
 VALID_GET_LINK_SOURCES = {"filelink", "custom", "user_input"}
 VALID_INSTALL_OPERATIONS = {"auto", "no", "custom"}
 VALID_DEPLOY_METHODS = {"auto", "gitclone", "!gitclone", "getfile"}
+FILELINK_FIELD_ALIASES = (
+    "file_link",
+    "version_file_link",
+    "get_version_file_link",
+    "get_link_file_link",
+    "get_link_file",
+    "link_file",
+)
+SCRIPT_FIELD_ALIASES = (
+    "custom_script",
+    "version_script",
+    "get_version_script",
+    "get_link_script",
+    "get_version_custom",
+    "get_link_custom",
+    "script_path",
+)
+PROVIDER_SOURCE_FIELDS = set(FILELINK_FIELD_ALIASES) | set(SCRIPT_FIELD_ALIASES)
 KNOWN_PATH_VARIABLES = {
     "$Temporary",
     "$ProgramFiles",
@@ -66,6 +84,7 @@ COMPONENT_ALLOWED_FIELDS = {
     "github_repo",
     "get_link",
     "get_link_provide_list",
+    *PROVIDER_SOURCE_FIELDS,
     "user_choose",
     "choose_list",
     "format_version",
@@ -103,6 +122,7 @@ DEPLOYMENT_ALLOWED_FIELDS = {
     "github_repo",
     "get_link",
     "get_link_provide_list",
+    *PROVIDER_SOURCE_FIELDS,
     "user_choose",
     "choose_list",
     "format_version",
@@ -170,8 +190,6 @@ UNINSTALL_ALLOWED_FIELDS = {
     "env_input_list",
 }
 
-FILELINK_FIELD_ALIASES = ("file_link", "version_file_link", "get_version_file_link", "get_link_file_link")
-SCRIPT_FIELD_ALIASES = ("custom_script", "version_script", "get_version_script", "get_link_script", "script_path")
 COMPONENT_ID_PATTERN = re.compile(r"^[a-z0-9-]+$")
 MOD_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+$")
 SEMVER_PATTERN = re.compile(r"^v?\d+(?:\.\d+){1,3}(?:[-+][0-9A-Za-z.-]+)?$")
@@ -597,7 +615,7 @@ class DeploymentModTemplateChecker:
                         "组件",
                         item_id,
                         item,
-                        {"install_operate", "install_custom_list", "direct_link", "get_method", "get_version", "github_repo", "get_link", "get_link_provide_list", "choose_list", "format_version", "version_formatting_formula", "splicing_link"},
+                        {"install_operate", "install_custom_list", "direct_link", "get_method", "get_version", "github_repo", "get_link", "get_link_provide_list", "choose_list", "format_version", "version_formatting_formula", "splicing_link"} | PROVIDER_SOURCE_FIELDS,
                         report,
                         source_map.array_field("Component", index, "command_install", item_id),
                     )
@@ -741,7 +759,7 @@ class DeploymentModTemplateChecker:
                         "部署",
                         item_id,
                         item,
-                        {"deploy_method", "base_link", "get_method", "get_version", "github_repo", "get_link", "get_link_provide_list", "choose_list", "format_version", "version_formatting_formula", "splicing_link"},
+                        {"deploy_method", "base_link", "get_method", "get_version", "github_repo", "get_link", "get_link_provide_list", "choose_list", "format_version", "version_formatting_formula", "splicing_link"} | PROVIDER_SOURCE_FIELDS,
                         report,
                         source_map.array_field("Deployment", index, "command_deploy", item_id),
                     )
