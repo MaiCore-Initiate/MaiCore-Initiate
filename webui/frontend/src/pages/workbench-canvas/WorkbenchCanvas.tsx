@@ -11,8 +11,8 @@ const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
   id: '',
   choose: null,
-  runtime: '',
-  commandTheme: '',
+  runtime: 'powershell',
+  commandTheme: 'classical',
   install: null,
   check: null,
   checkCommand: [],
@@ -442,13 +442,26 @@ export default function WorkbenchCanvas({
         </svg>
       </div>
       {addNodePopoverScreenPosition && (
-        <AddNodePopover
-          position={addNodePopoverScreenPosition}
-          componentsVisible={blockVisibility.components}
-          onAddComponents={addComponentsBlock}
-          onAddComponent={addComponentBlock}
-          onClose={() => setAddNodePopoverPosition(null)}
-        />
+        <>
+          <button
+            data-workbench-ui
+            type="button"
+            className="absolute inset-0 z-[9] cursor-default bg-transparent outline-none"
+            onClick={event => {
+              event.stopPropagation()
+              setAddNodePopoverPosition(null)
+            }}
+            onPointerDown={event => event.stopPropagation()}
+            aria-label="关闭添加节点菜单"
+          />
+          <AddNodePopover
+            position={addNodePopoverScreenPosition}
+            componentsVisible={blockVisibility.components}
+            onAddComponents={addComponentsBlock}
+            onAddComponent={addComponentBlock}
+            onClose={() => setAddNodePopoverPosition(null)}
+          />
+        </>
       )}
     </>
   )

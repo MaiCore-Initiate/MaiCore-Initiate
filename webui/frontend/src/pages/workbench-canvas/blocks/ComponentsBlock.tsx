@@ -169,17 +169,6 @@ export default function ComponentsBlock({
         onPointerDown={event => event.stopPropagation()}
       />
 
-      <g
-        transform={`translate(${outputOffset.x} ${connectorY})`}
-        className="cursor-pointer"
-        onClick={event => {
-          event.stopPropagation()
-          onAddConnectorClick?.()
-        }}
-        onPointerDown={event => event.stopPropagation()}
-      >
-        <AddConnectorButton />
-      </g>
       <InputPort />
 
       <g
@@ -232,6 +221,18 @@ export default function ComponentsBlock({
         onPointerUp={resizeHandlers?.onResizePointerUp}
         onPointerCancel={resizeHandlers?.onResizePointerCancel}
       />
+      <g
+        transform={`translate(${outputOffset.x} ${connectorY})`}
+        className="cursor-pointer"
+        onClick={event => {
+          event.stopPropagation()
+          onAddConnectorClick?.()
+        }}
+        onPointerDown={event => event.stopPropagation()}
+      >
+        <AddConnectorButton />
+        <circle cx="0" cy="12" r="18" fill="transparent" />
+      </g>
     </g>
   )
 }

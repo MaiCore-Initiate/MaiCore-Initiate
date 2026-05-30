@@ -57,8 +57,8 @@ const emptyComponentMeta: WorkbenchComponentMeta = {
   name: '',
   id: '',
   choose: null,
-  runtime: '',
-  commandTheme: '',
+  runtime: 'powershell',
+  commandTheme: 'classical',
   install: null,
   check: null,
   checkCommand: [],
@@ -354,8 +354,8 @@ function RuntimeSelectField({
   onChange: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const options = ['', ...runtimeOptions]
-  const displayValue = value || '空白'
+  const options = runtimeOptions
+  const displayValue = value || options[0]
   const dropdownHeight = options.length * 34 + 10
 
   return (
@@ -415,10 +415,10 @@ function RuntimeSelectField({
           role="listbox"
         >
           {options.map(option => {
-            const selected = option === value
+            const selected = option === displayValue
             return (
               <button
-                key={option || 'empty'}
+                key={option}
                 type="button"
                 tabIndex={open ? 0 : -1}
                 onMouseDown={event => event.preventDefault()}
@@ -433,7 +433,7 @@ function RuntimeSelectField({
                 role="option"
                 aria-selected={selected}
               >
-                {option || '空白'}
+                {option}
               </button>
             )
           })}
@@ -457,8 +457,8 @@ function OptionSelectField({
   width?: number
 }) {
   const [open, setOpen] = useState(false)
-  const allOptions = ['', ...options]
-  const displayValue = value || '空白'
+  const allOptions = options
+  const displayValue = value || allOptions[0]
   const dropdownHeight = allOptions.length * 34 + 10
 
   return (
@@ -519,10 +519,10 @@ function OptionSelectField({
           role="listbox"
         >
           {allOptions.map(option => {
-            const selected = option === value
+            const selected = option === displayValue
             return (
               <button
-                key={option || 'empty'}
+                key={option}
                 type="button"
                 tabIndex={open ? 0 : -1}
                 onMouseDown={event => event.preventDefault()}
@@ -537,7 +537,7 @@ function OptionSelectField({
                 role="option"
                 aria-selected={selected}
               >
-                {option || '空白'}
+                {option}
               </button>
             )
           })}
