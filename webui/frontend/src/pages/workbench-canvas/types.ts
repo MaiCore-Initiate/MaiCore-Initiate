@@ -78,14 +78,19 @@ export interface WorkbenchComponentMeta {
   afterCommand: boolean | null
   afterCommandList: string[]
   envOutput: boolean | null
-  envOutputList: string[]
+  envOutputList: WorkbenchEnvVariableEntry[]
   envInput: boolean | null
-  envInputList: string[]
+  envInputList: WorkbenchEnvVariableEntry[]
 }
 
 export interface WorkbenchVersionFormattingRule {
   match: string
   replace: string
+}
+
+export interface WorkbenchEnvVariableEntry {
+  name: string
+  value: string
 }
 
 export interface WorkbenchPoint {

@@ -1,4 +1,4 @@
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
 
 export const componentBlockMinSize: WorkbenchSize = { width: 520, height: 430 }
 export const componentBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -71,12 +71,16 @@ function hasJvmCustomSource(values: string[]) {
   })
 }
 
-function formatTomlInlineTable(value: WorkbenchVersionFormattingRule) {
+function formatTomlVersionFormattingRule(value: WorkbenchVersionFormattingRule) {
   return `{match = ${formatTomlString(value.match)}, replace = ${formatTomlString(value.replace)}}`
 }
 
-function formatTomlInlineTableArray(values: WorkbenchVersionFormattingRule[]) {
-  return values.length ? `[${values.map(formatTomlInlineTable).join(', ')}]` : ''
+function formatTomlEnvVariableEntry(value: WorkbenchEnvVariableEntry) {
+  return `{name = ${formatTomlString(value.name)}, value = ${formatTomlString(value.value)}}`
+}
+
+function formatTomlInlineTableArray<T>(values: T[], formatter: (value: T) => string) {
+  return values.length ? `[${values.map(formatter).join(', ')}]` : ''
 }
 
 function formatTomlBoolean(value: boolean | null) {
@@ -151,7 +155,7 @@ export default function ComponentBlock({
           : []),
         { label: '版本拼接链接：', value: formatTomlString(component.splicingLink) },
         { label: '格式化版本：', value: formatTomlBoolean(component.formatVersion) },
-        ...(component.formatVersion === true ? [{ label: '格式化规则：', value: formatTomlInlineTableArray(component.versionFormattingFormula) }] : []),
+        ...(component.formatVersion === true ? [{ label: '格式化规则：', value: formatTomlInlineTableArray(component.versionFormattingFormula, formatTomlVersionFormattingRule) }] : []),
       ]
       : []),
     ...(component.getMethod === 'get_link'
@@ -193,9 +197,9 @@ export default function ComponentBlock({
     { label: '安装后操作：', value: formatTomlBoolean(component.afterCommand) },
     ...(component.afterCommand === true ? [{ label: '安装后命令：', value: formatTomlArray(component.afterCommandList) }] : []),
     { label: '环境变量导出：', value: formatTomlBoolean(component.envOutput) },
-    ...(component.envOutput === true ? [{ label: '导出变量：', value: formatTomlArray(component.envOutputList) }] : []),
+    ...(component.envOutput === true ? [{ label: '导出变量：', value: formatTomlInlineTableArray(component.envOutputList, formatTomlEnvVariableEntry) }] : []),
     { label: '环境变量导入：', value: formatTomlBoolean(component.envInput) },
-    ...(component.envInput === true ? [{ label: '导入变量：', value: formatTomlArray(component.envInputList) }] : []),
+    ...(component.envInput === true ? [{ label: '导入变量：', value: formatTomlInlineTableArray(component.envInputList, formatTomlEnvVariableEntry) }] : []),
   ]
 
   return (

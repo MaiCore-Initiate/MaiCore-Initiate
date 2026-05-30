@@ -4,7 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchEnvVariableEntry, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -156,12 +156,16 @@ function hasJvmCustomSource(values: string[]) {
   })
 }
 
-function formatTomlInlineTable(value: WorkbenchVersionFormattingRule) {
+function formatTomlVersionFormattingRule(value: WorkbenchVersionFormattingRule) {
   return `{match = ${formatTomlString(value.match)}, replace = ${formatTomlString(value.replace)}}`
 }
 
-function formatTomlInlineTableArray(values: WorkbenchVersionFormattingRule[]) {
-  return `[${values.map(formatTomlInlineTable).join(', ')}]`
+function formatTomlEnvVariableEntry(value: WorkbenchEnvVariableEntry) {
+  return `{name = ${formatTomlString(value.name)}, value = ${formatTomlString(value.value)}}`
+}
+
+function formatTomlInlineTableArray<T>(values: T[], formatter: (value: T) => string) {
+  return `[${values.map(formatter).join(', ')}]`
 }
 
 function formatTomlBoolean(value: boolean | null) {
@@ -194,7 +198,7 @@ function createStringArrayOutlineNode(id: string, fieldName: string, values: str
 function createVersionFormattingOutlineNode(id: string, values: WorkbenchVersionFormattingRule[]): OutlineNode {
   return {
     id,
-    label: `version_formatting_formula = ${values.length ? formatTomlInlineTableArray(values) : ''}`,
+    label: `version_formatting_formula = ${values.length ? formatTomlInlineTableArray(values, formatTomlVersionFormattingRule) : ''}`,
     icon: 'object',
     defaultExpanded: true,
     children: values.map((value, index) => ({
@@ -211,6 +215,33 @@ function createVersionFormattingOutlineNode(id: string, values: WorkbenchVersion
         {
           id: `${id}-${index}-replace`,
           label: `replace = ${formatTomlString(value.replace)}`,
+          icon: 'string' as const,
+        },
+      ],
+    })),
+  }
+}
+
+function createEnvVariableOutlineNode(id: string, fieldName: string, values: WorkbenchEnvVariableEntry[]): OutlineNode {
+  return {
+    id,
+    label: `${fieldName} = ${values.length ? formatTomlInlineTableArray(values, formatTomlEnvVariableEntry) : ''}`,
+    icon: 'object',
+    defaultExpanded: true,
+    children: values.map((value, index) => ({
+      id: `${id}-${index}`,
+      label: `${index}`,
+      icon: 'object' as const,
+      defaultExpanded: true,
+      children: [
+        {
+          id: `${id}-${index}-name`,
+          label: `name = ${formatTomlString(value.name)}`,
+          icon: 'string' as const,
+        },
+        {
+          id: `${id}-${index}-value`,
+          label: `value = ${formatTomlString(value.value)}`,
           icon: 'string' as const,
         },
       ],
@@ -378,9 +409,9 @@ function createComponentOutlineChildren(component: WorkbenchComponentMeta, index
       ? [createStringArrayOutlineNode(id('after-command-list'), 'after_command_list', component.afterCommandList)]
       : []),
     createBooleanOutlineNode(id('env-output'), 'env_output', component.envOutput),
-    ...(component.envOutput === true ? [createStringArrayOutlineNode(id('env-output-list'), 'env_output_list', component.envOutputList)] : []),
+    ...(component.envOutput === true ? [createEnvVariableOutlineNode(id('env-output-list'), 'env_output_list', component.envOutputList)] : []),
     createBooleanOutlineNode(id('env-input'), 'env_input', component.envInput),
-    ...(component.envInput === true ? [createStringArrayOutlineNode(id('env-input-list'), 'env_input_list', component.envInputList)] : []),
+    ...(component.envInput === true ? [createEnvVariableOutlineNode(id('env-input-list'), 'env_input_list', component.envInputList)] : []),
   ]
 }
 
