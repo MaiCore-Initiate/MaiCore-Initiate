@@ -79,7 +79,7 @@ class TemplateMetadata:
     deno_custom_permissions: bool = False
     deno_permission_list: List[str] = field(default_factory=list)
     platforms: List[str] = field(default_factory=list)
-    schema_version: str = "1.0"
+    schema_version: str = "2.5"
     template_root: str = ""
     source: str = "local"
 
@@ -235,7 +235,7 @@ class TemplateDefinition:
 class ModBinding:
     template_id: str
     template_version: str
-    schema_version: str = "1.0"
+    schema_version: str = "2.5"
     source: str = "local"
 
     def to_dict(self) -> Dict[str, Any]:

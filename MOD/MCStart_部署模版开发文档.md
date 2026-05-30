@@ -1,6 +1,6 @@
 
 
-# MCStart 部署模版开发文档 V2.4
+# MCStart 部署模版开发文档 V2.5
 
 ---
 
@@ -125,6 +125,7 @@ MCStart 引擎读取该模版后，会按照模版中声明的流程自动或半
 | `2.2` | 新增模板语法检测模块与 `mcsb -t` / `mcsb test` 使用说明 | [2.4 使用 mcsb 检测模板语法](#24-使用-mcsb-检测模板语法) |
 | `2.3` | 新增命令运行输出增强、命令检视模式，以及表数组级 `runtime` / `command_theme` 键 | [2.5 命令输出与命令检视模式](#25-命令输出与命令检视模式)、[4.2.1 表数组级运行时与命令显示键](#421-表数组级运行时与命令显示键) |
 | `2.4` | 新增 `deno` 运行时，以及 Deno 权限声明键与自定义权限参数列表 | [4.2 [MODINFO] — 模版元信息](#42-modinfo--模版元信息) |
+| `2.5` | 新增 `version_file` / `version_custom` / `link_file` / `link_custom` 来源数组，并为自定义 `.ts` / `.java` / `.jar` 提供逐项运行参数 | [4.3.4 获取方式模块](#434-获取方式模块)、[8.1 版本获取方式](#81-版本获取方式) |
 
 ---
 
@@ -151,7 +152,7 @@ file_import = false
 file_import_list = []
 runtime = "powershell"
 platforms = ["windows"]
-schema_version = "2.4"
+schema_version = "2.5"
 ```
 
 ### 2.2 文件组织结构
@@ -399,7 +400,7 @@ deno_permission_list = [
   "--allow-read=./config,./data",
   "--allow-env=DATABASE_URL,API_KEY",
 ]
-schema_version = "2.4"
+schema_version = "2.5"
 ```
 
 对应命令应显式带上所需权限：
@@ -563,10 +564,12 @@ check_version_regex = ["^v(\\d+\\.\\d+\\.\\d+)$"]
 | `github_repo` | String | 条件必填 | — | 组件的 GitHub 仓库链接。仅当 `get_version = "github_repo"` 时需要提供。MCStart 通过 GitHub API 获取版本号 |
 | `get_link` | String | 条件必填 | `"filelink"` / `"custom"` / `"user_input"` | 链接获取方式。仅当 `get_method = "get_link"` 时需要提供 |
 | `get_link_provide_list` | Array\[String\] | 否 | — | 直接提供可选下载链接列表。仅当 `get_method = "get_link"` 且 `get_link` 为 `"filelink"` 或 `"custom"` 时生效；有值时优先于来源字段 |
-| `get_version_file_link` | String | 条件必填 | — | 推荐的版本文件来源字段。仅当 `get_version = "filelink"` 时需要提供 |
-| `get_link_file_link` | String | 条件必填 | — | 推荐的链接文件来源字段。仅当 `get_link = "filelink"` 且未提供 `get_link_provide_list` 时需要提供 |
-| `get_version_script` | String | 条件必填 | — | 推荐的版本脚本来源字段。仅当 `get_version = "custom"` 时需要提供 |
-| `get_link_script` | String | 条件必填 | — | 推荐的链接脚本来源字段。仅当 `get_link = "custom"` 且未提供 `get_link_provide_list` 时需要提供 |
+| `version_file` | Array\[String\] | 条件必填 | — | 版本文件来源列表。仅当 `get_version = "filelink"` 时需要提供 |
+| `version_custom` | Array\[String\] | 条件必填 | — | 版本脚本来源列表。仅当 `get_version = "custom"` 时需要提供 |
+| `link_file` | Array\[String\] | 条件必填 | — | 链接文件来源列表。仅当 `get_link = "filelink"` 且未提供 `get_link_provide_list` 时需要提供 |
+| `link_custom` | Array\[String\] | 条件必填 | — | 链接脚本来源列表。仅当 `get_link = "custom"` 且未提供 `get_link_provide_list` 时需要提供 |
+| `deno_permissions` | Array\[String\] | 条件必填 | — | `.ts` 自定义来源的 Deno 权限参数，按 `.ts` 文件出现顺序一一对应；空字符串表示不插入权限 |
+| `JVM` | Array\[String\] | 条件必填 | — | `.java` / `.jar` 自定义来源的 Java 虚拟机参数，按 Java 文件出现顺序一一对应；空字符串表示不插入参数 |
 
 ##### get_method 详解
 
@@ -581,26 +584,30 @@ check_version_regex = ["^v(\\d+\\.\\d+\\.\\d+)$"]
 | 值 | 行为 | 必须搭配的字段 |
 |----|------|---------------|
 | `"github_repo"` | 通过 GitHub API 获取仓库的最新 Release / Tag 版本号 | `github_repo` |
-| `"filelink"` | 通过远程或本地文件链接获取版本号，支持 `txt` / `json` / `toml` / `xml` 等格式，也支持 `file:///` 协议 | 推荐 `get_version_file_link` |
-| `"custom"` | 通过自定义脚本获取版本号。支持 `.py` / `.bat` / `.exe` / `.ps1` / `.sh`（Windows 需 Git Bash）/ `.js`（需 Node.js）等脚本 | 推荐 `get_version_script` |
+| `"filelink"` | 通过远程或本地文件链接获取版本号，支持 `txt` / `json` / `toml` / `xml` 等格式，也支持 `file:///` 协议 | `version_file` |
+| `"custom"` | 通过自定义脚本获取版本号，按 `version_custom` 从上到下依次运行并收集输出 | `version_custom` |
 
-`get_version = "filelink"` 时，运行时会按顺序读取以下字段作为文件或 URL 来源：`file_link`、`version_file_link`、`get_version_file_link`、`get_link_file_link`、`get_link_file`、`link_file`。写新模板时建议使用 `get_version_file_link`。
+`get_version = "filelink"` 时，`version_file` 是字符串数组，每个值填写一个远程或本地文件链接。来源可以是 `http://` / `https://` URL、`file:///` 本地文件 URL、绝对路径或相对路径；相对路径以模板目录为基准解析。
 
-`get_version = "custom"` 时，运行时会按顺序读取以下字段作为脚本来源：`custom_script`、`version_script`、`get_version_script`、`get_link_script`、`get_version_custom`、`get_link_custom`、`script_path`。写新模板时建议使用 `get_version_script`。
+`get_version = "custom"` 时，`version_custom` 是字符串数组，每个值填写一个代码文件地址或链接。支持 `.bat` / `.cmd` / `.ps1` / `.sh` / `.js` / `.ts` / `.py` / `.java` / `.jar` / `.exe`。运行时会按数组顺序在子进程中运行，并把每行非空输出作为版本候选。
 
 ##### get_link 详解
 
 | 值 | 行为 | 说明 |
 |----|------|------|
-| `"filelink"` | 从远程或本地文件中读取下载链接列表，支持 `txt` / `json` / `toml` / `xml` 等格式，每行一个链接 | 用户可像选择版本一样选择链接 |
-| `"custom"` | 通过自定义脚本获取下载链接，脚本返回链接列表 | 支持 `.py` / `.bat` / `.exe` / `.ps1` / `.sh` / `.js` 等脚本 |
+| `"filelink"` | 从远程或本地文件中读取下载链接列表，支持 `txt` / `json` / `toml` / `xml` 等格式，每行一个链接 | 搭配 `link_file` |
+| `"custom"` | 通过自定义脚本获取下载链接，脚本返回链接列表 | 搭配 `link_custom` |
 | `"user_input"` | 由用户在运行时手动输入下载链接 | 适用于链接不固定的场景 |
 
-`get_link = "filelink"` 时，运行时会按顺序读取以下字段作为文件或 URL 来源：`file_link`、`version_file_link`、`get_version_file_link`、`get_link_file_link`、`get_link_file`、`link_file`。写新模板时建议使用 `get_link_file_link`。
+`get_link = "filelink"` 时，`link_file` 的规则与 `version_file` 相同，只是输出会被当作下载链接候选。
 
-`get_link = "custom"` 时，运行时会按顺序读取以下字段作为脚本来源：`custom_script`、`version_script`、`get_version_script`、`get_link_script`、`get_version_custom`、`get_link_custom`、`script_path`。写新模板时建议使用 `get_link_script`。
+`get_link = "custom"` 时，`link_custom` 的规则与 `version_custom` 相同，只是脚本输出会被当作下载链接候选。
 
 如果已经提供非空的 `get_link_provide_list`，MCStart 会直接使用这个列表作为可选下载链接，不再读取 `filelink` 或 `custom` 的来源字段。
+
+当自定义来源中包含 `.ts` 文件时，可声明 `deno_permissions`。该字段是字符串数组，只对应 `.ts` 文件，而不是对应所有 `version_custom` / `link_custom` 项；多个 `.ts` 文件按从上到下的顺序与 `deno_permissions` 一一对应。每个字符串填写该 `.ts` 文件的 Deno 权限参数，例如 `"--allow-net --allow-read"`；填写 `""` 时不插入任何权限参数。
+
+当自定义来源中包含 `.java` 或 `.jar` 文件时，可声明 `JVM`。该字段是字符串数组，只对应 `.java` / `.jar` 文件，顺序规则与 `deno_permissions` 相同。运行 `.java` 时命令形态为 `java <JVM参数> 文件.java`；运行 `.jar` 时命令形态为 `java <JVM参数> -jar 文件.jar`。
 
 **示例 — 直接下载**：
 
@@ -623,7 +630,7 @@ splicing_link = "https://sqlitestudio.pl/files/sqlitestudio-{{version|SQLiteStud
 ```toml
 get_method = "get_version"
 get_version = "filelink"
-get_version_file_link = "versions.txt"
+version_file = ["versions.txt"]
 splicing_link = "https://example.com/app-{{version|App}}.zip"
 ```
 
@@ -632,7 +639,20 @@ splicing_link = "https://example.com/app-{{version|App}}.zip"
 ```toml
 get_method = "get_link"
 get_link = "custom"
-get_link_script = "{{file_path|GetLinks.py}}"
+link_custom = ["{{file_path|GetLinks.py}}"]
+```
+
+**示例 — Deno 与 JVM 自定义来源参数**：
+
+```toml
+get_method = "get_version"
+get_version = "custom"
+version_custom = [
+    "{{file_path|GetVersions.ts}}",
+    "{{file_path|GetMoreVersions.jar}}",
+]
+deno_permissions = ["--allow-net --allow-read"]
+JVM = ["-Xmx256m"]
 ```
 
 ---
@@ -948,16 +968,18 @@ git clone -b v1.2.0 --depth 1 https://github.com/Mai-with-u/MaiBot.git
 | `github_repo` | String | 条件必填 | — | GitHub 仓库链接 |
 | `get_link` | String | 条件必填 | `"filelink"` / `"custom"` / `"user_input"` | 链接获取方式 |
 | `get_link_provide_list` | Array\[String\] | 否 | — | 直接提供可选下载链接列表；有值时优先于来源字段 |
-| `get_version_file_link` | String | 条件必填 | — | 推荐的版本文件来源字段。仅当 `get_version = "filelink"` 时需要提供 |
-| `get_link_file_link` | String | 条件必填 | — | 推荐的链接文件来源字段。仅当 `get_link = "filelink"` 且未提供 `get_link_provide_list` 时需要提供 |
-| `get_version_script` | String | 条件必填 | — | 推荐的版本脚本来源字段。仅当 `get_version = "custom"` 时需要提供 |
-| `get_link_script` | String | 条件必填 | — | 推荐的链接脚本来源字段。仅当 `get_link = "custom"` 且未提供 `get_link_provide_list` 时需要提供 |
+| `version_file` | Array\[String\] | 条件必填 | — | 版本文件来源列表。仅当 `get_version = "filelink"` 时需要提供 |
+| `version_custom` | Array\[String\] | 条件必填 | — | 版本脚本来源列表。仅当 `get_version = "custom"` 时需要提供 |
+| `link_file` | Array\[String\] | 条件必填 | — | 链接文件来源列表。仅当 `get_link = "filelink"` 且未提供 `get_link_provide_list` 时需要提供 |
+| `link_custom` | Array\[String\] | 条件必填 | — | 链接脚本来源列表。仅当 `get_link = "custom"` 且未提供 `get_link_provide_list` 时需要提供 |
+| `deno_permissions` | Array\[String\] | 条件必填 | — | `.ts` 自定义来源的 Deno 权限参数，按 `.ts` 文件出现顺序一一对应 |
+| `JVM` | Array\[String\] | 条件必填 | — | `.java` / `.jar` 自定义来源的 Java 虚拟机参数，按 Java 文件出现顺序一一对应 |
 | `user_choose` | Boolean | 否 | — | 是否让用户选择版本 |
 | `choose_list` | Array | 条件必填 | — | 版本选择列表（规则同组件的 `choose_list`） |
 | `format_version` | Boolean | 条件必填 | — | 是否格式化版本号 |
 | `version_formatting_formula` | Array\[InlineTable\] | 条件必填 | — | 格式化规则（同组件） |
 
-`get_version = "filelink"` / `get_link = "filelink"` 的文件来源字段、`get_version = "custom"` / `get_link = "custom"` 的脚本来源字段，与 `[[Component]]` 中的规则完全一致。写新模板时推荐分别使用 `get_version_file_link`、`get_link_file_link`、`get_version_script`、`get_link_script`。
+`get_version = "filelink"` / `get_link = "filelink"` 的文件来源字段、`get_version = "custom"` / `get_link = "custom"` 的脚本来源字段，与 `[[Component]]` 中的规则完全一致。写新模板时分别使用 `version_file`、`link_file`、`version_custom`、`link_custom`。
 
 如果 `get_link_provide_list` 是非空数组，部署项会直接使用该列表作为链接候选，不再读取 `filelink` 或 `custom` 对应的来源字段。
 
@@ -973,7 +995,7 @@ format_version = false
 ```toml
 get_method = "get_link"
 get_link = "filelink"
-get_link_file_link = "deploy-links.json"
+link_file = ["deploy-links.json"]
 ```
 
 ---
@@ -1764,29 +1786,31 @@ MCStart 支持三种版本获取方式，适用于 `[[Component]]` 和 `[[Deploy
 │  │  → 从远程/本地文件中读取版本号
 │  │  → 支持 txt/json/toml/xml 等格式
 │  │  → 支持 file:/// 本地协议
-│  │  → 推荐通过 get_version_file_link 指定来源
+│  │  → 通过 version_file 数组指定来源
 │  │
 │  └─ get_version = "custom"
-│     → 运行自定义脚本获取版本号
-│     → 支持 .py/.bat/.exe/.ps1/.sh/.js
-│     → 推荐通过 get_version_script 指定来源
+│     → 按 version_custom 数组运行自定义脚本获取版本号
+│     → 支持 .bat/.cmd/.ps1/.sh/.js/.ts/.py/.java/.jar/.exe
+│     → .ts 使用 deno_permissions，.java/.jar 使用 JVM
 │
 └─ get_method = "get_link"
    ├─ get_link = "filelink"
    │  → 从文件中读取链接列表，用户选择
-   │  → 推荐通过 get_link_file_link 指定来源
+   │  → 通过 link_file 数组指定来源
    │
    ├─ get_link = "custom"
    │  → 运行脚本获取链接列表，用户选择
-   │  → 推荐通过 get_link_script 指定来源
+   │  → 通过 link_custom 数组指定来源
    │
    └─ get_link = "user_input"
       → 用户手动输入下载链接
 ```
 
-`filelink` 来源可以写成 `http://` / `https://` URL、`file:///` 本地文件 URL、绝对路径或相对路径。相对路径以当前模板目录为基准解析。文件内容支持纯文本逐行读取，也支持从 `json` / `toml` / `xml` 中提取字符串值。
+`version_file` 与 `link_file` 都是字符串数组。来源可以写成 `http://` / `https://` URL、`file:///` 本地文件 URL、绝对路径或相对路径。相对路径以当前模板目录为基准解析。文件内容支持纯文本逐行读取，也支持从 `json` / `toml` / `xml` 中提取字符串值。
 
-`custom` 来源填写脚本文件路径。脚本输出会按行解析为候选版本或候选链接，空行会被忽略。
+`version_custom` 与 `link_custom` 都是字符串数组。运行时会从上到下逐个运行脚本，脚本输出按行解析为候选版本或候选链接，空行会被忽略。远程脚本链接会先下载到临时目录再执行。
+
+`deno_permissions` 只与自定义来源中的 `.ts` 文件对应；`JVM` 只与 `.java` / `.jar` 文件对应。它们都按对应文件出现顺序逐项匹配，空字符串表示该文件不插入额外参数。
 
 ### 8.2 版本号格式化
 
@@ -2072,10 +2096,12 @@ version_formatting_formula = [
 | `github_repo` | String | 📎 | `get_version="github_repo"` | GitHub 仓库链接 |
 | `get_link` | String | 📎 | `get_method="get_link"` | 链接获取方式 |
 | `get_link_provide_list` | Array\[String\] | ❌ | `get_link="filelink"/"custom"` | 可选链接列表，有值时优先于来源字段 |
-| `get_version_file_link` | String | 📎 | `get_version="filelink"` | 推荐的版本文件来源 |
-| `get_link_file_link` | String | 📎 | `get_link="filelink"` | 未提供 `get_link_provide_list` 时推荐的链接文件来源 |
-| `get_version_script` | String | 📎 | `get_version="custom"` | 推荐的版本脚本来源 |
-| `get_link_script` | String | 📎 | `get_link="custom"` | 未提供 `get_link_provide_list` 时推荐的链接脚本来源 |
+| `version_file` | Array\[String\] | 📎 | `get_version="filelink"` | 版本文件来源列表 |
+| `link_file` | Array\[String\] | 📎 | `get_link="filelink"` | 未提供 `get_link_provide_list` 时的链接文件来源列表 |
+| `version_custom` | Array\[String\] | 📎 | `get_version="custom"` | 版本脚本来源列表 |
+| `link_custom` | Array\[String\] | 📎 | `get_link="custom"` | 未提供 `get_link_provide_list` 时的链接脚本来源列表 |
+| `deno_permissions` | Array\[String\] | 📎 | 自定义来源含 `.ts` | Deno 权限参数，按 `.ts` 文件顺序对应 |
+| `JVM` | Array\[String\] | 📎 | 自定义来源含 `.java`/`.jar` | Java 虚拟机参数，按 Java 文件顺序对应 |
 | `user_choose` | Boolean | ❌ | — | 用户可选版本 |
 | `choose_list` | Array | 📎 | `user_choose=true` | 版本选择列表 |
 | `format_version` | Boolean | 📎 | `get_method="get_version"` | 是否格式化版本号 |
@@ -2125,10 +2151,12 @@ version_formatting_formula = [
 | `github_repo` | String | 📎 | `get_version="github_repo"` | GitHub 仓库链接 |
 | `get_link` | String | 📎 | `get_method="get_link"` | 链接获取方式 |
 | `get_link_provide_list` | Array\[String\] | ❌ | `get_link="filelink"/"custom"` | 可选链接列表，有值时优先于来源字段 |
-| `get_version_file_link` | String | 📎 | `get_version="filelink"` | 推荐的版本文件来源 |
-| `get_link_file_link` | String | 📎 | `get_link="filelink"` | 未提供 `get_link_provide_list` 时推荐的链接文件来源 |
-| `get_version_script` | String | 📎 | `get_version="custom"` | 推荐的版本脚本来源 |
-| `get_link_script` | String | 📎 | `get_link="custom"` | 未提供 `get_link_provide_list` 时推荐的链接脚本来源 |
+| `version_file` | Array\[String\] | 📎 | `get_version="filelink"` | 版本文件来源列表 |
+| `link_file` | Array\[String\] | 📎 | `get_link="filelink"` | 未提供 `get_link_provide_list` 时的链接文件来源列表 |
+| `version_custom` | Array\[String\] | 📎 | `get_version="custom"` | 版本脚本来源列表 |
+| `link_custom` | Array\[String\] | 📎 | `get_link="custom"` | 未提供 `get_link_provide_list` 时的链接脚本来源列表 |
+| `deno_permissions` | Array\[String\] | 📎 | 自定义来源含 `.ts` | Deno 权限参数，按 `.ts` 文件顺序对应 |
+| `JVM` | Array\[String\] | 📎 | 自定义来源含 `.java`/`.jar` | Java 虚拟机参数，按 Java 文件顺序对应 |
 | `user_choose` | Boolean | ❌ | — | 用户可选版本 |
 | `choose_list` | Array | 📎 | `user_choose=true` | 版本选择列表 |
 | `format_version` | Boolean | 📎 | `get_method="get_version"` | 是否格式化版本号 |
@@ -2143,9 +2171,9 @@ version_formatting_formula = [
 | `env_input` | Boolean | ❌ | — | 导入环境变量 |
 | `env_input_list` | Array\[InlineTable\] | 📎 | `env_input=true` | 导入变量列表 |
 
-`filelink` 来源字段兼容别名：`file_link`、`version_file_link`、`get_version_file_link`、`get_link_file_link`、`get_link_file`、`link_file`。
+`filelink` 来源字段兼容别名：版本来源兼容 `version_file_link`、`get_version_file_link`、`file_link`；链接来源兼容 `get_link_file_link`、`get_link_file`、`file_link`。
 
-`custom` 脚本来源字段兼容别名：`custom_script`、`version_script`、`get_version_script`、`get_link_script`、`get_version_custom`、`get_link_custom`、`script_path`。
+`custom` 脚本来源字段兼容别名：版本来源兼容 `version_script`、`get_version_script`、`get_version_custom`、`custom_script`、`script_path`；链接来源兼容 `get_link_script`、`get_link_custom`、`custom_script`、`script_path`。
 
 ### [LAUNCH]
 

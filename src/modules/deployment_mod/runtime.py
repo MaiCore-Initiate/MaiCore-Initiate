@@ -5,10 +5,12 @@ import json
 import os
 import re
 import shutil
+import shlex
 import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import zipfile
 from dataclasses import dataclass, field
@@ -125,15 +127,45 @@ class DeploymentModRuntime:
         "$UserProfile\\Videos": lambda: str(Path.home() / "Videos"),
     }
 
+    VERSION_FILE_FIELDS = (
+        "version_file",
+        "version_file_link",
+        "get_version_file_link",
+        "file_link",
+    )
+    LINK_FILE_FIELDS = (
+        "link_file",
+        "get_link_file_link",
+        "get_link_file",
+        "file_link",
+    )
     FILELINK_FIELD_ALIASES = (
+        "version_file",
+        "link_file",
         "file_link",
         "version_file_link",
         "get_version_file_link",
         "get_link_file_link",
         "get_link_file",
-        "link_file",
+    )
+    VERSION_CUSTOM_FIELDS = (
+        "version_custom",
+        "version_script",
+        "get_version_script",
+        "get_version_custom",
+        "custom_script",
+        "script_path",
+    )
+    LINK_CUSTOM_FIELDS = (
+        "link_custom",
+        "get_link_script",
+        "get_link_custom",
+        "custom_script",
+        "script_path",
     )
     SCRIPT_FIELD_ALIASES = (
+        "version_custom",
+        "link_custom",
         "custom_script",
         "version_script",
         "get_version_script",
@@ -1302,22 +1334,15 @@ class DeploymentModRuntime:
             if github_repo:
                 return self._fetch_github_candidates(github_repo)
         elif version_source == "filelink":
-            source = self._resolve_provider_source_static(template, definition, self.FILELINK_FIELD_ALIASES)
-            if source:
-                content = self._read_text_source(source)
-                if source.lower().endswith(".json"):
-                    return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(json.loads(content))]
-                if source.lower().endswith(".toml"):
-                    return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(toml.loads(content))]
-                if source.lower().endswith(".xml"):
-                    root = ElementTree.fromstring(content)
-                    return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(self._xml_to_tree(root))]
-                return [{"name": item.strip(), "raw_name": item.strip(), "type": "file"} for item in content.splitlines() if item.strip()]
+            return [
+                {"name": item, "raw_name": item, "type": "file"}
+                for item in self._extract_candidates_from_static_sources(template, definition, self.VERSION_FILE_FIELDS)
+            ]
         elif version_source == "custom":
-            source = self._resolve_provider_source_static(template, definition, self.SCRIPT_FIELD_ALIASES)
-            if source:
-                output = self._run_external_script(source, os.path.dirname(source) or os.getcwd())
-                return [{"name": item.strip(), "raw_name": item.strip(), "type": "custom"} for item in output.splitlines() if item.strip()]
+            return [
+                {"name": item, "raw_name": item, "type": "custom"}
+                for item in self._execute_custom_provider_static(template, definition, self.VERSION_CUSTOM_FIELDS)
+            ]
         return []
 
     def fetch_link_candidates(
@@ -1339,36 +1364,33 @@ class DeploymentModRuntime:
 
         get_link = str(getattr(definition, "get_link", "") or "").strip().lower()
         if get_link == "filelink":
-            source = self._resolve_provider_source_static(template, definition, self.FILELINK_FIELD_ALIASES)
-            if not source:
-                return []
-            content = self._read_text_source(source)
-            if source.lower().endswith(".json"):
-                return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(json.loads(content))]
-            if source.lower().endswith(".toml"):
-                return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(toml.loads(content))]
-            if source.lower().endswith(".xml"):
-                root = ElementTree.fromstring(content)
-                return [{"name": item, "raw_name": item, "type": "file"} for item in self._extract_scalar_strings(self._xml_to_tree(root))]
-            return [{"name": item.strip(), "raw_name": item.strip(), "type": "file"} for item in content.splitlines() if item.strip()]
+            return [
+                {"name": item, "raw_name": item, "type": "file"}
+                for item in self._extract_candidates_from_static_sources(template, definition, self.LINK_FILE_FIELDS)
+            ]
         if get_link == "custom":
-            source = self._resolve_provider_source_static(template, definition, self.SCRIPT_FIELD_ALIASES)
-            if not source:
-                return []
-            output = self._run_external_script(source, os.path.dirname(source) or os.getcwd())
-            return [{"name": item.strip(), "raw_name": item.strip(), "type": "custom"} for item in output.splitlines() if item.strip()]
+            return [
+                {"name": item, "raw_name": item, "type": "custom"}
+                for item in self._execute_custom_provider_static(template, definition, self.LINK_CUSTOM_FIELDS)
+            ]
         return []
 
     def _resolve_text_for_static(self, text: str, raw_template: Dict[str, Any]) -> str:
         """静态版本的文本解析，不依赖运行时 state。"""
         if not text:
             return ""
+        template_root = ""
+        metadata = raw_template.get("MODINFO") if isinstance(raw_template, dict) else None
+        if isinstance(metadata, dict):
+            template_root = str(metadata.get("__template_root", "") or "")
 
         def repl(match: re.Match[str]) -> str:
             kind = match.group(1)
             key = match.group(2).strip()
             if kind == "key":
                 return self._resolve_template_key(raw_template, key)
+            if kind == "file_path" and template_root:
+                return os.path.abspath(os.path.join(template_root, key))
             return ""
 
         for _ in range(5):
@@ -1388,6 +1410,32 @@ class DeploymentModRuntime:
                 resolved = self._resolve_text_for_static(value, template.raw)
                 return self._normalize_provider_source_path(resolved, template.metadata.template_root)
         return ""
+
+    def _resolve_provider_sources_static(self, template: TemplateDefinition, definition: Any, aliases: Iterable[str]) -> List[str]:
+        raw = getattr(definition, "raw", {}) or {}
+        raw_template = dict(template.raw)
+        modinfo = dict(raw_template.get("MODINFO") or {})
+        modinfo["__template_root"] = template.metadata.template_root
+        raw_template["MODINFO"] = modinfo
+        for alias in aliases:
+            values = self._coerce_str_list(raw.get(alias))
+            if values:
+                return [
+                    self._normalize_provider_source_path(self._resolve_text_for_static(value, raw_template), template.metadata.template_root)
+                    for value in values
+                    if value.strip()
+                ]
+        return []
+
+    def _extract_candidates_from_static_sources(self, template: TemplateDefinition, definition: Any, aliases: Iterable[str]) -> List[str]:
+        candidates: List[str] = []
+        for source in self._resolve_provider_sources_static(template, definition, aliases):
+            candidates.extend(self._extract_candidates_from_source_path(source))
+        return candidates
+
+    def _execute_custom_provider_static(self, template: TemplateDefinition, definition: Any, aliases: Iterable[str]) -> List[str]:
+        sources = self._resolve_provider_sources_static(template, definition, aliases)
+        return self._execute_custom_sources(sources, definition)
 
     def _select_version(
         self,
@@ -1565,27 +1613,22 @@ class DeploymentModRuntime:
         return candidates
 
     def _extract_candidates_from_source(self, state: RuntimeState, definition: Any, scope: RuntimeScope) -> List[str]:
-        source = self._resolve_provider_source(state, definition, scope, self.FILELINK_FIELD_ALIASES)
-        if not source:
-            return []
-        self._notify(state, 0, 0, "provider:filelink", "running", f"读取文件源: {source}", event="detail")
-        content = self._read_text_source(source)
-        if source.lower().endswith(".json"):
-            return self._extract_scalar_strings(json.loads(content))
-        if source.lower().endswith(".toml"):
-            return self._extract_scalar_strings(toml.loads(content))
-        if source.lower().endswith(".xml"):
-            root = ElementTree.fromstring(content)
-            return self._extract_scalar_strings(self._xml_to_tree(root))
-        return [line.strip() for line in content.splitlines() if line.strip()]
+        get_method = str(getattr(definition, "get_method", "") or "").strip().lower()
+        aliases = self.LINK_FILE_FIELDS if get_method == "get_link" else self.VERSION_FILE_FIELDS
+        sources = self._resolve_provider_sources(state, definition, scope, aliases)
+        candidates: List[str] = []
+        for source in sources:
+            self._notify(state, 0, 0, "provider:filelink", "running", f"读取文件源: {source}", event="detail")
+            candidates.extend(self._extract_candidates_from_source_path(source))
+        return candidates
 
     def _execute_custom_provider(self, state: RuntimeState, definition: Any, scope: RuntimeScope) -> List[str]:
-        source = self._resolve_provider_source(state, definition, scope, self.SCRIPT_FIELD_ALIASES)
-        if not source:
-            return []
-        self._notify(state, 0, 0, "provider:custom", "running", f"执行自定义提供器: {source}", event="detail")
-        output = self._run_external_script(source, os.path.dirname(source) or os.getcwd())
-        return [line.strip() for line in output.splitlines() if line.strip()]
+        get_method = str(getattr(definition, "get_method", "") or "").strip().lower()
+        aliases = self.LINK_CUSTOM_FIELDS if get_method == "get_link" else self.VERSION_CUSTOM_FIELDS
+        sources = self._resolve_provider_sources(state, definition, scope, aliases)
+        for source in sources:
+            self._notify(state, 0, 0, "provider:custom", "running", f"执行自定义提供器: {source}", event="detail")
+        return self._execute_custom_sources(sources, definition)
 
     def _resolve_provider_source(self, state: RuntimeState, definition: Any, scope: RuntimeScope, aliases: Iterable[str]) -> str:
         raw = getattr(definition, "raw", {}) or {}
@@ -1595,6 +1638,18 @@ class DeploymentModRuntime:
                 resolved = self._resolve_text(state, value, scope)
                 return self._normalize_provider_source_path(resolved, state.template.metadata.template_root)
         return ""
+
+    def _resolve_provider_sources(self, state: RuntimeState, definition: Any, scope: RuntimeScope, aliases: Iterable[str]) -> List[str]:
+        raw = getattr(definition, "raw", {}) or {}
+        for alias in aliases:
+            values = self._coerce_str_list(raw.get(alias))
+            if values:
+                return [
+                    self._normalize_provider_source_path(self._resolve_text(state, value, scope), state.template.metadata.template_root)
+                    for value in values
+                    if value.strip()
+                ]
+        return []
 
     def _fetch_link_candidates_runtime(
         self,
@@ -1626,26 +1681,188 @@ class DeploymentModRuntime:
             return [{"name": item, "raw_name": item, "type": "custom"} for item in raw_candidates]
         return []
 
-    def _run_external_script(self, script_path: str, cwd: str) -> str:
+    def _execute_custom_sources(self, sources: Sequence[str], definition: Any) -> List[str]:
+        raw = getattr(definition, "raw", {}) or {}
+        deno_permission_values = self._coerce_str_list(raw.get("deno_permissions"), keep_empty=True)
+        jvm_values = self._coerce_str_list(raw.get("JVM"), keep_empty=True)
+        deno_index = 0
+        jvm_index = 0
+        candidates: List[str] = []
+
+        for source in sources:
+            extension = self._provider_source_extension(source)
+            deno_args: List[str] = []
+            jvm_args: List[str] = []
+            if extension == ".ts":
+                deno_args = self._split_provider_args(deno_permission_values[deno_index] if deno_index < len(deno_permission_values) else "")
+                deno_index += 1
+            elif extension in {".java", ".jar"}:
+                jvm_args = self._split_provider_args(jvm_values[jvm_index] if jvm_index < len(jvm_values) else "")
+                jvm_index += 1
+
+            output = self._run_external_script(source, deno_args=deno_args, jvm_args=jvm_args)
+            candidates.extend(line.strip() for line in output.splitlines() if line.strip())
+        return candidates
+
+    def _run_external_script(self, script_path: str, deno_args: Sequence[str] | None = None, jvm_args: Sequence[str] | None = None) -> str:
+        temp_dir: tempfile.TemporaryDirectory[str] | None = None
+        actual_path = script_path
+        cwd = ""
+        try:
+            if re.match(r"^https?://", script_path, re.I):
+                temp_dir = tempfile.TemporaryDirectory(prefix="mcsb-provider-")
+                actual_path = self._download_external_script(script_path, temp_dir.name)
+                cwd = temp_dir.name
+            elif script_path.startswith("file:///"):
+                actual_path = script_path[8:]
+
+            if not cwd:
+                cwd = os.path.dirname(actual_path) or os.getcwd()
+
+            cmd = self._build_external_script_command(actual_path, deno_args or [], jvm_args or [])
+            return self._run_external_script_process(cmd, cwd)
+        finally:
+            if temp_dir is not None:
+                temp_dir.cleanup()
+
+    def _download_external_script(self, url: str, target_dir: str) -> str:
+        response = requests.get(url, timeout=30, **self._get_request_kwargs())
+        response.raise_for_status()
+        suffix = self._provider_source_extension(url) or ".tmp"
+        filename = self._sanitize_filename(Path(urlparse(url).path).stem or "provider")
+        target_path = os.path.join(target_dir, f"{filename}{suffix}")
+        with open(target_path, "wb") as handle:
+            handle.write(response.content)
+        if os.name != "nt" and suffix in {".sh", ".exe"}:
+            os.chmod(target_path, os.stat(target_path).st_mode | stat.S_IEXEC)
+        return target_path
+
+    def _build_external_script_command(self, script_path: str, deno_args: Sequence[str], jvm_args: Sequence[str]) -> List[str]:
         lower_name = script_path.lower()
         if lower_name.endswith(".ps1"):
-            cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
-        elif lower_name.endswith((".bat", ".cmd")):
-            cmd = ["cmd.exe", "/c", script_path]
-        elif lower_name.endswith(".py"):
-            cmd = [sys.executable, script_path]
-        elif lower_name.endswith(".sh"):
-            cmd = ["bash", script_path]
-        elif lower_name.endswith(".js"):
-            cmd = ["node", script_path]
-        else:
-            cmd = [script_path]
+            return ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
+        if lower_name.endswith((".bat", ".cmd")):
+            return ["cmd.exe", "/c", script_path]
+        if lower_name.endswith(".py"):
+            return [sys.executable, script_path]
+        if lower_name.endswith(".sh"):
+            return ["bash", script_path]
+        if lower_name.endswith(".js"):
+            return ["node", script_path]
+        if lower_name.endswith(".ts"):
+            return ["deno", "run", *deno_args, script_path]
+        if lower_name.endswith(".java"):
+            return ["java", *jvm_args, script_path]
+        if lower_name.endswith(".jar"):
+            return ["java", *jvm_args, "-jar", script_path]
+        return [script_path]
 
-        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
-        output = f"{result.stdout}\n{result.stderr}".strip()
-        if result.returncode != 0:
-            raise RuntimeError(f"自定义脚本执行失败: {output or result.returncode}")
+    def _run_external_script_process(self, cmd: Sequence[str], cwd: str) -> str:
+        try:
+            process = subprocess.Popen(
+                list(cmd),
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                shell=False,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+            )
+        except OSError as exc:
+            raise RuntimeError(f"自定义脚本无法启动: {exc}") from exc
+
+        output_lines: List[str] = []
+        self._collect_process_output(process, output_lines, timeout_seconds=120)
+        returncode = process.wait()
+        output = "\n".join(output_lines).strip()
+        if returncode != 0:
+            raise RuntimeError(f"自定义脚本执行失败: {output or returncode}")
         return output
+
+    def _collect_process_output(self, process: subprocess.Popen, output_lines: List[str], timeout_seconds: int) -> None:
+        import queue
+        import threading
+
+        if process.stdout is None:
+            return
+
+        output_queue: "queue.Queue[str]" = queue.Queue()
+        done = threading.Event()
+
+        def read_stream() -> None:
+            try:
+                while True:
+                    line = process.stdout.readline()
+                    if line == "":
+                        break
+                    output_queue.put(line.rstrip("\r\n"))
+            finally:
+                done.set()
+                try:
+                    process.stdout.close()
+                except Exception:
+                    pass
+
+        thread = threading.Thread(target=read_stream, daemon=True)
+        thread.start()
+        start_time = time.monotonic()
+        while True:
+            if time.monotonic() - start_time > timeout_seconds:
+                process.kill()
+                raise RuntimeError(f"自定义脚本执行超时（超过 {timeout_seconds} 秒）")
+            try:
+                line = output_queue.get(timeout=0.1)
+            except queue.Empty:
+                if done.is_set() and process.poll() is not None and output_queue.empty():
+                    break
+                continue
+            output_lines.append(line)
+
+    def _extract_candidates_from_source_path(self, source: str) -> List[str]:
+        content = self._read_text_source(source)
+        lower_source = self._provider_source_basename(source).lower()
+        if lower_source.endswith(".json"):
+            return self._extract_scalar_strings(json.loads(content))
+        if lower_source.endswith(".toml"):
+            return self._extract_scalar_strings(toml.loads(content))
+        if lower_source.endswith(".xml"):
+            root = ElementTree.fromstring(content)
+            return self._extract_scalar_strings(self._xml_to_tree(root))
+        return [line.strip() for line in content.splitlines() if line.strip()]
+
+    @staticmethod
+    def _coerce_str_list(value: Any, keep_empty: bool = False) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            values = [str(item).strip() for item in value]
+            return values if keep_empty else [item for item in values if item]
+        text = str(value).strip()
+        return [text] if text else []
+
+    @staticmethod
+    def _split_provider_args(value: str) -> List[str]:
+        text = str(value or "").strip()
+        if not text:
+            return []
+        try:
+            return shlex.split(text)
+        except ValueError:
+            return [part for part in text.split() if part]
+
+    @staticmethod
+    def _provider_source_basename(source: str) -> str:
+        if re.match(r"^https?://", source, re.I):
+            return Path(urlparse(source).path).name
+        if source.startswith("file:///"):
+            return Path(source[8:]).name
+        return Path(source).name
+
+    @classmethod
+    def _provider_source_extension(cls, source: str) -> str:
+        return Path(cls._provider_source_basename(source)).suffix.lower()
 
     def _resolve_text(self, state: RuntimeState, text: str, scope: RuntimeScope) -> str:
         value = str(text or "")

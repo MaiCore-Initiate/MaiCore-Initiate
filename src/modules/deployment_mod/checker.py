@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
+from urllib.parse import urlparse
 from xml.etree import ElementTree
 
 try:
@@ -31,15 +32,45 @@ VALID_GET_VERSION_SOURCES = {"github_repo", "filelink", "custom"}
 VALID_GET_LINK_SOURCES = {"filelink", "custom", "user_input"}
 VALID_INSTALL_OPERATIONS = {"auto", "no", "custom"}
 VALID_DEPLOY_METHODS = {"auto", "gitclone", "!gitclone", "getfile"}
+VERSION_FILE_FIELDS = (
+    "version_file",
+    "version_file_link",
+    "get_version_file_link",
+    "file_link",
+)
+LINK_FILE_FIELDS = (
+    "link_file",
+    "get_link_file_link",
+    "get_link_file",
+    "file_link",
+)
 FILELINK_FIELD_ALIASES = (
+    "version_file",
+    "link_file",
     "file_link",
     "version_file_link",
     "get_version_file_link",
     "get_link_file_link",
     "get_link_file",
-    "link_file",
+)
+VERSION_CUSTOM_FIELDS = (
+    "version_custom",
+    "version_script",
+    "get_version_script",
+    "get_version_custom",
+    "custom_script",
+    "script_path",
+)
+LINK_CUSTOM_FIELDS = (
+    "link_custom",
+    "get_link_script",
+    "get_link_custom",
+    "custom_script",
+    "script_path",
 )
 SCRIPT_FIELD_ALIASES = (
+    "version_custom",
+    "link_custom",
     "custom_script",
     "version_script",
     "get_version_script",
@@ -48,7 +79,8 @@ SCRIPT_FIELD_ALIASES = (
     "get_link_custom",
     "script_path",
 )
-PROVIDER_SOURCE_FIELDS = set(FILELINK_FIELD_ALIASES) | set(SCRIPT_FIELD_ALIASES)
+PROVIDER_SOURCE_FIELDS = set(FILELINK_FIELD_ALIASES) | set(SCRIPT_FIELD_ALIASES) | {"deno_permissions", "JVM"}
+CUSTOM_PROVIDER_EXTENSIONS = {".bat", ".cmd", ".ps1", ".sh", ".js", ".ts", ".py", ".java", ".jar", ".exe"}
 KNOWN_PATH_VARIABLES = {
     "$Temporary",
     "$ProgramFiles",
@@ -1196,10 +1228,10 @@ class DeploymentModTemplateChecker:
                 report.warn("github_repo 形态可疑", "当前 GitHub 仓库地址看起来不像标准的仓库首页链接。", location)
             return
         if source == "filelink":
-            self._validate_provider_source(item, FILELINK_FIELD_ALIASES, "文件链接来源", report, location, template_root)
+            self._validate_provider_source_list(item, VERSION_FILE_FIELDS, "版本文件来源", report, location, template_root)
             return
         if source == "custom":
-            self._validate_provider_source(item, SCRIPT_FIELD_ALIASES, "脚本来源", report, location, template_root)
+            self._validate_provider_source_list(item, VERSION_CUSTOM_FIELDS, "版本脚本来源", report, location, template_root, custom=True)
 
     def _validate_link_provider(self, item: Dict[str, Any], source: str, report: CheckReport, location: CheckLocation, template_root: Path) -> None:
         if source == "user_input":
@@ -1213,10 +1245,52 @@ class DeploymentModTemplateChecker:
                 return
         allow_missing = isinstance(provide_list, list) and bool(provide_list)
         if source == "filelink":
-            self._validate_provider_source(item, FILELINK_FIELD_ALIASES, "文件链接来源", report, location, template_root, allow_missing=allow_missing)
+            self._validate_provider_source_list(item, LINK_FILE_FIELDS, "链接文件来源", report, location, template_root, allow_missing=allow_missing)
             return
         if source == "custom":
-            self._validate_provider_source(item, SCRIPT_FIELD_ALIASES, "脚本来源", report, location, template_root, allow_missing=allow_missing)
+            self._validate_provider_source_list(item, LINK_CUSTOM_FIELDS, "链接脚本来源", report, location, template_root, allow_missing=allow_missing, custom=True)
+
+    def _validate_provider_source_list(
+        self,
+        item: Dict[str, Any],
+        aliases: Sequence[str],
+        label: str,
+        report: CheckReport,
+        location: CheckLocation,
+        template_root: Path,
+        allow_missing: bool = False,
+        custom: bool = False,
+    ) -> None:
+        field_name = ""
+        raw_values: List[str] = []
+        for alias in aliases:
+            value = item.get(alias)
+            if value is None:
+                continue
+            field_name = alias
+            if alias == aliases[0] and not isinstance(value, list):
+                report.error("来源字段类型非法", f"`{alias}` 必须是字符串数组。", location)
+                return
+            if isinstance(value, list):
+                raw_values = [str(entry).strip() for entry in value if str(entry).strip()]
+            else:
+                raw_values = [str(value).strip()] if str(value).strip() else []
+            break
+
+        if not raw_values:
+            if allow_missing:
+                return
+            report.error("缺少来源字段", f"当前配置需要提供 {label}。推荐字段: `{aliases[0]}`。兼容字段包括: {', '.join(aliases)}。", location)
+            return
+
+        for raw_value in raw_values:
+            self._validate_provider_source_value(raw_value, label, report, location, template_root, custom=custom)
+
+        if custom:
+            self._validate_provider_runtime_args(item, raw_values, report, location)
+
+        if field_name and field_name != aliases[0]:
+            report.warn("使用了兼容来源字段", f"`{field_name}` 仍可运行，但新模板建议改用 `{aliases[0]}`。", location)
 
     def _validate_provider_source(
         self,
@@ -1245,6 +1319,64 @@ class DeploymentModTemplateChecker:
         local_path = Path(normalized[8:]) if normalized.startswith("file:///") else Path(normalized)
         if not local_path.exists():
             report.error("来源文件不存在", f"配置的 {label} `{raw_value}` 无法在本地解析到实际文件。", location)
+
+    def _validate_provider_source_value(
+        self,
+        raw_value: str,
+        label: str,
+        report: CheckReport,
+        location: CheckLocation,
+        template_root: Path,
+        custom: bool = False,
+    ) -> None:
+        normalized = self._normalize_provider_source_path(raw_value, template_root)
+        extension = self._provider_source_extension(normalized)
+        if custom and extension and extension not in CUSTOM_PROVIDER_EXTENSIONS:
+            report.warn("脚本扩展名未声明", f"{label} `{raw_value}` 的扩展名 `{extension}` 不在文档声明范围内。", location)
+        if "{{" in raw_value:
+            return
+        if normalized.startswith("http://") or normalized.startswith("https://"):
+            return
+        local_path = Path(normalized[8:]) if normalized.startswith("file:///") else Path(normalized)
+        if not local_path.exists():
+            report.error("来源文件不存在", f"配置的 {label} `{raw_value}` 无法在本地解析到实际文件。", location)
+
+    def _validate_provider_runtime_args(self, item: Dict[str, Any], raw_values: Sequence[str], report: CheckReport, location: CheckLocation) -> None:
+        deno_permissions = item.get("deno_permissions")
+        jvm_args = item.get("JVM")
+        ts_count = sum(1 for value in raw_values if self._provider_source_extension(value) == ".ts")
+        jvm_count = sum(1 for value in raw_values if self._provider_source_extension(value) in {".java", ".jar"})
+
+        if deno_permissions is not None:
+            if not isinstance(deno_permissions, list) or not all(isinstance(entry, str) for entry in deno_permissions):
+                report.error("deno_permissions 类型非法", "`deno_permissions` 必须是字符串数组，空字符串表示不插入任何 Deno 权限参数。", location)
+            elif len(deno_permissions) != ts_count:
+                report.warn("deno_permissions 数量不匹配", f"`deno_permissions` 应与 `.ts` 文件数量一一对应；当前 `.ts` 数量 {ts_count}，权限项数量 {len(deno_permissions)}。", location)
+        elif ts_count:
+            report.warn("deno_permissions 未声明", "存在 `.ts` 自定义提供器时可声明 `deno_permissions`；未声明时不会插入任何 Deno 权限参数。", location)
+
+        if jvm_args is not None:
+            if not isinstance(jvm_args, list) or not all(isinstance(entry, str) for entry in jvm_args):
+                report.error("JVM 类型非法", "`JVM` 必须是字符串数组，空字符串表示不插入任何 Java 虚拟机参数。", location)
+            elif len(jvm_args) != jvm_count:
+                report.warn("JVM 数量不匹配", f"`JVM` 应与 `.java` / `.jar` 文件数量一一对应；当前 Java 来源数量 {jvm_count}，JVM 项数量 {len(jvm_args)}。", location)
+        elif jvm_count:
+            report.warn("JVM 未声明", "存在 `.java` 或 `.jar` 自定义提供器时可声明 `JVM`；未声明时不会插入任何 Java 虚拟机参数。", location)
+
+    @staticmethod
+    def _provider_source_extension(source: str) -> str:
+        value = str(source or "")
+        placeholder = PLACEHOLDER_PATTERN.search(value)
+        if placeholder:
+            payload = placeholder.group(1)
+            _, separator, inner_value = payload.partition("|")
+            if separator and inner_value:
+                value = inner_value
+        if re.match(r"^https?://", value, re.I):
+            return Path(urlparse(value).path).suffix.lower()
+        if value.startswith("file:///"):
+            return Path(value[8:]).suffix.lower()
+        return Path(value).suffix.lower()
 
     def _validate_splicing_link(self, splicing_link: str, item_id: str, report: CheckReport, location: CheckLocation) -> None:
         if f"{{{{version|{item_id}}}}}" not in splicing_link:
