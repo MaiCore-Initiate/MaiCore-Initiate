@@ -329,7 +329,7 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
       selectable: false,
       children: Array.from({ length: visibleBlocks.componentCount }, (_, index) => ({
         id: `component-${index}`,
-        label: `对象${index}`,
+        label: String(index),
         icon: 'object' as const,
         defaultExpanded: true,
         blockId: createComponentBlockId(index),

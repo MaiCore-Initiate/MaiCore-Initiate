@@ -356,6 +356,7 @@ function RuntimeSelectField({
   const [open, setOpen] = useState(false)
   const options = ['', ...runtimeOptions]
   const displayValue = value || '空白'
+  const dropdownHeight = options.length * 34 + 10
 
   return (
     <div
@@ -394,9 +395,17 @@ function RuntimeSelectField({
         </svg>
       </button>
 
-      {open && (
+      <div
+        className="mt-[6px] overflow-hidden transition-[height,opacity] duration-150 ease-out"
+        style={{
+          height: open ? dropdownHeight : 0,
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+        }}
+        aria-hidden={!open}
+      >
         <div
-          className="absolute left-0 top-[48px] z-40 w-full overflow-hidden rounded-[14px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.12)]"
+          className="w-full overflow-hidden rounded-[14px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.12)]"
           style={{
             borderColor: 'var(--dfw-sidebar-border)',
             background: 'var(--dfw-sidebar-bg)',
@@ -411,6 +420,7 @@ function RuntimeSelectField({
               <button
                 key={option || 'empty'}
                 type="button"
+                tabIndex={open ? 0 : -1}
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => {
                   onChange(option)
@@ -428,7 +438,7 @@ function RuntimeSelectField({
             )
           })}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -449,6 +459,7 @@ function OptionSelectField({
   const [open, setOpen] = useState(false)
   const allOptions = ['', ...options]
   const displayValue = value || '空白'
+  const dropdownHeight = allOptions.length * 34 + 10
 
   return (
     <div
@@ -488,9 +499,17 @@ function OptionSelectField({
         </svg>
       </button>
 
-      {open && (
+      <div
+        className="mt-[6px] overflow-hidden transition-[height,opacity] duration-150 ease-out"
+        style={{
+          height: open ? dropdownHeight : 0,
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+        }}
+        aria-hidden={!open}
+      >
         <div
-          className="absolute left-0 top-[48px] z-40 w-full overflow-hidden rounded-[14px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.12)]"
+          className="w-full overflow-hidden rounded-[14px] border py-[4px] shadow-[0_8px_20px_rgba(0,0,0,0.12)]"
           style={{
             borderColor: 'var(--dfw-sidebar-border)',
             background: 'var(--dfw-sidebar-bg)',
@@ -505,6 +524,7 @@ function OptionSelectField({
               <button
                 key={option || 'empty'}
                 type="button"
+                tabIndex={open ? 0 : -1}
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => {
                   onChange(option)
@@ -522,7 +542,7 @@ function OptionSelectField({
             )
           })}
         </div>
-      )}
+      </div>
     </div>
   )
 }
