@@ -81,7 +81,7 @@ const emptyComponentMeta: WorkbenchComponentMeta = {
   name: '',
   id: '',
   choose: null,
-  runtime: 'powershell',
+  runtime: '',
   commandTheme: 'classical',
   install: null,
   check: null,
@@ -379,13 +379,15 @@ function BooleanSwitchField({
 function RuntimeSelectField({
   value,
   onChange,
+  allowInherit = false,
 }: {
   value: string
   onChange: (value: string) => void
+  allowInherit?: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const options = runtimeOptions
-  const displayValue = value || options[0]
+  const options = allowInherit ? ['', ...runtimeOptions] : runtimeOptions
+  const displayValue = value || (allowInherit ? '' : options[0])
   const dropdownHeight = options.length * 34 + 10
 
   return (
@@ -411,7 +413,9 @@ function RuntimeSelectField({
         aria-haspopup="listbox"
         aria-label="运行时"
       >
-        <span className="overflow-hidden whitespace-nowrap">{optionLabels[displayValue] ?? displayValue}</span>
+        <span className="overflow-hidden whitespace-nowrap">
+          {displayValue === '' ? '继承 [MODINFO]' : optionLabels[displayValue] ?? displayValue}
+        </span>
         <svg
           className="ml-[8px] shrink-0 transition-transform duration-150"
           style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)' }}
@@ -463,7 +467,7 @@ function RuntimeSelectField({
                 role="option"
                 aria-selected={selected}
               >
-                {optionLabels[option] ?? option}
+                {option === '' ? '继承 [MODINFO]' : optionLabels[option] ?? option}
               </button>
             )
           })}
@@ -2019,6 +2023,7 @@ export default function WorkbenchRightSidebar({
               <RuntimeSelectField
                 value={component.runtime}
                 onChange={runtime => updateComponent({ runtime })}
+                allowInherit
               />
             </section>
 

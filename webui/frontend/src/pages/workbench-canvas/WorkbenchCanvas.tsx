@@ -11,7 +11,7 @@ const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
   id: '',
   choose: null,
-  runtime: 'powershell',
+  runtime: '',
   commandTheme: 'classical',
   install: null,
   check: null,

@@ -327,7 +327,7 @@ MCStart = true
 | `max_version` | String | 否 | `""` | MCStart 最高支持版本，为空不限制 |
 | `file_import` | Boolean | **是** | — | 是否启用文件导入功能 |
 | `file_import_list` | Array\[String\] | 条件必填 | `[]` | 需要导入的文件列表，仅当 `file_import = true` 时需要提供 |
-| `runtime` | String | **是** | — | 模版运行时环境，见下表 |
+| `runtime` | String | **是** | — | 模版运行时环境，见下表；`[MODINFO]` 内不能为空 |
 | `deno_net` | Boolean | 条件必填 | — | 是否允许 Deno 脚本访问网络，仅当 `runtime = "deno"` 时需要提供 |
 | `deno_read` | Boolean | 条件必填 | — | 是否允许 Deno 脚本读取本地文件，仅当 `runtime = "deno"` 时需要提供 |
 | `deno_write` | Boolean | 条件必填 | — | 是否允许 Deno 脚本写入、创建、修改或删除文件，仅当 `runtime = "deno"` 时需要提供 |
@@ -414,7 +414,7 @@ deno run --allow-net=api.example.com,cdn.example.com --allow-read=./config,./dat
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `runtime` | String | 回退到 `MODINFO.runtime` | 为当前表数组内的命令指定运行时；留空或缺失时，回退到 `MODINFO.runtime` |
+| `runtime` | String | 回退到 `MODINFO.runtime` | 为当前表数组内的命令指定运行时；除 `[MODINFO]` 外可留空或缺失，此时回退到 `MODINFO.runtime` |
 | `command_theme` | String | 自动判定 | 命令工作目录的显示主题。支持 `"oh-my-posh"` 与 `"classical"`；未填写时，如环境中检测到 `oh-my-posh`，则优先按 `oh-my-posh` 显示，否则使用 `classical` |
 
 补充说明：
