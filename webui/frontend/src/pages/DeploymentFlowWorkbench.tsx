@@ -4,7 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentMeta } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -27,9 +27,11 @@ const blockNames: Record<WorkbenchBlockId, string> = {
   start: '起始端点',
   init: '初始化块',
   components: '[COMPONENTS]',
+  component: '[[Component]]',
 }
 
 type WorkbenchViewport = { scale: number; x: number; y: number }
+const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, component: false }
 
 export type OutlineIconType = 'boolean' | 'array' | 'object' | 'string' | 'number'
 export type OutlineNodeTone = 'normal' | 'locked' | 'note'
@@ -282,9 +284,11 @@ function createComponentOutlineChildren(component: WorkbenchComponentMeta): Outl
   ]
 }
 
-function createComponentsOutlineNodes(meta: WorkbenchMetaState): OutlineNode[] {
-  return [
-    {
+function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisibleBlocks): OutlineNode[] {
+  const nodes: OutlineNode[] = []
+
+  if (visibleBlocks.components) {
+    nodes.push({
       id: 'components',
       label: '[COMPONENTS]',
       defaultExpanded: true,
@@ -293,17 +297,22 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState): OutlineNode[] {
         createBooleanOutlineNode('components-env-input', 'env_input', meta.componentsEnvInput),
         createStringArrayOutlineNode('components-list', 'list', meta.componentsList, true),
       ],
-    },
-    {
+    })
+  }
+
+  if (visibleBlocks.component) {
+    nodes.push({
       id: 'component-array',
       label: '[[Component]]',
       defaultExpanded: true,
       children: createComponentOutlineChildren(meta.component),
-    },
-  ]
+    })
+  }
+
+  return nodes
 }
 
-function createOutline(meta: WorkbenchMetaState): OutlineNode[] {
+function createOutline(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisibleBlocks): OutlineNode[] {
   return [
     {
       id: 'mcstart',
@@ -320,7 +329,7 @@ function createOutline(meta: WorkbenchMetaState): OutlineNode[] {
       defaultExpanded: true,
       children: createModInfoOutlineChildren(meta),
     },
-    ...createComponentsOutlineNodes(meta),
+    ...createComponentsOutlineNodes(meta, visibleBlocks),
   ]
 }
 
@@ -432,11 +441,10 @@ function resolveOutlineBlockId(node: OutlineNode): WorkbenchBlockId | null {
   if (
     node.id === 'components'
     || node.id.startsWith('components-')
-    || node.id === 'component-array'
-    || node.id.startsWith('component-')
   ) {
     return 'components'
   }
+  if (node.id === 'component-array' || node.id.startsWith('component-')) return 'component'
   return null
 }
 
@@ -833,6 +841,7 @@ export default function DeploymentFlowWorkbench({
   const [selectedBlockId, setSelectedBlockId] = useState<WorkbenchBlockId | null>(null)
   const [addNodeAnchor, setAddNodeAnchor] = useState<WorkbenchAddNodeAnchor | null>(null)
   const [meta, setMeta] = useState<WorkbenchMetaState>(defaultWorkbenchMeta)
+  const [visibleBlocks, setVisibleBlocks] = useState<WorkbenchVisibleBlocks>(defaultVisibleBlocks)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -846,7 +855,7 @@ export default function DeploymentFlowWorkbench({
     id: 'workspace-0',
     title: projectInfo?.mod_name || '未命名',
   }], [projectInfo?.mod_name])
-  const effectiveOutline = useMemo(() => outline ?? createOutline(meta), [outline, meta])
+  const effectiveOutline = useMemo(() => outline ?? createOutline(meta, visibleBlocks), [outline, meta, visibleBlocks])
   const blockMeta = useMemo(() => ({
     author: meta.author,
     tags: meta.tags,
@@ -1093,6 +1102,8 @@ export default function DeploymentFlowWorkbench({
         addNodeAnchor={addNodeAnchor}
         selectedBlockId={selectedBlockId}
         onSelectedBlockChange={setSelectedBlockId}
+        visibleBlocks={visibleBlocks}
+        onVisibleBlocksChange={patch => setVisibleBlocks(prev => ({ ...prev, ...patch }))}
         blockMeta={blockMeta}
       />
       <WorkbenchLeftSidebar

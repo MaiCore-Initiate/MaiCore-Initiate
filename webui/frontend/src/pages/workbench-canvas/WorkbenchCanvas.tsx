@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import AddNodePopover from './AddNodePopover'
 import CanvasConnectionLayer from './CanvasConnectionLayer'
+import ComponentBlock, { componentBlockInputOffset, componentBlockMinSize, resolveComponentBlockOutputOffset } from './blocks/ComponentBlock'
 import ComponentsBlock, { componentsBlockInputOffset, componentsBlockMinSize, resolveComponentsBlockOutputOffset } from './blocks/ComponentsBlock'
 import InitBlock from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
-import { workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentMeta, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize } from './types'
+import { workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentMeta, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchVisibleBlocks } from './types'
 
 const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
@@ -79,8 +80,9 @@ const initBlockInputOffset: WorkbenchPoint = { x: 5, y: 115.5 }
 const startEndpointOutputOffset: WorkbenchPoint = { x: 95.711, y: 70.711 }
 const longPressMs = 220
 const initBlockMinSize: WorkbenchSize = { width: 421, height: 431 }
+const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, component: false }
 type DraggableBlockId = WorkbenchBlockId
-type ResizableBlockId = 'init' | 'components'
+type ResizableBlockId = 'init' | 'components' | 'component'
 
 function resolveInitBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
   return {
@@ -94,15 +96,19 @@ export default function WorkbenchCanvas({
   addNodeAnchor = null,
   selectedBlockId = null,
   onSelectedBlockChange,
+  visibleBlocks,
+  onVisibleBlocksChange,
   blockMeta,
 }: WorkbenchCanvasProps) {
   const meta = { ...defaultBlockMeta, ...blockMeta }
+  const blockVisibility = { ...defaultVisibleBlocks, ...visibleBlocks }
   const [startEndpointPosition, setStartEndpointPosition] = useState<WorkbenchPoint>({ x: 605.289, y: 469.289 })
   const [initBlockPosition, setInitBlockPosition] = useState<WorkbenchPoint>({ x: 829, y: 359 })
   const [initBlockSize, setInitBlockSize] = useState<WorkbenchSize>(initBlockMinSize)
-  const [componentsBlockVisible, setComponentsBlockVisible] = useState(false)
   const [componentsBlockPosition, setComponentsBlockPosition] = useState<WorkbenchPoint>({ x: 1332, y: 342 })
   const [componentsBlockSize, setComponentsBlockSize] = useState<WorkbenchSize>(componentsBlockMinSize)
+  const [componentBlockPosition, setComponentBlockPosition] = useState<WorkbenchPoint>({ x: 1810, y: 330 })
+  const [componentBlockSize, setComponentBlockSize] = useState<WorkbenchSize>(componentBlockMinSize)
   const [addNodePopoverPosition, setAddNodePopoverPosition] = useState<WorkbenchPoint | null>(null)
   const dragRef = useRef<{
     pointerId: number
@@ -130,6 +136,7 @@ export default function WorkbenchCanvas({
   const setBlockPosition = (blockId: DraggableBlockId, position: WorkbenchPoint) => {
     if (blockId === 'init') setInitBlockPosition(position)
     else if (blockId === 'components') setComponentsBlockPosition(position)
+    else if (blockId === 'component') setComponentBlockPosition(position)
     else setStartEndpointPosition(position)
   }
 
@@ -186,16 +193,17 @@ export default function WorkbenchCanvas({
   })
 
   const getBlockSize = (blockId: ResizableBlockId) => (
-    blockId === 'init' ? initBlockSize : componentsBlockSize
+    blockId === 'init' ? initBlockSize : blockId === 'components' ? componentsBlockSize : componentBlockSize
   )
 
   const resizeBlock = (blockId: ResizableBlockId, size: WorkbenchSize) => {
     if (blockId === 'init') setInitBlockSize(size)
-    else setComponentsBlockSize(size)
+    else if (blockId === 'components') setComponentsBlockSize(size)
+    else setComponentBlockSize(size)
   }
 
   const getBlockMinSize = (blockId: ResizableBlockId) => (
-    blockId === 'init' ? initBlockMinSize : componentsBlockMinSize
+    blockId === 'init' ? initBlockMinSize : blockId === 'components' ? componentsBlockMinSize : componentBlockMinSize
   )
 
   const startBlockResize = (blockId: ResizableBlockId, direction: WorkbenchResizeDirection, event: PointerEvent<SVGRectElement>) => {
@@ -272,6 +280,15 @@ export default function WorkbenchCanvas({
     x: componentsBlockPosition.x + componentsBlockOutputOffset.x,
     y: componentsBlockPosition.y + componentsBlockOutputOffset.y,
   }
+  const componentBlockInput = {
+    x: componentBlockPosition.x + componentBlockInputOffset.x,
+    y: componentBlockPosition.y + componentBlockInputOffset.y,
+  }
+  const componentBlockOutputOffset = resolveComponentBlockOutputOffset(componentBlockSize)
+  const componentBlockOutput = {
+    x: componentBlockPosition.x + componentBlockOutputOffset.x,
+    y: componentBlockPosition.y + componentBlockOutputOffset.y,
+  }
 
   const openAddNodePopover = (position: WorkbenchPoint) => {
     setAddNodePopoverPosition({
@@ -286,8 +303,14 @@ export default function WorkbenchCanvas({
   }, [addNodeAnchor])
 
   const addComponentsBlock = () => {
-    setComponentsBlockVisible(true)
+    onVisibleBlocksChange?.({ components: true })
     onSelectedBlockChange?.('components')
+    setAddNodePopoverPosition(null)
+  }
+
+  const addComponentBlock = () => {
+    onVisibleBlocksChange?.({ component: true })
+    onSelectedBlockChange?.('component')
     setAddNodePopoverPosition(null)
   }
 
@@ -306,8 +329,14 @@ export default function WorkbenchCanvas({
     >
       <svg width="1920" height="1080" viewBox="0 0 1920 1080" className="block overflow-visible" style={{ fill: 'currentColor' }}>
         <CanvasConnectionLayer from={startEndpointOutput} to={initBlockInput} />
-        {componentsBlockVisible && (
+        {blockVisibility.components && (
           <CanvasConnectionLayer from={initBlockOutput} to={componentsBlockInput} stroke="#22b386" />
+        )}
+        {blockVisibility.components && blockVisibility.component && (
+          <CanvasConnectionLayer from={componentsBlockOutput} to={componentBlockInput} stroke="#22b386" />
+        )}
+        {!blockVisibility.components && blockVisibility.component && (
+          <CanvasConnectionLayer from={initBlockOutput} to={componentBlockInput} stroke="#22b386" />
         )}
         <StartEndpointBlock
           position={startEndpointPosition}
@@ -325,7 +354,7 @@ export default function WorkbenchCanvas({
           dragHandlers={createDragHandlers('init', initBlockPosition)}
           resizeHandlers={createResizeHandlers('init')}
         />
-        {componentsBlockVisible && (
+        {blockVisibility.components && (
           <ComponentsBlock
             position={componentsBlockPosition}
             size={componentsBlockSize}
@@ -335,16 +364,29 @@ export default function WorkbenchCanvas({
             componentsEnvOutput={meta.componentsEnvOutput}
             componentsEnvInput={meta.componentsEnvInput}
             componentsList={meta.componentsList}
-            component={meta.component}
             dragHandlers={createDragHandlers('components', componentsBlockPosition)}
             resizeHandlers={createResizeHandlers('components')}
+          />
+        )}
+        {blockVisibility.component && (
+          <ComponentBlock
+            position={componentBlockPosition}
+            size={componentBlockSize}
+            selected={selectedBlockId === 'component'}
+            onSelect={() => onSelectedBlockChange?.('component')}
+            onAddConnectorClick={() => openAddNodePopover(componentBlockOutput)}
+            component={meta.component}
+            dragHandlers={createDragHandlers('component', componentBlockPosition)}
+            resizeHandlers={createResizeHandlers('component')}
           />
         )}
         {addNodePopoverPosition && (
           <AddNodePopover
             position={addNodePopoverPosition}
-            componentsVisible={componentsBlockVisible}
+            componentsVisible={blockVisibility.components}
+            componentVisible={blockVisibility.component}
             onAddComponents={addComponentsBlock}
+            onAddComponent={addComponentBlock}
             onClose={() => setAddNodePopoverPosition(null)}
           />
         )}

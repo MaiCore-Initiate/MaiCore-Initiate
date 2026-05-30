@@ -14,14 +14,13 @@ export const rightSidebarMinWidth = 200
 export const rightSidebarMaxWidth = 760
 
 const runtimeOptions = ['powershell', 'pwsh', 'cmd', 'bash', 'python3', 'python', 'node', 'deno']
-const platformOptions = ['windows', 'linux', 'macos']
 const commandThemeOptions = ['oh-my-push', 'classical']
 const getMethodOptions = ['direct', 'get_version', 'get_link']
 const getVersionOptions = ['github_repo', 'filelink', 'custom']
 const getLinkOptions = ['filelink', 'custom', 'user_input']
 const installOperateOptions = ['auto', 'no', 'custom']
 
-let denoPermissionItemId = 0
+let arrayListItemId = 0
 
 export interface WorkbenchModInfoMeta {
   author: string
@@ -147,28 +146,6 @@ function TextAlignRightGlyph() {
       <path d="M15.5 28h16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
     </svg>
   )
-}
-
-function parseTags(value: string) {
-  return value
-    .split('#')
-    .map(tag => tag.trim())
-    .filter(Boolean)
-}
-
-function formatTagInput(tags: string[]) {
-  return tags.length ? `#${tags.join(' #')}` : ''
-}
-
-function parseLineList(value: string) {
-  return value
-    .split(/[\n,]/)
-    .map(item => item.trim())
-    .filter(Boolean)
-}
-
-function formatLineList(values: string[]) {
-  return values.join('\n')
 }
 
 function arraysEqual(left: string[], right: string[]) {
@@ -578,109 +555,14 @@ function ConditionalField({
   )
 }
 
-function PlatformPicker({
-  value,
-  onChange,
-}: {
-  value: string[]
-  onChange: (value: string[]) => void
-}) {
-  const togglePlatform = (platform: string) => {
-    onChange(value.includes(platform)
-      ? value.filter(item => item !== platform)
-      : [...value, platform])
-  }
-
-  return (
-    <div className="flex max-w-full flex-wrap gap-[8px]">
-      {platformOptions.map(platform => {
-        const selected = value.includes(platform)
-        return (
-          <button
-            key={platform}
-            type="button"
-            onClick={() => togglePlatform(platform)}
-            className="h-[34px] rounded-[17px] border px-[12px] text-[18px] font-light leading-[32px] transition-colors hover:bg-[var(--dfw-control-hover)]"
-            style={{
-              borderColor: selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
-              background: selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
-              fontFamily: font,
-            }}
-          >
-            {platform}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function ValueChips({ values }: { values: string[] }) {
-  if (!values.length) return null
-
-  return (
-    <div className="mt-[10px] flex max-w-[553px] flex-wrap gap-[8px]">
-      {values.map((value, index) => (
-        <span
-          key={`${value}-${index}`}
-          className="h-[30px] max-w-[180px] overflow-hidden whitespace-nowrap rounded-[5px] border px-[6px] text-[20px] font-light leading-[28px]"
-          style={{
-            borderColor: 'var(--dfw-sidebar-border)',
-            background: 'var(--dfw-sidebar-bg)',
-            fontFamily: font,
-          }}
-          title={value}
-        >
-          {value}
-        </span>
-      ))}
-    </div>
-  )
-}
-
-function LineListField({
-  values,
-  onChange,
-  maxWidth,
-  ariaLabel,
-}: {
-  values: string[]
-  onChange: (values: string[]) => void
-  maxWidth: number
-  ariaLabel: string
-}) {
-  const [input, setInput] = useState(formatLineList(values))
-
-  useEffect(() => {
-    if (!arraysEqual(parseLineList(input), values)) {
-      setInput(formatLineList(values))
-    }
-  }, [values])
-
-  const updateInput = (value: string) => {
-    setInput(value)
-    onChange(parseLineList(value))
-  }
-
-  return (
-    <AutoGrowTextField
-      value={input}
-      onChange={updateInput}
-      allowLineBreaks
-      maxWidth={maxWidth}
-      ariaLabel={ariaLabel}
-    />
-  )
-}
-
-interface DenoPermissionItem {
+interface ArrayListItem {
   id: string
   value: string
 }
 
-function createDenoPermissionItem(value: string): DenoPermissionItem {
-  denoPermissionItemId += 1
-  return { id: `deno-permission-${denoPermissionItemId}`, value }
+function createArrayListItem(value: string): ArrayListItem {
+  arrayListItemId += 1
+  return { id: `array-list-item-${arrayListItemId}`, value }
 }
 
 function reorderItems<T>(values: T[], fromIndex: number, toIndex: number) {
@@ -709,7 +591,7 @@ function DeleteGlyph() {
   )
 }
 
-function DenoPermissionInput({
+function ArrayListInput({
   value,
   onChange,
   onFocus,
@@ -759,17 +641,21 @@ function DenoPermissionInput({
   )
 }
 
-function DenoPermissionListField({
+function ArrayListField({
+  label,
   values,
   onChange,
   maxWidth,
+  itemAriaLabel,
 }: {
+  label: string
   values: string[]
   onChange: (values: string[]) => void
   maxWidth: number
+  itemAriaLabel?: string
 }) {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
-  const [items, setItems] = useState<DenoPermissionItem[]>(() => values.map(createDenoPermissionItem))
+  const [items, setItems] = useState<ArrayListItem[]>(() => values.map(createArrayListItem))
   const itemsRef = useRef(items)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
   const previousRectsRef = useRef<Map<string, DOMRect> | null>(null)
@@ -781,7 +667,7 @@ function DenoPermissionListField({
       if (arraysEqual(currentValues, values)) return currentItems
 
       const nextItems = values.map((value, index) => ({
-        id: currentItems[index]?.id ?? createDenoPermissionItem(value),
+        id: currentItems[index]?.id ?? createArrayListItem(value).id,
         value,
       }))
       itemsRef.current = nextItems
@@ -826,25 +712,25 @@ function DenoPermissionListField({
     previousRectsRef.current = rects
   }
 
-  const commitItems = (nextItems: DenoPermissionItem[], animate = false) => {
+  const commitItems = (nextItems: ArrayListItem[], animate = false) => {
     if (animate) captureRowRects()
     itemsRef.current = nextItems
     setItems(nextItems)
     onChange(nextItems.map(item => item.value))
   }
 
-  const addPermission = () => {
-    commitItems([...itemsRef.current, createDenoPermissionItem('')], true)
+  const addItem = () => {
+    commitItems([...itemsRef.current, createArrayListItem('')], true)
   }
 
-  const updatePermission = (index: number, nextValue: string) => {
+  const updateItem = (index: number, nextValue: string) => {
     const nextItems = itemsRef.current.map((item, itemIndex) => (
       itemIndex === index ? { ...item, value: nextValue } : item
     ))
     commitItems(nextItems)
   }
 
-  const deletePermission = (index: number) => {
+  const deleteItem = (index: number) => {
     setFocusedIndex(current => {
       if (current === null) return null
       if (current === index) return null
@@ -876,10 +762,10 @@ function DenoPermissionListField({
 
     const target = document
       .elementFromPoint(event.clientX, event.clientY)
-      ?.closest<HTMLElement>('[data-deno-permission-index]')
+      ?.closest<HTMLElement>('[data-array-list-index]')
     if (!target) return
 
-    const targetIndex = Number(target.dataset.denoPermissionIndex)
+    const targetIndex = Number(target.dataset.arrayListIndex)
     if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= itemsRef.current.length) return
     if (targetIndex === drag.index) return
 
@@ -903,19 +789,19 @@ function DenoPermissionListField({
     <div className="max-w-full">
       <div className="flex h-[36px] max-w-full items-center justify-between" style={{ width: maxWidth }}>
         <label className="block h-[36px] leading-[36px]" style={{ fontFamily: font, fontSize: 30, fontWeight: 600 }}>
-          Deno自定义权限列表
+          {label}
         </label>
         <button
           type="button"
-          onClick={addPermission}
+          onClick={addItem}
           className="flex h-[30px] w-[30px] items-center justify-center rounded-[5px] border transition-colors hover:bg-[var(--dfw-control-hover)]"
           style={{
             borderColor: 'var(--dfw-sidebar-border)',
             background: 'var(--dfw-sidebar-bg)',
             color: 'var(--dfw-text)',
           }}
-          aria-label="添加Deno权限参数"
-          title="添加Deno权限参数"
+          aria-label={`添加${label}`}
+          title="添加"
         >
           <PlusGlyph />
         </button>
@@ -931,7 +817,7 @@ function DenoPermissionListField({
                 if (node) rowRefs.current.set(item.id, node)
                 else rowRefs.current.delete(item.id)
               }}
-              data-deno-permission-index={index}
+              data-array-list-index={index}
               className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
               style={{
                 borderColor: focused ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
@@ -947,17 +833,17 @@ function DenoPermissionListField({
                 onPointerMove={moveDrag}
                 onPointerUp={stopDrag}
                 onPointerCancel={stopDrag}
-                aria-label={`拖拽排序第${index + 1}条Deno权限参数`}
+                aria-label={`拖拽排序第${index + 1}条${itemAriaLabel ?? label}`}
                 title="长按拖拽排序"
               >
                 ⠿
               </button>
-              <DenoPermissionInput
+              <ArrayListInput
                 value={item.value}
-                onChange={nextValue => updatePermission(index, nextValue)}
+                onChange={nextValue => updateItem(index, nextValue)}
                 onFocus={() => setFocusedIndex(index)}
                 onBlur={() => setFocusedIndex(current => (current === index ? null : current))}
-                ariaLabel={`Deno权限参数${index + 1}`}
+                ariaLabel={`${itemAriaLabel ?? label}${index + 1}`}
               />
               <button
                 type="button"
@@ -966,9 +852,9 @@ function DenoPermissionListField({
                 onPointerDown={event => event.stopPropagation()}
                 onClick={event => {
                   event.stopPropagation()
-                  deletePermission(index)
+                  deleteItem(index)
                 }}
-                aria-label={`删除第${index + 1}条Deno权限参数`}
+                aria-label={`删除第${index + 1}条${itemAriaLabel ?? label}`}
                 title="删除"
               >
                 <DeleteGlyph />
@@ -991,44 +877,11 @@ export default function WorkbenchRightSidebar({
   meta = emptyModInfoMeta,
   onMetaPatch,
 }: WorkbenchRightSidebarProps) {
-  const [tagInput, setTagInput] = useState(formatTagInput(meta.tags))
-  const [fileImportListInput, setFileImportListInput] = useState(formatLineList(meta.fileImportList))
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
   const fieldAvailableWidth = Math.max(fieldMinWidth, Math.min(fieldMaxWidth, width - 40))
 
-  useEffect(() => {
-    if (!arraysEqual(parseTags(tagInput), meta.tags)) {
-      setTagInput(formatTagInput(meta.tags))
-    }
-  }, [meta.tags])
-
-  useEffect(() => {
-    if (!arraysEqual(parseLineList(fileImportListInput), meta.fileImportList)) {
-      setFileImportListInput(formatLineList(meta.fileImportList))
-    }
-  }, [meta.fileImportList])
-
   const updateMeta = (patch: Partial<WorkbenchModInfoMeta>) => {
     onMetaPatch?.(patch)
-  }
-
-  const commitTags = () => {
-    const parsedTags = parseTags(tagInput)
-    updateMeta({ tags: parsedTags })
-  }
-
-  const updateTagInput = (value: string) => {
-    setTagInput(value)
-    updateMeta({ tags: parseTags(value) })
-  }
-
-  const commitFileImportList = () => {
-    updateMeta({ fileImportList: parseLineList(fileImportListInput) })
-  }
-
-  const updateFileImportListInput = (value: string) => {
-    setFileImportListInput(value)
-    updateMeta({ fileImportList: parseLineList(value) })
   }
 
   const component = meta.component ?? emptyComponentMeta
@@ -1086,6 +939,7 @@ export default function WorkbenchRightSidebar({
 
   const shouldShowInitMeta = selectedBlockId === 'init'
   const shouldShowComponentsMeta = selectedBlockId === 'components'
+  const shouldShowComponentMeta = selectedBlockId === 'component'
 
   if (collapsed) {
     return (
@@ -1180,15 +1034,13 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <section>
-            <FieldLabel>模版标签</FieldLabel>
-            <AutoGrowTextField
-              value={tagInput}
-              onChange={updateTagInput}
-              onCommit={commitTags}
+            <ArrayListField
+              label="模版标签列表"
+              values={meta.tags}
+              onChange={tags => updateMeta({ tags })}
               maxWidth={fieldAvailableWidth}
-              ariaLabel="标签"
+              itemAriaLabel="模版标签"
             />
-            <ValueChips values={meta.tags} />
           </section>
 
           <section>
@@ -1261,16 +1113,13 @@ export default function WorkbenchRightSidebar({
 
           <ConditionalField show={meta.fileImport === true}>
             <section>
-              <FieldLabel>文件导入列表</FieldLabel>
-              <AutoGrowTextField
-                value={fileImportListInput}
-                onChange={updateFileImportListInput}
-                onCommit={commitFileImportList}
-                allowLineBreaks
+              <ArrayListField
+                label="文件导入列表"
+                values={meta.fileImportList}
+                onChange={fileImportList => updateMeta({ fileImportList })}
                 maxWidth={fieldAvailableWidth}
-                ariaLabel="文件导入列表"
+                itemAriaLabel="文件导入项"
               />
-              <ValueChips values={meta.fileImportList} />
             </section>
           </ConditionalField>
 
@@ -1366,10 +1215,12 @@ export default function WorkbenchRightSidebar({
 
               <ConditionalField show={meta.denoCustomPermissions === true}>
                 <section>
-                  <DenoPermissionListField
+                  <ArrayListField
+                    label="Deno自定义权限列表"
                     values={meta.denoPermissionList}
                     onChange={denoPermissionList => updateMeta({ denoPermissionList })}
                     maxWidth={fieldAvailableWidth}
+                    itemAriaLabel="Deno权限参数"
                   />
                 </section>
               </ConditionalField>
@@ -1377,10 +1228,12 @@ export default function WorkbenchRightSidebar({
           </ConditionalField>
 
           <section>
-            <FieldLabel>平台限制</FieldLabel>
-            <PlatformPicker
-              value={meta.platforms}
+            <ArrayListField
+              label="平台限制列表"
+              values={meta.platforms}
               onChange={platforms => updateMeta({ platforms })}
+              maxWidth={fieldAvailableWidth}
+              itemAriaLabel="平台限制"
             />
           </section>
 
@@ -1395,7 +1248,7 @@ export default function WorkbenchRightSidebar({
           </section>
         </div>
         ) : shouldShowComponentsMeta ? (
-          <div className="flex min-h-[3600px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+          <div className="flex min-h-[390px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
             <section>
               <FieldLabel>[COMPONENTS] 环境变量导出</FieldLabel>
               <BooleanSwitchField
@@ -1413,15 +1266,17 @@ export default function WorkbenchRightSidebar({
             </section>
 
             <section>
-              <FieldLabel>组件ID列表</FieldLabel>
-              <LineListField
+              <ArrayListField
+                label="组件ID列表"
                 values={meta.componentsList}
                 onChange={componentsList => updateMeta({ componentsList })}
                 maxWidth={fieldAvailableWidth}
-                ariaLabel="组件ID列表"
+                itemAriaLabel="组件ID"
               />
-              <ValueChips values={meta.componentsList} />
             </section>
+          </div>
+        ) : shouldShowComponentMeta ? (
+          <div className="flex min-h-[3200px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
 
             <section>
               <FieldLabel>组件名称</FieldLabel>
@@ -1490,32 +1345,32 @@ export default function WorkbenchRightSidebar({
             <ConditionalField show={component.check === true}>
               <div className="flex flex-col gap-[18px]">
                 <section>
-                  <FieldLabel>检查命令列表</FieldLabel>
-                  <LineListField
+                  <ArrayListField
+                    label="检查命令列表"
                     values={component.checkCommand}
                     onChange={checkCommand => updateComponent({ checkCommand })}
                     maxWidth={fieldAvailableWidth}
-                    ariaLabel="检查命令列表"
+                    itemAriaLabel="检查命令"
                   />
                 </section>
 
                 <section>
-                  <FieldLabel>版本关键字</FieldLabel>
-                  <LineListField
+                  <ArrayListField
+                    label="版本关键字列表"
                     values={component.checkVersionContains}
                     onChange={checkVersionContains => updateComponent({ checkVersionContains })}
                     maxWidth={fieldAvailableWidth}
-                    ariaLabel="版本关键字"
+                    itemAriaLabel="版本关键字"
                   />
                 </section>
 
                 <section>
-                  <FieldLabel>版本正则匹配</FieldLabel>
-                  <LineListField
+                  <ArrayListField
+                    label="版本正则匹配列表"
                     values={component.checkVersionRegex}
                     onChange={checkVersionRegex => updateComponent({ checkVersionRegex })}
                     maxWidth={fieldAvailableWidth}
-                    ariaLabel="版本正则匹配"
+                    itemAriaLabel="版本正则"
                   />
                 </section>
               </div>
@@ -1587,12 +1442,12 @@ export default function WorkbenchRightSidebar({
 
                 <ConditionalField show={component.formatVersion === true}>
                   <section>
-                    <FieldLabel>格式化规则列表</FieldLabel>
-                    <LineListField
+                    <ArrayListField
+                      label="格式化规则列表"
                       values={component.versionFormattingFormula}
                       onChange={versionFormattingFormula => updateComponent({ versionFormattingFormula })}
                       maxWidth={fieldAvailableWidth}
-                      ariaLabel="格式化规则列表"
+                      itemAriaLabel="格式化规则"
                     />
                   </section>
                 </ConditionalField>
@@ -1613,12 +1468,12 @@ export default function WorkbenchRightSidebar({
 
                 <ConditionalField show={component.getLink === 'filelink' || component.getLink === 'custom'}>
                   <section>
-                    <FieldLabel>可选链接列表</FieldLabel>
-                    <LineListField
+                    <ArrayListField
+                      label="可选链接列表"
                       values={component.getLinkProvideList}
                       onChange={getLinkProvideList => updateComponent({ getLinkProvideList })}
                       maxWidth={fieldAvailableWidth}
-                      ariaLabel="可选链接列表"
+                      itemAriaLabel="可选链接"
                     />
                   </section>
                 </ConditionalField>
@@ -1635,12 +1490,12 @@ export default function WorkbenchRightSidebar({
 
             <ConditionalField show={component.userChoose === true}>
               <section>
-                <FieldLabel>版本选择列表</FieldLabel>
-                <LineListField
+                <ArrayListField
+                  label="版本选择列表"
                   values={component.chooseList}
                   onChange={chooseList => updateComponent({ chooseList })}
                   maxWidth={fieldAvailableWidth}
-                  ariaLabel="版本选择列表"
+                  itemAriaLabel="版本选择项"
                 />
               </section>
             </ConditionalField>
@@ -1657,12 +1512,12 @@ export default function WorkbenchRightSidebar({
 
                 <ConditionalField show={component.commandInstall === true}>
                   <section>
-                    <FieldLabel>安装命令列表</FieldLabel>
-                    <LineListField
+                    <ArrayListField
+                      label="安装命令列表"
                       values={component.installCommandList}
                       onChange={installCommandList => updateComponent({ installCommandList })}
                       maxWidth={fieldAvailableWidth}
-                      ariaLabel="安装命令列表"
+                      itemAriaLabel="安装命令"
                     />
                   </section>
                 </ConditionalField>
@@ -1681,12 +1536,12 @@ export default function WorkbenchRightSidebar({
 
                     <ConditionalField show={component.installOperate === 'custom'}>
                       <section>
-                        <FieldLabel>自定义安装规则</FieldLabel>
-                        <LineListField
+                        <ArrayListField
+                          label="自定义安装规则"
                           values={component.installCustomList}
                           onChange={installCustomList => updateComponent({ installCustomList })}
                           maxWidth={fieldAvailableWidth}
-                          ariaLabel="自定义安装规则"
+                          itemAriaLabel="自定义安装规则"
                         />
                       </section>
                     </ConditionalField>
@@ -1727,12 +1582,12 @@ export default function WorkbenchRightSidebar({
 
             <ConditionalField show={component.beforeCommand === true}>
               <section>
-                <FieldLabel>安装前命令列表</FieldLabel>
-                <LineListField
+                <ArrayListField
+                  label="安装前命令列表"
                   values={component.beforeCommandList}
                   onChange={beforeCommandList => updateComponent({ beforeCommandList })}
                   maxWidth={fieldAvailableWidth}
-                  ariaLabel="安装前命令列表"
+                  itemAriaLabel="安装前命令"
                 />
               </section>
             </ConditionalField>
@@ -1747,12 +1602,12 @@ export default function WorkbenchRightSidebar({
 
             <ConditionalField show={component.afterCommand === true}>
               <section>
-                <FieldLabel>安装后命令列表</FieldLabel>
-                <LineListField
+                <ArrayListField
+                  label="安装后命令列表"
                   values={component.afterCommandList}
                   onChange={afterCommandList => updateComponent({ afterCommandList })}
                   maxWidth={fieldAvailableWidth}
-                  ariaLabel="安装后命令列表"
+                  itemAriaLabel="安装后命令"
                 />
               </section>
             </ConditionalField>
@@ -1767,12 +1622,12 @@ export default function WorkbenchRightSidebar({
 
             <ConditionalField show={component.envOutput === true}>
               <section>
-                <FieldLabel>导出变量列表</FieldLabel>
-                <LineListField
+                <ArrayListField
+                  label="导出变量列表"
                   values={component.envOutputList}
                   onChange={envOutputList => updateComponent({ envOutputList })}
                   maxWidth={fieldAvailableWidth}
-                  ariaLabel="导出变量列表"
+                  itemAriaLabel="导出变量"
                 />
               </section>
             </ConditionalField>
@@ -1787,12 +1642,12 @@ export default function WorkbenchRightSidebar({
 
             <ConditionalField show={component.envInput === true}>
               <section>
-                <FieldLabel>导入变量列表</FieldLabel>
-                <LineListField
+                <ArrayListField
+                  label="导入变量列表"
                   values={component.envInputList}
                   onChange={envInputList => updateComponent({ envInputList })}
                   maxWidth={fieldAvailableWidth}
-                  ariaLabel="导入变量列表"
+                  itemAriaLabel="导入变量"
                 />
               </section>
             </ConditionalField>

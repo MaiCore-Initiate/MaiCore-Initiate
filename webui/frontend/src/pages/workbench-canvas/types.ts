@@ -97,10 +97,17 @@ export interface WorkbenchCanvasProps {
   addNodeAnchor?: WorkbenchAddNodeAnchor | null
   selectedBlockId?: WorkbenchBlockId | null
   onSelectedBlockChange?: (blockId: WorkbenchBlockId | null) => void
+  visibleBlocks?: Partial<WorkbenchVisibleBlocks>
+  onVisibleBlocksChange?: (patch: Partial<WorkbenchVisibleBlocks>) => void
   blockMeta?: Partial<WorkbenchBlockMeta>
 }
 
-export type WorkbenchBlockId = 'start' | 'init' | 'components'
+export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'component'
+
+export interface WorkbenchVisibleBlocks {
+  components: boolean
+  component: boolean
+}
 
 export interface WorkbenchBlockDragHandlers {
   onHeaderPointerDown?: (event: PointerEvent<SVGGElement>) => void
