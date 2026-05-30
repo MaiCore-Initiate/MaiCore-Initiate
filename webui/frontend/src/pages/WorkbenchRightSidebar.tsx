@@ -714,6 +714,7 @@ function ArrayListField({
   itemAriaLabel?: string
 }) {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
+  const [activeDragIndex, setActiveDragIndex] = useState<number | null>(null)
   const [items, setItems] = useState<ArrayListItem[]>(() => values.map(createArrayListItem))
   const itemsRef = useRef(items)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
@@ -800,6 +801,7 @@ function ArrayListField({
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
+    if (dragRef.current || (activeDragIndex !== null && activeDragIndex !== index)) return
     event.preventDefault()
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -810,6 +812,7 @@ function ArrayListField({
       timer: window.setTimeout(() => {
         if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return
         dragRef.current.active = true
+        setActiveDragIndex(index)
       }, 180),
     }
   }
@@ -820,6 +823,7 @@ function ArrayListField({
     if (event.buttons !== 1) {
       window.clearTimeout(drag.timer)
       dragRef.current = null
+      setActiveDragIndex(null)
       return
     }
     if (!drag.active) return
@@ -849,6 +853,7 @@ function ArrayListField({
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     dragRef.current = null
+    setActiveDragIndex(null)
   }
 
   return (
@@ -879,6 +884,7 @@ function ArrayListField({
       <div className="mt-[8px] flex max-w-full flex-col gap-[8px]" style={{ width: maxWidth }}>
         {items.map((item, index) => {
           const focused = focusedIndex === index
+          const dragLocked = activeDragIndex !== null && activeDragIndex !== index
           return (
             <div
               key={item.id}
@@ -896,8 +902,13 @@ function ArrayListField({
             >
               <button
                 type="button"
+                disabled={dragLocked}
                 className="flex min-h-[40px] w-[30px] shrink-0 cursor-grab select-none items-center justify-center rounded-l-[5px] text-[18px] active:cursor-grabbing"
-                style={{ color: 'var(--dfw-outline-muted)', touchAction: 'none' }}
+                style={{
+                  color: 'var(--dfw-outline-muted)',
+                  opacity: dragLocked ? 0.38 : 1,
+                  touchAction: 'none',
+                }}
                 onPointerDown={event => startDrag(index, event)}
                 onPointerMove={moveDrag}
                 onPointerUp={stopDrag}
@@ -948,6 +959,7 @@ function VersionFormattingRuleField({
   maxWidth: number
 }) {
   const [focusedCell, setFocusedCell] = useState<{ index: number; key: keyof WorkbenchVersionFormattingRule } | null>(null)
+  const [activeDragIndex, setActiveDragIndex] = useState<number | null>(null)
   const [items, setItems] = useState<VersionFormattingRuleItem[]>(() => values.map(createVersionFormattingRuleItem))
   const itemsRef = useRef(items)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
@@ -1035,6 +1047,7 @@ function VersionFormattingRuleField({
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
+    if (dragRef.current || (activeDragIndex !== null && activeDragIndex !== index)) return
     event.preventDefault()
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -1045,6 +1058,7 @@ function VersionFormattingRuleField({
       timer: window.setTimeout(() => {
         if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return
         dragRef.current.active = true
+        setActiveDragIndex(index)
       }, 180),
     }
   }
@@ -1055,6 +1069,7 @@ function VersionFormattingRuleField({
     if (event.buttons !== 1) {
       window.clearTimeout(drag.timer)
       dragRef.current = null
+      setActiveDragIndex(null)
       return
     }
     if (!drag.active) return
@@ -1095,6 +1110,7 @@ function VersionFormattingRuleField({
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     dragRef.current = null
+    setActiveDragIndex(null)
   }
 
   return (
@@ -1126,6 +1142,7 @@ function VersionFormattingRuleField({
         {items.map((item, index) => {
           const matchFocused = focusedCell?.index === index && focusedCell.key === 'match'
           const replaceFocused = focusedCell?.index === index && focusedCell.key === 'replace'
+          const dragLocked = activeDragIndex !== null && activeDragIndex !== index
           return (
             <div
               key={item.id}
@@ -1147,8 +1164,13 @@ function VersionFormattingRuleField({
               >
                 <button
                   type="button"
+                  disabled={dragLocked}
                   className="flex min-h-[40px] w-[30px] shrink-0 cursor-grab select-none items-center justify-center rounded-l-[5px] text-[18px] active:cursor-grabbing"
-                  style={{ color: 'var(--dfw-outline-muted)', touchAction: 'none' }}
+                  style={{
+                    color: 'var(--dfw-outline-muted)',
+                    opacity: dragLocked ? 0.38 : 1,
+                    touchAction: 'none',
+                  }}
                   onPointerDown={event => startDrag(index, event)}
                   onPointerMove={moveDrag}
                   onPointerUp={stopDrag}
