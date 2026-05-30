@@ -671,7 +671,7 @@ function OutlineTree({
         大纲
       </span>
 
-      <div className="absolute left-0 right-0 top-[45px] bottom-0 overflow-hidden">
+      <div className="absolute left-0 right-0 top-[45px] bottom-0 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="pointer-events-none absolute inset-0 z-10" aria-hidden>
           {lineSegments.map(segment => (
             <span
