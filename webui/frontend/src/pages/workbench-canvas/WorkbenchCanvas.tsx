@@ -361,86 +361,95 @@ export default function WorkbenchCanvas({
     setAddNodePopoverPosition(null)
   }
 
+  const addNodePopoverScreenPosition = addNodePopoverPosition
+    ? {
+      x: viewport.x + addNodePopoverPosition.x * viewport.scale,
+      y: viewport.y + addNodePopoverPosition.y * viewport.scale,
+    }
+    : null
+
   return (
-    <div
-      className="absolute left-0 top-0 z-0 h-[1920px] w-[1920px] origin-top-left"
-      style={{
-        transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
-        color: 'var(--dfw-text)',
-        fontFamily: workbenchCanvasFont,
-      }}
-      onClick={() => {
-        setAddNodePopoverPosition(null)
-        onSelectedBlockChange?.(null)
-      }}
-    >
-      <svg width="1920" height="1080" viewBox="0 0 1920 1080" className="block overflow-visible" style={{ fill: 'currentColor' }}>
-        <CanvasConnectionLayer from={startEndpointOutput} to={initBlockInput} />
-        {blockVisibility.components && (
-          <CanvasConnectionLayer from={initBlockOutput} to={componentsBlockInput} stroke="#22b386" />
-        )}
-        {componentBlocks.map(block => (
-          <CanvasConnectionLayer
-            key={`component-line-${block.index}`}
-            from={blockVisibility.components ? componentsBlockOutput : initBlockOutput}
-            to={block.input}
-            stroke="#22b386"
+    <>
+      <div
+        className="absolute left-0 top-0 z-0 h-[1920px] w-[1920px] origin-top-left"
+        style={{
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
+          color: 'var(--dfw-text)',
+          fontFamily: workbenchCanvasFont,
+        }}
+        onClick={() => {
+          setAddNodePopoverPosition(null)
+          onSelectedBlockChange?.(null)
+        }}
+      >
+        <svg width="1920" height="1080" viewBox="0 0 1920 1080" className="block overflow-visible" style={{ fill: 'currentColor' }}>
+          <CanvasConnectionLayer from={startEndpointOutput} to={initBlockInput} />
+          {blockVisibility.components && (
+            <CanvasConnectionLayer from={initBlockOutput} to={componentsBlockInput} stroke="#22b386" />
+          )}
+          {componentBlocks.map(block => (
+            <CanvasConnectionLayer
+              key={`component-line-${block.index}`}
+              from={blockVisibility.components ? componentsBlockOutput : initBlockOutput}
+              to={block.input}
+              stroke="#22b386"
+            />
+          ))}
+          <StartEndpointBlock
+            position={startEndpointPosition}
+            selected={selectedBlockId === 'start'}
+            onSelect={() => onSelectedBlockChange?.('start')}
+            dragHandlers={createDragHandlers('start', startEndpointPosition)}
           />
-        ))}
-        <StartEndpointBlock
-          position={startEndpointPosition}
-          selected={selectedBlockId === 'start'}
-          onSelect={() => onSelectedBlockChange?.('start')}
-          dragHandlers={createDragHandlers('start', startEndpointPosition)}
+          <InitBlock
+            position={initBlockPosition}
+            size={initBlockSize}
+            selected={selectedBlockId === 'init'}
+            onSelect={() => onSelectedBlockChange?.('init')}
+            onAddConnectorClick={() => openAddNodePopover(initBlockOutput)}
+            meta={meta}
+            dragHandlers={createDragHandlers('init', initBlockPosition)}
+            resizeHandlers={createResizeHandlers('init')}
+          />
+          {blockVisibility.components && (
+            <ComponentsBlock
+              position={componentsBlockPosition}
+              size={componentsBlockSize}
+              selected={selectedBlockId === 'components'}
+              onSelect={() => onSelectedBlockChange?.('components')}
+              onAddConnectorClick={() => openAddNodePopover(componentsBlockOutput)}
+              componentsEnvOutput={meta.componentsEnvOutput}
+              componentsEnvInput={meta.componentsEnvInput}
+              componentsList={meta.componentsList}
+              dragHandlers={createDragHandlers('components', componentsBlockPosition)}
+              resizeHandlers={createResizeHandlers('components')}
+            />
+          )}
+          {componentBlocks.map(block => (
+            <ComponentBlock
+              key={block.blockId}
+              blockIndex={block.index}
+              position={block.position}
+              size={block.size}
+              selected={selectedBlockId === block.blockId}
+              onSelect={() => onSelectedBlockChange?.(block.blockId)}
+              onAddConnectorClick={() => openAddNodePopover(block.output)}
+              component={meta.components[block.index] ?? defaultComponentMeta}
+              dragHandlers={createDragHandlers(block.blockId, block.position)}
+              resizeHandlers={createResizeHandlers(block.blockId)}
+            />
+          ))}
+        </svg>
+      </div>
+      {addNodePopoverScreenPosition && (
+        <AddNodePopover
+          position={addNodePopoverScreenPosition}
+          componentsVisible={blockVisibility.components}
+          onAddComponents={addComponentsBlock}
+          onAddComponent={addComponentBlock}
+          onClose={() => setAddNodePopoverPosition(null)}
         />
-        <InitBlock
-          position={initBlockPosition}
-          size={initBlockSize}
-          selected={selectedBlockId === 'init'}
-          onSelect={() => onSelectedBlockChange?.('init')}
-          onAddConnectorClick={() => openAddNodePopover(initBlockOutput)}
-          meta={meta}
-          dragHandlers={createDragHandlers('init', initBlockPosition)}
-          resizeHandlers={createResizeHandlers('init')}
-        />
-        {blockVisibility.components && (
-          <ComponentsBlock
-            position={componentsBlockPosition}
-            size={componentsBlockSize}
-            selected={selectedBlockId === 'components'}
-            onSelect={() => onSelectedBlockChange?.('components')}
-            onAddConnectorClick={() => openAddNodePopover(componentsBlockOutput)}
-            componentsEnvOutput={meta.componentsEnvOutput}
-            componentsEnvInput={meta.componentsEnvInput}
-            componentsList={meta.componentsList}
-            dragHandlers={createDragHandlers('components', componentsBlockPosition)}
-            resizeHandlers={createResizeHandlers('components')}
-          />
-        )}
-        {componentBlocks.map(block => (
-          <ComponentBlock
-            key={block.blockId}
-            blockIndex={block.index}
-            position={block.position}
-            size={block.size}
-            selected={selectedBlockId === block.blockId}
-            onSelect={() => onSelectedBlockChange?.(block.blockId)}
-            onAddConnectorClick={() => openAddNodePopover(block.output)}
-            component={meta.components[block.index] ?? defaultComponentMeta}
-            dragHandlers={createDragHandlers(block.blockId, block.position)}
-            resizeHandlers={createResizeHandlers(block.blockId)}
-          />
-        ))}
-        {addNodePopoverPosition && (
-          <AddNodePopover
-            position={addNodePopoverPosition}
-            componentsVisible={blockVisibility.components}
-            onAddComponents={addComponentsBlock}
-            onAddComponent={addComponentBlock}
-            onClose={() => setAddNodePopoverPosition(null)}
-          />
-        )}
-      </svg>
-    </div>
+      )}
+    </>
   )
 }

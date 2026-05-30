@@ -65,11 +65,20 @@ export default function AddNodePopover({
   onClose: () => void
 }) {
   return (
-    <g
-      transform={`translate(${position.x} ${position.y})`}
+    <svg
+      data-workbench-ui
+      width="352"
+      height="502"
+      viewBox="0 0 352 502"
+      className="absolute z-10 overflow-visible"
+      style={{
+        left: position.x,
+        top: position.y,
+        color: 'var(--dfw-text)',
+        filter: 'drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18))',
+      }}
       onClick={event => event.stopPropagation()}
       onPointerDown={event => event.stopPropagation()}
-      style={{ filter: 'drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18))' }}
     >
       <rect x="1" y="1" width="350" height="500" rx="30" fill="var(--dfw-bg)" stroke="var(--dfw-sidebar-border)" strokeWidth="2" />
       <text x="21" y="49.85" fontSize="30" fontFamily={workbenchCanvasFont} fontWeight="600" fill="currentColor">
@@ -104,6 +113,6 @@ export default function AddNodePopover({
       >
         <rect x="321" y="0" width="31" height="31" rx="15.5" fill="transparent" />
       </g>
-    </g>
+    </svg>
   )
 }

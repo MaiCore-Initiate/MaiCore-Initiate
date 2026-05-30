@@ -580,7 +580,7 @@ function ConditionalField({
         opacity: show ? 1 : 0,
         transform: show ? 'translateY(0)' : 'translateY(-6px)',
         marginTop: show ? 0 : -18,
-        marginBottom: show ? 0 : -18,
+        marginBottom: 0,
         pointerEvents: show ? 'auto' : 'none',
       }}
       aria-hidden={!show}
