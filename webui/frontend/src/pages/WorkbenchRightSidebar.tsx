@@ -714,12 +714,12 @@ function ArrayListField({
   itemAriaLabel?: string
 }) {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
-  const [activeDragIndex, setActiveDragIndex] = useState<number | null>(null)
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [items, setItems] = useState<ArrayListItem[]>(() => values.map(createArrayListItem))
   const itemsRef = useRef(items)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
   const previousRectsRef = useRef<Map<string, DOMRect> | null>(null)
-  const dragRef = useRef<{ pointerId: number; index: number; active: boolean; timer: number } | null>(null)
+  const dragRef = useRef<{ pointerId: number; index: number; itemId: string; lastClientY: number; active: boolean; timer: number } | null>(null)
 
   useEffect(() => {
     setItems(currentItems => {
@@ -801,18 +801,22 @@ function ArrayListField({
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
-    if (dragRef.current || (activeDragIndex !== null && activeDragIndex !== index)) return
+    const item = itemsRef.current[index]
+    if (!item) return
+    if (dragRef.current || (activeDragId !== null && activeDragId !== item.id)) return
     event.preventDefault()
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
     dragRef.current = {
       pointerId: event.pointerId,
       index,
+      itemId: item.id,
+      lastClientY: event.clientY,
       active: false,
       timer: window.setTimeout(() => {
         if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return
         dragRef.current.active = true
-        setActiveDragIndex(index)
+        setActiveDragId(item.id)
       }, 180),
     }
   }
@@ -823,24 +827,47 @@ function ArrayListField({
     if (event.buttons !== 1) {
       window.clearTimeout(drag.timer)
       dragRef.current = null
-      setActiveDragIndex(null)
+      setActiveDragId(null)
       return
     }
     if (!drag.active) return
     event.preventDefault()
     event.stopPropagation()
 
-    const target = document
-      .elementFromPoint(event.clientX, event.clientY)
-      ?.closest<HTMLElement>('[data-array-list-index]')
-    if (!target) return
+    const currentIndex = itemsRef.current.findIndex(item => item.id === drag.itemId)
+    if (currentIndex < 0) {
+      window.clearTimeout(drag.timer)
+      dragRef.current = null
+      setActiveDragId(null)
+      return
+    }
+    drag.index = currentIndex
 
-    const targetIndex = Number(target.dataset.arrayListIndex)
-    if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= itemsRef.current.length) return
-    if (targetIndex === drag.index) return
+    const deltaY = event.clientY - drag.lastClientY
+    if (Math.abs(deltaY) < 1) return
 
-    commitItems(reorderItems(itemsRef.current, drag.index, targetIndex), true)
-    drag.index = targetIndex
+    const direction = deltaY > 0 ? 1 : -1
+    const targetIndex = drag.index + direction
+    const targetItem = itemsRef.current[targetIndex]
+    if (!targetItem) {
+      drag.lastClientY = event.clientY
+      return
+    }
+
+    const targetElement = rowRefs.current.get(targetItem.id)
+    if (!targetElement) {
+      drag.lastClientY = event.clientY
+      return
+    }
+
+    const targetRect = targetElement.getBoundingClientRect()
+    const targetMiddle = targetRect.top + targetRect.height / 2
+    const shouldReorder = direction > 0 ? event.clientY > targetMiddle : event.clientY < targetMiddle
+    if (shouldReorder) {
+      commitItems(reorderItems(itemsRef.current, drag.index, targetIndex), true)
+      drag.index = targetIndex
+    }
+    drag.lastClientY = event.clientY
   }
 
   const stopDrag = (event: PointerEvent<HTMLButtonElement>) => {
@@ -853,7 +880,7 @@ function ArrayListField({
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     dragRef.current = null
-    setActiveDragIndex(null)
+    setActiveDragId(null)
   }
 
   return (
@@ -884,7 +911,7 @@ function ArrayListField({
       <div className="mt-[8px] flex max-w-full flex-col gap-[8px]" style={{ width: maxWidth }}>
         {items.map((item, index) => {
           const focused = focusedIndex === index
-          const dragLocked = activeDragIndex !== null && activeDragIndex !== index
+          const dragLocked = activeDragId !== null && activeDragId !== item.id
           return (
             <div
               key={item.id}
@@ -959,12 +986,12 @@ function VersionFormattingRuleField({
   maxWidth: number
 }) {
   const [focusedCell, setFocusedCell] = useState<{ index: number; key: keyof WorkbenchVersionFormattingRule } | null>(null)
-  const [activeDragIndex, setActiveDragIndex] = useState<number | null>(null)
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [items, setItems] = useState<VersionFormattingRuleItem[]>(() => values.map(createVersionFormattingRuleItem))
   const itemsRef = useRef(items)
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
   const previousRectsRef = useRef<Map<string, DOMRect> | null>(null)
-  const dragRef = useRef<{ pointerId: number; index: number; active: boolean; timer: number } | null>(null)
+  const dragRef = useRef<{ pointerId: number; index: number; itemId: string; lastClientY: number; active: boolean; timer: number } | null>(null)
   const fieldWidth = Math.max(66, Math.floor((maxWidth - 8) / 2))
 
   useEffect(() => {
@@ -1047,18 +1074,22 @@ function VersionFormattingRuleField({
 
   const startDrag = (index: number, event: PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
-    if (dragRef.current || (activeDragIndex !== null && activeDragIndex !== index)) return
+    const item = itemsRef.current[index]
+    if (!item) return
+    if (dragRef.current || (activeDragId !== null && activeDragId !== item.id)) return
     event.preventDefault()
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
     dragRef.current = {
       pointerId: event.pointerId,
       index,
+      itemId: item.id,
+      lastClientY: event.clientY,
       active: false,
       timer: window.setTimeout(() => {
         if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return
         dragRef.current.active = true
-        setActiveDragIndex(index)
+        setActiveDragId(item.id)
       }, 180),
     }
   }
@@ -1069,21 +1100,46 @@ function VersionFormattingRuleField({
     if (event.buttons !== 1) {
       window.clearTimeout(drag.timer)
       dragRef.current = null
-      setActiveDragIndex(null)
+      setActiveDragId(null)
       return
     }
     if (!drag.active) return
     event.preventDefault()
     event.stopPropagation()
 
-    const target = document
-      .elementFromPoint(event.clientX, event.clientY)
-      ?.closest<HTMLElement>('[data-formatting-rule-index]')
-    if (!target) return
+    const currentIndex = itemsRef.current.findIndex(item => item.id === drag.itemId)
+    if (currentIndex < 0) {
+      window.clearTimeout(drag.timer)
+      dragRef.current = null
+      setActiveDragId(null)
+      return
+    }
+    drag.index = currentIndex
 
-    const targetIndex = Number(target.dataset.formattingRuleIndex)
-    if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= itemsRef.current.length) return
-    if (targetIndex === drag.index) return
+    const deltaY = event.clientY - drag.lastClientY
+    if (Math.abs(deltaY) < 1) return
+
+    const direction = deltaY > 0 ? 1 : -1
+    const targetIndex = drag.index + direction
+    const targetItem = itemsRef.current[targetIndex]
+    if (!targetItem) {
+      drag.lastClientY = event.clientY
+      return
+    }
+
+    const targetElement = rowRefs.current.get(targetItem.id)
+    if (!targetElement) {
+      drag.lastClientY = event.clientY
+      return
+    }
+
+    const targetRect = targetElement.getBoundingClientRect()
+    const targetMiddle = targetRect.top + targetRect.height / 2
+    const shouldReorder = direction > 0 ? event.clientY > targetMiddle : event.clientY < targetMiddle
+    if (!shouldReorder) {
+      drag.lastClientY = event.clientY
+      return
+    }
 
     commitItems(reorderItems(itemsRef.current, drag.index, targetIndex), true)
     setFocusedCell(current => {
@@ -1098,6 +1154,7 @@ function VersionFormattingRuleField({
       return current
     })
     drag.index = targetIndex
+    drag.lastClientY = event.clientY
   }
 
   const stopDrag = (event: PointerEvent<HTMLButtonElement>) => {
@@ -1110,7 +1167,7 @@ function VersionFormattingRuleField({
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     dragRef.current = null
-    setActiveDragIndex(null)
+    setActiveDragId(null)
   }
 
   return (
@@ -1142,7 +1199,7 @@ function VersionFormattingRuleField({
         {items.map((item, index) => {
           const matchFocused = focusedCell?.index === index && focusedCell.key === 'match'
           const replaceFocused = focusedCell?.index === index && focusedCell.key === 'replace'
-          const dragLocked = activeDragIndex !== null && activeDragIndex !== index
+          const dragLocked = activeDragId !== null && activeDragId !== item.id
           return (
             <div
               key={item.id}
