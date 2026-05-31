@@ -342,10 +342,46 @@ function resolveFieldMetrics(value: string, maxWidth = fieldMaxWidth) {
   return { width, lines: wrappedLines }
 }
 
-function resolveInlineTableCellWidth(value: string, minWidth: number, maxWidth: number, chromeWidth: number) {
+const inlineTableGap = 8
+const inlineTableCellMinWidth = 66
+const inlineTablePreferredMinWidth = 132
+
+function resolveInlineTableDesiredWidth(value: string, chromeWidth: number) {
   const lines = value.split('\n')
   const longestLineWidth = Math.max(...lines.map(line => measureTextWidth(line)))
-  return Math.min(maxWidth, Math.max(minWidth, longestLineWidth + chromeWidth))
+  return longestLineWidth + chromeWidth
+}
+
+function resolveSplitTableCellWidths(
+  leftValue: string,
+  rightValue: string,
+  maxWidth: number,
+  leftChromeWidth: number,
+  rightChromeWidth: number,
+) {
+  const contentWidth = Math.max(inlineTableCellMinWidth * 2, maxWidth - inlineTableGap)
+  const defaultLeftWidth = Math.floor(contentWidth / 2)
+  const defaultRightWidth = contentWidth - defaultLeftWidth
+  const minCellWidth = Math.min(
+    inlineTablePreferredMinWidth,
+    Math.max(inlineTableCellMinWidth, Math.floor(contentWidth * 0.25)),
+  )
+  const leftDesiredWidth = resolveInlineTableDesiredWidth(leftValue, leftChromeWidth)
+  const rightDesiredWidth = resolveInlineTableDesiredWidth(rightValue, rightChromeWidth)
+  let leftWidth = defaultLeftWidth
+  let rightWidth = defaultRightWidth
+
+  if (leftDesiredWidth > leftWidth && rightDesiredWidth <= rightWidth) {
+    const borrowedWidth = Math.min(leftDesiredWidth - leftWidth, rightWidth - minCellWidth)
+    leftWidth += borrowedWidth
+    rightWidth -= borrowedWidth
+  } else if (rightDesiredWidth > rightWidth && leftDesiredWidth <= leftWidth) {
+    const borrowedWidth = Math.min(rightDesiredWidth - rightWidth, leftWidth - minCellWidth)
+    rightWidth += borrowedWidth
+    leftWidth -= borrowedWidth
+  }
+
+  return { leftWidth, rightWidth }
 }
 
 function FieldLabel({ children }: { children: string }) {
@@ -963,12 +999,12 @@ function ArrayListInput({
 }) {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const textArea = textAreaRef.current
     if (!textArea) return
     textArea.style.height = 'auto'
     textArea.style.height = `${Math.max(40, textArea.scrollHeight)}px`
-  }, [value])
+  })
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter') {
@@ -1351,8 +1387,9 @@ function ArrayListField({
                 else rowRefs.current.delete(item.id)
               }}
               data-array-list-index={index}
-              className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
+              className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
               style={{
+                width: maxWidth,
                 borderColor: focused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
                 background: focused || selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
                 color: 'var(--dfw-text)',
@@ -1424,7 +1461,6 @@ function VersionFormattingRuleField({
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
   const previousRectsRef = useRef<Map<string, DOMRect> | null>(null)
   const dragRef = useRef<{ pointerId: number; index: number; itemId: string; lastClientY: number; active: boolean; timer: number } | null>(null)
-  const fieldWidth = Math.max(66, Math.floor((maxWidth - 8) / 2))
 
   useEffect(() => {
     setItems(currentItems => {
@@ -1664,6 +1700,14 @@ function VersionFormattingRuleField({
           const replaceFocused = focusedCell?.index === index && focusedCell.key === 'replace'
           const selected = selectedIds.includes(item.id)
           const dragLocked = activeDragId !== null && activeDragId !== item.id
+          const { leftWidth: matchWidth, rightWidth: replaceWidth } = resolveSplitTableCellWidths(
+            item.value.match,
+            item.value.replace,
+            maxWidth,
+            92,
+            92,
+          )
+
           return (
             <div
               key={item.id}
@@ -1672,12 +1716,13 @@ function VersionFormattingRuleField({
                 else rowRefs.current.delete(item.id)
               }}
               data-formatting-rule-index={index}
-              className="flex max-w-full items-start gap-[8px]"
+              style={{ width: maxWidth }}
+              className="flex max-w-full items-stretch gap-[8px]"
             >
               <div
-                className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
+                className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
-                  width: fieldWidth,
+                  width: matchWidth,
                   borderColor: matchFocused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
                   background: matchFocused || selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
                   color: 'var(--dfw-text)',
@@ -1719,9 +1764,9 @@ function VersionFormattingRuleField({
               </div>
 
               <div
-                className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
+                className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
-                  width: fieldWidth,
+                  width: replaceWidth,
                   borderColor: replaceFocused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
                   background: replaceFocused || selected ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
                   color: 'var(--dfw-text)',
@@ -1788,7 +1833,6 @@ function EnvVariableTableField({
   const rowRefs = useRef(new Map<string, HTMLDivElement>())
   const previousRectsRef = useRef<Map<string, DOMRect> | null>(null)
   const dragRef = useRef<{ pointerId: number; index: number; itemId: string; lastClientY: number; active: boolean; timer: number } | null>(null)
-  const cellMaxWidth = Math.max(66, maxWidth)
 
   useEffect(() => {
     setItems(currentItems => {
@@ -2127,8 +2171,13 @@ function EnvVariableTableField({
           const valueFocused = focusedCell?.index === index && focusedCell.key === 'value'
           const selected = selectedIds.includes(item.id)
           const dragLocked = activeDragId !== null && activeDragId !== item.id
-          const nameWidth = resolveInlineTableCellWidth(item.value.name, 132, cellMaxWidth, 76)
-          const valueWidth = resolveInlineTableCellWidth(item.value.value, 132, cellMaxWidth, 70)
+          const { leftWidth: nameWidth, rightWidth: valueWidth } = resolveSplitTableCellWidths(
+            item.value.name,
+            item.value.value,
+            maxWidth,
+            76,
+            70,
+          )
 
           return (
             <div
@@ -2138,10 +2187,11 @@ function EnvVariableTableField({
                 else rowRefs.current.delete(item.id)
               }}
               data-env-variable-entry-index={index}
-              className="flex max-w-full flex-wrap items-start gap-[8px]"
+              style={{ width: maxWidth }}
+              className="flex max-w-full items-stretch gap-[8px]"
             >
               <div
-                className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
+                className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
                   width: nameWidth,
                   borderColor: nameFocused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
@@ -2185,7 +2235,7 @@ function EnvVariableTableField({
               </div>
 
               <div
-                className="flex max-w-full items-start rounded-[5px] border transition-[border-color,background-color] duration-150"
+                className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
                   width: valueWidth,
                   borderColor: valueFocused || selected ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
