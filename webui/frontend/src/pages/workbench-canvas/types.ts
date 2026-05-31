@@ -145,10 +145,3 @@ export interface WorkbenchBlockResizeHandlers {
   onResizePointerUp?: (event: PointerEvent<SVGRectElement>) => void
   onResizePointerCancel?: (event: PointerEvent<SVGRectElement>) => void
 }
-
-export interface WorkbenchConnectorDragHandlers {
-  onConnectorPointerDown?: (event: PointerEvent<SVGGElement>) => void
-  onConnectorPointerMove?: (event: PointerEvent<SVGGElement>) => void
-  onConnectorPointerUp?: (event: PointerEvent<SVGGElement>) => void
-  onConnectorPointerCancel?: (event: PointerEvent<SVGGElement>) => void
-}

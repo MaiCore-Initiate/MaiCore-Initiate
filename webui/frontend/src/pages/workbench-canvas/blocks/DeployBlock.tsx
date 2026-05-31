@@ -1,4 +1,4 @@
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConnectorDragHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 export const deployBlockMinSize: WorkbenchSize = { width: 456, height: 210 }
 export const deployBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -7,19 +7,11 @@ const bodyX = 5
 const bodyY = 5
 const accent = '#d97706'
 
-function InputPort({ dragHandlers }: { dragHandlers?: WorkbenchConnectorDragHandlers }) {
+function InputPort() {
   return (
-    <g
-      transform={`translate(${deployBlockInputOffset.x - 2.5} ${deployBlockInputOffset.y - 2.5})`}
-      className="cursor-crosshair"
-      onPointerDown={dragHandlers?.onConnectorPointerDown}
-      onPointerMove={dragHandlers?.onConnectorPointerMove}
-      onPointerUp={dragHandlers?.onConnectorPointerUp}
-      onPointerCancel={dragHandlers?.onConnectorPointerCancel}
-    >
+    <g transform={`translate(${deployBlockInputOffset.x - 2.5} ${deployBlockInputOffset.y - 2.5})`}>
       <circle cx="2.5" cy="2.5" r="2.5" fill={accent} stroke={accent} strokeWidth="2" />
       <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke={accent} strokeWidth="2" />
-      <circle cx="2.5" cy="2.5" r="18" fill="transparent" />
     </g>
   )
 }
@@ -31,7 +23,6 @@ export default function DeployBlock({
   onSelect,
   dragHandlers,
   resizeHandlers,
-  inputDragHandlers,
 }: {
   position: WorkbenchPoint
   size: WorkbenchSize
@@ -39,7 +30,6 @@ export default function DeployBlock({
   onSelect?: () => void
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
-  inputDragHandlers?: WorkbenchConnectorDragHandlers
 }) {
   const bodyWidth = Math.max(deployBlockMinSize.width, size.width)
   const bodyHeight = Math.max(deployBlockMinSize.height, size.height)
@@ -86,7 +76,7 @@ export default function DeployBlock({
         onPointerDown={event => event.stopPropagation()}
       />
 
-      <InputPort dragHandlers={inputDragHandlers} />
+      <InputPort />
 
       <g
         className="cursor-grab active:cursor-grabbing"

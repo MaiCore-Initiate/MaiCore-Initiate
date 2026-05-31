@@ -1,4 +1,4 @@
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockMeta, type WorkbenchBlockResizeHandlers, type WorkbenchConnectorDragHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockMeta, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 const inputPortOffset: WorkbenchPoint = { x: 5, y: 115.5 }
 
@@ -62,7 +62,6 @@ export default function InitBlock({
   meta,
   dragHandlers,
   resizeHandlers,
-  connectorDragHandlers,
 }: {
   position: WorkbenchPoint
   size: WorkbenchSize
@@ -72,7 +71,6 @@ export default function InitBlock({
   meta: WorkbenchBlockMeta
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
-  connectorDragHandlers?: WorkbenchConnectorDragHandlers
 }) {
   const bodyX = 5
   const bodyY = 5
@@ -208,12 +206,9 @@ export default function InitBlock({
         className="cursor-crosshair"
         onClick={event => {
           event.stopPropagation()
-          if (!connectorDragHandlers) onAddConnectorClick?.()
+          onAddConnectorClick?.()
         }}
-        onPointerDown={connectorDragHandlers?.onConnectorPointerDown ?? (event => event.stopPropagation())}
-        onPointerMove={connectorDragHandlers?.onConnectorPointerMove}
-        onPointerUp={connectorDragHandlers?.onConnectorPointerUp}
-        onPointerCancel={connectorDragHandlers?.onConnectorPointerCancel}
+        onPointerDown={event => event.stopPropagation()}
       >
         <AddConnectorButton />
         <circle cx="0" cy="12" r="18" fill="transparent" />

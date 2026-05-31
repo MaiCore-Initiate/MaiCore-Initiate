@@ -1,4 +1,4 @@
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConnectorDragHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 export const componentsBlockMinSize: WorkbenchSize = { width: 456, height: 240 }
 export const componentsBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -32,19 +32,11 @@ function AddConnectorButton({ label }: { label?: string }) {
   )
 }
 
-function InputPort({ dragHandlers }: { dragHandlers?: WorkbenchConnectorDragHandlers }) {
+function InputPort() {
   return (
-    <g
-      transform={`translate(${componentsBlockInputOffset.x - 2.5} ${componentsBlockInputOffset.y - 2.5})`}
-      className={dragHandlers ? 'cursor-crosshair' : undefined}
-      onPointerDown={dragHandlers?.onConnectorPointerDown}
-      onPointerMove={dragHandlers?.onConnectorPointerMove}
-      onPointerUp={dragHandlers?.onConnectorPointerUp}
-      onPointerCancel={dragHandlers?.onConnectorPointerCancel}
-    >
+    <g transform={`translate(${componentsBlockInputOffset.x - 2.5} ${componentsBlockInputOffset.y - 2.5})`}>
       <circle cx="2.5" cy="2.5" r="2.5" fill={accent} stroke={accent} strokeWidth="2" />
       <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke={accent} strokeWidth="2" />
-      {dragHandlers ? <circle cx="2.5" cy="2.5" r="18" fill="transparent" /> : null}
     </g>
   )
 }
@@ -97,9 +89,6 @@ export default function ComponentsBlock({
   componentsList,
   dragHandlers,
   resizeHandlers,
-  inputDragHandlers,
-  deployConnectorDragHandlers,
-  componentConnectorDragHandlers,
 }: {
   position: WorkbenchPoint
   size: WorkbenchSize
@@ -112,9 +101,6 @@ export default function ComponentsBlock({
   componentsList: string[]
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
-  inputDragHandlers?: WorkbenchConnectorDragHandlers
-  deployConnectorDragHandlers?: WorkbenchConnectorDragHandlers
-  componentConnectorDragHandlers?: WorkbenchConnectorDragHandlers
 }) {
   const bodyWidth = Math.max(componentsBlockMinSize.width, size.width)
   const bodyHeight = Math.max(componentsBlockMinSize.height, size.height)
@@ -224,7 +210,7 @@ export default function ComponentsBlock({
         onPointerDown={event => event.stopPropagation()}
       />
 
-      <InputPort dragHandlers={inputDragHandlers} />
+      <InputPort />
 
       <g
         className="cursor-grab active:cursor-grabbing"
@@ -282,12 +268,9 @@ export default function ComponentsBlock({
         className="cursor-crosshair"
         onClick={event => {
           event.stopPropagation()
-          if (!deployConnectorDragHandlers) onDeployConnectorClick?.()
+          onDeployConnectorClick?.()
         }}
-        onPointerDown={deployConnectorDragHandlers?.onConnectorPointerDown ?? (event => event.stopPropagation())}
-        onPointerMove={deployConnectorDragHandlers?.onConnectorPointerMove}
-        onPointerUp={deployConnectorDragHandlers?.onConnectorPointerUp}
-        onPointerCancel={deployConnectorDragHandlers?.onConnectorPointerCancel}
+        onPointerDown={event => event.stopPropagation()}
       >
         <AddConnectorButton label="连接部署管理闸" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
@@ -298,12 +281,9 @@ export default function ComponentsBlock({
         className="cursor-crosshair"
         onClick={event => {
           event.stopPropagation()
-          if (!componentConnectorDragHandlers) onComponentConnectorClick?.()
+          onComponentConnectorClick?.()
         }}
-        onPointerDown={componentConnectorDragHandlers?.onConnectorPointerDown ?? (event => event.stopPropagation())}
-        onPointerMove={componentConnectorDragHandlers?.onConnectorPointerMove}
-        onPointerUp={componentConnectorDragHandlers?.onConnectorPointerUp}
-        onPointerCancel={componentConnectorDragHandlers?.onConnectorPointerCancel}
+        onPointerDown={event => event.stopPropagation()}
       >
         <AddConnectorButton label="连接组件界定器" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
