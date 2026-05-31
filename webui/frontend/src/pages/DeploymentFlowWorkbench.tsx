@@ -699,11 +699,13 @@ function OutlineTree({
   sidebarWidth,
   selectedBlockId,
   onBlockSelect,
+  onNodeDoubleClick,
 }: {
   nodes: OutlineNode[]
   sidebarWidth: number
   selectedBlockId: WorkbenchBlockId | null
   onBlockSelect: (blockId: WorkbenchBlockId) => void
+  onNodeDoubleClick: (node: OutlineNode) => void
 }) {
   const [expanded, setExpanded] = useState(() => collectDefaultExpanded(nodes))
   const [selectedId, setSelectedId] = useState(() => selectedBlockId ? findOutlineNodeIdForBlock(nodes, selectedBlockId) : '')
@@ -781,6 +783,16 @@ function OutlineTree({
                   if (blockId) onBlockSelect(blockId)
                 }
               }}
+              onDoubleClick={event => {
+                event.preventDefault()
+                event.stopPropagation()
+                if (selectable) {
+                  setSelectedId(node.id)
+                  const blockId = resolveOutlineBlockId(node)
+                  if (blockId) onBlockSelect(blockId)
+                }
+                onNodeDoubleClick(node)
+              }}
               className="absolute left-0 h-[24px] text-left transition-[top,background-color,opacity,transform] duration-150 ease-out hover:bg-[var(--dfw-outline-hover)]"
               style={{
                 top: index * outlineRowHeight,
@@ -853,6 +865,7 @@ function WorkbenchLeftSidebar({
   outline,
   selectedBlockId,
   onBlockSelect,
+  onOutlineNodeDoubleClick,
 }: {
   collapsed: boolean
   width: number
@@ -862,6 +875,7 @@ function WorkbenchLeftSidebar({
   outline: OutlineNode[]
   selectedBlockId: WorkbenchBlockId | null
   onBlockSelect: (blockId: WorkbenchBlockId) => void
+  onOutlineNodeDoubleClick: (node: OutlineNode) => void
 }) {
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
 
@@ -952,6 +966,7 @@ function WorkbenchLeftSidebar({
         sidebarWidth={width}
         selectedBlockId={selectedBlockId}
         onBlockSelect={onBlockSelect}
+        onNodeDoubleClick={onOutlineNodeDoubleClick}
       />
       <div
         className="absolute bottom-[30px] right-[-5px] top-[30px] w-[10px] cursor-ew-resize"
@@ -979,6 +994,7 @@ export default function DeploymentFlowWorkbench({
   const [rightSidebarWidth, setRightSidebarWidth] = useState(rightSidebarExpandedWidth)
   const [projectInfo, setProjectInfo] = useState<WorkbenchProjectInfo | null>(null)
   const [selectedBlockId, setSelectedBlockId] = useState<WorkbenchBlockId | null>(null)
+  const [rightSidebarFocusTarget, setRightSidebarFocusTarget] = useState<{ id: string; nonce: number } | null>(null)
   const [addNodeAnchor, setAddNodeAnchor] = useState<WorkbenchAddNodeAnchor | null>(null)
   const [meta, setMeta] = useState<WorkbenchMetaState>(defaultWorkbenchMeta)
   const [visibleBlocks, setVisibleBlocks] = useState<WorkbenchVisibleBlocks>(defaultVisibleBlocks)
@@ -1221,6 +1237,16 @@ export default function DeploymentFlowWorkbench({
     }))
   }
 
+  const focusRightSidebarFromOutline = (node: OutlineNode) => {
+    const blockId = resolveOutlineBlockId(node)
+    if (blockId) setSelectedBlockId(blockId)
+    if (rightSidebarCollapsed) setRightSidebarCollapsed(false)
+    setRightSidebarFocusTarget(prev => ({
+      id: node.id,
+      nonce: (prev?.nonce ?? 0) + 1,
+    }))
+  }
+
   return (
     <div
       ref={workbenchRef}
@@ -1255,6 +1281,7 @@ export default function DeploymentFlowWorkbench({
         outline={effectiveOutline}
         selectedBlockId={selectedBlockId}
         onBlockSelect={setSelectedBlockId}
+        onOutlineNodeDoubleClick={focusRightSidebarFromOutline}
       />
       <WorkbenchTopTabs
         onBackToLibrary={onBackToLibrary}
@@ -1269,6 +1296,7 @@ export default function DeploymentFlowWorkbench({
         onResize={setRightSidebarWidth}
         selectedName={formatSelectedBlockName(selectedBlockId, meta)}
         selectedBlockId={selectedBlockId}
+        focusTarget={rightSidebarFocusTarget}
         meta={meta}
         onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
       />

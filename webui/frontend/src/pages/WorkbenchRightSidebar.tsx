@@ -166,12 +166,45 @@ export interface WorkbenchRightSidebarProps {
   onResize: (width: number) => void
   selectedName?: string
   selectedBlockId?: WorkbenchBlockId | null
+  focusTarget?: { id: string; nonce: number } | null
   meta?: WorkbenchModInfoMeta
   onMetaPatch?: (patch: Partial<WorkbenchModInfoMeta>) => void
 }
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+function findOutlineTargetElement(root: HTMLElement, id: string) {
+  const targets = Array.from(root.querySelectorAll<HTMLElement>('[data-outline-target]'))
+  let currentId = id
+
+  while (currentId) {
+    const target = targets.find(element => element.dataset.outlineTarget === currentId)
+    if (target) return target
+
+    const nextId = currentId.replace(/-[^-]+$/, '')
+    if (nextId === currentId) break
+    currentId = nextId
+  }
+
+  return null
+}
+
+function flashOutlineTarget(element: HTMLElement) {
+  return element.animate(
+    [
+      { boxShadow: '0 0 0 0 rgba(0, 144, 255, 0)', backgroundColor: 'transparent', offset: 0 },
+      { boxShadow: '0 0 0 2px var(--dfw-blue)', backgroundColor: 'var(--dfw-outline-selected-bg)', offset: 0.18 },
+      { boxShadow: '0 0 0 0 rgba(0, 144, 255, 0)', backgroundColor: 'transparent', offset: 0.36 },
+      { boxShadow: '0 0 0 2px var(--dfw-blue)', backgroundColor: 'var(--dfw-outline-selected-bg)', offset: 0.64 },
+      { boxShadow: '0 0 0 0 rgba(0, 144, 255, 0)', backgroundColor: 'transparent', offset: 1 },
+    ],
+    {
+      duration: 900,
+      easing: 'ease-in-out',
+    },
+  )
 }
 
 function TextAlignRightGlyph() {
@@ -1042,6 +1075,7 @@ function ArrayListField({
   maxWidth,
   itemAriaLabel,
   presetOptions = [],
+  outlineTargetId,
 }: {
   label: string
   values: string[]
@@ -1049,6 +1083,7 @@ function ArrayListField({
   maxWidth: number
   itemAriaLabel?: string
   presetOptions?: ArrayListPresetOption[]
+  outlineTargetId?: string
 }) {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
@@ -1271,6 +1306,7 @@ function ArrayListField({
   return (
     <div
       className="max-w-full"
+      data-outline-target={outlineTargetId}
       onBlur={event => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setPresetOpen(false)
@@ -1387,6 +1423,7 @@ function ArrayListField({
                 else rowRefs.current.delete(item.id)
               }}
               data-array-list-index={index}
+              data-outline-target={outlineTargetId ? `${outlineTargetId}-${index}` : undefined}
               className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
               style={{
                 width: maxWidth,
@@ -1446,11 +1483,13 @@ function VersionFormattingRuleField({
   values,
   onChange,
   maxWidth,
+  outlineTargetId,
 }: {
   label: string
   values: WorkbenchVersionFormattingRule[]
   onChange: (values: WorkbenchVersionFormattingRule[]) => void
   maxWidth: number
+  outlineTargetId?: string
 }) {
   const [focusedCell, setFocusedCell] = useState<{ index: number; key: keyof WorkbenchVersionFormattingRule } | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
@@ -1670,7 +1709,7 @@ function VersionFormattingRuleField({
   }
 
   return (
-    <div className="max-w-full">
+    <div className="max-w-full" data-outline-target={outlineTargetId}>
       <div className="flex min-h-[36px] max-w-full items-start justify-between gap-[12px]" style={{ width: maxWidth }}>
         <label
           className="block min-h-[36px] min-w-0 flex-1 leading-[36px]"
@@ -1716,10 +1755,12 @@ function VersionFormattingRuleField({
                 else rowRefs.current.delete(item.id)
               }}
               data-formatting-rule-index={index}
+              data-outline-target={outlineTargetId ? `${outlineTargetId}-${index}` : undefined}
               style={{ width: maxWidth }}
               className="flex max-w-full items-stretch gap-[8px]"
             >
               <div
+                data-outline-target={outlineTargetId ? `${outlineTargetId}-${index}-match` : undefined}
                 className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
                   width: matchWidth,
@@ -1764,6 +1805,7 @@ function VersionFormattingRuleField({
               </div>
 
               <div
+                data-outline-target={outlineTargetId ? `${outlineTargetId}-${index}-replace` : undefined}
                 className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
                   width: replaceWidth,
@@ -1816,12 +1858,14 @@ function EnvVariableTableField({
   onChange,
   maxWidth,
   presetOptions = [],
+  outlineTargetId,
 }: {
   label: string
   values: WorkbenchEnvVariableEntry[]
   onChange: (values: WorkbenchEnvVariableEntry[]) => void
   maxWidth: number
   presetOptions?: ArrayListPresetOption[]
+  outlineTargetId?: string
 }) {
   const [focusedCell, setFocusedCell] = useState<{ index: number; key: keyof WorkbenchEnvVariableEntry } | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
@@ -2062,6 +2106,7 @@ function EnvVariableTableField({
   return (
     <div
       className="max-w-full"
+      data-outline-target={outlineTargetId}
       onBlur={event => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setPresetOpen(false)
@@ -2187,10 +2232,12 @@ function EnvVariableTableField({
                 else rowRefs.current.delete(item.id)
               }}
               data-env-variable-entry-index={index}
+              data-outline-target={outlineTargetId ? `${outlineTargetId}-${index}` : undefined}
               style={{ width: maxWidth }}
               className="flex max-w-full items-stretch gap-[8px]"
             >
               <div
+                data-outline-target={outlineTargetId ? `${outlineTargetId}-${index}-name` : undefined}
                 className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
                   width: nameWidth,
@@ -2235,6 +2282,7 @@ function EnvVariableTableField({
               </div>
 
               <div
+                data-outline-target={outlineTargetId ? `${outlineTargetId}-${index}-value` : undefined}
                 className="flex max-w-full items-stretch rounded-[5px] border transition-[border-color,background-color] duration-150"
                 style={{
                   width: valueWidth,
@@ -2288,10 +2336,13 @@ export default function WorkbenchRightSidebar({
   onResize,
   selectedName = '初始化块',
   selectedBlockId = 'init',
+  focusTarget = null,
   meta = emptyModInfoMeta,
   onMetaPatch,
 }: WorkbenchRightSidebarProps) {
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const focusAnimationRef = useRef<Animation | null>(null)
   const fieldAvailableWidth = Math.max(fieldMinWidth, Math.min(fieldMaxWidth, width - 40))
 
   const updateMeta = (patch: Partial<WorkbenchModInfoMeta>) => {
@@ -2414,6 +2465,34 @@ export default function WorkbenchRightSidebar({
   const shouldShowInitMeta = selectedBlockId === 'init'
   const shouldShowComponentsMeta = selectedBlockId === 'components'
   const shouldShowComponentMeta = selectedComponentIndex !== null
+  const componentOutlineTarget = (fieldName: string) => (
+    selectedComponentIndex === null ? undefined : `component-${selectedComponentIndex}-${fieldName}`
+  )
+
+  useEffect(() => {
+    if (!focusTarget || collapsed) return
+
+    let firstFrame = 0
+    let secondFrame = 0
+    firstFrame = requestAnimationFrame(() => {
+      secondFrame = requestAnimationFrame(() => {
+        const scrollContainer = scrollContainerRef.current
+        if (!scrollContainer) return
+
+        const target = findOutlineTargetElement(scrollContainer, focusTarget.id)
+        if (!target) return
+
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        focusAnimationRef.current?.cancel()
+        focusAnimationRef.current = flashOutlineTarget(target)
+      })
+    })
+
+    return () => {
+      cancelAnimationFrame(firstFrame)
+      cancelAnimationFrame(secondFrame)
+    }
+  }, [collapsed, focusTarget, selectedBlockId])
 
   if (collapsed) {
     return (
@@ -2494,10 +2573,10 @@ export default function WorkbenchRightSidebar({
         <TextAlignRightGlyph />
       </button>
 
-      <div className="absolute left-[19.5px] right-[20.5px] top-[102px] bottom-[24px] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div ref={scrollContainerRef} className="absolute left-[19.5px] right-[20.5px] top-[102px] bottom-[24px] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {shouldShowInitMeta ? (
         <div className="flex min-h-[1660px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
-          <section>
+          <section data-outline-target="modinfo-author">
             <FieldLabel>模版作者</FieldLabel>
             <AutoGrowTextField
               value={meta.author}
@@ -2507,17 +2586,18 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          <section>
+          <section data-outline-target="modinfo-tags">
             <ArrayListField
               label="模版标签列表"
               values={meta.tags}
+              outlineTargetId="modinfo-tags"
               onChange={tags => updateMeta({ tags })}
               maxWidth={fieldAvailableWidth}
               itemAriaLabel="模版标签"
             />
           </section>
 
-          <section>
+          <section data-outline-target="modinfo-description">
             <FieldLabel>模版描述</FieldLabel>
             <AutoGrowTextField
               value={meta.description}
@@ -2527,7 +2607,7 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          <section>
+          <section data-outline-target="modinfo-mod-id">
             <FieldLabel>模版唯一ID</FieldLabel>
             <AutoGrowTextField
               value={meta.modId}
@@ -2537,7 +2617,7 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          <section>
+          <section data-outline-target="modinfo-mod-name">
             <FieldLabel>模版显示名称</FieldLabel>
             <AutoGrowTextField
               value={meta.modName}
@@ -2547,7 +2627,7 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          <section>
+          <section data-outline-target="modinfo-version">
             <FieldLabel>模版版本</FieldLabel>
             <AutoGrowTextField
               value={meta.version}
@@ -2557,7 +2637,7 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          <section>
+          <section data-outline-target="modinfo-min-version">
             <FieldLabel>最低支持版本</FieldLabel>
             <AutoGrowTextField
               value={meta.minVersion}
@@ -2567,7 +2647,7 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          <section>
+          <section data-outline-target="modinfo-max-version">
             <FieldLabel>最高支持版本</FieldLabel>
             <AutoGrowTextField
               value={meta.maxVersion}
@@ -2577,7 +2657,7 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          <section>
+          <section data-outline-target="modinfo-file-import">
             <FieldLabel>启用文件导入</FieldLabel>
             <BooleanSwitchField
               value={meta.fileImport}
@@ -2586,10 +2666,11 @@ export default function WorkbenchRightSidebar({
           </section>
 
           <ConditionalField show={meta.fileImport === true}>
-            <section>
+            <section data-outline-target="modinfo-file-import-list">
               <ArrayListField
                 label="文件导入列表"
                 values={meta.fileImportList}
+                outlineTargetId="modinfo-file-import-list"
                 onChange={fileImportList => updateMeta({ fileImportList })}
                 maxWidth={fieldAvailableWidth}
                 itemAriaLabel="文件导入项"
@@ -2597,7 +2678,7 @@ export default function WorkbenchRightSidebar({
             </section>
           </ConditionalField>
 
-          <section>
+          <section data-outline-target="modinfo-runtime">
             <FieldLabel>运行时环境</FieldLabel>
             <RuntimeSelectField
               value={meta.runtime}
@@ -2607,7 +2688,7 @@ export default function WorkbenchRightSidebar({
 
           <ConditionalField show={meta.runtime === 'deno'}>
             <div className="flex flex-col gap-[18px]">
-              <section>
+              <section data-outline-target="modinfo-deno-net">
                 <FieldLabel>Deno网络权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoNet}
@@ -2615,7 +2696,7 @@ export default function WorkbenchRightSidebar({
                 />
               </section>
 
-              <section>
+              <section data-outline-target="modinfo-deno-read">
                 <FieldLabel>Deno读取权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoRead}
@@ -2623,7 +2704,7 @@ export default function WorkbenchRightSidebar({
                 />
               </section>
 
-              <section>
+              <section data-outline-target="modinfo-deno-write">
                 <FieldLabel>Deno写入权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoWrite}
@@ -2631,7 +2712,7 @@ export default function WorkbenchRightSidebar({
                 />
               </section>
 
-              <section>
+              <section data-outline-target="modinfo-deno-env">
                 <FieldLabel>Deno环境变量权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoEnv}
@@ -2639,7 +2720,7 @@ export default function WorkbenchRightSidebar({
                 />
               </section>
 
-              <section>
+              <section data-outline-target="modinfo-deno-run">
                 <FieldLabel>Deno子进程权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoRun}
@@ -2647,7 +2728,7 @@ export default function WorkbenchRightSidebar({
                 />
               </section>
 
-              <section>
+              <section data-outline-target="modinfo-deno-hrtime">
                 <FieldLabel>Deno高精度时间权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoHrtime}
@@ -2655,7 +2736,7 @@ export default function WorkbenchRightSidebar({
                 />
               </section>
 
-              <section>
+              <section data-outline-target="modinfo-deno-ffi">
                 <FieldLabel>Deno动态库权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoFfi}
@@ -2663,7 +2744,7 @@ export default function WorkbenchRightSidebar({
                 />
               </section>
 
-              <section>
+              <section data-outline-target="modinfo-deno-sys">
                 <FieldLabel>Deno系统信息权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoSys}
@@ -2671,7 +2752,7 @@ export default function WorkbenchRightSidebar({
                 />
               </section>
 
-              <section>
+              <section data-outline-target="modinfo-deno-all">
                 <FieldLabel>Deno全部权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoAll}
@@ -2679,7 +2760,7 @@ export default function WorkbenchRightSidebar({
                 />
               </section>
 
-              <section>
+              <section data-outline-target="modinfo-deno-custom-permissions">
                 <FieldLabel>自定义Deno权限</FieldLabel>
                 <BooleanSwitchField
                   value={meta.denoCustomPermissions}
@@ -2688,10 +2769,11 @@ export default function WorkbenchRightSidebar({
               </section>
 
               <ConditionalField show={meta.denoCustomPermissions === true}>
-                <section>
+                <section data-outline-target="modinfo-deno-permission-list">
                   <ArrayListField
                     label="Deno自定义权限列表"
                     values={meta.denoPermissionList}
+                    outlineTargetId="modinfo-deno-permission-list"
                     onChange={denoPermissionList => updateMeta({ denoPermissionList })}
                     maxWidth={fieldAvailableWidth}
                     itemAriaLabel="Deno权限参数"
@@ -2701,7 +2783,7 @@ export default function WorkbenchRightSidebar({
             </div>
           </ConditionalField>
 
-          <section>
+          <section data-outline-target="modinfo-platforms">
             <FieldLabel>平台限制列表</FieldLabel>
             <PlatformSelectField
               values={meta.platforms}
@@ -2710,7 +2792,7 @@ export default function WorkbenchRightSidebar({
             />
           </section>
 
-          <section>
+          <section data-outline-target="modinfo-schema-version">
             <FieldLabel>模版格式版本</FieldLabel>
             <AutoGrowTextField
               value={meta.schemaVersion}
@@ -2722,7 +2804,7 @@ export default function WorkbenchRightSidebar({
         </div>
         ) : shouldShowComponentsMeta ? (
           <div className="flex min-h-[390px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
-            <section>
+            <section data-outline-target="components-env-output">
               <FieldLabel>[COMPONENTS] 环境变量导出</FieldLabel>
               <BooleanSwitchField
                 value={meta.componentsEnvOutput}
@@ -2730,7 +2812,7 @@ export default function WorkbenchRightSidebar({
               />
             </section>
 
-            <section>
+            <section data-outline-target="components-env-input">
               <FieldLabel>[COMPONENTS] 环境变量导入</FieldLabel>
               <BooleanSwitchField
                 value={meta.componentsEnvInput}
@@ -2738,10 +2820,11 @@ export default function WorkbenchRightSidebar({
               />
             </section>
 
-            <section>
+            <section data-outline-target="components-list">
               <ArrayListField
                 label="组件ID列表"
                 values={meta.componentsList}
+                outlineTargetId="components-list"
                 onChange={componentsList => updateMeta({ componentsList })}
                 maxWidth={fieldAvailableWidth}
                 itemAriaLabel="组件ID"
@@ -2751,7 +2834,7 @@ export default function WorkbenchRightSidebar({
         ) : shouldShowComponentMeta ? (
           <div className="flex min-h-[3200px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('name')}>
               <FieldLabel>组件名称</FieldLabel>
               <AutoGrowTextField
                 value={component.name}
@@ -2761,7 +2844,7 @@ export default function WorkbenchRightSidebar({
               />
             </section>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('id')}>
               <FieldLabel>组件ID</FieldLabel>
               <AutoGrowTextField
                 value={component.id}
@@ -2771,7 +2854,7 @@ export default function WorkbenchRightSidebar({
               />
             </section>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('install')}>
               <FieldLabel>需要安装</FieldLabel>
               <BooleanSwitchField
                 value={component.install}
@@ -2780,7 +2863,7 @@ export default function WorkbenchRightSidebar({
             </section>
 
             <ConditionalField show={component.install === true}>
-              <section>
+              <section data-outline-target={componentOutlineTarget('choose')}>
                 <FieldLabel>用户可选安装</FieldLabel>
                 <BooleanSwitchField
                   value={component.choose}
@@ -2789,7 +2872,7 @@ export default function WorkbenchRightSidebar({
               </section>
             </ConditionalField>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('runtime')}>
               <FieldLabel>组件运行时</FieldLabel>
               <RuntimeSelectField
                 value={component.runtime}
@@ -2798,7 +2881,7 @@ export default function WorkbenchRightSidebar({
               />
             </section>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('command-theme')}>
               <FieldLabel>命令主题</FieldLabel>
               <OptionSelectField
                 value={component.commandTheme}
@@ -2808,7 +2891,7 @@ export default function WorkbenchRightSidebar({
               />
             </section>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('check')}>
               <FieldLabel>检查已安装</FieldLabel>
               <BooleanSwitchField
                 value={component.check}
@@ -2818,30 +2901,33 @@ export default function WorkbenchRightSidebar({
 
             <ConditionalField show={component.check === true}>
               <div className="flex flex-col gap-[18px]">
-                <section>
+                <section data-outline-target={componentOutlineTarget('check-command')}>
                   <ArrayListField
                     label="检查命令列表"
                     values={component.checkCommand}
+                    outlineTargetId={componentOutlineTarget('check-command')}
                     onChange={checkCommand => updateComponent({ checkCommand })}
                     maxWidth={fieldAvailableWidth}
                     itemAriaLabel="检查命令"
                   />
                 </section>
 
-                <section>
+                <section data-outline-target={componentOutlineTarget('check-version-contains')}>
                   <ArrayListField
                     label="版本关键字列表"
                     values={component.checkVersionContains}
+                    outlineTargetId={componentOutlineTarget('check-version-contains')}
                     onChange={checkVersionContains => updateComponent({ checkVersionContains })}
                     maxWidth={fieldAvailableWidth}
                     itemAriaLabel="版本关键字"
                   />
                 </section>
 
-                <section>
+                <section data-outline-target={componentOutlineTarget('check-version-regex')}>
                   <ArrayListField
                     label="版本正则匹配列表"
                     values={component.checkVersionRegex}
+                    outlineTargetId={componentOutlineTarget('check-version-regex')}
                     onChange={checkVersionRegex => updateComponent({ checkVersionRegex })}
                     maxWidth={fieldAvailableWidth}
                     itemAriaLabel="版本正则"
@@ -2850,7 +2936,7 @@ export default function WorkbenchRightSidebar({
               </div>
             </ConditionalField>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('get-method')}>
               <FieldLabel>获取方法</FieldLabel>
               <OptionSelectField
                 value={component.getMethod}
@@ -2861,7 +2947,7 @@ export default function WorkbenchRightSidebar({
             </section>
 
             <ConditionalField show={component.getMethod === 'direct'}>
-              <section>
+              <section data-outline-target={componentOutlineTarget('direct-link')}>
                 <FieldLabel>直接下载链接</FieldLabel>
                 <AutoGrowTextField
                   value={component.directLink}
@@ -2874,7 +2960,7 @@ export default function WorkbenchRightSidebar({
 
             <ConditionalField show={component.getMethod === 'get_version'}>
               <div className="flex flex-col gap-[18px]">
-                <section>
+                <section data-outline-target={componentOutlineTarget('get-version')}>
                   <FieldLabel>版本获取方式</FieldLabel>
                   <OptionSelectField
                     value={component.getVersion}
@@ -2885,7 +2971,7 @@ export default function WorkbenchRightSidebar({
                 </section>
 
                 <ConditionalField show={component.getVersion === 'github_repo'}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('github-repo')}>
                     <FieldLabel>GitHub仓库链接</FieldLabel>
                     <AutoGrowTextField
                       value={component.githubRepo}
@@ -2897,10 +2983,11 @@ export default function WorkbenchRightSidebar({
                 </ConditionalField>
 
                 <ConditionalField show={component.getVersion === 'filelink'}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('version-file')}>
                     <ArrayListField
                       label="版本文件来源列表"
                       values={componentVersionFile}
+                      outlineTargetId={componentOutlineTarget('version-file')}
                       onChange={versionFile => updateComponent({ versionFile })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="版本文件来源"
@@ -2909,10 +2996,11 @@ export default function WorkbenchRightSidebar({
                 </ConditionalField>
 
                 <ConditionalField show={component.getVersion === 'custom'}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('version-custom')}>
                     <ArrayListField
                       label="版本脚本来源列表"
                       values={componentVersionCustom}
+                      outlineTargetId={componentOutlineTarget('version-custom')}
                       onChange={versionCustom => updateComponent({ versionCustom })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="版本脚本来源"
@@ -2921,10 +3009,11 @@ export default function WorkbenchRightSidebar({
                 </ConditionalField>
 
                 <ConditionalField show={component.getVersion === 'custom' && showVersionDenoPermissions}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('deno-permissions')}>
                     <ArrayListField
                       label="Deno权限参数列表"
                       values={componentDenoPermissions}
+                      outlineTargetId={componentOutlineTarget('deno-permissions')}
                       onChange={denoPermissions => updateComponent({ denoPermissions })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="Deno权限参数"
@@ -2933,10 +3022,11 @@ export default function WorkbenchRightSidebar({
                 </ConditionalField>
 
                 <ConditionalField show={component.getVersion === 'custom' && showVersionJvmOptions}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('jvm')}>
                     <ArrayListField
                       label="JVM参数列表"
                       values={componentJvm}
+                      outlineTargetId={componentOutlineTarget('jvm')}
                       onChange={jvm => updateComponent({ jvm })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="JVM参数"
@@ -2944,7 +3034,7 @@ export default function WorkbenchRightSidebar({
                   </section>
                 </ConditionalField>
 
-                <section>
+                <section data-outline-target={componentOutlineTarget('splicing-link')}>
                   <FieldLabel>版本拼接链接</FieldLabel>
                   <AutoGrowTextField
                     value={component.splicingLink}
@@ -2954,7 +3044,7 @@ export default function WorkbenchRightSidebar({
                   />
                 </section>
 
-                <section>
+                <section data-outline-target={componentOutlineTarget('format-version')}>
                   <FieldLabel>格式化版本号</FieldLabel>
                   <BooleanSwitchField
                     value={component.formatVersion}
@@ -2963,10 +3053,11 @@ export default function WorkbenchRightSidebar({
                 </section>
 
                 <ConditionalField show={component.formatVersion === true}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('version-formatting-formula')}>
                     <VersionFormattingRuleField
                       label="格式化规则列表"
                       values={component.versionFormattingFormula}
+                      outlineTargetId={componentOutlineTarget('version-formatting-formula')}
                       onChange={versionFormattingFormula => updateComponent({ versionFormattingFormula })}
                       maxWidth={fieldAvailableWidth}
                     />
@@ -2977,7 +3068,7 @@ export default function WorkbenchRightSidebar({
 
             <ConditionalField show={component.getMethod === 'get_link'}>
               <div className="flex flex-col gap-[18px]">
-                <section>
+                <section data-outline-target={componentOutlineTarget('get-link')}>
                   <FieldLabel>链接获取方式</FieldLabel>
                   <OptionSelectField
                     value={component.getLink}
@@ -2988,10 +3079,11 @@ export default function WorkbenchRightSidebar({
                 </section>
 
                 <ConditionalField show={component.getLink === 'filelink' || component.getLink === 'custom'}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('get-link-provide-list')}>
                     <ArrayListField
                       label="可选链接列表"
                       values={componentGetLinkProvideList}
+                      outlineTargetId={componentOutlineTarget('get-link-provide-list')}
                       onChange={getLinkProvideList => updateComponent({ getLinkProvideList })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="可选链接"
@@ -3000,10 +3092,11 @@ export default function WorkbenchRightSidebar({
                 </ConditionalField>
 
                 <ConditionalField show={component.getLink === 'filelink' && componentGetLinkProvideList.length === 0}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('link-file')}>
                     <ArrayListField
                       label="链接文件来源列表"
                       values={componentLinkFile}
+                      outlineTargetId={componentOutlineTarget('link-file')}
                       onChange={linkFile => updateComponent({ linkFile })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="链接文件来源"
@@ -3012,10 +3105,11 @@ export default function WorkbenchRightSidebar({
                 </ConditionalField>
 
                 <ConditionalField show={component.getLink === 'custom' && componentGetLinkProvideList.length === 0}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('link-custom')}>
                     <ArrayListField
                       label="链接脚本来源列表"
                       values={componentLinkCustom}
+                      outlineTargetId={componentOutlineTarget('link-custom')}
                       onChange={linkCustom => updateComponent({ linkCustom })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="链接脚本来源"
@@ -3024,10 +3118,11 @@ export default function WorkbenchRightSidebar({
                 </ConditionalField>
 
                 <ConditionalField show={component.getLink === 'custom' && componentGetLinkProvideList.length === 0 && showLinkDenoPermissions}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('deno-permissions')}>
                     <ArrayListField
                       label="Deno权限参数列表"
                       values={componentDenoPermissions}
+                      outlineTargetId={componentOutlineTarget('deno-permissions')}
                       onChange={denoPermissions => updateComponent({ denoPermissions })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="Deno权限参数"
@@ -3036,10 +3131,11 @@ export default function WorkbenchRightSidebar({
                 </ConditionalField>
 
                 <ConditionalField show={component.getLink === 'custom' && componentGetLinkProvideList.length === 0 && showLinkJvmOptions}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('jvm')}>
                     <ArrayListField
                       label="JVM参数列表"
                       values={componentJvm}
+                      outlineTargetId={componentOutlineTarget('jvm')}
                       onChange={jvm => updateComponent({ jvm })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="JVM参数"
@@ -3049,7 +3145,7 @@ export default function WorkbenchRightSidebar({
               </div>
             </ConditionalField>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('user-choose')}>
               <FieldLabel>用户可选版本</FieldLabel>
               <BooleanSwitchField
                 value={component.userChoose}
@@ -3058,10 +3154,11 @@ export default function WorkbenchRightSidebar({
             </section>
 
             <ConditionalField show={component.userChoose === true}>
-              <section>
+              <section data-outline-target={componentOutlineTarget('choose-list')}>
                 <ArrayListField
                   label="版本选择列表"
                   values={component.chooseList}
+                  outlineTargetId={componentOutlineTarget('choose-list')}
                   onChange={chooseList => updateComponent({ chooseList })}
                   maxWidth={fieldAvailableWidth}
                   itemAriaLabel="版本选择项"
@@ -3071,7 +3168,7 @@ export default function WorkbenchRightSidebar({
 
             <ConditionalField show={component.install === true}>
               <div className="flex flex-col gap-[18px]">
-                <section>
+                <section data-outline-target={componentOutlineTarget('command-install')}>
                   <FieldLabel>命令行安装</FieldLabel>
                   <BooleanSwitchField
                     value={component.commandInstall}
@@ -3080,10 +3177,11 @@ export default function WorkbenchRightSidebar({
                 </section>
 
                 <ConditionalField show={component.commandInstall === true}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('install-command-list')}>
                     <ArrayListField
                       label="安装命令列表"
                       values={component.installCommandList}
+                      outlineTargetId={componentOutlineTarget('install-command-list')}
                       onChange={installCommandList => updateComponent({ installCommandList })}
                       maxWidth={fieldAvailableWidth}
                       itemAriaLabel="安装命令"
@@ -3093,7 +3191,7 @@ export default function WorkbenchRightSidebar({
 
                 <ConditionalField show={component.commandInstall !== true}>
                   <div className="flex flex-col gap-[18px]">
-                    <section>
+                    <section data-outline-target={componentOutlineTarget('install-operate')}>
                       <FieldLabel>安装操作方式</FieldLabel>
                       <OptionSelectField
                         value={component.installOperate}
@@ -3104,10 +3202,11 @@ export default function WorkbenchRightSidebar({
                     </section>
 
                     <ConditionalField show={component.installOperate === 'custom'}>
-                      <section>
+                      <section data-outline-target={componentOutlineTarget('install-custom-list')}>
                         <ArrayListField
                           label="自定义安装规则"
                           values={component.installCustomList}
+                          outlineTargetId={componentOutlineTarget('install-custom-list')}
                           onChange={installCustomList => updateComponent({ installCustomList })}
                           maxWidth={fieldAvailableWidth}
                           itemAriaLabel="自定义安装规则"
@@ -3117,7 +3216,7 @@ export default function WorkbenchRightSidebar({
                   </div>
                 </ConditionalField>
 
-                <section>
+                <section data-outline-target={componentOutlineTarget('install-path')}>
                   <FieldLabel>安装路径</FieldLabel>
                   <AutoGrowTextField
                     value={component.installPath}
@@ -3128,7 +3227,7 @@ export default function WorkbenchRightSidebar({
                 </section>
 
                 <ConditionalField show={component.installPath === '$CustomPath'}>
-                  <section>
+                  <section data-outline-target={componentOutlineTarget('custom-path')}>
                     <FieldLabel>自定义路径</FieldLabel>
                     <AutoGrowTextField
                       value={component.customPath}
@@ -3141,7 +3240,7 @@ export default function WorkbenchRightSidebar({
               </div>
             </ConditionalField>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('before-command')}>
               <FieldLabel>安装前操作</FieldLabel>
               <BooleanSwitchField
                 value={component.beforeCommand}
@@ -3150,10 +3249,11 @@ export default function WorkbenchRightSidebar({
             </section>
 
             <ConditionalField show={component.beforeCommand === true}>
-              <section>
+              <section data-outline-target={componentOutlineTarget('before-command-list')}>
                 <ArrayListField
                   label="安装前命令列表"
                   values={component.beforeCommandList}
+                  outlineTargetId={componentOutlineTarget('before-command-list')}
                   onChange={beforeCommandList => updateComponent({ beforeCommandList })}
                   maxWidth={fieldAvailableWidth}
                   itemAriaLabel="安装前命令"
@@ -3161,7 +3261,7 @@ export default function WorkbenchRightSidebar({
               </section>
             </ConditionalField>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('after-command')}>
               <FieldLabel>安装后操作</FieldLabel>
               <BooleanSwitchField
                 value={component.afterCommand}
@@ -3170,10 +3270,11 @@ export default function WorkbenchRightSidebar({
             </section>
 
             <ConditionalField show={component.afterCommand === true}>
-              <section>
+              <section data-outline-target={componentOutlineTarget('after-command-list')}>
                 <ArrayListField
                   label="安装后命令列表"
                   values={component.afterCommandList}
+                  outlineTargetId={componentOutlineTarget('after-command-list')}
                   onChange={afterCommandList => updateComponent({ afterCommandList })}
                   maxWidth={fieldAvailableWidth}
                   itemAriaLabel="安装后命令"
@@ -3181,7 +3282,7 @@ export default function WorkbenchRightSidebar({
               </section>
             </ConditionalField>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('env-output')}>
               <FieldLabel>组件环境变量导出</FieldLabel>
               <BooleanSwitchField
                 value={component.envOutput}
@@ -3190,10 +3291,11 @@ export default function WorkbenchRightSidebar({
             </section>
 
             <ConditionalField show={component.envOutput === true}>
-              <section>
+              <section data-outline-target={componentOutlineTarget('env-output-list')}>
                 <EnvVariableTableField
                   label="导出变量列表"
                   values={componentEnvOutputList}
+                  outlineTargetId={componentOutlineTarget('env-output-list')}
                   onChange={envOutputList => updateComponent({ envOutputList })}
                   maxWidth={fieldAvailableWidth}
                   presetOptions={componentEnvOutputOptions}
@@ -3201,7 +3303,7 @@ export default function WorkbenchRightSidebar({
               </section>
             </ConditionalField>
 
-            <section>
+            <section data-outline-target={componentOutlineTarget('env-input')}>
               <FieldLabel>组件环境变量导入</FieldLabel>
               <BooleanSwitchField
                 value={component.envInput}
@@ -3210,10 +3312,11 @@ export default function WorkbenchRightSidebar({
             </section>
 
             <ConditionalField show={component.envInput === true}>
-              <section>
+              <section data-outline-target={componentOutlineTarget('env-input-list')}>
                 <EnvVariableTableField
                   label="导入变量列表"
                   values={componentEnvInputList}
+                  outlineTargetId={componentOutlineTarget('env-input-list')}
                   onChange={envInputList => updateComponent({ envInputList })}
                   maxWidth={fieldAvailableWidth}
                   presetOptions={componentEnvInputOptions}
