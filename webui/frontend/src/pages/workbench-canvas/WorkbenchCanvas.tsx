@@ -388,7 +388,13 @@ export default function WorkbenchCanvas({
           onSelectedBlockChange?.(null)
         }}
       >
-        <svg width="1920" height="1080" viewBox="0 0 1920 1080" className="block overflow-visible" style={{ fill: 'currentColor' }}>
+        <svg
+          width="1920"
+          height="1080"
+          viewBox="0 0 1920 1080"
+          className="block select-none overflow-visible"
+          style={{ fill: 'currentColor', userSelect: 'none', WebkitUserSelect: 'none' }}
+        >
           <CanvasConnectionLayer from={startEndpointOutput} to={initBlockInput} />
           {blockVisibility.components && (
             <CanvasConnectionLayer from={initBlockOutput} to={componentsBlockInput} stroke="#22b386" />
