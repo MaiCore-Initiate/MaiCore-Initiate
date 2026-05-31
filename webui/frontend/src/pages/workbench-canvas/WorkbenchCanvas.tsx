@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import AddNodePopover from './AddNodePopover'
 import CanvasConnectionLayer from './CanvasConnectionLayer'
 import ComponentBlock, { componentBlockInputOffset, componentBlockMinSize, resolveComponentBlockOutputOffset } from './blocks/ComponentBlock'
-import ComponentsBlock, { componentsBlockInputOffset, componentsBlockMinSize, resolveComponentsBlockOutputOffset } from './blocks/ComponentsBlock'
+import ComponentsBlock, { componentsBlockInputOffset, componentsBlockMinSize, resolveComponentsBlockComponentOutputOffset, resolveComponentsBlockOutputOffset } from './blocks/ComponentsBlock'
+import DeployBlock, { deployBlockInputOffset, deployBlockMinSize } from './blocks/DeployBlock'
 import InitBlock from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
-import { workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchVisibleBlocks } from './types'
+import { workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConnectionSource, type WorkbenchConnectorDragHandlers, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchVisibleBlocks } from './types'
 
 const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
@@ -85,10 +86,23 @@ const defaultBlockMeta: WorkbenchBlockMeta = {
 const initBlockInputOffset: WorkbenchPoint = { x: 5, y: 115.5 }
 const startEndpointOutputOffset: WorkbenchPoint = { x: 95.711, y: 70.711 }
 const longPressMs = 220
+const connectorLongPressMs = 180
 const initBlockMinSize: WorkbenchSize = { width: 421, height: 431 }
-const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, componentCount: 0 }
+const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, componentCount: 0 }
 type DraggableBlockId = WorkbenchBlockId
 type ResizableBlockId = Exclude<WorkbenchBlockId, 'start'>
+type ConnectorEndpoint = 'components-input' | 'deploy-input' | `component-input:${number}`
+
+type ConnectorDragState = {
+  pointerId: number
+  source: WorkbenchConnectionSource
+  from: WorkbenchPoint
+  current: WorkbenchPoint
+  active: boolean
+  timer: number
+  mode: 'create' | 'detach'
+  detachTarget?: ConnectorEndpoint
+}
 
 function resolveInitBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
   return {
@@ -120,6 +134,13 @@ function resizeArray<T>(values: T[], length: number, createValue: (index: number
   ]
 }
 
+function canvasPointFromEvent(event: PointerEvent<SVGGElement>, viewport: { scale: number; x: number; y: number }): WorkbenchPoint {
+  return {
+    x: (event.clientX - viewport.x) / (viewport.scale || 1),
+    y: (event.clientY - viewport.y) / (viewport.scale || 1),
+  }
+}
+
 export default function WorkbenchCanvas({
   viewport,
   addNodeAnchor = null,
@@ -136,9 +157,17 @@ export default function WorkbenchCanvas({
   const [initBlockSize, setInitBlockSize] = useState<WorkbenchSize>(initBlockMinSize)
   const [componentsBlockPosition, setComponentsBlockPosition] = useState<WorkbenchPoint>({ x: 1332, y: 342 })
   const [componentsBlockSize, setComponentsBlockSize] = useState<WorkbenchSize>(componentsBlockMinSize)
+  const [deployBlockPosition, setDeployBlockPosition] = useState<WorkbenchPoint>({ x: 1900, y: 342 })
+  const [deployBlockSize, setDeployBlockSize] = useState<WorkbenchSize>(deployBlockMinSize)
   const [componentBlockPositions, setComponentBlockPositions] = useState<WorkbenchPoint[]>([])
   const [componentBlockSizes, setComponentBlockSizes] = useState<WorkbenchSize[]>([])
+  const [componentConnections, setComponentConnections] = useState<boolean[]>([])
+  const [componentsConnected, setComponentsConnected] = useState(false)
+  const [deployConnected, setDeployConnected] = useState(false)
   const [addNodePopoverPosition, setAddNodePopoverPosition] = useState<WorkbenchPoint | null>(null)
+  const [addNodePopoverSource, setAddNodePopoverSource] = useState<WorkbenchConnectionSource | null>(null)
+  const [connectorDrag, setConnectorDrag] = useState<ConnectorDragState | null>(null)
+  const connectorDragRef = useRef<ConnectorDragState | null>(null)
   const dragRef = useRef<{
     pointerId: number
     blockId: DraggableBlockId
@@ -162,16 +191,24 @@ export default function WorkbenchCanvas({
     window.clearTimeout(dragRef.current.timer)
   }
 
+  const clearConnectorDragTimer = () => {
+    if (!connectorDragRef.current) return
+    window.clearTimeout(connectorDragRef.current.timer)
+  }
+
   useEffect(() => {
     const count = Math.max(0, blockVisibility.componentCount)
     setComponentBlockPositions(current => resizeArray(current, count, createDefaultComponentPosition))
     setComponentBlockSizes(current => resizeArray(current, count, () => componentBlockMinSize))
+    setComponentConnections(current => resizeArray(current, count, () => false))
   }, [blockVisibility.componentCount])
+
 
   const setBlockPosition = (blockId: DraggableBlockId, position: WorkbenchPoint) => {
     const componentIndex = parseComponentBlockIndex(blockId)
     if (blockId === 'init') setInitBlockPosition(position)
     else if (blockId === 'components') setComponentsBlockPosition(position)
+    else if (blockId === 'deploy') setDeployBlockPosition(position)
     else if (componentIndex !== null) {
       setComponentBlockPositions(current => current.map((item, index) => (index === componentIndex ? position : item)))
     }
@@ -235,20 +272,29 @@ export default function WorkbenchCanvas({
       ? initBlockSize
       : blockId === 'components'
         ? componentsBlockSize
-        : componentBlockSizes[parseComponentBlockIndex(blockId) ?? -1] ?? componentBlockMinSize
+        : blockId === 'deploy'
+          ? deployBlockSize
+          : componentBlockSizes[parseComponentBlockIndex(blockId) ?? -1] ?? componentBlockMinSize
   )
 
   const resizeBlock = (blockId: ResizableBlockId, size: WorkbenchSize) => {
     const componentIndex = parseComponentBlockIndex(blockId)
     if (blockId === 'init') setInitBlockSize(size)
     else if (blockId === 'components') setComponentsBlockSize(size)
+    else if (blockId === 'deploy') setDeployBlockSize(size)
     else if (componentIndex !== null) {
       setComponentBlockSizes(current => current.map((item, index) => (index === componentIndex ? size : item)))
     }
   }
 
   const getBlockMinSize = (blockId: ResizableBlockId) => (
-    blockId === 'init' ? initBlockMinSize : blockId === 'components' ? componentsBlockMinSize : componentBlockMinSize
+    blockId === 'init'
+      ? initBlockMinSize
+      : blockId === 'components'
+        ? componentsBlockMinSize
+        : blockId === 'deploy'
+          ? deployBlockMinSize
+          : componentBlockMinSize
   )
 
   const startBlockResize = (blockId: ResizableBlockId, direction: WorkbenchResizeDirection, event: PointerEvent<SVGRectElement>) => {
@@ -320,10 +366,19 @@ export default function WorkbenchCanvas({
     x: componentsBlockPosition.x + componentsBlockInputOffset.x,
     y: componentsBlockPosition.y + componentsBlockInputOffset.y,
   }
-  const componentsBlockOutputOffset = resolveComponentsBlockOutputOffset(componentsBlockSize)
-  const componentsBlockOutput = {
-    x: componentsBlockPosition.x + componentsBlockOutputOffset.x,
-    y: componentsBlockPosition.y + componentsBlockOutputOffset.y,
+  const componentsDeployOutputOffset = resolveComponentsBlockOutputOffset(componentsBlockSize)
+  const componentsDeployOutput = {
+    x: componentsBlockPosition.x + componentsDeployOutputOffset.x,
+    y: componentsBlockPosition.y + componentsDeployOutputOffset.y,
+  }
+  const componentsComponentOutputOffset = resolveComponentsBlockComponentOutputOffset(componentsBlockSize)
+  const componentsComponentOutput = {
+    x: componentsBlockPosition.x + componentsComponentOutputOffset.x,
+    y: componentsBlockPosition.y + componentsComponentOutputOffset.y,
+  }
+  const deployBlockInput = {
+    x: deployBlockPosition.x + deployBlockInputOffset.x,
+    y: deployBlockPosition.y + deployBlockInputOffset.y,
   }
   const componentBlocks = Array.from({ length: blockVisibility.componentCount }, (_, index) => {
     const position = componentBlockPositions[index] ?? createDefaultComponentPosition(index)
@@ -337,35 +392,181 @@ export default function WorkbenchCanvas({
       x: position.x + outputOffset.x,
       y: position.y + outputOffset.y,
     }
-    return { index, blockId: createComponentBlockId(index), position, size, input, output } as const
+    return { index, blockId: createComponentBlockId(index), position, size, input, output, connected: componentConnections[index] ?? false } as const
   })
 
-  const openAddNodePopover = (position: WorkbenchPoint) => {
+  const endpointTargets = [
+    ...(blockVisibility.components ? [{ endpoint: 'components-input' as const, point: componentsBlockInput }] : []),
+    ...(blockVisibility.deploy ? [{ endpoint: 'deploy-input' as const, point: deployBlockInput }] : []),
+    ...componentBlocks.map(block => ({ endpoint: `component-input:${block.index}` as const, point: block.input })),
+  ]
+
+  const findConnectorTarget = (point: WorkbenchPoint, exclude?: ConnectorEndpoint) => {
+    const threshold = 34
+    return endpointTargets.find(target => {
+      if (target.endpoint === exclude) return false
+      return Math.hypot(point.x - target.point.x, point.y - target.point.y) <= threshold
+    }) ?? null
+  }
+
+  const setConnectionForEndpoint = (endpoint: ConnectorEndpoint, connected: boolean) => {
+    if (endpoint === 'components-input') setComponentsConnected(connected)
+    else if (endpoint === 'deploy-input') setDeployConnected(connected)
+    else {
+      const index = Number(endpoint.slice('component-input:'.length))
+      if (Number.isInteger(index)) {
+        setComponentConnections(current => current.map((item, itemIndex) => (itemIndex === index ? connected : item)))
+      }
+    }
+  }
+
+  const connectTarget = (source: WorkbenchConnectionSource, endpoint: ConnectorEndpoint | null) => {
+    if (source === 'init-components' && endpoint === 'components-input') {
+      setComponentsConnected(true)
+      return true
+    }
+    if (source === 'components-deploy' && endpoint === 'deploy-input') {
+      setDeployConnected(true)
+      return true
+    }
+    if (source === 'components-component' && endpoint?.startsWith('component-input:')) {
+      const index = Number(endpoint.slice('component-input:'.length))
+      if (Number.isInteger(index)) {
+        setComponentConnections(current => current.map((item, itemIndex) => (itemIndex === index ? true : item)))
+        return true
+      }
+    }
+    return false
+  }
+
+  const sourcePoint = (source: WorkbenchConnectionSource) => {
+    if (source === 'init-components') return initBlockOutput
+    if (source === 'components-deploy') return componentsDeployOutput
+    return componentsComponentOutput
+  }
+
+  const openAddNodePopover = (position: WorkbenchPoint, source: WorkbenchConnectionSource | null = null) => {
     setAddNodePopoverPosition({
       x: position.x + 32,
       y: position.y - 42,
     })
+    setAddNodePopoverSource(source)
   }
 
   useEffect(() => {
     if (!addNodeAnchor) return
-    openAddNodePopover(addNodeAnchor.point)
+    openAddNodePopover(addNodeAnchor.point, addNodeAnchor.source ?? null)
   }, [addNodeAnchor])
 
   const addComponentsBlock = () => {
     onVisibleBlocksChange?.({ components: true })
+    if (addNodePopoverSource === 'init-components') setComponentsConnected(true)
     onSelectedBlockChange?.('components')
     setAddNodePopoverPosition(null)
+    setAddNodePopoverSource(null)
+  }
+
+  const addDeployBlock = () => {
+    onVisibleBlocksChange?.({ deploy: true })
+    if (addNodePopoverSource === 'components-deploy') setDeployConnected(true)
+    onSelectedBlockChange?.('deploy')
+    setAddNodePopoverPosition(null)
+    setAddNodePopoverSource(null)
   }
 
   const addComponentBlock = () => {
     const nextIndex = blockVisibility.componentCount
-    setComponentBlockPositions(current => [...current, createDefaultComponentPosition(nextIndex)])
+    const position = addNodePopoverSource === 'components-component'
+      ? { x: componentsComponentOutput.x - componentBlockInputOffset.x - 160, y: componentsComponentOutput.y + 110 }
+      : createDefaultComponentPosition(nextIndex)
+    setComponentBlockPositions(current => [...current, position])
     setComponentBlockSizes(current => [...current, componentBlockMinSize])
+    setComponentConnections(current => [...current, addNodePopoverSource === 'components-component'])
     onVisibleBlocksChange?.({ componentCount: nextIndex + 1 })
     onSelectedBlockChange?.(createComponentBlockId(nextIndex))
     setAddNodePopoverPosition(null)
+    setAddNodePopoverSource(null)
   }
+
+  const startConnectorDrag = (source: WorkbenchConnectionSource, from: WorkbenchPoint, mode: 'create' | 'detach', event: PointerEvent<SVGGElement>, detachTarget?: ConnectorEndpoint) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const currentTarget = event.currentTarget
+    currentTarget.setPointerCapture(event.pointerId)
+    const state: ConnectorDragState = {
+      pointerId: event.pointerId,
+      source,
+      from,
+      current: canvasPointFromEvent(event, viewport),
+      active: false,
+      timer: window.setTimeout(() => {
+        const current = connectorDragRef.current
+        if (!current || current.pointerId !== event.pointerId) return
+        const next = { ...current, active: true }
+        connectorDragRef.current = next
+        setConnectorDrag(next)
+      }, connectorLongPressMs),
+      mode,
+      detachTarget,
+    }
+    connectorDragRef.current = state
+    setConnectorDrag(state)
+  }
+
+  const moveConnectorDrag = (event: PointerEvent<SVGGElement>) => {
+    const drag = connectorDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    const next = { ...drag, current: canvasPointFromEvent(event, viewport) }
+    connectorDragRef.current = next
+    setConnectorDrag(next)
+  }
+
+  const stopConnectorDrag = (event: PointerEvent<SVGGElement>) => {
+    const drag = connectorDragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    event.preventDefault()
+    event.stopPropagation()
+    clearConnectorDragTimer()
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    if (drag.active) {
+      const target = findConnectorTarget(drag.current, drag.detachTarget)
+      if (drag.mode === 'detach') {
+        if (!target) {
+          setConnectionForEndpoint(drag.detachTarget!, false)
+        } else if (target.endpoint !== drag.detachTarget && connectTarget(drag.source, target.endpoint)) {
+          setConnectionForEndpoint(drag.detachTarget!, false)
+        }
+      } else if (target) {
+        connectTarget(drag.source, target.endpoint)
+      } else {
+        openAddNodePopover(drag.current, drag.source)
+      }
+    } else if (drag.mode === 'create') {
+      openAddNodePopover(sourcePoint(drag.source), drag.source)
+    }
+
+    connectorDragRef.current = null
+    setConnectorDrag(null)
+  }
+
+  const createConnectorDragHandlers = (source: WorkbenchConnectionSource, from: WorkbenchPoint): WorkbenchConnectorDragHandlers => ({
+    onConnectorPointerDown: (event: PointerEvent<SVGGElement>) => startConnectorDrag(source, from, 'create', event),
+    onConnectorPointerMove: moveConnectorDrag,
+    onConnectorPointerUp: stopConnectorDrag,
+    onConnectorPointerCancel: stopConnectorDrag,
+  })
+
+  const createDetachDragHandlers = (source: WorkbenchConnectionSource, from: WorkbenchPoint, target: ConnectorEndpoint): WorkbenchConnectorDragHandlers => ({
+    onConnectorPointerDown: (event: PointerEvent<SVGGElement>) => startConnectorDrag(source, from, 'detach', event, target),
+    onConnectorPointerMove: moveConnectorDrag,
+    onConnectorPointerUp: stopConnectorDrag,
+    onConnectorPointerCancel: stopConnectorDrag,
+  })
 
   const addNodePopoverScreenPosition = addNodePopoverPosition
     ? {
@@ -385,6 +586,7 @@ export default function WorkbenchCanvas({
         }}
         onClick={() => {
           setAddNodePopoverPosition(null)
+          setAddNodePopoverSource(null)
           onSelectedBlockChange?.(null)
         }}
       >
@@ -396,17 +598,23 @@ export default function WorkbenchCanvas({
           style={{ fill: 'currentColor', userSelect: 'none', WebkitUserSelect: 'none' }}
         >
           <CanvasConnectionLayer from={startEndpointOutput} to={initBlockInput} />
-          {blockVisibility.components && (
+          {blockVisibility.components && componentsConnected && (
             <CanvasConnectionLayer from={initBlockOutput} to={componentsBlockInput} stroke="#22b386" />
           )}
-          {componentBlocks.map(block => (
+          {blockVisibility.deploy && deployConnected && (
+            <CanvasConnectionLayer from={componentsDeployOutput} to={deployBlockInput} stroke="#d97706" />
+          )}
+          {componentBlocks.filter(block => block.connected).map(block => (
             <CanvasConnectionLayer
               key={`component-line-${block.index}`}
-              from={blockVisibility.components ? componentsBlockOutput : initBlockOutput}
+              from={componentsComponentOutput}
               to={block.input}
               stroke="#22b386"
             />
           ))}
+          {connectorDrag?.active && (
+            <CanvasConnectionLayer from={connectorDrag.from} to={connectorDrag.current} stroke="#0084ff" arrow />
+          )}
           <StartEndpointBlock
             position={startEndpointPosition}
             selected={selectedBlockId === 'start'}
@@ -418,10 +626,11 @@ export default function WorkbenchCanvas({
             size={initBlockSize}
             selected={selectedBlockId === 'init'}
             onSelect={() => onSelectedBlockChange?.('init')}
-            onAddConnectorClick={() => openAddNodePopover(initBlockOutput)}
+            onAddConnectorClick={() => openAddNodePopover(initBlockOutput, 'init-components')}
             meta={meta}
             dragHandlers={createDragHandlers('init', initBlockPosition)}
             resizeHandlers={createResizeHandlers('init')}
+            connectorDragHandlers={createConnectorDragHandlers('init-components', initBlockOutput)}
           />
           {blockVisibility.components && (
             <ComponentsBlock
@@ -429,12 +638,27 @@ export default function WorkbenchCanvas({
               size={componentsBlockSize}
               selected={selectedBlockId === 'components'}
               onSelect={() => onSelectedBlockChange?.('components')}
-              onAddConnectorClick={() => openAddNodePopover(componentsBlockOutput)}
+              onDeployConnectorClick={() => openAddNodePopover(componentsDeployOutput, 'components-deploy')}
+              onComponentConnectorClick={() => openAddNodePopover(componentsComponentOutput, 'components-component')}
               componentsEnvOutput={meta.componentsEnvOutput}
               componentsEnvInput={meta.componentsEnvInput}
               componentsList={meta.componentsList}
               dragHandlers={createDragHandlers('components', componentsBlockPosition)}
               resizeHandlers={createResizeHandlers('components')}
+              inputDragHandlers={componentsConnected ? createDetachDragHandlers('init-components', initBlockOutput, 'components-input') : undefined}
+              deployConnectorDragHandlers={createConnectorDragHandlers('components-deploy', componentsDeployOutput)}
+              componentConnectorDragHandlers={createConnectorDragHandlers('components-component', componentsComponentOutput)}
+            />
+          )}
+          {blockVisibility.deploy && (
+            <DeployBlock
+              position={deployBlockPosition}
+              size={deployBlockSize}
+              selected={selectedBlockId === 'deploy'}
+              onSelect={() => onSelectedBlockChange?.('deploy')}
+              dragHandlers={createDragHandlers('deploy', deployBlockPosition)}
+              resizeHandlers={createResizeHandlers('deploy')}
+              inputDragHandlers={deployConnected ? createDetachDragHandlers('components-deploy', componentsDeployOutput, 'deploy-input') : undefined}
             />
           )}
           {componentBlocks.map(block => (
@@ -449,6 +673,7 @@ export default function WorkbenchCanvas({
               component={meta.components[block.index] ?? defaultComponentMeta}
               dragHandlers={createDragHandlers(block.blockId, block.position)}
               resizeHandlers={createResizeHandlers(block.blockId)}
+              inputDragHandlers={block.connected ? createDetachDragHandlers('components-component', componentsComponentOutput, `component-input:${block.index}`) : undefined}
             />
           ))}
         </svg>
@@ -462,6 +687,7 @@ export default function WorkbenchCanvas({
             onClick={event => {
               event.stopPropagation()
               setAddNodePopoverPosition(null)
+              setAddNodePopoverSource(null)
             }}
             onPointerDown={event => event.stopPropagation()}
             aria-label="关闭添加节点菜单"
@@ -469,9 +695,15 @@ export default function WorkbenchCanvas({
           <AddNodePopover
             position={addNodePopoverScreenPosition}
             componentsVisible={blockVisibility.components}
+            deployVisible={blockVisibility.deploy}
+            source={addNodePopoverSource}
             onAddComponents={addComponentsBlock}
+            onAddDeploy={addDeployBlock}
             onAddComponent={addComponentBlock}
-            onClose={() => setAddNodePopoverPosition(null)}
+            onClose={() => {
+              setAddNodePopoverPosition(null)
+              setAddNodePopoverSource(null)
+            }}
           />
         </>
       )}

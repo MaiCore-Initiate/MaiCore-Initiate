@@ -98,9 +98,12 @@ export interface WorkbenchPoint {
   y: number
 }
 
+export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component'
+
 export interface WorkbenchAddNodeAnchor {
   id: number
   point: WorkbenchPoint
+  source?: WorkbenchConnectionSource | null
 }
 
 export interface WorkbenchSize {
@@ -119,10 +122,11 @@ export interface WorkbenchCanvasProps {
 }
 
 export type WorkbenchComponentBlockId = `component:${number}`
-export type WorkbenchBlockId = 'start' | 'init' | 'components' | WorkbenchComponentBlockId
+export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | WorkbenchComponentBlockId
 
 export interface WorkbenchVisibleBlocks {
   components: boolean
+  deploy: boolean
   componentCount: number
 }
 
@@ -140,4 +144,11 @@ export interface WorkbenchBlockResizeHandlers {
   onResizePointerMove?: (event: PointerEvent<SVGRectElement>) => void
   onResizePointerUp?: (event: PointerEvent<SVGRectElement>) => void
   onResizePointerCancel?: (event: PointerEvent<SVGRectElement>) => void
+}
+
+export interface WorkbenchConnectorDragHandlers {
+  onConnectorPointerDown?: (event: PointerEvent<SVGGElement>) => void
+  onConnectorPointerMove?: (event: PointerEvent<SVGGElement>) => void
+  onConnectorPointerUp?: (event: PointerEvent<SVGGElement>) => void
+  onConnectorPointerCancel?: (event: PointerEvent<SVGGElement>) => void
 }

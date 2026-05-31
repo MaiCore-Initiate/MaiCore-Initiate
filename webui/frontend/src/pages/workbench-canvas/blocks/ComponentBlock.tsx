@@ -1,4 +1,4 @@
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchConnectorDragHandlers, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
 
 export const componentBlockMinSize: WorkbenchSize = { width: 520, height: 430 }
 export const componentBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -24,11 +24,19 @@ function AddConnectorButton() {
   )
 }
 
-function InputPort() {
+function InputPort({ dragHandlers }: { dragHandlers?: WorkbenchConnectorDragHandlers }) {
   return (
-    <g transform={`translate(${componentBlockInputOffset.x - 2.5} ${componentBlockInputOffset.y - 2.5})`}>
+    <g
+      transform={`translate(${componentBlockInputOffset.x - 2.5} ${componentBlockInputOffset.y - 2.5})`}
+      className={dragHandlers ? 'cursor-crosshair' : undefined}
+      onPointerDown={dragHandlers?.onConnectorPointerDown}
+      onPointerMove={dragHandlers?.onConnectorPointerMove}
+      onPointerUp={dragHandlers?.onConnectorPointerUp}
+      onPointerCancel={dragHandlers?.onConnectorPointerCancel}
+    >
       <circle cx="2.5" cy="2.5" r="2.5" fill={accent} stroke={accent} strokeWidth="2" />
       <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke={accent} strokeWidth="2" />
+      {dragHandlers ? <circle cx="2.5" cy="2.5" r="18" fill="transparent" /> : null}
     </g>
   )
 }
@@ -98,6 +106,7 @@ export default function ComponentBlock({
   component,
   dragHandlers,
   resizeHandlers,
+  inputDragHandlers,
 }: {
   blockIndex: number
   position: WorkbenchPoint
@@ -108,6 +117,7 @@ export default function ComponentBlock({
   component: WorkbenchComponentMeta
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
+  inputDragHandlers?: WorkbenchConnectorDragHandlers
 }) {
   const bodyWidth = Math.max(componentBlockMinSize.width, size.width)
   const bodyHeight = Math.max(componentBlockMinSize.height, size.height)
@@ -257,7 +267,7 @@ export default function ComponentBlock({
       >
         <AddConnectorButton />
       </g>
-      <InputPort />
+      <InputPort dragHandlers={inputDragHandlers} />
 
       <g
         className="cursor-grab active:cursor-grabbing"

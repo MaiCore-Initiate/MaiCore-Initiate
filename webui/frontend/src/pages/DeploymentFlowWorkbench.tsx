@@ -27,10 +27,11 @@ const baseBlockNames = {
   start: '起始端点',
   init: '初始化块',
   components: '[COMPONENTS]',
+  deploy: '[DEPLOY]',
 }
 
 type WorkbenchViewport = { scale: number; x: number; y: number }
-const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, componentCount: 0 }
+const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, componentCount: 0 }
 
 export type OutlineIconType = 'boolean' | 'array' | 'object' | 'string' | 'number'
 export type OutlineNodeTone = 'normal' | 'locked' | 'note'
@@ -445,6 +446,16 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
         blockId: createComponentBlockId(index),
         children: createComponentOutlineChildren(meta.components[index] ?? defaultComponentMeta, index),
       })),
+    })
+  }
+
+  if (visibleBlocks.deploy) {
+    nodes.push({
+      id: 'deploy',
+      label: '[DEPLOY]',
+      defaultExpanded: true,
+      blockId: 'deploy',
+      children: [],
     })
   }
 

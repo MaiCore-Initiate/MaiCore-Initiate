@@ -1,6 +1,6 @@
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConnectorDragHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
-export const componentsBlockMinSize: WorkbenchSize = { width: 456, height: 210 }
+export const componentsBlockMinSize: WorkbenchSize = { width: 456, height: 240 }
 export const componentsBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
 
 const bodyX = 5
@@ -14,21 +14,37 @@ export function resolveComponentsBlockOutputOffset(size: WorkbenchSize): Workben
   }
 }
 
-function AddConnectorButton() {
+export function resolveComponentsBlockComponentOutputOffset(size: WorkbenchSize): WorkbenchPoint {
+  return {
+    x: bodyX + Math.max(componentsBlockMinSize.width, size.width) / 2,
+    y: bodyY + Math.max(componentsBlockMinSize.height, size.height),
+  }
+}
+
+function AddConnectorButton({ label }: { label?: string }) {
   return (
     <g transform="translate(-12 0)">
       <circle cx="12" cy="12" r="12" fill="var(--dfw-bg)" stroke={accent} strokeWidth="2" />
       <path d="M7,12h10" fill="none" stroke={accent} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
       <path d="M12,7v10" fill="none" stroke={accent} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      {label ? <title>{label}</title> : null}
     </g>
   )
 }
 
-function InputPort() {
+function InputPort({ dragHandlers }: { dragHandlers?: WorkbenchConnectorDragHandlers }) {
   return (
-    <g transform={`translate(${componentsBlockInputOffset.x - 2.5} ${componentsBlockInputOffset.y - 2.5})`}>
+    <g
+      transform={`translate(${componentsBlockInputOffset.x - 2.5} ${componentsBlockInputOffset.y - 2.5})`}
+      className={dragHandlers ? 'cursor-crosshair' : undefined}
+      onPointerDown={dragHandlers?.onConnectorPointerDown}
+      onPointerMove={dragHandlers?.onConnectorPointerMove}
+      onPointerUp={dragHandlers?.onConnectorPointerUp}
+      onPointerCancel={dragHandlers?.onConnectorPointerCancel}
+    >
       <circle cx="2.5" cy="2.5" r="2.5" fill={accent} stroke={accent} strokeWidth="2" />
       <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke={accent} strokeWidth="2" />
+      {dragHandlers ? <circle cx="2.5" cy="2.5" r="18" fill="transparent" /> : null}
     </g>
   )
 }
@@ -74,32 +90,47 @@ export default function ComponentsBlock({
   size,
   selected,
   onSelect,
-  onAddConnectorClick,
+  onDeployConnectorClick,
+  onComponentConnectorClick,
   componentsEnvOutput,
   componentsEnvInput,
   componentsList,
   dragHandlers,
   resizeHandlers,
+  inputDragHandlers,
+  deployConnectorDragHandlers,
+  componentConnectorDragHandlers,
 }: {
   position: WorkbenchPoint
   size: WorkbenchSize
   selected: boolean
   onSelect?: () => void
-  onAddConnectorClick?: () => void
+  onDeployConnectorClick?: () => void
+  onComponentConnectorClick?: () => void
   componentsEnvOutput: boolean | null
   componentsEnvInput: boolean | null
   componentsList: string[]
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
+  inputDragHandlers?: WorkbenchConnectorDragHandlers
+  deployConnectorDragHandlers?: WorkbenchConnectorDragHandlers
+  componentConnectorDragHandlers?: WorkbenchConnectorDragHandlers
 }) {
   const bodyWidth = Math.max(componentsBlockMinSize.width, size.width)
   const bodyHeight = Math.max(componentsBlockMinSize.height, size.height)
   const selectWidth = bodyWidth + 10
   const selectHeight = bodyHeight + 10
   const headerHeight = 58
+  const delimiterHeight = 34
+  const delimiterWidth = Math.max(140, bodyWidth - 70)
+  const delimiterX = bodyX + (bodyWidth - delimiterWidth) / 2
+  const delimiterY = bodyY + bodyHeight - 57
   const sectionClipId = 'dfw-components-block-section-clip'
-  const outputOffset = resolveComponentsBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
-  const connectorY = outputOffset.y - 12
+  const deployOutputOffset = resolveComponentsBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
+  const deployConnectorY = deployOutputOffset.y - 12
+  const componentOutputOffset = resolveComponentsBlockComponentOutputOffset({ width: bodyWidth, height: bodyHeight })
+  const componentConnectorX = componentOutputOffset.x
+  const componentConnectorY = componentOutputOffset.y - 12
   const sectionRows = [
     { label: '环境变量导出：', value: formatTomlBoolean(componentsEnvOutput) },
     { label: '环境变量导入：', value: formatTomlBoolean(componentsEnvInput) },
@@ -137,7 +168,7 @@ export default function ComponentsBlock({
 
       <defs>
         <clipPath id={sectionClipId}>
-          <rect x="18" y="76" width={bodyWidth - 36} height={bodyHeight - 96} />
+          <rect x="18" y="76" width={bodyWidth - 36} height={Math.max(20, delimiterY - 86)} />
         </clipPath>
       </defs>
 
@@ -155,6 +186,30 @@ export default function ComponentsBlock({
       ))}
 
       <rect
+        x={delimiterX}
+        y={delimiterY}
+        width={delimiterWidth}
+        height={delimiterHeight}
+        rx="10"
+        fill="var(--dfw-bg)"
+        stroke={accent}
+        strokeWidth="1.5"
+        opacity="0.9"
+      />
+      <text
+        x={bodyX + bodyWidth / 2}
+        y={delimiterY + 23}
+        textAnchor="middle"
+        fontSize="18"
+        fontFamily={workbenchCanvasFont}
+        fontWeight="500"
+        fill="currentColor"
+        opacity="0.86"
+      >
+        界定器
+      </text>
+
+      <rect
         x={bodyX}
         y={bodyY}
         width={bodyWidth}
@@ -169,7 +224,7 @@ export default function ComponentsBlock({
         onPointerDown={event => event.stopPropagation()}
       />
 
-      <InputPort />
+      <InputPort dragHandlers={inputDragHandlers} />
 
       <g
         className="cursor-grab active:cursor-grabbing"
@@ -221,16 +276,36 @@ export default function ComponentsBlock({
         onPointerUp={resizeHandlers?.onResizePointerUp}
         onPointerCancel={resizeHandlers?.onResizePointerCancel}
       />
+
       <g
-        transform={`translate(${outputOffset.x} ${connectorY})`}
-        className="cursor-pointer"
+        transform={`translate(${deployOutputOffset.x} ${deployConnectorY})`}
+        className="cursor-crosshair"
         onClick={event => {
           event.stopPropagation()
-          onAddConnectorClick?.()
+          if (!deployConnectorDragHandlers) onDeployConnectorClick?.()
         }}
-        onPointerDown={event => event.stopPropagation()}
+        onPointerDown={deployConnectorDragHandlers?.onConnectorPointerDown ?? (event => event.stopPropagation())}
+        onPointerMove={deployConnectorDragHandlers?.onConnectorPointerMove}
+        onPointerUp={deployConnectorDragHandlers?.onConnectorPointerUp}
+        onPointerCancel={deployConnectorDragHandlers?.onConnectorPointerCancel}
       >
-        <AddConnectorButton />
+        <AddConnectorButton label="连接部署管理闸" />
+        <circle cx="0" cy="12" r="18" fill="transparent" />
+      </g>
+
+      <g
+        transform={`translate(${componentConnectorX} ${componentConnectorY})`}
+        className="cursor-crosshair"
+        onClick={event => {
+          event.stopPropagation()
+          if (!componentConnectorDragHandlers) onComponentConnectorClick?.()
+        }}
+        onPointerDown={componentConnectorDragHandlers?.onConnectorPointerDown ?? (event => event.stopPropagation())}
+        onPointerMove={componentConnectorDragHandlers?.onConnectorPointerMove}
+        onPointerUp={componentConnectorDragHandlers?.onConnectorPointerUp}
+        onPointerCancel={componentConnectorDragHandlers?.onConnectorPointerCancel}
+      >
+        <AddConnectorButton label="连接组件界定器" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
       </g>
     </g>

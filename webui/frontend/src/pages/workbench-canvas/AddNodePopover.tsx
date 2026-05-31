@@ -1,9 +1,11 @@
-import { workbenchCanvasFont, type WorkbenchPoint } from './types'
+import { workbenchCanvasFont, type WorkbenchConnectionSource, type WorkbenchPoint } from './types'
 
 const componentsAccent = '#127439'
 const componentsFill = '#009200'
 const componentAccent = '#00d000'
 const componentFill = '#7fff9f'
+const deployAccent = '#d97706'
+const deployFill = '#f59e0b'
 
 function ComponentNodeRow({
   y,
@@ -51,19 +53,49 @@ function ComponentNodeRow({
   )
 }
 
+function shouldShowComponents(source: WorkbenchConnectionSource | null) {
+  return source === null || source === 'init-components'
+}
+
+function shouldShowDeploy(source: WorkbenchConnectionSource | null) {
+  return source === null || source === 'components-deploy'
+}
+
+function shouldShowComponent(source: WorkbenchConnectionSource | null) {
+  return source === null || source === 'components-component'
+}
+
 export default function AddNodePopover({
   position,
   componentsVisible,
+  deployVisible,
+  source = null,
   onAddComponents,
+  onAddDeploy,
   onAddComponent,
   onClose,
 }: {
   position: WorkbenchPoint
   componentsVisible: boolean
+  deployVisible: boolean
+  source?: WorkbenchConnectionSource | null
   onAddComponents: () => void
+  onAddDeploy: () => void
   onAddComponent: () => void
   onClose: () => void
 }) {
+  const rows = [
+    ...(shouldShowComponents(source)
+      ? [{ key: 'components', label: '组件管理闸', code: '[COMPONENTS]', fill: componentsFill, stroke: componentsAccent, disabled: componentsVisible, onClick: onAddComponents }]
+      : []),
+    ...(shouldShowComponent(source)
+      ? [{ key: 'component', label: '组件界定器', code: '[[Component]]', fill: componentFill, stroke: componentAccent, disabled: false, onClick: onAddComponent }]
+      : []),
+    ...(shouldShowDeploy(source)
+      ? [{ key: 'deploy', label: '部署管理闸', code: '[DEPLOY]', fill: deployFill, stroke: deployAccent, disabled: deployVisible, onClick: onAddDeploy }]
+      : []),
+  ]
+
   return (
     <svg
       data-workbench-ui
@@ -85,23 +117,18 @@ export default function AddNodePopover({
         组件
       </text>
 
-      <ComponentNodeRow
-        y={57}
-        label="组件管理闸"
-        code="[COMPONENTS]"
-        swatchFill={componentsFill}
-        swatchStroke={componentsAccent}
-        disabled={componentsVisible}
-        onClick={onAddComponents}
-      />
-      <ComponentNodeRow
-        y={92}
-        label="组件界定器"
-        code="[[Component]]"
-        swatchFill={componentFill}
-        swatchStroke={componentAccent}
-        onClick={onAddComponent}
-      />
+      {rows.map((row, index) => (
+        <ComponentNodeRow
+          key={row.key}
+          y={57 + index * 35}
+          label={row.label}
+          code={row.code}
+          swatchFill={row.fill}
+          swatchStroke={row.stroke}
+          disabled={row.disabled}
+          onClick={row.onClick}
+        />
+      ))}
 
       <g
         className="cursor-pointer"
