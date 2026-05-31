@@ -98,6 +98,8 @@ type ConnectorDragState = {
   source: WorkbenchConnectionSource
   from: WorkbenchPoint
   current: WorkbenchPoint
+  fromScreen: WorkbenchPoint
+  currentScreen: WorkbenchPoint
   active: boolean
   timer: number
   mode: 'create' | 'detach'
@@ -142,6 +144,19 @@ function canvasPointFromEvent(event: PointerEvent<SVGGElement>, viewport: { scal
   return {
     x: (event.clientX - originX) / scale,
     y: (event.clientY - originY) / scale,
+  }
+}
+
+function screenPointFromEvent(event: PointerEvent<SVGGElement>): WorkbenchPoint {
+  return { x: event.clientX, y: event.clientY }
+}
+
+function screenPointFromCanvasPoint(point: WorkbenchPoint, event: PointerEvent<SVGGElement>, viewport: { scale: number }): WorkbenchPoint {
+  const rect = event.currentTarget.ownerSVGElement?.getBoundingClientRect()
+  const scale = viewport.scale || 1
+  return {
+    x: (rect?.left ?? 0) + point.x * scale,
+    y: (rect?.top ?? 0) + point.y * scale,
   }
 }
 
@@ -497,11 +512,14 @@ export default function WorkbenchCanvas({
     event.stopPropagation()
     const currentTarget = event.currentTarget
     currentTarget.setPointerCapture(event.pointerId)
+    const pointerScreenPoint = screenPointFromEvent(event)
     const state: ConnectorDragState = {
       pointerId: event.pointerId,
       source,
       from,
       current: canvasPointFromEvent(event, viewport),
+      fromScreen: screenPointFromCanvasPoint(from, event, viewport),
+      currentScreen: pointerScreenPoint,
       active: false,
       timer: window.setTimeout(() => {
         const current = connectorDragRef.current
@@ -522,7 +540,7 @@ export default function WorkbenchCanvas({
     if (!drag || drag.pointerId !== event.pointerId) return
     event.preventDefault()
     event.stopPropagation()
-    const next = { ...drag, current: canvasPointFromEvent(event, viewport) }
+    const next = { ...drag, current: canvasPointFromEvent(event, viewport), currentScreen: screenPointFromEvent(event) }
     connectorDragRef.current = next
     setConnectorDrag(next)
   }
@@ -616,9 +634,7 @@ export default function WorkbenchCanvas({
               stroke="#22b386"
             />
           ))}
-          {connectorDrag?.active && (
-            <CanvasConnectionLayer from={connectorDrag.from} to={connectorDrag.current} stroke="#0084ff" arrow />
-          )}
+
           <StartEndpointBlock
             position={startEndpointPosition}
             selected={selectedBlockId === 'start'}
@@ -682,6 +698,11 @@ export default function WorkbenchCanvas({
           ))}
         </svg>
       </div>
+      {connectorDrag?.active && (
+        <svg className="fixed inset-0 z-[8] h-screen w-screen overflow-visible pointer-events-none" aria-hidden>
+          <CanvasConnectionLayer from={connectorDrag.fromScreen} to={connectorDrag.currentScreen} stroke="#0084ff" arrow />
+        </svg>
+      )}
       {addNodePopoverScreenPosition && (
         <>
           <button
