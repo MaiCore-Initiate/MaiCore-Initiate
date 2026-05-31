@@ -135,9 +135,13 @@ function resizeArray<T>(values: T[], length: number, createValue: (index: number
 }
 
 function canvasPointFromEvent(event: PointerEvent<SVGGElement>, viewport: { scale: number; x: number; y: number }): WorkbenchPoint {
+  const rect = event.currentTarget.ownerSVGElement?.getBoundingClientRect()
+  const scale = viewport.scale || 1
+  const originX = rect?.left ?? 0
+  const originY = rect?.top ?? 0
   return {
-    x: (event.clientX - viewport.x) / (viewport.scale || 1),
-    y: (event.clientY - viewport.y) / (viewport.scale || 1),
+    x: (event.clientX - originX) / scale,
+    y: (event.clientY - originY) / scale,
   }
 }
 

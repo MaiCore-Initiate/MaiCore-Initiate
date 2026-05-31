@@ -12,7 +12,7 @@ export default function CanvasConnectionLayer({
   arrow?: boolean
 }) {
   const controlOffset = Math.max(68, Math.abs(to.x - from.x) * 0.46)
-  const path = `M${to.x},${to.y} C${to.x - controlOffset},${to.y} ${from.x + controlOffset * 0.45},${from.y} ${from.x},${from.y}`
+  const path = `M${from.x},${from.y} C${from.x + controlOffset * 0.45},${from.y} ${to.x - controlOffset},${to.y} ${to.x},${to.y}`
   const markerId = `dfw-arrow-${stroke.replace(/[^a-zA-Z0-9]/g, '') || 'current'}`
 
   return (
