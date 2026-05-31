@@ -414,6 +414,30 @@ function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: S
   const workbenchReturnTarget = useRef<{ page: Page; params?: SubPageParams }>({ page: 'misc' })
   const navigate = useNavigate()
 
+  useEffect(() => {
+    if (routePage !== 'workbench-canvas') return
+
+    const bodyStyle = document.body.style
+    const rootStyle = document.documentElement.style
+    const previousBodyOverflow = bodyStyle.overflow
+    const previousRootOverflow = rootStyle.overflow
+    const previousBodyOverscroll = bodyStyle.getPropertyValue('overscroll-behavior')
+    const previousRootOverscroll = rootStyle.getPropertyValue('overscroll-behavior')
+
+    window.scrollTo(0, 0)
+    bodyStyle.overflow = 'hidden'
+    rootStyle.overflow = 'hidden'
+    bodyStyle.setProperty('overscroll-behavior', 'none')
+    rootStyle.setProperty('overscroll-behavior', 'none')
+
+    return () => {
+      bodyStyle.overflow = previousBodyOverflow
+      rootStyle.overflow = previousRootOverflow
+      bodyStyle.setProperty('overscroll-behavior', previousBodyOverscroll)
+      rootStyle.setProperty('overscroll-behavior', previousRootOverscroll)
+    }
+  }, [routePage])
+
   const activeTab = tabs.find(tab => tab.id === activeTabId) || tabs[0]
   const routeParamsKey = paramsKey(routeParams)
 
