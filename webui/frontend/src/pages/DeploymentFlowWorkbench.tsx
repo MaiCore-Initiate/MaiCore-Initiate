@@ -4,7 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchEnvVariableEntry, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -31,7 +31,7 @@ const baseBlockNames = {
 }
 
 type WorkbenchViewport = { scale: number; x: number; y: number }
-const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, componentCount: 0 }
+const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, componentCount: 0, deploymentCount: 0 }
 
 export type OutlineIconType = 'boolean' | 'array' | 'object' | 'string' | 'number'
 export type OutlineNodeTone = 'normal' | 'locked' | 'note'
@@ -107,6 +107,44 @@ const defaultComponentMeta: WorkbenchComponentMeta = {
   envInputList: [],
 }
 
+const defaultDeploymentMeta: WorkbenchDeploymentMeta = {
+  name: '',
+  id: '',
+  choose: null,
+  runtime: '',
+  commandTheme: 'classical',
+  deploy: null,
+  commandDeploy: null,
+  deployCommandList: [],
+  deployMethod: '',
+  baseLink: '',
+  getMethod: '',
+  getVersion: '',
+  githubRepo: '',
+  versionFile: [],
+  versionCustom: [],
+  getLink: '',
+  getLinkProvideList: [],
+  linkFile: [],
+  linkCustom: [],
+  denoPermissions: [],
+  jvm: [],
+  userChoose: null,
+  chooseList: [],
+  formatVersion: null,
+  versionFormattingFormula: [],
+  deployPath: '',
+  customPath: '',
+  beforeCommand: null,
+  beforeCommandList: [],
+  afterCommand: null,
+  afterCommandList: [],
+  splicingLink: '',
+  envOutput: null,
+  envOutputList: [],
+  envInput: null,
+  envInputList: [],
+}
 const defaultWorkbenchMeta: WorkbenchMetaState = {
   author: '',
   tags: [],
@@ -136,6 +174,10 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   componentsEnvInput: null,
   componentsList: [],
   components: [],
+  deployEnvOutput: null,
+  deployEnvInput: null,
+  deployList: [],
+  deployments: [],
 }
 
 function formatTomlString(value: string) {
@@ -254,9 +296,19 @@ function createComponentBlockId(index: number): WorkbenchComponentBlockId {
   return `component:${index}`
 }
 
+function createDeploymentBlockId(index: number): WorkbenchDeploymentBlockId {
+  return `deployment:${index}`
+}
+
 function parseComponentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
   if (!blockId?.startsWith('component:')) return null
   const index = Number(blockId.slice('component:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function parseDeploymentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('deployment:')) return null
+  const index = Number(blockId.slice('deployment:'.length))
   return Number.isInteger(index) && index >= 0 ? index : null
 }
 
@@ -265,7 +317,12 @@ function formatSelectedBlockName(blockId: WorkbenchBlockId | null, meta: Workben
   const componentIndex = parseComponentBlockIndex(blockId)
   if (componentIndex !== null) {
     const componentName = meta.components[componentIndex]?.name
-    return componentName ? `[[Component]] 对象${componentIndex}：${componentName}` : `[[Component]] 对象${componentIndex}`
+    return componentName ? `[[Component]] ${componentIndex}：${componentName}` : `[[Component]] ${componentIndex}`
+  }
+  const deploymentIndex = parseDeploymentBlockIndex(blockId)
+  if (deploymentIndex !== null) {
+    const deploymentName = meta.deployments[deploymentIndex]?.name
+    return deploymentName ? `[[Deployment]] ${deploymentIndex}：${deploymentName}` : `[[Deployment]] ${deploymentIndex}`
   }
   return baseBlockNames[blockId as keyof typeof baseBlockNames]
 }
@@ -416,6 +473,95 @@ function createComponentOutlineChildren(component: WorkbenchComponentMeta, index
   ]
 }
 
+function createDeploymentOutlineChildren(deployment: WorkbenchDeploymentMeta, index: number): OutlineNode[] {
+  const id = (fieldName: string) => `deployment-${index}-${fieldName}`
+  const versionFile = deployment.versionFile ?? []
+  const versionCustom = deployment.versionCustom ?? []
+  const getLinkProvideList = deployment.getLinkProvideList ?? []
+  const linkFile = deployment.linkFile ?? []
+  const linkCustom = deployment.linkCustom ?? []
+  const denoPermissions = deployment.denoPermissions ?? []
+  const jvm = deployment.jvm ?? []
+
+  return [
+    { id: id('name'), label: `name = ${formatTomlString(deployment.name)}`, icon: 'string' },
+    { id: id('id'), label: `id = ${formatTomlString(deployment.id)}`, icon: 'string' },
+    ...(deployment.deploy === true ? [createBooleanOutlineNode(id('choose'), 'choose', deployment.choose)] : []),
+    { id: id('runtime'), label: `runtime = ${formatTomlString(deployment.runtime)}`, icon: 'string' },
+    { id: id('command-theme'), label: `command_theme = ${formatTomlString(deployment.commandTheme)}`, icon: 'string' },
+    createBooleanOutlineNode(id('deploy'), 'deploy', deployment.deploy),
+    ...(deployment.deploy === true ? [createBooleanOutlineNode(id('command-deploy'), 'command_deploy', deployment.commandDeploy)] : []),
+    ...(deployment.deploy === true && deployment.commandDeploy === true
+      ? [createStringArrayOutlineNode(id('deploy-command-list'), 'deploy_command_list', deployment.deployCommandList)]
+      : []),
+    ...(deployment.deploy === true && deployment.commandDeploy !== true
+      ? [
+        { id: id('deploy-method'), label: `deploy_method = ${formatTomlString(deployment.deployMethod)}`, icon: 'string' as const },
+        { id: id('base-link'), label: `base_link = ${formatTomlString(deployment.baseLink)}`, icon: 'string' as const },
+        { id: id('get-method'), label: `get_method = ${formatTomlString(deployment.getMethod)}`, icon: 'string' as const },
+        ...(deployment.getMethod === 'get_version'
+          ? [
+            { id: id('get-version'), label: `get_version = ${formatTomlString(deployment.getVersion)}`, icon: 'string' as const },
+            ...(deployment.getVersion === 'github_repo'
+              ? [{ id: id('github-repo'), label: `github_repo = ${formatTomlString(deployment.githubRepo)}`, icon: 'string' as const }]
+              : []),
+            ...(deployment.getVersion === 'filelink'
+              ? [createStringArrayOutlineNode(id('version-file'), 'version_file', versionFile)]
+              : []),
+            ...(deployment.getVersion === 'custom'
+              ? [
+                createStringArrayOutlineNode(id('version-custom'), 'version_custom', versionCustom),
+                ...(hasDenoCustomSource(versionCustom) ? [createStringArrayOutlineNode(id('deno-permissions'), 'deno_permissions', denoPermissions)] : []),
+                ...(hasJvmCustomSource(versionCustom) ? [createStringArrayOutlineNode(id('jvm'), 'JVM', jvm)] : []),
+              ]
+              : []),
+            createBooleanOutlineNode(id('format-version'), 'format_version', deployment.formatVersion),
+            ...(deployment.formatVersion === true
+              ? [createVersionFormattingOutlineNode(id('version-formatting-formula'), deployment.versionFormattingFormula)]
+              : []),
+            { id: id('splicing-link'), label: `splicing_link = ${formatTomlString(deployment.splicingLink)}`, icon: 'string' as const },
+          ]
+          : []),
+        ...(deployment.getMethod === 'get_link'
+          ? [
+            { id: id('get-link'), label: `get_link = ${formatTomlString(deployment.getLink)}`, icon: 'string' as const },
+            ...(deployment.getLink === 'filelink' || deployment.getLink === 'custom'
+              ? [createStringArrayOutlineNode(id('get-link-provide-list'), 'get_link_provide_list', getLinkProvideList)]
+              : []),
+            ...(deployment.getLink === 'filelink' && getLinkProvideList.length === 0
+              ? [createStringArrayOutlineNode(id('link-file'), 'link_file', linkFile)]
+              : []),
+            ...(deployment.getLink === 'custom' && getLinkProvideList.length === 0
+              ? [
+                createStringArrayOutlineNode(id('link-custom'), 'link_custom', linkCustom),
+                ...(hasDenoCustomSource(linkCustom) ? [createStringArrayOutlineNode(id('deno-permissions'), 'deno_permissions', denoPermissions)] : []),
+                ...(hasJvmCustomSource(linkCustom) ? [createStringArrayOutlineNode(id('jvm'), 'JVM', jvm)] : []),
+              ]
+              : []),
+          ]
+          : []),
+        { id: id('deploy-path'), label: `deploy_path = ${formatTomlString(deployment.deployPath)}`, icon: 'string' as const },
+        ...(deployment.deployPath === '$CustomPath'
+          ? [{ id: id('custom-path'), label: `custom_path = ${formatTomlString(deployment.customPath)}`, icon: 'string' as const }]
+          : []),
+      ]
+      : []),
+    createBooleanOutlineNode(id('user-choose'), 'user_choose', deployment.userChoose),
+    ...(deployment.userChoose === true ? [createStringArrayOutlineNode(id('choose-list'), 'choose_list', deployment.chooseList)] : []),
+    createBooleanOutlineNode(id('before-command'), 'before_command', deployment.beforeCommand),
+    ...(deployment.beforeCommand === true
+      ? [createStringArrayOutlineNode(id('before-command-list'), 'before_command_list', deployment.beforeCommandList)]
+      : []),
+    createBooleanOutlineNode(id('after-command'), 'after_command', deployment.afterCommand),
+    ...(deployment.afterCommand === true
+      ? [createStringArrayOutlineNode(id('after-command-list'), 'after_command_list', deployment.afterCommandList)]
+      : []),
+    createBooleanOutlineNode(id('env-output'), 'env_output', deployment.envOutput),
+    ...(deployment.envOutput === true ? [createEnvVariableOutlineNode(id('env-output-list'), 'env_output_list', deployment.envOutputList)] : []),
+    createBooleanOutlineNode(id('env-input'), 'env_input', deployment.envInput),
+    ...(deployment.envInput === true ? [createEnvVariableOutlineNode(id('env-input-list'), 'env_input_list', deployment.envInputList)] : []),
+  ]
+}
 function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisibleBlocks): OutlineNode[] {
   const nodes: OutlineNode[] = []
 
@@ -455,7 +601,28 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
       label: '[DEPLOY]',
       defaultExpanded: true,
       blockId: 'deploy',
-      children: [],
+      children: [
+        createBooleanOutlineNode('deploy-env-output', 'env_output', meta.deployEnvOutput),
+        createBooleanOutlineNode('deploy-env-input', 'env_input', meta.deployEnvInput),
+        createStringArrayOutlineNode('deploy-list', 'list', meta.deployList, true),
+      ],
+    })
+  }
+
+  if (visibleBlocks.deploymentCount > 0) {
+    nodes.push({
+      id: 'deployment-array',
+      label: '[[Deployment]]',
+      defaultExpanded: true,
+      selectable: false,
+      children: Array.from({ length: visibleBlocks.deploymentCount }, (_, index) => ({
+        id: `deployment-${index}`,
+        label: String(index),
+        icon: 'object' as const,
+        defaultExpanded: true,
+        blockId: createDeploymentBlockId(index),
+        children: createDeploymentOutlineChildren(meta.deployments[index] ?? defaultDeploymentMeta, index),
+      })),
     })
   }
 
@@ -590,15 +757,22 @@ function resolveOutlineBlockId(node: OutlineNode): WorkbenchBlockId | null {
   if (node.id === 'modinfo' || node.id.startsWith('modinfo-')) return 'init'
   const componentMatch = /^component-(\d+)(?:-|$)/.exec(node.id)
   if (componentMatch) return createComponentBlockId(Number(componentMatch[1]))
+  const deploymentMatch = /^deployment-(\d+)(?:-|$)/.exec(node.id)
+  if (deploymentMatch) return createDeploymentBlockId(Number(deploymentMatch[1]))
   if (
     node.id === 'components'
     || node.id.startsWith('components-')
   ) {
     return 'components'
   }
+  if (
+    node.id === 'deploy'
+    || node.id.startsWith('deploy-')
+  ) {
+    return 'deploy'
+  }
   return null
 }
-
 function findOutlineNodeIdForBlock(nodes: OutlineNode[], blockId: WorkbenchBlockId): string {
   for (const node of nodes) {
     if (resolveOutlineBlockId(node) === blockId) return node.id
@@ -1052,6 +1226,10 @@ export default function DeploymentFlowWorkbench({
     componentsEnvInput: meta.componentsEnvInput,
     componentsList: meta.componentsList,
     components: meta.components,
+    deployEnvOutput: meta.deployEnvOutput,
+    deployEnvInput: meta.deployEnvInput,
+    deployList: meta.deployList,
+    deployments: meta.deployments,
   }), [meta])
 
   const cancelViewportAnimation = () => {

@@ -3,10 +3,11 @@ import AddNodePopover from './AddNodePopover'
 import CanvasConnectionLayer from './CanvasConnectionLayer'
 import ComponentBlock, { componentBlockInputOffset, componentBlockMinSize, resolveComponentBlockOutputOffset } from './blocks/ComponentBlock'
 import ComponentsBlock, { componentsBlockInputOffset, componentsBlockMinSize, resolveComponentsBlockComponentOutputOffset, resolveComponentsBlockOutputOffset } from './blocks/ComponentsBlock'
-import DeployBlock, { deployBlockInputOffset, deployBlockMinSize } from './blocks/DeployBlock'
+import DeployBlock, { deployBlockInputOffset, deployBlockMinSize, resolveDeployBlockOutputOffset } from './blocks/DeployBlock'
+import DeploymentBlock, { deploymentBlockInputOffset, deploymentBlockMinSize, resolveDeploymentBlockOutputOffset } from './blocks/DeploymentBlock'
 import InitBlock from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
-import { workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConnectionSource, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchVisibleBlocks } from './types'
+import { workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchVisibleBlocks } from './types'
 
 const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
@@ -52,6 +53,45 @@ const defaultComponentMeta: WorkbenchComponentMeta = {
   envInputList: [],
 }
 
+const defaultDeploymentMeta: WorkbenchDeploymentMeta = {
+  name: '',
+  id: '',
+  choose: null,
+  runtime: '',
+  commandTheme: 'classical',
+  deploy: null,
+  commandDeploy: null,
+  deployCommandList: [],
+  deployMethod: '',
+  baseLink: '',
+  getMethod: '',
+  getVersion: '',
+  githubRepo: '',
+  versionFile: [],
+  versionCustom: [],
+  getLink: '',
+  getLinkProvideList: [],
+  linkFile: [],
+  linkCustom: [],
+  denoPermissions: [],
+  jvm: [],
+  userChoose: null,
+  chooseList: [],
+  formatVersion: null,
+  versionFormattingFormula: [],
+  deployPath: '',
+  customPath: '',
+  beforeCommand: null,
+  beforeCommandList: [],
+  afterCommand: null,
+  afterCommandList: [],
+  splicingLink: '',
+  envOutput: null,
+  envOutputList: [],
+  envInput: null,
+  envInputList: [],
+}
+
 const defaultBlockMeta: WorkbenchBlockMeta = {
   author: '',
   tags: [],
@@ -81,13 +121,17 @@ const defaultBlockMeta: WorkbenchBlockMeta = {
   componentsEnvInput: null,
   componentsList: [],
   components: [],
+  deployEnvOutput: null,
+  deployEnvInput: null,
+  deployList: [],
+  deployments: [],
 }
 
 const initBlockInputOffset: WorkbenchPoint = { x: 5, y: 115.5 }
 const startEndpointOutputOffset: WorkbenchPoint = { x: 95.711, y: 70.711 }
 const longPressMs = 220
 const initBlockMinSize: WorkbenchSize = { width: 421, height: 431 }
-const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, componentCount: 0 }
+const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, componentCount: 0, deploymentCount: 0 }
 type DraggableBlockId = WorkbenchBlockId
 type ResizableBlockId = Exclude<WorkbenchBlockId, 'start'>
 
@@ -102,14 +146,28 @@ function createComponentBlockId(index: number): WorkbenchComponentBlockId {
   return `component:${index}`
 }
 
+function createDeploymentBlockId(index: number): WorkbenchDeploymentBlockId {
+  return `deployment:${index}`
+}
+
 function parseComponentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
   if (!blockId?.startsWith('component:')) return null
   const index = Number(blockId.slice('component:'.length))
   return Number.isInteger(index) && index >= 0 ? index : null
 }
 
+function parseDeploymentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('deployment:')) return null
+  const index = Number(blockId.slice('deployment:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
 function createDefaultComponentPosition(index: number): WorkbenchPoint {
   return { x: 1810 + index * 72, y: 330 + index * 72 }
+}
+
+function createDefaultDeploymentPosition(index: number): WorkbenchPoint {
+  return { x: 2440 + index * 72, y: 330 + index * 72 }
 }
 
 function resizeArray<T>(values: T[], length: number, createValue: (index: number) => T) {
@@ -143,6 +201,9 @@ export default function WorkbenchCanvas({
   const [componentBlockPositions, setComponentBlockPositions] = useState<WorkbenchPoint[]>([])
   const [componentBlockSizes, setComponentBlockSizes] = useState<WorkbenchSize[]>([])
   const [componentConnections, setComponentConnections] = useState<boolean[]>([])
+  const [deploymentBlockPositions, setDeploymentBlockPositions] = useState<WorkbenchPoint[]>([])
+  const [deploymentBlockSizes, setDeploymentBlockSizes] = useState<WorkbenchSize[]>([])
+  const [deploymentConnections, setDeploymentConnections] = useState<boolean[]>([])
   const [componentsConnected, setComponentsConnected] = useState(false)
   const [deployConnected, setDeployConnected] = useState(false)
   const [addNodePopoverPosition, setAddNodePopoverPosition] = useState<WorkbenchPoint | null>(null)
@@ -179,14 +240,24 @@ export default function WorkbenchCanvas({
     setComponentConnections(current => resizeArray(current, count, () => false))
   }, [blockVisibility.componentCount])
 
+  useEffect(() => {
+    const count = Math.max(0, blockVisibility.deploymentCount)
+    setDeploymentBlockPositions(current => resizeArray(current, count, createDefaultDeploymentPosition))
+    setDeploymentBlockSizes(current => resizeArray(current, count, () => deploymentBlockMinSize))
+    setDeploymentConnections(current => resizeArray(current, count, () => false))
+  }, [blockVisibility.deploymentCount])
+
 
   const setBlockPosition = (blockId: DraggableBlockId, position: WorkbenchPoint) => {
     const componentIndex = parseComponentBlockIndex(blockId)
+    const deploymentIndex = parseDeploymentBlockIndex(blockId)
     if (blockId === 'init') setInitBlockPosition(position)
     else if (blockId === 'components') setComponentsBlockPosition(position)
     else if (blockId === 'deploy') setDeployBlockPosition(position)
     else if (componentIndex !== null) {
       setComponentBlockPositions(current => current.map((item, index) => (index === componentIndex ? position : item)))
+    } else if (deploymentIndex !== null) {
+      setDeploymentBlockPositions(current => current.map((item, index) => (index === deploymentIndex ? position : item)))
     }
     else setStartEndpointPosition(position)
   }
@@ -250,16 +321,21 @@ export default function WorkbenchCanvas({
         ? componentsBlockSize
         : blockId === 'deploy'
           ? deployBlockSize
-          : componentBlockSizes[parseComponentBlockIndex(blockId) ?? -1] ?? componentBlockMinSize
+          : parseComponentBlockIndex(blockId) !== null
+            ? componentBlockSizes[parseComponentBlockIndex(blockId) ?? -1] ?? componentBlockMinSize
+            : deploymentBlockSizes[parseDeploymentBlockIndex(blockId) ?? -1] ?? deploymentBlockMinSize
   )
 
   const resizeBlock = (blockId: ResizableBlockId, size: WorkbenchSize) => {
     const componentIndex = parseComponentBlockIndex(blockId)
+    const deploymentIndex = parseDeploymentBlockIndex(blockId)
     if (blockId === 'init') setInitBlockSize(size)
     else if (blockId === 'components') setComponentsBlockSize(size)
     else if (blockId === 'deploy') setDeployBlockSize(size)
     else if (componentIndex !== null) {
       setComponentBlockSizes(current => current.map((item, index) => (index === componentIndex ? size : item)))
+    } else if (deploymentIndex !== null) {
+      setDeploymentBlockSizes(current => current.map((item, index) => (index === deploymentIndex ? size : item)))
     }
   }
 
@@ -270,7 +346,9 @@ export default function WorkbenchCanvas({
         ? componentsBlockMinSize
         : blockId === 'deploy'
           ? deployBlockMinSize
-          : componentBlockMinSize
+          : parseComponentBlockIndex(blockId) !== null
+            ? componentBlockMinSize
+            : deploymentBlockMinSize
   )
 
   const startBlockResize = (blockId: ResizableBlockId, direction: WorkbenchResizeDirection, event: PointerEvent<SVGRectElement>) => {
@@ -356,6 +434,11 @@ export default function WorkbenchCanvas({
     x: deployBlockPosition.x + deployBlockInputOffset.x,
     y: deployBlockPosition.y + deployBlockInputOffset.y,
   }
+  const deployBlockOutputOffset = resolveDeployBlockOutputOffset(deployBlockSize)
+  const deployBlockOutput = {
+    x: deployBlockPosition.x + deployBlockOutputOffset.x,
+    y: deployBlockPosition.y + deployBlockOutputOffset.y,
+  }
   const componentBlocks = Array.from({ length: blockVisibility.componentCount }, (_, index) => {
     const position = componentBlockPositions[index] ?? createDefaultComponentPosition(index)
     const size = componentBlockSizes[index] ?? componentBlockMinSize
@@ -369,6 +452,20 @@ export default function WorkbenchCanvas({
       y: position.y + outputOffset.y,
     }
     return { index, blockId: createComponentBlockId(index), position, size, input, output, connected: componentConnections[index] ?? false } as const
+  })
+  const deploymentBlocks = Array.from({ length: blockVisibility.deploymentCount }, (_, index) => {
+    const position = deploymentBlockPositions[index] ?? createDefaultDeploymentPosition(index)
+    const size = deploymentBlockSizes[index] ?? deploymentBlockMinSize
+    const input = {
+      x: position.x + deploymentBlockInputOffset.x,
+      y: position.y + deploymentBlockInputOffset.y,
+    }
+    const outputOffset = resolveDeploymentBlockOutputOffset(size)
+    const output = {
+      x: position.x + outputOffset.x,
+      y: position.y + outputOffset.y,
+    }
+    return { index, blockId: createDeploymentBlockId(index), position, size, input, output, connected: deploymentConnections[index] ?? false } as const
   })
 
 
@@ -411,6 +508,20 @@ export default function WorkbenchCanvas({
     setComponentConnections(current => [...current, addNodePopoverSource === 'components-component'])
     onVisibleBlocksChange?.({ componentCount: nextIndex + 1 })
     onSelectedBlockChange?.(createComponentBlockId(nextIndex))
+    setAddNodePopoverPosition(null)
+    setAddNodePopoverSource(null)
+  }
+
+  const addDeploymentBlock = () => {
+    const nextIndex = blockVisibility.deploymentCount
+    const position = addNodePopoverSource === 'deploy-deployment'
+      ? { x: deployBlockOutput.x - deploymentBlockInputOffset.x - 160, y: deployBlockOutput.y + 110 }
+      : createDefaultDeploymentPosition(nextIndex)
+    setDeploymentBlockPositions(current => [...current, position])
+    setDeploymentBlockSizes(current => [...current, deploymentBlockMinSize])
+    setDeploymentConnections(current => [...current, addNodePopoverSource === 'deploy-deployment'])
+    onVisibleBlocksChange?.({ deploymentCount: nextIndex + 1 })
+    onSelectedBlockChange?.(createDeploymentBlockId(nextIndex))
     setAddNodePopoverPosition(null)
     setAddNodePopoverSource(null)
   }
@@ -460,6 +571,14 @@ export default function WorkbenchCanvas({
               stroke="#22b386"
             />
           ))}
+          {deploymentBlocks.filter(block => block.connected).map(block => (
+            <CanvasConnectionLayer
+              key={`deployment-line-${block.index}`}
+              from={deployBlockOutput}
+              to={block.input}
+              stroke="#d97706"
+            />
+          ))}
 
           <StartEndpointBlock
             position={startEndpointPosition}
@@ -498,6 +617,10 @@ export default function WorkbenchCanvas({
               size={deployBlockSize}
               selected={selectedBlockId === 'deploy'}
               onSelect={() => onSelectedBlockChange?.('deploy')}
+              onDeploymentConnectorClick={() => openAddNodePopover(deployBlockOutput, 'deploy-deployment')}
+              deployEnvOutput={meta.deployEnvOutput}
+              deployEnvInput={meta.deployEnvInput}
+              deployList={meta.deployList}
               dragHandlers={createDragHandlers('deploy', deployBlockPosition)}
               resizeHandlers={createResizeHandlers('deploy')}
             />
@@ -512,6 +635,20 @@ export default function WorkbenchCanvas({
               onSelect={() => onSelectedBlockChange?.(block.blockId)}
               onAddConnectorClick={() => openAddNodePopover(block.output)}
               component={meta.components[block.index] ?? defaultComponentMeta}
+              dragHandlers={createDragHandlers(block.blockId, block.position)}
+              resizeHandlers={createResizeHandlers(block.blockId)}
+            />
+          ))}
+          {deploymentBlocks.map(block => (
+            <DeploymentBlock
+              key={block.blockId}
+              blockIndex={block.index}
+              position={block.position}
+              size={block.size}
+              selected={selectedBlockId === block.blockId}
+              onSelect={() => onSelectedBlockChange?.(block.blockId)}
+              onAddConnectorClick={() => openAddNodePopover(block.output)}
+              deployment={meta.deployments[block.index] ?? defaultDeploymentMeta}
               dragHandlers={createDragHandlers(block.blockId, block.position)}
               resizeHandlers={createResizeHandlers(block.blockId)}
             />
@@ -541,6 +678,7 @@ export default function WorkbenchCanvas({
             onAddComponents={addComponentsBlock}
             onAddDeploy={addDeployBlock}
             onAddComponent={addComponentBlock}
+            onAddDeployment={addDeploymentBlock}
             onClose={() => {
               setAddNodePopoverPosition(null)
               setAddNodePopoverSource(null)

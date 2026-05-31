@@ -37,6 +37,10 @@ export interface WorkbenchBlockMeta {
   componentsEnvInput: boolean | null
   componentsList: string[]
   components: WorkbenchComponentMeta[]
+  deployEnvOutput: boolean | null
+  deployEnvInput: boolean | null
+  deployList: string[]
+  deployments: WorkbenchDeploymentMeta[]
 }
 
 export interface WorkbenchComponentMeta {
@@ -83,6 +87,45 @@ export interface WorkbenchComponentMeta {
   envInputList: WorkbenchEnvVariableEntry[]
 }
 
+export interface WorkbenchDeploymentMeta {
+  name: string
+  id: string
+  choose: boolean | null
+  runtime: string
+  commandTheme: string
+  deploy: boolean | null
+  commandDeploy: boolean | null
+  deployCommandList: string[]
+  deployMethod: string
+  baseLink: string
+  getMethod: string
+  getVersion: string
+  githubRepo: string
+  versionFile: string[]
+  versionCustom: string[]
+  getLink: string
+  getLinkProvideList: string[]
+  linkFile: string[]
+  linkCustom: string[]
+  denoPermissions: string[]
+  jvm: string[]
+  userChoose: boolean | null
+  chooseList: string[]
+  formatVersion: boolean | null
+  versionFormattingFormula: WorkbenchVersionFormattingRule[]
+  deployPath: string
+  customPath: string
+  beforeCommand: boolean | null
+  beforeCommandList: string[]
+  afterCommand: boolean | null
+  afterCommandList: string[]
+  splicingLink: string
+  envOutput: boolean | null
+  envOutputList: WorkbenchEnvVariableEntry[]
+  envInput: boolean | null
+  envInputList: WorkbenchEnvVariableEntry[]
+}
+
 export interface WorkbenchVersionFormattingRule {
   match: string
   replace: string
@@ -98,7 +141,7 @@ export interface WorkbenchPoint {
   y: number
 }
 
-export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component'
+export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component' | 'deploy-deployment'
 
 export interface WorkbenchAddNodeAnchor {
   id: number
@@ -122,12 +165,14 @@ export interface WorkbenchCanvasProps {
 }
 
 export type WorkbenchComponentBlockId = `component:${number}`
-export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | WorkbenchComponentBlockId
+export type WorkbenchDeploymentBlockId = `deployment:${number}`
+export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId
 
 export interface WorkbenchVisibleBlocks {
   components: boolean
   deploy: boolean
   componentCount: number
+  deploymentCount: number
 }
 
 export interface WorkbenchBlockDragHandlers {

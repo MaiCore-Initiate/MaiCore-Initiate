@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import type { WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchEnvVariableEntry, WorkbenchVersionFormattingRule } from './workbench-canvas/types'
+import type { WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchVersionFormattingRule } from './workbench-canvas/types'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -16,8 +16,10 @@ export const rightSidebarMaxWidth = 760
 const runtimeOptions = ['powershell', 'pwsh', 'cmd', 'bash', 'python3', 'python', 'node', 'deno']
 const commandThemeOptions = ['oh-my-posh', 'classical']
 const getMethodOptions = ['direct', 'get_version', 'get_link']
+const deploymentGetMethodOptions = ['get_version', 'get_link']
 const getVersionOptions = ['github_repo', 'filelink', 'custom']
 const getLinkOptions = ['filelink', 'custom', 'user_input']
+const deployMethodOptions = ['auto', 'gitclone', '!gitclone', 'getfile']
 const installOperateOptions = ['auto', 'no', 'custom']
 const platformOptions = ['windows', 'linux', 'macos']
 const optionLabels: Record<string, string> = {
@@ -38,6 +40,9 @@ const optionLabels: Record<string, string> = {
   custom: '自定义',
   user_input: '用户输入',
   auto: '自动处理',
+  gitclone: 'Git 克隆',
+  '!gitclone': '非 Git 获取',
+  getfile: '获取文件',
   no: '不处理',
   windows: 'Windows',
   linux: 'Linux',
@@ -82,6 +87,10 @@ export interface WorkbenchModInfoMeta {
   componentsEnvInput: boolean | null
   componentsList: string[]
   components: WorkbenchComponentMeta[]
+  deployEnvOutput: boolean | null
+  deployEnvInput: boolean | null
+  deployList: string[]
+  deployments: WorkbenchDeploymentMeta[]
 }
 
 const emptyComponentMeta: WorkbenchComponentMeta = {
@@ -128,6 +137,45 @@ const emptyComponentMeta: WorkbenchComponentMeta = {
   envInputList: [],
 }
 
+const emptyDeploymentMeta: WorkbenchDeploymentMeta = {
+  name: '',
+  id: '',
+  choose: null,
+  runtime: '',
+  commandTheme: 'classical',
+  deploy: null,
+  commandDeploy: null,
+  deployCommandList: [],
+  deployMethod: '',
+  baseLink: '',
+  getMethod: '',
+  getVersion: '',
+  githubRepo: '',
+  versionFile: [],
+  versionCustom: [],
+  getLink: '',
+  getLinkProvideList: [],
+  linkFile: [],
+  linkCustom: [],
+  denoPermissions: [],
+  jvm: [],
+  userChoose: null,
+  chooseList: [],
+  formatVersion: null,
+  versionFormattingFormula: [],
+  deployPath: '',
+  customPath: '',
+  beforeCommand: null,
+  beforeCommandList: [],
+  afterCommand: null,
+  afterCommandList: [],
+  splicingLink: '',
+  envOutput: null,
+  envOutputList: [],
+  envInput: null,
+  envInputList: [],
+}
+
 const emptyModInfoMeta: WorkbenchModInfoMeta = {
   author: '',
   tags: [],
@@ -157,6 +205,10 @@ const emptyModInfoMeta: WorkbenchModInfoMeta = {
   componentsEnvInput: null,
   componentsList: [],
   components: [],
+  deployEnvOutput: null,
+  deployEnvInput: null,
+  deployList: [],
+  deployments: [],
 }
 
 export interface WorkbenchRightSidebarProps {
@@ -320,6 +372,20 @@ function fillComponentsToIndex(components: WorkbenchComponentMeta[], index: numb
   return [
     ...components,
     ...Array.from({ length: index - components.length + 1 }, () => ({ ...emptyComponentMeta })),
+  ]
+}
+
+function parseDeploymentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('deployment:')) return null
+  const index = Number(blockId.slice('deployment:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function fillDeploymentsToIndex(deployments: WorkbenchDeploymentMeta[], index: number) {
+  if (deployments.length > index) return [...deployments]
+  return [
+    ...deployments,
+    ...Array.from({ length: index - deployments.length + 1 }, () => ({ ...emptyDeploymentMeta })),
   ]
 }
 
@@ -2329,6 +2395,528 @@ function EnvVariableTableField({
   )
 }
 
+function DeployMetaEditor({
+  meta,
+  updateMeta,
+  fieldAvailableWidth,
+  width,
+}: {
+  meta: WorkbenchModInfoMeta
+  updateMeta: (patch: Partial<WorkbenchModInfoMeta>) => void
+  fieldAvailableWidth: number
+  width: number
+}) {
+  return (
+    <div className="flex min-h-[390px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+      <section data-outline-target="deploy-env-output">
+        <FieldLabel>[DEPLOY] 环境变量导出</FieldLabel>
+        <BooleanSwitchField
+          value={meta.deployEnvOutput}
+          onChange={deployEnvOutput => updateMeta({ deployEnvOutput })}
+        />
+      </section>
+
+      <section data-outline-target="deploy-env-input">
+        <FieldLabel>[DEPLOY] 环境变量导入</FieldLabel>
+        <BooleanSwitchField
+          value={meta.deployEnvInput}
+          onChange={deployEnvInput => updateMeta({ deployEnvInput })}
+        />
+      </section>
+
+      <section data-outline-target="deploy-list">
+        <ArrayListField
+          label="部署ID列表"
+          values={meta.deployList}
+          outlineTargetId="deploy-list"
+          onChange={deployList => updateMeta({ deployList })}
+          maxWidth={fieldAvailableWidth}
+          itemAriaLabel="部署ID"
+        />
+      </section>
+    </div>
+  )
+}
+
+function DeploymentMetaEditor({
+  deployment,
+  updateDeployment,
+  updateDeploymentId,
+  deploymentOutlineTarget,
+  fieldAvailableWidth,
+  width,
+  deploymentVersionFile,
+  deploymentVersionCustom,
+  deploymentLinkFile,
+  deploymentLinkCustom,
+  deploymentGetLinkProvideList,
+  deploymentDenoPermissions,
+  deploymentJvm,
+  showDeploymentVersionDenoPermissions,
+  showDeploymentVersionJvmOptions,
+  showDeploymentLinkDenoPermissions,
+  showDeploymentLinkJvmOptions,
+  deploymentEnvOutputList,
+  deploymentEnvInputList,
+  deploymentEnvOutputOptions,
+  deploymentEnvInputOptions,
+}: {
+  deployment: WorkbenchDeploymentMeta
+  updateDeployment: (patch: Partial<WorkbenchDeploymentMeta>) => void
+  updateDeploymentId: (id: string) => void
+  deploymentOutlineTarget: (fieldName: string) => string | undefined
+  fieldAvailableWidth: number
+  width: number
+  deploymentVersionFile: string[]
+  deploymentVersionCustom: string[]
+  deploymentLinkFile: string[]
+  deploymentLinkCustom: string[]
+  deploymentGetLinkProvideList: string[]
+  deploymentDenoPermissions: string[]
+  deploymentJvm: string[]
+  showDeploymentVersionDenoPermissions: boolean
+  showDeploymentVersionJvmOptions: boolean
+  showDeploymentLinkDenoPermissions: boolean
+  showDeploymentLinkJvmOptions: boolean
+  deploymentEnvOutputList: WorkbenchEnvVariableEntry[]
+  deploymentEnvInputList: WorkbenchEnvVariableEntry[]
+  deploymentEnvOutputOptions: ArrayListPresetOption[]
+  deploymentEnvInputOptions: ArrayListPresetOption[]
+}) {
+  return (
+    <div className="flex min-h-[3200px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+      <section data-outline-target={deploymentOutlineTarget('name')}>
+        <FieldLabel>部署名称</FieldLabel>
+        <AutoGrowTextField
+          value={deployment.name}
+          onChange={name => updateDeployment({ name })}
+          maxWidth={fieldAvailableWidth}
+          ariaLabel="部署名称"
+        />
+      </section>
+
+      <section data-outline-target={deploymentOutlineTarget('id')}>
+        <FieldLabel>部署ID</FieldLabel>
+        <AutoGrowTextField
+          value={deployment.id}
+          onChange={updateDeploymentId}
+          maxWidth={fieldAvailableWidth}
+          ariaLabel="部署ID"
+        />
+      </section>
+
+      <section data-outline-target={deploymentOutlineTarget('deploy')}>
+        <FieldLabel>需要部署</FieldLabel>
+        <BooleanSwitchField
+          value={deployment.deploy}
+          onChange={deploy => updateDeployment({ deploy })}
+        />
+      </section>
+
+      <ConditionalField show={deployment.deploy === true}>
+        <section data-outline-target={deploymentOutlineTarget('choose')}>
+          <FieldLabel>用户可选部署</FieldLabel>
+          <BooleanSwitchField
+            value={deployment.choose}
+            onChange={choose => updateDeployment({ choose })}
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={deploymentOutlineTarget('runtime')}>
+        <FieldLabel>部署运行时</FieldLabel>
+        <RuntimeSelectField
+          value={deployment.runtime}
+          onChange={runtime => updateDeployment({ runtime })}
+          allowInherit
+        />
+      </section>
+
+      <section data-outline-target={deploymentOutlineTarget('command-theme')}>
+        <FieldLabel>命令主题</FieldLabel>
+        <OptionSelectField
+          value={deployment.commandTheme}
+          options={commandThemeOptions}
+          onChange={commandTheme => updateDeployment({ commandTheme })}
+          ariaLabel="命令主题"
+        />
+      </section>
+
+      <ConditionalField show={deployment.deploy === true}>
+        <div className="flex flex-col gap-[18px]">
+          <section data-outline-target={deploymentOutlineTarget('command-deploy')}>
+            <FieldLabel>命令行部署</FieldLabel>
+            <BooleanSwitchField
+              value={deployment.commandDeploy}
+              onChange={commandDeploy => updateDeployment({ commandDeploy })}
+            />
+          </section>
+
+          <ConditionalField show={deployment.commandDeploy === true}>
+            <section data-outline-target={deploymentOutlineTarget('deploy-command-list')}>
+              <ArrayListField
+                label="部署命令列表"
+                values={deployment.deployCommandList}
+                outlineTargetId={deploymentOutlineTarget('deploy-command-list')}
+                onChange={deployCommandList => updateDeployment({ deployCommandList })}
+                maxWidth={fieldAvailableWidth}
+                itemAriaLabel="部署命令"
+              />
+            </section>
+          </ConditionalField>
+
+          <ConditionalField show={deployment.commandDeploy !== true}>
+            <div className="flex flex-col gap-[18px]">
+              <section data-outline-target={deploymentOutlineTarget('deploy-method')}>
+                <FieldLabel>部署方式</FieldLabel>
+                <OptionSelectField
+                  value={deployment.deployMethod}
+                  options={deployMethodOptions}
+                  onChange={deployMethod => updateDeployment({ deployMethod })}
+                  ariaLabel="部署方式"
+                />
+              </section>
+
+              <section data-outline-target={deploymentOutlineTarget('base-link')}>
+                <FieldLabel>部署基础链接</FieldLabel>
+                <AutoGrowTextField
+                  value={deployment.baseLink}
+                  onChange={baseLink => updateDeployment({ baseLink })}
+                  maxWidth={fieldAvailableWidth}
+                  ariaLabel="部署基础链接"
+                />
+              </section>
+
+              <section data-outline-target={deploymentOutlineTarget('get-method')}>
+                <FieldLabel>获取方法</FieldLabel>
+                <OptionSelectField
+                  value={deployment.getMethod}
+                  options={deploymentGetMethodOptions}
+                  onChange={getMethod => updateDeployment({ getMethod })}
+                  ariaLabel="获取方法"
+                />
+              </section>
+
+              <ConditionalField show={deployment.getMethod === 'get_version'}>
+                <div className="flex flex-col gap-[18px]">
+                  <section data-outline-target={deploymentOutlineTarget('get-version')}>
+                    <FieldLabel>版本获取方式</FieldLabel>
+                    <OptionSelectField
+                      value={deployment.getVersion}
+                      options={getVersionOptions}
+                      onChange={getVersion => updateDeployment({ getVersion })}
+                      ariaLabel="版本获取方式"
+                    />
+                  </section>
+
+                  <ConditionalField show={deployment.getVersion === 'github_repo'}>
+                    <section data-outline-target={deploymentOutlineTarget('github-repo')}>
+                      <FieldLabel>GitHub仓库链接</FieldLabel>
+                      <AutoGrowTextField
+                        value={deployment.githubRepo}
+                        onChange={githubRepo => updateDeployment({ githubRepo })}
+                        maxWidth={fieldAvailableWidth}
+                        ariaLabel="GitHub仓库链接"
+                      />
+                    </section>
+                  </ConditionalField>
+
+                  <ConditionalField show={deployment.getVersion === 'filelink'}>
+                    <section data-outline-target={deploymentOutlineTarget('version-file')}>
+                      <ArrayListField
+                        label="版本文件来源列表"
+                        values={deploymentVersionFile}
+                        outlineTargetId={deploymentOutlineTarget('version-file')}
+                        onChange={versionFile => updateDeployment({ versionFile })}
+                        maxWidth={fieldAvailableWidth}
+                        itemAriaLabel="版本文件来源"
+                      />
+                    </section>
+                  </ConditionalField>
+
+                  <ConditionalField show={deployment.getVersion === 'custom'}>
+                    <section data-outline-target={deploymentOutlineTarget('version-custom')}>
+                      <ArrayListField
+                        label="版本脚本来源列表"
+                        values={deploymentVersionCustom}
+                        outlineTargetId={deploymentOutlineTarget('version-custom')}
+                        onChange={versionCustom => updateDeployment({ versionCustom })}
+                        maxWidth={fieldAvailableWidth}
+                        itemAriaLabel="版本脚本来源"
+                      />
+                    </section>
+                  </ConditionalField>
+
+                  <ConditionalField show={deployment.getVersion === 'custom' && showDeploymentVersionDenoPermissions}>
+                    <section data-outline-target={deploymentOutlineTarget('deno-permissions')}>
+                      <ArrayListField
+                        label="Deno权限参数列表"
+                        values={deploymentDenoPermissions}
+                        outlineTargetId={deploymentOutlineTarget('deno-permissions')}
+                        onChange={denoPermissions => updateDeployment({ denoPermissions })}
+                        maxWidth={fieldAvailableWidth}
+                        itemAriaLabel="Deno权限参数"
+                      />
+                    </section>
+                  </ConditionalField>
+
+                  <ConditionalField show={deployment.getVersion === 'custom' && showDeploymentVersionJvmOptions}>
+                    <section data-outline-target={deploymentOutlineTarget('jvm')}>
+                      <ArrayListField
+                        label="JVM参数列表"
+                        values={deploymentJvm}
+                        outlineTargetId={deploymentOutlineTarget('jvm')}
+                        onChange={jvm => updateDeployment({ jvm })}
+                        maxWidth={fieldAvailableWidth}
+                        itemAriaLabel="JVM参数"
+                      />
+                    </section>
+                  </ConditionalField>
+
+                  <section data-outline-target={deploymentOutlineTarget('splicing-link')}>
+                    <FieldLabel>版本拼接链接</FieldLabel>
+                    <AutoGrowTextField
+                      value={deployment.splicingLink}
+                      onChange={splicingLink => updateDeployment({ splicingLink })}
+                      maxWidth={fieldAvailableWidth}
+                      ariaLabel="版本拼接链接"
+                    />
+                  </section>
+
+                  <section data-outline-target={deploymentOutlineTarget('format-version')}>
+                    <FieldLabel>格式化版本号</FieldLabel>
+                    <BooleanSwitchField
+                      value={deployment.formatVersion}
+                      onChange={formatVersion => updateDeployment({ formatVersion })}
+                    />
+                  </section>
+
+                  <ConditionalField show={deployment.formatVersion === true}>
+                    <section data-outline-target={deploymentOutlineTarget('version-formatting-formula')}>
+                      <VersionFormattingRuleField
+                        label="格式化规则列表"
+                        values={deployment.versionFormattingFormula}
+                        outlineTargetId={deploymentOutlineTarget('version-formatting-formula')}
+                        onChange={versionFormattingFormula => updateDeployment({ versionFormattingFormula })}
+                        maxWidth={fieldAvailableWidth}
+                      />
+                    </section>
+                  </ConditionalField>
+                </div>
+              </ConditionalField>
+
+              <ConditionalField show={deployment.getMethod === 'get_link'}>
+                <div className="flex flex-col gap-[18px]">
+                  <section data-outline-target={deploymentOutlineTarget('get-link')}>
+                    <FieldLabel>链接获取方式</FieldLabel>
+                    <OptionSelectField
+                      value={deployment.getLink}
+                      options={getLinkOptions}
+                      onChange={getLink => updateDeployment({ getLink })}
+                      ariaLabel="链接获取方式"
+                    />
+                  </section>
+
+                  <ConditionalField show={deployment.getLink === 'filelink' || deployment.getLink === 'custom'}>
+                    <section data-outline-target={deploymentOutlineTarget('get-link-provide-list')}>
+                      <ArrayListField
+                        label="可选链接列表"
+                        values={deploymentGetLinkProvideList}
+                        outlineTargetId={deploymentOutlineTarget('get-link-provide-list')}
+                        onChange={getLinkProvideList => updateDeployment({ getLinkProvideList })}
+                        maxWidth={fieldAvailableWidth}
+                        itemAriaLabel="可选链接"
+                      />
+                    </section>
+                  </ConditionalField>
+
+                  <ConditionalField show={deployment.getLink === 'filelink' && deploymentGetLinkProvideList.length === 0}>
+                    <section data-outline-target={deploymentOutlineTarget('link-file')}>
+                      <ArrayListField
+                        label="链接文件来源列表"
+                        values={deploymentLinkFile}
+                        outlineTargetId={deploymentOutlineTarget('link-file')}
+                        onChange={linkFile => updateDeployment({ linkFile })}
+                        maxWidth={fieldAvailableWidth}
+                        itemAriaLabel="链接文件来源"
+                      />
+                    </section>
+                  </ConditionalField>
+
+                  <ConditionalField show={deployment.getLink === 'custom' && deploymentGetLinkProvideList.length === 0}>
+                    <section data-outline-target={deploymentOutlineTarget('link-custom')}>
+                      <ArrayListField
+                        label="链接脚本来源列表"
+                        values={deploymentLinkCustom}
+                        outlineTargetId={deploymentOutlineTarget('link-custom')}
+                        onChange={linkCustom => updateDeployment({ linkCustom })}
+                        maxWidth={fieldAvailableWidth}
+                        itemAriaLabel="链接脚本来源"
+                      />
+                    </section>
+                  </ConditionalField>
+
+                  <ConditionalField show={deployment.getLink === 'custom' && deploymentGetLinkProvideList.length === 0 && showDeploymentLinkDenoPermissions}>
+                    <section data-outline-target={deploymentOutlineTarget('deno-permissions')}>
+                      <ArrayListField
+                        label="Deno权限参数列表"
+                        values={deploymentDenoPermissions}
+                        outlineTargetId={deploymentOutlineTarget('deno-permissions')}
+                        onChange={denoPermissions => updateDeployment({ denoPermissions })}
+                        maxWidth={fieldAvailableWidth}
+                        itemAriaLabel="Deno权限参数"
+                      />
+                    </section>
+                  </ConditionalField>
+
+                  <ConditionalField show={deployment.getLink === 'custom' && deploymentGetLinkProvideList.length === 0 && showDeploymentLinkJvmOptions}>
+                    <section data-outline-target={deploymentOutlineTarget('jvm')}>
+                      <ArrayListField
+                        label="JVM参数列表"
+                        values={deploymentJvm}
+                        outlineTargetId={deploymentOutlineTarget('jvm')}
+                        onChange={jvm => updateDeployment({ jvm })}
+                        maxWidth={fieldAvailableWidth}
+                        itemAriaLabel="JVM参数"
+                      />
+                    </section>
+                  </ConditionalField>
+                </div>
+              </ConditionalField>
+            </div>
+          </ConditionalField>
+
+          <section data-outline-target={deploymentOutlineTarget('deploy-path')}>
+            <FieldLabel>部署路径</FieldLabel>
+            <AutoGrowTextField
+              value={deployment.deployPath}
+              onChange={deployPath => updateDeployment({ deployPath })}
+              maxWidth={fieldAvailableWidth}
+              ariaLabel="部署路径"
+            />
+          </section>
+
+          <ConditionalField show={deployment.deployPath === '$CustomPath'}>
+            <section data-outline-target={deploymentOutlineTarget('custom-path')}>
+              <FieldLabel>自定义路径</FieldLabel>
+              <AutoGrowTextField
+                value={deployment.customPath}
+                onChange={customPath => updateDeployment({ customPath })}
+                maxWidth={fieldAvailableWidth}
+                ariaLabel="自定义路径"
+              />
+            </section>
+          </ConditionalField>
+        </div>
+      </ConditionalField>
+
+      <section data-outline-target={deploymentOutlineTarget('user-choose')}>
+        <FieldLabel>用户可选版本</FieldLabel>
+        <BooleanSwitchField
+          value={deployment.userChoose}
+          onChange={userChoose => updateDeployment({ userChoose })}
+        />
+      </section>
+
+      <ConditionalField show={deployment.userChoose === true}>
+        <section data-outline-target={deploymentOutlineTarget('choose-list')}>
+          <ArrayListField
+            label="版本选择列表"
+            values={deployment.chooseList}
+            outlineTargetId={deploymentOutlineTarget('choose-list')}
+            onChange={chooseList => updateDeployment({ chooseList })}
+            maxWidth={fieldAvailableWidth}
+            itemAriaLabel="版本选择项"
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={deploymentOutlineTarget('before-command')}>
+        <FieldLabel>部署前操作</FieldLabel>
+        <BooleanSwitchField
+          value={deployment.beforeCommand}
+          onChange={beforeCommand => updateDeployment({ beforeCommand })}
+        />
+      </section>
+
+      <ConditionalField show={deployment.beforeCommand === true}>
+        <section data-outline-target={deploymentOutlineTarget('before-command-list')}>
+          <ArrayListField
+            label="部署前命令列表"
+            values={deployment.beforeCommandList}
+            outlineTargetId={deploymentOutlineTarget('before-command-list')}
+            onChange={beforeCommandList => updateDeployment({ beforeCommandList })}
+            maxWidth={fieldAvailableWidth}
+            itemAriaLabel="部署前命令"
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={deploymentOutlineTarget('after-command')}>
+        <FieldLabel>部署后操作</FieldLabel>
+        <BooleanSwitchField
+          value={deployment.afterCommand}
+          onChange={afterCommand => updateDeployment({ afterCommand })}
+        />
+      </section>
+
+      <ConditionalField show={deployment.afterCommand === true}>
+        <section data-outline-target={deploymentOutlineTarget('after-command-list')}>
+          <ArrayListField
+            label="部署后命令列表"
+            values={deployment.afterCommandList}
+            outlineTargetId={deploymentOutlineTarget('after-command-list')}
+            onChange={afterCommandList => updateDeployment({ afterCommandList })}
+            maxWidth={fieldAvailableWidth}
+            itemAriaLabel="部署后命令"
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={deploymentOutlineTarget('env-output')}>
+        <FieldLabel>部署环境变量导出</FieldLabel>
+        <BooleanSwitchField
+          value={deployment.envOutput}
+          onChange={envOutput => updateDeployment({ envOutput })}
+        />
+      </section>
+
+      <ConditionalField show={deployment.envOutput === true}>
+        <section data-outline-target={deploymentOutlineTarget('env-output-list')}>
+          <EnvVariableTableField
+            label="导出变量列表"
+            values={deploymentEnvOutputList}
+            outlineTargetId={deploymentOutlineTarget('env-output-list')}
+            onChange={envOutputList => updateDeployment({ envOutputList })}
+            maxWidth={fieldAvailableWidth}
+            presetOptions={deploymentEnvOutputOptions}
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={deploymentOutlineTarget('env-input')}>
+        <FieldLabel>部署环境变量导入</FieldLabel>
+        <BooleanSwitchField
+          value={deployment.envInput}
+          onChange={envInput => updateDeployment({ envInput })}
+        />
+      </section>
+
+      <ConditionalField show={deployment.envInput === true}>
+        <section data-outline-target={deploymentOutlineTarget('env-input-list')}>
+          <EnvVariableTableField
+            label="导入变量列表"
+            values={deploymentEnvInputList}
+            outlineTargetId={deploymentOutlineTarget('env-input-list')}
+            onChange={envInputList => updateDeployment({ envInputList })}
+            maxWidth={fieldAvailableWidth}
+            presetOptions={deploymentEnvInputOptions}
+          />
+        </section>
+      </ConditionalField>
+    </div>
+  )
+}
 export default function WorkbenchRightSidebar({
   collapsed,
   width,
@@ -2401,6 +2989,65 @@ export default function WorkbenchRightSidebar({
     value: createEnvInputValue(name),
     label: name,
   })))
+
+  const selectedDeploymentIndex = parseDeploymentBlockIndex(selectedBlockId)
+  const deployment = selectedDeploymentIndex === null
+    ? emptyDeploymentMeta
+    : { ...emptyDeploymentMeta, ...(meta.deployments[selectedDeploymentIndex] ?? {}) }
+  const deploymentVersionFile = deployment.versionFile ?? []
+  const deploymentVersionCustom = deployment.versionCustom ?? []
+  const deploymentLinkFile = deployment.linkFile ?? []
+  const deploymentLinkCustom = deployment.linkCustom ?? []
+  const deploymentGetLinkProvideList = deployment.getLinkProvideList ?? []
+  const deploymentDenoPermissions = deployment.denoPermissions ?? []
+  const deploymentJvm = deployment.jvm ?? []
+  const showDeploymentVersionDenoPermissions = hasDenoCustomSource(deploymentVersionCustom)
+  const showDeploymentVersionJvmOptions = hasJvmCustomSource(deploymentVersionCustom)
+  const showDeploymentLinkDenoPermissions = hasDenoCustomSource(deploymentLinkCustom)
+  const showDeploymentLinkJvmOptions = hasJvmCustomSource(deploymentLinkCustom)
+  const deploymentNameForPlaceholder = deployment.id || deployment.name || `部署${(selectedDeploymentIndex ?? 0) + 1}`
+  const deploymentEnvOutputList = normalizeEnvVariableEntries(deployment.envOutputList)
+  const deploymentEnvInputList = normalizeEnvVariableEntries(deployment.envInputList)
+  const deploymentEnvNameBase = createEnvVariableName(deployment.id || deployment.name || `deployment-${(selectedDeploymentIndex ?? 0) + 1}`)
+  const componentOutputEnvNames = meta.components.flatMap(item => (
+    normalizeEnvVariableEntries(item.envOutputList).map(extractEnvName).filter((name): name is string => Boolean(name))
+  ))
+  const previousDeploymentEnvNames = selectedDeploymentIndex === null
+    ? []
+    : meta.deployments.slice(0, selectedDeploymentIndex).flatMap(item => (
+      normalizeEnvVariableEntries(item.envOutputList).map(extractEnvName).filter((name): name is string => Boolean(name))
+    ))
+  const deploymentEnvOutputOptions = uniquePresetOptions([
+    {
+      name: `${deploymentEnvNameBase}_HOME`,
+      value: `{{deploy_path|${deploymentNameForPlaceholder}}}`,
+      label: `部署路径：${deploymentNameForPlaceholder}`,
+    },
+    {
+      name: `${deploymentEnvNameBase}_VERSION`,
+      value: `{{version|${deploymentNameForPlaceholder}}}`,
+      label: `版本号：${deploymentNameForPlaceholder}`,
+    },
+    ...deploymentGetLinkProvideList.map((_, index) => ({
+      name: `${deploymentEnvNameBase}_LINK_${index}`,
+      value: `{{key|Deployment.${deploymentNameForPlaceholder}.get_link_provide_list.${index}}}`,
+      label: `可选链接 ${index}`,
+    })),
+    ...(meta.fileImport === true ? meta.fileImportList.filter(Boolean).map(fileName => ({
+      name: `${createEnvVariableName(fileName)}_PATH`,
+      value: `{{file_path|${fileName}}}`,
+      label: `导入文件：${fileName}`,
+    })) : []),
+  ])
+  const deploymentEnvInputOptions = uniquePresetOptions([
+    ...builtinEnvNames,
+    ...componentOutputEnvNames,
+    ...previousDeploymentEnvNames,
+  ].map(name => ({
+    name,
+    value: createEnvInputValue(name),
+    label: name,
+  })))
   const updateComponent = (patch: Partial<WorkbenchComponentMeta>) => {
     if (selectedComponentIndex === null) return
     const nextComponents = fillComponentsToIndex(meta.components, selectedComponentIndex)
@@ -2424,6 +3071,32 @@ export default function WorkbenchRightSidebar({
     updateMeta({
       components: nextComponents,
       componentsList: arraysEqual(nextList, meta.componentsList) ? meta.componentsList : nextList,
+    })
+  }
+
+  const updateDeployment = (patch: Partial<WorkbenchDeploymentMeta>) => {
+    if (selectedDeploymentIndex === null) return
+    const nextDeployments = fillDeploymentsToIndex(meta.deployments, selectedDeploymentIndex)
+    nextDeployments[selectedDeploymentIndex] = { ...nextDeployments[selectedDeploymentIndex], ...deployment, ...patch }
+    updateMeta({ deployments: nextDeployments })
+  }
+
+  const updateDeploymentId = (id: string) => {
+    if (selectedDeploymentIndex === null) return
+    const previousId = deployment.id
+    const nextDeployments = fillDeploymentsToIndex(meta.deployments, selectedDeploymentIndex).map((item, index) => (
+      index === selectedDeploymentIndex ? { ...item, ...deployment, id } : item
+    ))
+    const deploymentIds = nextDeployments.map(item => item.id).filter(Boolean)
+    const extraIds = meta.deployList.filter(item => (
+      item
+      && item !== previousId
+      && !deploymentIds.includes(item)
+    ))
+    const nextList = [...deploymentIds, ...extraIds]
+    updateMeta({
+      deployments: nextDeployments,
+      deployList: arraysEqual(nextList, meta.deployList) ? meta.deployList : nextList,
     })
   }
 
@@ -2465,8 +3138,13 @@ export default function WorkbenchRightSidebar({
   const shouldShowInitMeta = selectedBlockId === 'init'
   const shouldShowComponentsMeta = selectedBlockId === 'components'
   const shouldShowComponentMeta = selectedComponentIndex !== null
+  const shouldShowDeployMeta = selectedBlockId === 'deploy'
+  const shouldShowDeploymentMeta = selectedDeploymentIndex !== null
   const componentOutlineTarget = (fieldName: string) => (
     selectedComponentIndex === null ? undefined : `component-${selectedComponentIndex}-${fieldName}`
+  )
+  const deploymentOutlineTarget = (fieldName: string) => (
+    selectedDeploymentIndex === null ? undefined : `deployment-${selectedDeploymentIndex}-${fieldName}`
   )
 
   useEffect(() => {
@@ -2831,6 +3509,37 @@ export default function WorkbenchRightSidebar({
               />
             </section>
           </div>
+        ) : shouldShowDeployMeta ? (
+          <DeployMetaEditor
+            meta={meta}
+            updateMeta={updateMeta}
+            fieldAvailableWidth={fieldAvailableWidth}
+            width={width}
+          />
+        ) : shouldShowDeploymentMeta ? (
+          <DeploymentMetaEditor
+            deployment={deployment}
+            updateDeployment={updateDeployment}
+            updateDeploymentId={updateDeploymentId}
+            deploymentOutlineTarget={deploymentOutlineTarget}
+            fieldAvailableWidth={fieldAvailableWidth}
+            width={width}
+            deploymentVersionFile={deploymentVersionFile}
+            deploymentVersionCustom={deploymentVersionCustom}
+            deploymentLinkFile={deploymentLinkFile}
+            deploymentLinkCustom={deploymentLinkCustom}
+            deploymentGetLinkProvideList={deploymentGetLinkProvideList}
+            deploymentDenoPermissions={deploymentDenoPermissions}
+            deploymentJvm={deploymentJvm}
+            showDeploymentVersionDenoPermissions={showDeploymentVersionDenoPermissions}
+            showDeploymentVersionJvmOptions={showDeploymentVersionJvmOptions}
+            showDeploymentLinkDenoPermissions={showDeploymentLinkDenoPermissions}
+            showDeploymentLinkJvmOptions={showDeploymentLinkJvmOptions}
+            deploymentEnvOutputList={deploymentEnvOutputList}
+            deploymentEnvInputList={deploymentEnvInputList}
+            deploymentEnvOutputOptions={deploymentEnvOutputOptions}
+            deploymentEnvInputOptions={deploymentEnvInputOptions}
+          />
         ) : shouldShowComponentMeta ? (
           <div className="flex min-h-[3200px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
 

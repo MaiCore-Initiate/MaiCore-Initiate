@@ -1,11 +1,29 @@
 import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
-export const deployBlockMinSize: WorkbenchSize = { width: 456, height: 210 }
+export const deployBlockMinSize: WorkbenchSize = { width: 456, height: 240 }
 export const deployBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
 
 const bodyX = 5
 const bodyY = 5
 const accent = '#d97706'
+
+export function resolveDeployBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
+  return {
+    x: bodyX + Math.max(deployBlockMinSize.width, size.width) / 2,
+    y: bodyY + Math.max(deployBlockMinSize.height, size.height),
+  }
+}
+
+function AddConnectorButton({ label }: { label?: string }) {
+  return (
+    <g transform="translate(-12 0)">
+      <circle cx="12" cy="12" r="12" fill="var(--dfw-bg)" stroke={accent} strokeWidth="2" />
+      <path d="M7,12h10" fill="none" stroke={accent} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      <path d="M12,7v10" fill="none" stroke={accent} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      {label ? <title>{label}</title> : null}
+    </g>
+  )
+}
 
 function InputPort() {
   return (
@@ -16,11 +34,49 @@ function InputPort() {
   )
 }
 
+function TextLine({
+  x = 22,
+  y,
+  label,
+  value,
+  clipId,
+}: {
+  x?: number
+  y: number
+  label: string
+  value: string
+  clipId: string
+}) {
+  return (
+    <text x={x} y={y} fontSize="18" fontFamily={workbenchCanvasFont} fontWeight="500" opacity="0.78" clipPath={`url(#${clipId})`}>
+      <tspan>{label}</tspan>
+      <tspan fontWeight="300">{value}</tspan>
+    </text>
+  )
+}
+
+function formatTomlString(value: string) {
+  return value ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : ''
+}
+
+function formatTomlArray(values: string[]) {
+  return values.length ? `[${values.map(formatTomlString).join(', ')}]` : ''
+}
+
+function formatTomlBoolean(value: boolean | null) {
+  if (value === null) return ''
+  return value ? 'true' : 'false'
+}
+
 export default function DeployBlock({
   position,
   size,
   selected,
   onSelect,
+  onDeploymentConnectorClick,
+  deployEnvOutput,
+  deployEnvInput,
+  deployList,
   dragHandlers,
   resizeHandlers,
 }: {
@@ -28,6 +84,10 @@ export default function DeployBlock({
   size: WorkbenchSize
   selected: boolean
   onSelect?: () => void
+  onDeploymentConnectorClick?: () => void
+  deployEnvOutput: boolean | null
+  deployEnvInput: boolean | null
+  deployList: string[]
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
 }) {
@@ -36,7 +96,19 @@ export default function DeployBlock({
   const selectWidth = bodyWidth + 10
   const selectHeight = bodyHeight + 10
   const headerHeight = 58
+  const delimiterHeight = 34
+  const delimiterWidth = Math.max(140, bodyWidth - 70)
+  const delimiterX = bodyX + (bodyWidth - delimiterWidth) / 2
+  const delimiterY = bodyY + bodyHeight - 57
   const contentClipId = 'dfw-deploy-block-content-clip'
+  const deploymentOutputOffset = resolveDeployBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
+  const deploymentConnectorX = deploymentOutputOffset.x
+  const deploymentConnectorY = deploymentOutputOffset.y - 12
+  const rows = [
+    { label: '环境变量导出：', value: formatTomlBoolean(deployEnvOutput) },
+    { label: '环境变量导入：', value: formatTomlBoolean(deployEnvInput) },
+    { label: '部署ID列表：', value: formatTomlArray(deployList) },
+  ]
 
   return (
     <g transform={`translate(${position.x} ${position.y})`}>
@@ -50,15 +122,45 @@ export default function DeployBlock({
 
       <defs>
         <clipPath id={contentClipId}>
-          <rect x="18" y="76" width={bodyWidth - 36} height={bodyHeight - 96} />
+          <rect x="18" y="76" width={bodyWidth - 36} height={Math.max(20, delimiterY - 86)} />
         </clipPath>
       </defs>
 
       <text x="22" y="44" fontSize="25" fontFamily={workbenchCanvasFont} fontWeight="600" fill="currentColor">
         [DEPLOY]
       </text>
-      <text x="22" y="94" fontSize="18" fontFamily={workbenchCanvasFont} fontWeight="500" opacity="0.78" clipPath={`url(#${contentClipId})`}>
-        <tspan>部署管理闸</tspan>
+      {rows.map((row, index) => (
+        <TextLine
+          key={row.label}
+          y={94 + index * 26}
+          label={row.label}
+          value={row.value}
+          clipId={contentClipId}
+        />
+      ))}
+
+      <rect
+        x={delimiterX}
+        y={delimiterY}
+        width={delimiterWidth}
+        height={delimiterHeight}
+        rx="10"
+        fill="var(--dfw-bg)"
+        stroke={accent}
+        strokeWidth="1.5"
+        opacity="0.9"
+      />
+      <text
+        x={bodyX + bodyWidth / 2}
+        y={delimiterY + 23}
+        textAnchor="middle"
+        fontSize="18"
+        fontFamily={workbenchCanvasFont}
+        fontWeight="500"
+        fill="currentColor"
+        opacity="0.86"
+      >
+        部署界定器
       </text>
 
       <rect
@@ -128,6 +230,19 @@ export default function DeployBlock({
         onPointerUp={resizeHandlers?.onResizePointerUp}
         onPointerCancel={resizeHandlers?.onResizePointerCancel}
       />
+
+      <g
+        transform={`translate(${deploymentConnectorX} ${deploymentConnectorY})`}
+        className="cursor-crosshair"
+        onClick={event => {
+          event.stopPropagation()
+          onDeploymentConnectorClick?.()
+        }}
+        onPointerDown={event => event.stopPropagation()}
+      >
+        <AddConnectorButton label="连接部署界定器" />
+        <circle cx="0" cy="12" r="18" fill="transparent" />
+      </g>
     </g>
   )
 }

@@ -6,6 +6,8 @@ const componentAccent = '#00d000'
 const componentFill = '#7fff9f'
 const deployAccent = '#d97706'
 const deployFill = '#f59e0b'
+const deploymentAccent = '#f59e0b'
+const deploymentFill = '#fde68a'
 
 function ComponentNodeRow({
   y,
@@ -65,6 +67,10 @@ function shouldShowComponent(source: WorkbenchConnectionSource | null) {
   return source === null || source === 'components-component'
 }
 
+function shouldShowDeployment(source: WorkbenchConnectionSource | null) {
+  return source === null || source === 'deploy-deployment'
+}
+
 export default function AddNodePopover({
   position,
   componentsVisible,
@@ -73,6 +79,7 @@ export default function AddNodePopover({
   onAddComponents,
   onAddDeploy,
   onAddComponent,
+  onAddDeployment,
   onClose,
 }: {
   position: WorkbenchPoint
@@ -82,6 +89,7 @@ export default function AddNodePopover({
   onAddComponents: () => void
   onAddDeploy: () => void
   onAddComponent: () => void
+  onAddDeployment: () => void
   onClose: () => void
 }) {
   const rows = [
@@ -93,6 +101,9 @@ export default function AddNodePopover({
       : []),
     ...(shouldShowDeploy(source)
       ? [{ key: 'deploy', label: '部署管理闸', code: '[DEPLOY]', fill: deployFill, stroke: deployAccent, disabled: deployVisible, onClick: onAddDeploy }]
+      : []),
+    ...(shouldShowDeployment(source)
+      ? [{ key: 'deployment', label: '部署界定器', code: '[[Deployment]]', fill: deploymentFill, stroke: deploymentAccent, disabled: false, onClick: onAddDeployment }]
       : []),
   ]
 
