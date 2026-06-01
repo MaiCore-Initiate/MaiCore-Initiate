@@ -1,4 +1,4 @@
-import type { PointerEvent } from 'react'
+import type { MouseEvent, PointerEvent } from 'react'
 
 export const workbenchCanvasFont = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 
@@ -162,6 +162,7 @@ export interface WorkbenchCanvasProps {
   visibleBlocks?: Partial<WorkbenchVisibleBlocks>
   onVisibleBlocksChange?: (patch: Partial<WorkbenchVisibleBlocks>) => void
   blockMeta?: Partial<WorkbenchBlockMeta>
+  onBlockMetaPatch?: (patch: Partial<WorkbenchBlockMeta>) => void
 }
 
 export type WorkbenchComponentBlockId = `component:${number}`
@@ -180,6 +181,7 @@ export interface WorkbenchBlockDragHandlers {
   onHeaderPointerMove?: (event: PointerEvent<SVGGElement>) => void
   onHeaderPointerUp?: (event: PointerEvent<SVGGElement>) => void
   onHeaderPointerCancel?: (event: PointerEvent<SVGGElement>) => void
+  onHeaderDoubleClick?: (event: MouseEvent<SVGGElement>) => void
 }
 
 export type WorkbenchResizeDirection = 'right' | 'bottom' | 'corner'

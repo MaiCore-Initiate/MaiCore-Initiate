@@ -1,3 +1,4 @@
+import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
 import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 export const componentsBlockMinSize: WorkbenchSize = { width: 456, height: 240 }
@@ -81,9 +82,11 @@ export default function ComponentsBlock({
   position,
   size,
   selected,
+  linking = false,
   onSelect,
   onDeployConnectorClick,
   onComponentConnectorClick,
+  onDelete,
   componentsEnvOutput,
   componentsEnvInput,
   componentsList,
@@ -93,9 +96,11 @@ export default function ComponentsBlock({
   position: WorkbenchPoint
   size: WorkbenchSize
   selected: boolean
+  linking?: boolean
   onSelect?: () => void
   onDeployConnectorClick?: () => void
   onComponentConnectorClick?: () => void
+  onDelete?: () => void
   componentsEnvOutput: boolean | null
   componentsEnvInput: boolean | null
   componentsList: string[]
@@ -128,6 +133,7 @@ export default function ComponentsBlock({
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
+      {linking && <LinkPendingOutline width={selectWidth} height={selectHeight} />}
 
       <rect
         x={bodyX}
@@ -218,6 +224,7 @@ export default function ComponentsBlock({
           event.stopPropagation()
           onSelect?.()
         }}
+        onDoubleClick={dragHandlers?.onHeaderDoubleClick}
         onPointerDown={dragHandlers?.onHeaderPointerDown}
         onPointerMove={dragHandlers?.onHeaderPointerMove}
         onPointerUp={dragHandlers?.onHeaderPointerUp}
@@ -288,6 +295,7 @@ export default function ComponentsBlock({
         <AddConnectorButton label="连接组件界定器" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
       </g>
+      <DeleteBlockButton x={bodyX + bodyWidth - 43} y={bodyY + 15} onDelete={onDelete} />
     </g>
   )
 }

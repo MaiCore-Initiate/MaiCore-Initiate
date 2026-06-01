@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
 import AddNodePopover from './AddNodePopover'
 import CanvasConnectionLayer from './CanvasConnectionLayer'
 import ComponentBlock, { componentBlockInputOffset, componentBlockMinSize, resolveComponentBlockOutputOffset } from './blocks/ComponentBlock'
@@ -134,6 +134,7 @@ const initBlockMinSize: WorkbenchSize = { width: 421, height: 431 }
 const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, componentCount: 0, deploymentCount: 0 }
 type DraggableBlockId = WorkbenchBlockId
 type ResizableBlockId = Exclude<WorkbenchBlockId, 'start'>
+type ManualConnection = { id: string; from: WorkbenchBlockId; to: WorkbenchBlockId }
 
 function resolveInitBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
   return {
@@ -179,6 +180,19 @@ function resizeArray<T>(values: T[], length: number, createValue: (index: number
   ]
 }
 
+function removeArrayItem<T>(values: T[], indexToRemove: number) {
+  return values.filter((_, index) => index !== indexToRemove)
+}
+
+function remapIndexedBlockId(blockId: WorkbenchBlockId, prefix: 'component' | 'deployment', removedIndex: number) {
+  const index = prefix === 'component'
+    ? parseComponentBlockIndex(blockId)
+    : parseDeploymentBlockIndex(blockId)
+  if (index === null) return blockId
+  if (index === removedIndex) return null
+  return `${prefix}:${index > removedIndex ? index - 1 : index}` as WorkbenchBlockId
+}
+
 
 export default function WorkbenchCanvas({
   viewport,
@@ -188,6 +202,7 @@ export default function WorkbenchCanvas({
   visibleBlocks,
   onVisibleBlocksChange,
   blockMeta,
+  onBlockMetaPatch,
 }: WorkbenchCanvasProps) {
   const meta = { ...defaultBlockMeta, ...blockMeta }
   const blockVisibility = { ...defaultVisibleBlocks, ...visibleBlocks }
@@ -208,6 +223,8 @@ export default function WorkbenchCanvas({
   const [deployConnected, setDeployConnected] = useState(false)
   const [addNodePopoverPosition, setAddNodePopoverPosition] = useState<WorkbenchPoint | null>(null)
   const [addNodePopoverSource, setAddNodePopoverSource] = useState<WorkbenchConnectionSource | null>(null)
+  const [linkSourceBlockId, setLinkSourceBlockId] = useState<WorkbenchBlockId | null>(null)
+  const [manualConnections, setManualConnections] = useState<ManualConnection[]>([])
 
   const dragRef = useRef<{
     pointerId: number
@@ -312,6 +329,7 @@ export default function WorkbenchCanvas({
     onHeaderPointerMove: moveBlockDrag,
     onHeaderPointerUp: stopBlockDrag,
     onHeaderPointerCancel: stopBlockDrag,
+    onHeaderDoubleClick: (event: MouseEvent<SVGGElement>) => handleHeaderDoubleClick(blockId, event),
   })
 
   const getBlockSize = (blockId: ResizableBlockId) => (
@@ -468,6 +486,177 @@ export default function WorkbenchCanvas({
     return { index, blockId: createDeploymentBlockId(index), position, size, input, output, connected: deploymentConnections[index] ?? false } as const
   })
 
+  const isBlockVisible = (blockId: WorkbenchBlockId) => {
+    if (blockId === 'start' || blockId === 'init') return true
+    if (blockId === 'components') return blockVisibility.components
+    if (blockId === 'deploy') return blockVisibility.deploy
+    const componentIndex = parseComponentBlockIndex(blockId)
+    if (componentIndex !== null) return componentIndex < blockVisibility.componentCount
+    const deploymentIndex = parseDeploymentBlockIndex(blockId)
+    return deploymentIndex !== null && deploymentIndex < blockVisibility.deploymentCount
+  }
+
+  const resolveBlockInputPoint = (blockId: WorkbenchBlockId) => {
+    if (!isBlockVisible(blockId)) return null
+    if (blockId === 'start') return startEndpointOutput
+    if (blockId === 'init') return initBlockInput
+    if (blockId === 'components') return componentsBlockInput
+    if (blockId === 'deploy') return deployBlockInput
+    const componentIndex = parseComponentBlockIndex(blockId)
+    if (componentIndex !== null) return componentBlocks[componentIndex]?.input ?? null
+    const deploymentIndex = parseDeploymentBlockIndex(blockId)
+    if (deploymentIndex !== null) return deploymentBlocks[deploymentIndex]?.input ?? null
+    return null
+  }
+
+  const resolveBlockOutputPoint = (blockId: WorkbenchBlockId) => {
+    if (!isBlockVisible(blockId)) return null
+    if (blockId === 'start') return startEndpointOutput
+    if (blockId === 'init') return initBlockOutput
+    if (blockId === 'components') return componentsDeployOutput
+    if (blockId === 'deploy') return deployBlockOutput
+    const componentIndex = parseComponentBlockIndex(blockId)
+    if (componentIndex !== null) return componentBlocks[componentIndex]?.output ?? null
+    const deploymentIndex = parseDeploymentBlockIndex(blockId)
+    if (deploymentIndex !== null) return deploymentBlocks[deploymentIndex]?.output ?? null
+    return null
+  }
+
+  const connectKnownRelation = (from: WorkbenchBlockId, to: WorkbenchBlockId) => {
+    if (from === 'init' && to === 'components' && blockVisibility.components) {
+      setComponentsConnected(true)
+      return true
+    }
+
+    if (from === 'components' && to === 'deploy' && blockVisibility.components && blockVisibility.deploy) {
+      setDeployConnected(true)
+      return true
+    }
+
+    if (from === 'components') {
+      const componentIndex = parseComponentBlockIndex(to)
+      if (componentIndex !== null && componentIndex < blockVisibility.componentCount) {
+        setComponentConnections(current => (
+          resizeArray(current, blockVisibility.componentCount, () => false).map((item, index) => (
+            index === componentIndex ? true : item
+          ))
+        ))
+        return true
+      }
+    }
+
+    if (from === 'deploy') {
+      const deploymentIndex = parseDeploymentBlockIndex(to)
+      if (deploymentIndex !== null && deploymentIndex < blockVisibility.deploymentCount) {
+        setDeploymentConnections(current => (
+          resizeArray(current, blockVisibility.deploymentCount, () => false).map((item, index) => (
+            index === deploymentIndex ? true : item
+          ))
+        ))
+        return true
+      }
+    }
+
+    return false
+  }
+
+  const addManualConnection = (from: WorkbenchBlockId, to: WorkbenchBlockId) => {
+    setManualConnections(current => {
+      if (current.some(connection => connection.from === from && connection.to === to)) return current
+      return [...current, { id: `${from}->${to}-${Date.now()}`, from, to }]
+    })
+  }
+
+  const handleHeaderDoubleClick = (blockId: WorkbenchBlockId, event: MouseEvent<SVGGElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    clearDragTimer()
+    dragRef.current = null
+    setAddNodePopoverPosition(null)
+    setAddNodePopoverSource(null)
+    onSelectedBlockChange?.(blockId)
+
+    if (!linkSourceBlockId) {
+      setLinkSourceBlockId(blockId)
+      return
+    }
+
+    if (linkSourceBlockId === blockId) {
+      setLinkSourceBlockId(null)
+      return
+    }
+
+    if (!connectKnownRelation(linkSourceBlockId, blockId) && !connectKnownRelation(blockId, linkSourceBlockId)) {
+      addManualConnection(linkSourceBlockId, blockId)
+    }
+    setLinkSourceBlockId(null)
+  }
+
+  const clearManualConnectionsFor = (blockId: WorkbenchBlockId) => {
+    setManualConnections(current => current.filter(connection => connection.from !== blockId && connection.to !== blockId))
+    setLinkSourceBlockId(current => (current === blockId ? null : current))
+  }
+
+  const remapManualConnectionsAfterIndexedDelete = (prefix: 'component' | 'deployment', removedIndex: number) => {
+    setManualConnections(current => current.flatMap(connection => {
+      const from = remapIndexedBlockId(connection.from, prefix, removedIndex)
+      const to = remapIndexedBlockId(connection.to, prefix, removedIndex)
+      return from && to ? [{ ...connection, from, to }] : []
+    }))
+    setLinkSourceBlockId(current => (current ? remapIndexedBlockId(current, prefix, removedIndex) : null))
+  }
+
+  const remapSelectedBlockAfterIndexedDelete = (prefix: 'component' | 'deployment', removedIndex: number) => {
+    if (!selectedBlockId) return
+    onSelectedBlockChange?.(remapIndexedBlockId(selectedBlockId, prefix, removedIndex))
+  }
+
+  const deleteComponentsBlock = () => {
+    onVisibleBlocksChange?.({ components: false })
+    setComponentsConnected(false)
+    setDeployConnected(false)
+    setComponentConnections(current => current.map(() => false))
+    clearManualConnectionsFor('components')
+    if (selectedBlockId === 'components') onSelectedBlockChange?.(null)
+  }
+
+  const deleteDeployBlock = () => {
+    onVisibleBlocksChange?.({ deploy: false })
+    setDeployConnected(false)
+    setDeploymentConnections(current => current.map(() => false))
+    clearManualConnectionsFor('deploy')
+    if (selectedBlockId === 'deploy') onSelectedBlockChange?.(null)
+  }
+
+  const deleteComponentBlock = (indexToRemove: number) => {
+    const componentToRemove = meta.components[indexToRemove]
+    const nextComponents = removeArrayItem(meta.components, indexToRemove)
+    const nextComponentsList = componentToRemove?.id
+      ? meta.componentsList.filter(id => id !== componentToRemove.id)
+      : meta.componentsList
+    setComponentBlockPositions(current => removeArrayItem(current, indexToRemove))
+    setComponentBlockSizes(current => removeArrayItem(current, indexToRemove))
+    setComponentConnections(current => removeArrayItem(current, indexToRemove))
+    onVisibleBlocksChange?.({ componentCount: Math.max(0, blockVisibility.componentCount - 1) })
+    onBlockMetaPatch?.({ components: nextComponents, componentsList: nextComponentsList })
+    remapManualConnectionsAfterIndexedDelete('component', indexToRemove)
+    remapSelectedBlockAfterIndexedDelete('component', indexToRemove)
+  }
+
+  const deleteDeploymentBlock = (indexToRemove: number) => {
+    const deploymentToRemove = meta.deployments[indexToRemove]
+    const nextDeployments = removeArrayItem(meta.deployments, indexToRemove)
+    const nextDeployList = deploymentToRemove?.id
+      ? meta.deployList.filter(id => id !== deploymentToRemove.id)
+      : meta.deployList
+    setDeploymentBlockPositions(current => removeArrayItem(current, indexToRemove))
+    setDeploymentBlockSizes(current => removeArrayItem(current, indexToRemove))
+    setDeploymentConnections(current => removeArrayItem(current, indexToRemove))
+    onVisibleBlocksChange?.({ deploymentCount: Math.max(0, blockVisibility.deploymentCount - 1) })
+    onBlockMetaPatch?.({ deployments: nextDeployments, deployList: nextDeployList })
+    remapManualConnectionsAfterIndexedDelete('deployment', indexToRemove)
+    remapSelectedBlockAfterIndexedDelete('deployment', indexToRemove)
+  }
 
   const openAddNodePopover = (position: WorkbenchPoint, source: WorkbenchConnectionSource | null = null) => {
     setAddNodePopoverPosition({
@@ -579,6 +768,19 @@ export default function WorkbenchCanvas({
               stroke="#d97706"
             />
           ))}
+          {manualConnections.map(connection => {
+            const from = resolveBlockOutputPoint(connection.from)
+            const to = resolveBlockInputPoint(connection.to)
+            if (!from || !to) return null
+            return (
+              <CanvasConnectionLayer
+                key={connection.id}
+                from={from}
+                to={to}
+                stroke="#8fdca4"
+              />
+            )
+          })}
 
           <StartEndpointBlock
             position={startEndpointPosition}
@@ -593,6 +795,7 @@ export default function WorkbenchCanvas({
             onSelect={() => onSelectedBlockChange?.('init')}
             onAddConnectorClick={() => openAddNodePopover(initBlockOutput, 'init-components')}
             meta={meta}
+            linking={linkSourceBlockId === 'init'}
             dragHandlers={createDragHandlers('init', initBlockPosition)}
             resizeHandlers={createResizeHandlers('init')}
           />
@@ -604,9 +807,11 @@ export default function WorkbenchCanvas({
               onSelect={() => onSelectedBlockChange?.('components')}
               onDeployConnectorClick={() => openAddNodePopover(componentsDeployOutput, 'components-deploy')}
               onComponentConnectorClick={() => openAddNodePopover(componentsComponentOutput, 'components-component')}
+              onDelete={deleteComponentsBlock}
               componentsEnvOutput={meta.componentsEnvOutput}
               componentsEnvInput={meta.componentsEnvInput}
               componentsList={meta.componentsList}
+              linking={linkSourceBlockId === 'components'}
               dragHandlers={createDragHandlers('components', componentsBlockPosition)}
               resizeHandlers={createResizeHandlers('components')}
             />
@@ -618,9 +823,11 @@ export default function WorkbenchCanvas({
               selected={selectedBlockId === 'deploy'}
               onSelect={() => onSelectedBlockChange?.('deploy')}
               onDeploymentConnectorClick={() => openAddNodePopover(deployBlockOutput, 'deploy-deployment')}
+              onDelete={deleteDeployBlock}
               deployEnvOutput={meta.deployEnvOutput}
               deployEnvInput={meta.deployEnvInput}
               deployList={meta.deployList}
+              linking={linkSourceBlockId === 'deploy'}
               dragHandlers={createDragHandlers('deploy', deployBlockPosition)}
               resizeHandlers={createResizeHandlers('deploy')}
             />
@@ -634,7 +841,9 @@ export default function WorkbenchCanvas({
               selected={selectedBlockId === block.blockId}
               onSelect={() => onSelectedBlockChange?.(block.blockId)}
               onAddConnectorClick={() => openAddNodePopover(block.output)}
+              onDelete={() => deleteComponentBlock(block.index)}
               component={meta.components[block.index] ?? defaultComponentMeta}
+              linking={linkSourceBlockId === block.blockId}
               dragHandlers={createDragHandlers(block.blockId, block.position)}
               resizeHandlers={createResizeHandlers(block.blockId)}
             />
@@ -648,7 +857,9 @@ export default function WorkbenchCanvas({
               selected={selectedBlockId === block.blockId}
               onSelect={() => onSelectedBlockChange?.(block.blockId)}
               onAddConnectorClick={() => openAddNodePopover(block.output)}
+              onDelete={() => deleteDeploymentBlock(block.index)}
               deployment={meta.deployments[block.index] ?? defaultDeploymentMeta}
+              linking={linkSourceBlockId === block.blockId}
               dragHandlers={createDragHandlers(block.blockId, block.position)}
               resizeHandlers={createResizeHandlers(block.blockId)}
             />

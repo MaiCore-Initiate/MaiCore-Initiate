@@ -1,3 +1,4 @@
+import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
 import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchDeploymentMeta, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
 
 export const deploymentBlockMinSize: WorkbenchSize = { width: 540, height: 430 }
@@ -93,8 +94,10 @@ export default function DeploymentBlock({
   position,
   size,
   selected,
+  linking = false,
   onSelect,
   onAddConnectorClick,
+  onDelete,
   deployment,
   dragHandlers,
   resizeHandlers,
@@ -103,8 +106,10 @@ export default function DeploymentBlock({
   position: WorkbenchPoint
   size: WorkbenchSize
   selected: boolean
+  linking?: boolean
   onSelect?: () => void
   onAddConnectorClick?: () => void
+  onDelete?: () => void
   deployment: WorkbenchDeploymentMeta
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
@@ -196,6 +201,7 @@ export default function DeploymentBlock({
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
+      {linking && <LinkPendingOutline width={selectWidth} height={selectHeight} />}
 
       <rect x={bodyX} y={bodyY} width={bodyWidth} height={bodyHeight} rx="30" fill="var(--dfw-bg)" stroke={accent} strokeWidth="2" opacity="0.92" />
       <rect x={bodyX} y={bodyY} width={bodyWidth} height={headerHeight} rx="30" fill={accent} opacity="0.16" stroke={accent} strokeWidth="2" />
@@ -235,17 +241,6 @@ export default function DeploymentBlock({
         onPointerDown={event => event.stopPropagation()}
       />
 
-      <g
-        transform={`translate(${outputOffset.x} ${connectorY})`}
-        className="cursor-pointer"
-        onClick={event => {
-          event.stopPropagation()
-          onAddConnectorClick?.()
-        }}
-        onPointerDown={event => event.stopPropagation()}
-      >
-        <AddConnectorButton />
-      </g>
       <InputPort />
 
       <g
@@ -254,6 +249,7 @@ export default function DeploymentBlock({
           event.stopPropagation()
           onSelect?.()
         }}
+        onDoubleClick={dragHandlers?.onHeaderDoubleClick}
         onPointerDown={dragHandlers?.onHeaderPointerDown}
         onPointerMove={dragHandlers?.onHeaderPointerMove}
         onPointerUp={dragHandlers?.onHeaderPointerUp}
@@ -298,6 +294,18 @@ export default function DeploymentBlock({
         onPointerUp={resizeHandlers?.onResizePointerUp}
         onPointerCancel={resizeHandlers?.onResizePointerCancel}
       />
+      <g
+        transform={`translate(${outputOffset.x} ${connectorY})`}
+        className="cursor-pointer"
+        onClick={event => {
+          event.stopPropagation()
+          onAddConnectorClick?.()
+        }}
+        onPointerDown={event => event.stopPropagation()}
+      >
+        <AddConnectorButton />
+      </g>
+      <DeleteBlockButton x={bodyX + bodyWidth - 43} y={bodyY + 15} onDelete={onDelete} />
     </g>
   )
 }

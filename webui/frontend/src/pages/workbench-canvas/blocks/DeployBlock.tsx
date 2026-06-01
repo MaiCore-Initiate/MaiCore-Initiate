@@ -1,3 +1,4 @@
+import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
 import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 export const deployBlockMinSize: WorkbenchSize = { width: 456, height: 240 }
@@ -72,8 +73,10 @@ export default function DeployBlock({
   position,
   size,
   selected,
+  linking = false,
   onSelect,
   onDeploymentConnectorClick,
+  onDelete,
   deployEnvOutput,
   deployEnvInput,
   deployList,
@@ -83,8 +86,10 @@ export default function DeployBlock({
   position: WorkbenchPoint
   size: WorkbenchSize
   selected: boolean
+  linking?: boolean
   onSelect?: () => void
   onDeploymentConnectorClick?: () => void
+  onDelete?: () => void
   deployEnvOutput: boolean | null
   deployEnvInput: boolean | null
   deployList: string[]
@@ -115,6 +120,7 @@ export default function DeployBlock({
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
+      {linking && <LinkPendingOutline width={selectWidth} height={selectHeight} />}
 
       <rect x={bodyX} y={bodyY} width={bodyWidth} height={bodyHeight} rx="30" fill="var(--dfw-bg)" stroke={accent} strokeWidth="2" />
       <rect x={bodyX} y={bodyY} width={bodyWidth} height={headerHeight} rx="30" fill={accent} opacity="0.2" stroke={accent} strokeWidth="2" />
@@ -186,6 +192,7 @@ export default function DeployBlock({
           event.stopPropagation()
           onSelect?.()
         }}
+        onDoubleClick={dragHandlers?.onHeaderDoubleClick}
         onPointerDown={dragHandlers?.onHeaderPointerDown}
         onPointerMove={dragHandlers?.onHeaderPointerMove}
         onPointerUp={dragHandlers?.onHeaderPointerUp}
@@ -243,6 +250,7 @@ export default function DeployBlock({
         <AddConnectorButton label="连接部署界定器" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
       </g>
+      <DeleteBlockButton x={bodyX + bodyWidth - 43} y={bodyY + 15} onDelete={onDelete} />
     </g>
   )
 }

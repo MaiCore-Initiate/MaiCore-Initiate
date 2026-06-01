@@ -1,3 +1,4 @@
+import { LinkPendingOutline } from './BlockFrameControls'
 import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockMeta, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 const inputPortOffset: WorkbenchPoint = { x: 5, y: 115.5 }
@@ -11,7 +12,6 @@ function AddConnectorButton() {
     </g>
   )
 }
-
 function InputPort() {
   return (
     <g transform={`translate(${inputPortOffset.x - 2.5} ${inputPortOffset.y - 2.5})`}>
@@ -57,6 +57,7 @@ export default function InitBlock({
   position,
   size,
   selected,
+  linking = false,
   onSelect,
   onAddConnectorClick,
   meta,
@@ -66,6 +67,7 @@ export default function InitBlock({
   position: WorkbenchPoint
   size: WorkbenchSize
   selected: boolean
+  linking?: boolean
   onSelect?: () => void
   onAddConnectorClick?: () => void
   meta: WorkbenchBlockMeta
@@ -120,6 +122,7 @@ export default function InitBlock({
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
+      {linking && <LinkPendingOutline width={selectWidth} height={selectHeight} />}
       <rect x={bodyX} y={bodyY} width={bodyWidth} height={bodyHeight} rx="30" fill="var(--dfw-bg)" stroke="currentColor" strokeWidth="2" />
       <path d={`M30,0H${headerWidth - 30}a30,30,0,0,1,30,30V53H0V30A30,30,0,0,1,30,0Z`} transform="translate(5 5)" fill="var(--dfw-bg)" stroke="currentColor" strokeWidth="2" />
       <defs>
@@ -158,6 +161,7 @@ export default function InitBlock({
           event.stopPropagation()
           onSelect?.()
         }}
+        onDoubleClick={dragHandlers?.onHeaderDoubleClick}
         onPointerDown={dragHandlers?.onHeaderPointerDown}
         onPointerMove={dragHandlers?.onHeaderPointerMove}
         onPointerUp={dragHandlers?.onHeaderPointerUp}

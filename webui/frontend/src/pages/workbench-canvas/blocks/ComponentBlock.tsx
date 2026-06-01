@@ -1,3 +1,4 @@
+import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
 import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
 
 export const componentBlockMinSize: WorkbenchSize = { width: 520, height: 430 }
@@ -23,7 +24,6 @@ function AddConnectorButton() {
     </g>
   )
 }
-
 function InputPort() {
   return (
     <g transform={`translate(${componentBlockInputOffset.x - 2.5} ${componentBlockInputOffset.y - 2.5})`}>
@@ -93,8 +93,10 @@ export default function ComponentBlock({
   position,
   size,
   selected,
+  linking = false,
   onSelect,
   onAddConnectorClick,
+  onDelete,
   component,
   dragHandlers,
   resizeHandlers,
@@ -103,8 +105,10 @@ export default function ComponentBlock({
   position: WorkbenchPoint
   size: WorkbenchSize
   selected: boolean
+  linking?: boolean
   onSelect?: () => void
   onAddConnectorClick?: () => void
+  onDelete?: () => void
   component: WorkbenchComponentMeta
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
@@ -207,6 +211,7 @@ export default function ComponentBlock({
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
+      {linking && <LinkPendingOutline width={selectWidth} height={selectHeight} />}
 
       <rect x={bodyX} y={bodyY} width={bodyWidth} height={bodyHeight} rx="30" fill="var(--dfw-bg)" stroke={accent} strokeWidth="2" opacity="0.92" />
       <rect x={bodyX} y={bodyY} width={bodyWidth} height={headerHeight} rx="30" fill={accent} opacity="0.16" stroke={accent} strokeWidth="2" />
@@ -246,17 +251,6 @@ export default function ComponentBlock({
         onPointerDown={event => event.stopPropagation()}
       />
 
-      <g
-        transform={`translate(${outputOffset.x} ${connectorY})`}
-        className="cursor-pointer"
-        onClick={event => {
-          event.stopPropagation()
-          onAddConnectorClick?.()
-        }}
-        onPointerDown={event => event.stopPropagation()}
-      >
-        <AddConnectorButton />
-      </g>
       <InputPort />
 
       <g
@@ -265,6 +259,7 @@ export default function ComponentBlock({
           event.stopPropagation()
           onSelect?.()
         }}
+        onDoubleClick={dragHandlers?.onHeaderDoubleClick}
         onPointerDown={dragHandlers?.onHeaderPointerDown}
         onPointerMove={dragHandlers?.onHeaderPointerMove}
         onPointerUp={dragHandlers?.onHeaderPointerUp}
@@ -309,6 +304,18 @@ export default function ComponentBlock({
         onPointerUp={resizeHandlers?.onResizePointerUp}
         onPointerCancel={resizeHandlers?.onResizePointerCancel}
       />
+      <g
+        transform={`translate(${outputOffset.x} ${connectorY})`}
+        className="cursor-pointer"
+        onClick={event => {
+          event.stopPropagation()
+          onAddConnectorClick?.()
+        }}
+        onPointerDown={event => event.stopPropagation()}
+      >
+        <AddConnectorButton />
+      </g>
+      <DeleteBlockButton x={bodyX + bodyWidth - 43} y={bodyY + 15} onDelete={onDelete} />
     </g>
   )
 }

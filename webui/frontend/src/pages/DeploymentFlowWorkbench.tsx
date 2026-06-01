@@ -1460,6 +1460,7 @@ export default function DeploymentFlowWorkbench({
         visibleBlocks={visibleBlocks}
         onVisibleBlocksChange={patch => setVisibleBlocks(prev => ({ ...prev, ...patch }))}
         blockMeta={blockMeta}
+        onBlockMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
       />
       <WorkbenchLeftSidebar
         collapsed={leftSidebarCollapsed}
