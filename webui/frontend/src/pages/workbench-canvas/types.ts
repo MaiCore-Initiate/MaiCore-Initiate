@@ -17,44 +17,52 @@ export interface WorkbenchBlockMeta {
   version: string
   minVersion: string
   maxVersion: string
-  fileImport: boolean | null
+  fileImport: boolean
   fileImportList: string[]
   runtime: string
-  denoNet: boolean | null
-  denoRead: boolean | null
-  denoWrite: boolean | null
-  denoEnv: boolean | null
-  denoRun: boolean | null
-  denoHrtime: boolean | null
-  denoFfi: boolean | null
-  denoSys: boolean | null
-  denoAll: boolean | null
-  denoCustomPermissions: boolean | null
+  denoNet: boolean
+  denoRead: boolean
+  denoWrite: boolean
+  denoEnv: boolean
+  denoRun: boolean
+  denoHrtime: boolean
+  denoFfi: boolean
+  denoSys: boolean
+  denoAll: boolean
+  denoCustomPermissions: boolean
   denoPermissionList: string[]
   platforms: string[]
   schemaVersion: string
-  componentsEnvOutput: boolean | null
-  componentsEnvInput: boolean | null
+  componentsEnvOutput: boolean
+  componentsEnvInput: boolean
   componentsList: string[]
   components: WorkbenchComponentMeta[]
-  deployEnvOutput: boolean | null
-  deployEnvInput: boolean | null
+  deployEnvOutput: boolean
+  deployEnvInput: boolean
   deployList: string[]
   deployments: WorkbenchDeploymentMeta[]
+  configEnvOutput: boolean
+  configEnvInput: boolean
+  configList: string[]
+  configItems: WorkbenchConfigItemMeta[]
+  launchEnvOutput: boolean
+  launchEnvInput: boolean
+  launchList: string[]
+  launchItems: WorkbenchLaunchItemMeta[]
 }
 
 export interface WorkbenchComponentMeta {
   name: string
   id: string
-  choose: boolean | null
+  choose: boolean
   runtime: string
   commandTheme: string
-  install: boolean | null
-  check: boolean | null
+  install: boolean
+  check: boolean
   checkCommand: string[]
   checkVersionContains: string[]
   checkVersionRegex: string[]
-  commandInstall: boolean | null
+  commandInstall: boolean
   installCommandList: string[]
   getMethod: string
   directLink: string
@@ -68,33 +76,33 @@ export interface WorkbenchComponentMeta {
   linkCustom: string[]
   denoPermissions: string[]
   jvm: string[]
-  userChoose: boolean | null
+  userChoose: boolean
   chooseList: string[]
-  formatVersion: boolean | null
+  formatVersion: boolean
   versionFormattingFormula: WorkbenchVersionFormattingRule[]
   installOperate: string
   installCustomList: string[]
   installPath: string
   customPath: string
   splicingLink: string
-  beforeCommand: boolean | null
+  beforeCommand: boolean
   beforeCommandList: string[]
-  afterCommand: boolean | null
+  afterCommand: boolean
   afterCommandList: string[]
-  envOutput: boolean | null
+  envOutput: boolean
   envOutputList: WorkbenchEnvVariableEntry[]
-  envInput: boolean | null
+  envInput: boolean
   envInputList: WorkbenchEnvVariableEntry[]
 }
 
 export interface WorkbenchDeploymentMeta {
   name: string
   id: string
-  choose: boolean | null
+  choose: boolean
   runtime: string
   commandTheme: string
-  deploy: boolean | null
-  commandDeploy: boolean | null
+  deploy: boolean
+  commandDeploy: boolean
   deployCommandList: string[]
   deployMethod: string
   baseLink: string
@@ -109,26 +117,51 @@ export interface WorkbenchDeploymentMeta {
   linkCustom: string[]
   denoPermissions: string[]
   jvm: string[]
-  userChoose: boolean | null
+  userChoose: boolean
   chooseList: string[]
-  formatVersion: boolean | null
+  formatVersion: boolean
   versionFormattingFormula: WorkbenchVersionFormattingRule[]
   deployPath: string
   customPath: string
-  beforeCommand: boolean | null
+  beforeCommand: boolean
   beforeCommandList: string[]
-  afterCommand: boolean | null
+  afterCommand: boolean
   afterCommandList: string[]
   splicingLink: string
-  envOutput: boolean | null
+  envOutput: boolean
   envOutputList: WorkbenchEnvVariableEntry[]
-  envInput: boolean | null
+  envInput: boolean
   envInputList: WorkbenchEnvVariableEntry[]
 }
 
 export interface WorkbenchVersionFormattingRule {
   match: string
   replace: string
+}
+
+export interface WorkbenchConfigItemMeta {
+  id: string
+  name: string
+  runtime: string
+  commandTheme: string
+  filePath: string
+  choose: boolean
+  envInput: boolean
+  envInputList: WorkbenchEnvVariableEntry[]
+}
+
+export interface WorkbenchLaunchItemMeta {
+  id: string
+  name: string
+  choose: boolean
+  runtime: string
+  commandTheme: string
+  launch: boolean
+  launchCommand: string[]
+  envInput: boolean
+  envInputList: WorkbenchEnvVariableEntry[]
+  envOutput: boolean
+  envOutputList: WorkbenchEnvVariableEntry[]
 }
 
 export interface WorkbenchEnvVariableEntry {
@@ -141,7 +174,7 @@ export interface WorkbenchPoint {
   y: number
 }
 
-export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component' | 'deploy-deployment'
+export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component' | 'deploy-deployment' | 'deploy-config' | 'config-item' | 'config-launch' | 'launch-item' | 'launch-uninstall'
 
 export interface WorkbenchAddNodeAnchor {
   id: number
@@ -167,13 +200,19 @@ export interface WorkbenchCanvasProps {
 
 export type WorkbenchComponentBlockId = `component:${number}`
 export type WorkbenchDeploymentBlockId = `deployment:${number}`
-export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId
+export type WorkbenchConfigItemBlockId = `config-item:${number}`
+export type WorkbenchLaunchItemBlockId = `launch-item:${number}`
+export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | 'config' | 'launch' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId | WorkbenchConfigItemBlockId | WorkbenchLaunchItemBlockId
 
 export interface WorkbenchVisibleBlocks {
   components: boolean
   deploy: boolean
+  config: boolean
+  launch: boolean
   componentCount: number
   deploymentCount: number
+  configItemCount: number
+  launchItemCount: number
 }
 
 export interface WorkbenchBlockDragHandlers {
