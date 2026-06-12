@@ -83,8 +83,7 @@ function formatTomlInlineTableArray<T>(values: T[], formatter: (value: T) => str
   return values.length ? `[${values.map(formatter).join(', ')}]` : ''
 }
 
-function formatTomlBoolean(value: boolean | null) {
-  if (value === null) return ''
+function formatTomlBoolean(value: boolean) {
   return value ? 'true' : 'false'
 }
 

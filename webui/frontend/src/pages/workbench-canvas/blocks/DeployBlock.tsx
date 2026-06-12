@@ -15,6 +15,13 @@ export function resolveDeployBlockOutputOffset(size: WorkbenchSize): WorkbenchPo
   }
 }
 
+export function resolveDeployBlockConfigOutputOffset(size: WorkbenchSize): WorkbenchPoint {
+  return {
+    x: bodyX + Math.max(deployBlockMinSize.width, size.width),
+    y: bodyY + Math.max(deployBlockMinSize.height, size.height) / 2,
+  }
+}
+
 function AddConnectorButton({ label }: { label?: string }) {
   return (
     <g transform="translate(-12 0)">
@@ -64,8 +71,7 @@ function formatTomlArray(values: string[]) {
   return values.length ? `[${values.map(formatTomlString).join(', ')}]` : ''
 }
 
-function formatTomlBoolean(value: boolean | null) {
-  if (value === null) return ''
+function formatTomlBoolean(value: boolean) {
   return value ? 'true' : 'false'
 }
 
@@ -76,6 +82,7 @@ export default function DeployBlock({
   linking = false,
   onSelect,
   onDeploymentConnectorClick,
+  onConfigConnectorClick,
   onDelete,
   deployEnvOutput,
   deployEnvInput,
@@ -89,9 +96,10 @@ export default function DeployBlock({
   linking?: boolean
   onSelect?: () => void
   onDeploymentConnectorClick?: () => void
+  onConfigConnectorClick?: () => void
   onDelete?: () => void
-  deployEnvOutput: boolean | null
-  deployEnvInput: boolean | null
+  deployEnvOutput: boolean
+  deployEnvInput: boolean
   deployList: string[]
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
@@ -109,6 +117,9 @@ export default function DeployBlock({
   const deploymentOutputOffset = resolveDeployBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
   const deploymentConnectorX = deploymentOutputOffset.x
   const deploymentConnectorY = deploymentOutputOffset.y - 12
+  const configOutputOffset = resolveDeployBlockConfigOutputOffset({ width: bodyWidth, height: bodyHeight })
+  const configConnectorX = configOutputOffset.x
+  const configConnectorY = configOutputOffset.y - 12
   const rows = [
     { label: '环境变量导出：', value: formatTomlBoolean(deployEnvOutput) },
     { label: '环境变量导入：', value: formatTomlBoolean(deployEnvInput) },
@@ -248,6 +259,18 @@ export default function DeployBlock({
         onPointerDown={event => event.stopPropagation()}
       >
         <AddConnectorButton label="连接部署界定器" />
+        <circle cx="0" cy="12" r="18" fill="transparent" />
+      </g>
+      <g
+        transform={`translate(${configConnectorX} ${configConnectorY})`}
+        className="cursor-crosshair"
+        onClick={event => {
+          event.stopPropagation()
+          onConfigConnectorClick?.()
+        }}
+        onPointerDown={event => event.stopPropagation()}
+      >
+        <AddConnectorButton label="连接配置管理闸" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
       </g>
       <DeleteBlockButton x={bodyX + bodyWidth - 43} y={bodyY + 15} onDelete={onDelete} />

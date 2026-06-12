@@ -73,8 +73,7 @@ function formatTomlArray(values: string[]) {
   return values.length ? `[${values.map(formatTomlString).join(', ')}]` : ''
 }
 
-function formatTomlBoolean(value: boolean | null) {
-  if (value === null) return ''
+function formatTomlBoolean(value: boolean) {
   return value ? 'true' : 'false'
 }
 
@@ -101,8 +100,8 @@ export default function ComponentsBlock({
   onDeployConnectorClick?: () => void
   onComponentConnectorClick?: () => void
   onDelete?: () => void
-  componentsEnvOutput: boolean | null
-  componentsEnvInput: boolean | null
+  componentsEnvOutput: boolean
+  componentsEnvInput: boolean
   componentsList: string[]
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers

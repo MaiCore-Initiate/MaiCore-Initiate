@@ -48,8 +48,7 @@ function formatTomlArray(values: string[]) {
   return values.length ? `[${values.map(value => formatTomlString(value)).join(', ')}]` : ''
 }
 
-function formatTomlBoolean(value: boolean | null) {
-  if (value === null) return ''
+function formatTomlBoolean(value: boolean) {
   return value ? 'true' : 'false'
 }
 
