@@ -4,7 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -28,10 +28,12 @@ const baseBlockNames = {
   init: '初始化块',
   components: '[COMPONENTS]',
   deploy: '[DEPLOY]',
+  config: '[CONFIG]',
+  launch: '[LAUNCH]',
 }
 
 type WorkbenchViewport = { scale: number; x: number; y: number }
-const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, componentCount: 0, deploymentCount: 0 }
+const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, config: false, launch: false, componentCount: 0, deploymentCount: 0, configItemCount: 0, launchItemCount: 0 }
 
 export type OutlineIconType = 'boolean' | 'array' | 'object' | 'string' | 'number'
 export type OutlineNodeTone = 'normal' | 'locked' | 'note'
@@ -66,15 +68,15 @@ type WorkbenchMetaState = WorkbenchModInfoMeta
 const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
   id: '',
-  choose: null,
+  choose: false,
   runtime: '',
   commandTheme: 'classical',
-  install: null,
-  check: null,
+  install: false,
+  check: false,
   checkCommand: [],
   checkVersionContains: [],
   checkVersionRegex: [],
-  commandInstall: null,
+  commandInstall: false,
   installCommandList: [],
   getMethod: '',
   directLink: '',
@@ -88,33 +90,33 @@ const defaultComponentMeta: WorkbenchComponentMeta = {
   linkCustom: [],
   denoPermissions: [],
   jvm: [],
-  userChoose: null,
+  userChoose: false,
   chooseList: [],
-  formatVersion: null,
+  formatVersion: false,
   versionFormattingFormula: [],
   installOperate: '',
   installCustomList: [],
   installPath: '',
   customPath: '',
   splicingLink: '',
-  beforeCommand: null,
+  beforeCommand: false,
   beforeCommandList: [],
-  afterCommand: null,
+  afterCommand: false,
   afterCommandList: [],
-  envOutput: null,
+  envOutput: false,
   envOutputList: [],
-  envInput: null,
+  envInput: false,
   envInputList: [],
 }
 
 const defaultDeploymentMeta: WorkbenchDeploymentMeta = {
   name: '',
   id: '',
-  choose: null,
+  choose: false,
   runtime: '',
   commandTheme: 'classical',
-  deploy: null,
-  commandDeploy: null,
+  deploy: false,
+  commandDeploy: false,
   deployCommandList: [],
   deployMethod: '',
   baseLink: '',
@@ -129,21 +131,45 @@ const defaultDeploymentMeta: WorkbenchDeploymentMeta = {
   linkCustom: [],
   denoPermissions: [],
   jvm: [],
-  userChoose: null,
+  userChoose: false,
   chooseList: [],
-  formatVersion: null,
+  formatVersion: false,
   versionFormattingFormula: [],
   deployPath: '',
   customPath: '',
-  beforeCommand: null,
+  beforeCommand: false,
   beforeCommandList: [],
-  afterCommand: null,
+  afterCommand: false,
   afterCommandList: [],
   splicingLink: '',
-  envOutput: null,
+  envOutput: false,
   envOutputList: [],
-  envInput: null,
+  envInput: false,
   envInputList: [],
+}
+const emptyConfigItemMeta: WorkbenchConfigItemMeta = {
+  id: '',
+  name: '',
+  runtime: '',
+  commandTheme: 'classical',
+  filePath: '',
+  choose: false,
+  envInput: false,
+  envInputList: [],
+}
+
+const emptyLaunchItemMeta: WorkbenchLaunchItemMeta = {
+  id: '',
+  name: '',
+  choose: false,
+  runtime: '',
+  commandTheme: 'classical',
+  launch: false,
+  launchCommand: [],
+  envInput: false,
+  envInputList: [],
+  envOutput: false,
+  envOutputList: [],
 }
 const defaultWorkbenchMeta: WorkbenchMetaState = {
   author: '',
@@ -154,30 +180,38 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   version: '',
   minVersion: '',
   maxVersion: '',
-  fileImport: null,
+  fileImport: false,
   fileImportList: [],
   runtime: 'powershell',
-  denoNet: null,
-  denoRead: null,
-  denoWrite: null,
-  denoEnv: null,
-  denoRun: null,
-  denoHrtime: null,
-  denoFfi: null,
-  denoSys: null,
-  denoAll: null,
-  denoCustomPermissions: null,
+  denoNet: false,
+  denoRead: false,
+  denoWrite: false,
+  denoEnv: false,
+  denoRun: false,
+  denoHrtime: false,
+  denoFfi: false,
+  denoSys: false,
+  denoAll: false,
+  denoCustomPermissions: false,
   denoPermissionList: [],
   platforms: ['windows'],
   schemaVersion: '',
-  componentsEnvOutput: null,
-  componentsEnvInput: null,
+  componentsEnvOutput: false,
+  componentsEnvInput: false,
   componentsList: [],
   components: [],
-  deployEnvOutput: null,
-  deployEnvInput: null,
+  deployEnvOutput: false,
+  deployEnvInput: false,
   deployList: [],
   deployments: [],
+  configEnvOutput: false,
+  configEnvInput: false,
+  configList: [],
+  configItems: [],
+  launchEnvOutput: false,
+  launchEnvInput: false,
+  launchList: [],
+  launchItems: [],
 }
 
 function formatTomlString(value: string) {
@@ -211,12 +245,11 @@ function formatTomlInlineTableArray<T>(values: T[], formatter: (value: T) => str
   return `[${values.map(formatter).join(', ')}]`
 }
 
-function formatTomlBoolean(value: boolean | null) {
-  if (value === null) return ''
+function formatTomlBoolean(value: boolean) {
   return value ? 'true' : 'false'
 }
 
-function createBooleanOutlineNode(id: string, fieldName: string, value: boolean | null): OutlineNode {
+function createBooleanOutlineNode(id: string, fieldName: string, value: boolean): OutlineNode {
   return {
     id,
     label: `${fieldName} = ${formatTomlBoolean(value)}`,
@@ -300,6 +333,14 @@ function createDeploymentBlockId(index: number): WorkbenchDeploymentBlockId {
   return `deployment:${index}`
 }
 
+function createConfigItemBlockId(index: number): WorkbenchConfigItemBlockId {
+  return `config-item:${index}`
+}
+
+function createLaunchItemBlockId(index: number): WorkbenchLaunchItemBlockId {
+  return `launch-item:${index}`
+}
+
 function parseComponentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
   if (!blockId?.startsWith('component:')) return null
   const index = Number(blockId.slice('component:'.length))
@@ -309,6 +350,18 @@ function parseComponentBlockIndex(blockId: WorkbenchBlockId | null | undefined) 
 function parseDeploymentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
   if (!blockId?.startsWith('deployment:')) return null
   const index = Number(blockId.slice('deployment:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function parseConfigItemBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('config-item:')) return null
+  const index = Number(blockId.slice('config-item:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function parseLaunchItemBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('launch-item:')) return null
+  const index = Number(blockId.slice('launch-item:'.length))
   return Number.isInteger(index) && index >= 0 ? index : null
 }
 
@@ -323,6 +376,16 @@ function formatSelectedBlockName(blockId: WorkbenchBlockId | null, meta: Workben
   if (deploymentIndex !== null) {
     const deploymentName = meta.deployments[deploymentIndex]?.name
     return deploymentName ? `[[Deployment]] ${deploymentIndex}：${deploymentName}` : `[[Deployment]] ${deploymentIndex}`
+  }
+  const configItemIndex = parseConfigItemBlockIndex(blockId)
+  if (configItemIndex !== null) {
+    const configItemName = meta.configItems[configItemIndex]?.name
+    return configItemName ? `[[ConfigItem]] ${configItemIndex}：${configItemName}` : `[[ConfigItem]] ${configItemIndex}`
+  }
+  const launchItemIndex = parseLaunchItemBlockIndex(blockId)
+  if (launchItemIndex !== null) {
+    const launchItemName = meta.launchItems[launchItemIndex]?.name
+    return launchItemName ? `[[LaunchItem]] ${launchItemIndex}：${launchItemName}` : `[[LaunchItem]] ${launchItemIndex}`
   }
   return baseBlockNames[blockId as keyof typeof baseBlockNames]
 }
@@ -562,6 +625,41 @@ function createDeploymentOutlineChildren(deployment: WorkbenchDeploymentMeta, in
     ...(deployment.envInput === true ? [createEnvVariableOutlineNode(id('env-input-list'), 'env_input_list', deployment.envInputList)] : []),
   ]
 }
+
+function createConfigItemOutlineChildren(configItem: WorkbenchConfigItemMeta, index: number): OutlineNode[] {
+  const id = (fieldName: string) => `config-item-${index}-${fieldName}`
+
+  return [
+    { id: id('id'), label: `id = ${formatTomlString(configItem.id)}`, icon: 'string' },
+    { id: id('name'), label: `name = ${formatTomlString(configItem.name)}`, icon: 'string' },
+    { id: id('runtime'), label: `runtime = ${formatTomlString(configItem.runtime)}`, icon: 'string' },
+    { id: id('command-theme'), label: `command_theme = ${formatTomlString(configItem.commandTheme)}`, icon: 'string' },
+    { id: id('file-path'), label: `file_path = ${formatTomlString(configItem.filePath)}`, icon: 'string' },
+    createBooleanOutlineNode(id('choose'), 'choose', configItem.choose),
+    createBooleanOutlineNode(id('env-input'), 'env_input', configItem.envInput),
+    ...(configItem.envInput === true ? [createEnvVariableOutlineNode(id('env-input-list'), 'env_input_list', configItem.envInputList)] : []),
+  ]
+}
+
+function createLaunchItemOutlineChildren(launchItem: WorkbenchLaunchItemMeta, index: number): OutlineNode[] {
+  const id = (fieldName: string) => `launch-item-${index}-${fieldName}`
+
+  return [
+    { id: id('id'), label: `id = ${formatTomlString(launchItem.id)}`, icon: 'string' },
+    { id: id('name'), label: `name = ${formatTomlString(launchItem.name)}`, icon: 'string' },
+    createBooleanOutlineNode(id('choose'), 'choose', launchItem.choose),
+    { id: id('runtime'), label: `runtime = ${formatTomlString(launchItem.runtime)}`, icon: 'string' },
+    { id: id('command-theme'), label: `command_theme = ${formatTomlString(launchItem.commandTheme)}`, icon: 'string' },
+    createBooleanOutlineNode(id('launch'), 'launch', launchItem.launch),
+    ...(launchItem.launch === true
+      ? [createStringArrayOutlineNode(id('launch-command'), 'launch_command', launchItem.launchCommand)]
+      : []),
+    createBooleanOutlineNode(id('env-input'), 'env_input', launchItem.envInput),
+    ...(launchItem.envInput === true ? [createEnvVariableOutlineNode(id('env-input-list'), 'env_input_list', launchItem.envInputList)] : []),
+    createBooleanOutlineNode(id('env-output'), 'env_output', launchItem.envOutput),
+    ...(launchItem.envOutput === true ? [createEnvVariableOutlineNode(id('env-output-list'), 'env_output_list', launchItem.envOutputList)] : []),
+  ]
+}
 function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisibleBlocks): OutlineNode[] {
   const nodes: OutlineNode[] = []
 
@@ -622,6 +720,68 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
         defaultExpanded: true,
         blockId: createDeploymentBlockId(index),
         children: createDeploymentOutlineChildren(meta.deployments[index] ?? defaultDeploymentMeta, index),
+      })),
+    })
+  }
+
+  if (visibleBlocks.config) {
+    nodes.push({
+      id: 'config',
+      label: '[CONFIG]',
+      defaultExpanded: true,
+      blockId: 'config',
+      children: [
+        createBooleanOutlineNode('config-env-output', 'env_output', meta.configEnvOutput),
+        createBooleanOutlineNode('config-env-input', 'env_input', meta.configEnvInput),
+        createStringArrayOutlineNode('config-list', 'list', meta.configList, true),
+      ],
+    })
+  }
+
+  if (visibleBlocks.configItemCount > 0) {
+    nodes.push({
+      id: 'config-item-array',
+      label: '[[ConfigItem]]',
+      defaultExpanded: true,
+      selectable: false,
+      children: Array.from({ length: visibleBlocks.configItemCount }, (_, index) => ({
+        id: `config-item-${index}`,
+        label: String(index),
+        icon: 'object' as const,
+        defaultExpanded: true,
+        blockId: createConfigItemBlockId(index),
+        children: createConfigItemOutlineChildren(meta.configItems[index] ?? emptyConfigItemMeta, index),
+      })),
+    })
+  }
+
+  if (visibleBlocks.launch) {
+    nodes.push({
+      id: 'launch',
+      label: '[LAUNCH]',
+      defaultExpanded: true,
+      blockId: 'launch',
+      children: [
+        createBooleanOutlineNode('launch-env-output', 'env_output', meta.launchEnvOutput),
+        createBooleanOutlineNode('launch-env-input', 'env_input', meta.launchEnvInput),
+        createStringArrayOutlineNode('launch-list', 'list', meta.launchList, true),
+      ],
+    })
+  }
+
+  if (visibleBlocks.launchItemCount > 0) {
+    nodes.push({
+      id: 'launch-item-array',
+      label: '[[LaunchItem]]',
+      defaultExpanded: true,
+      selectable: false,
+      children: Array.from({ length: visibleBlocks.launchItemCount }, (_, index) => ({
+        id: `launch-item-${index}`,
+        label: String(index),
+        icon: 'object' as const,
+        defaultExpanded: true,
+        blockId: createLaunchItemBlockId(index),
+        children: createLaunchItemOutlineChildren(meta.launchItems[index] ?? emptyLaunchItemMeta, index),
       })),
     })
   }
