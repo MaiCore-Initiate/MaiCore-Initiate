@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import type { WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchVersionFormattingRule } from './workbench-canvas/types'
+import type { WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchConfigItemMeta, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchLaunchItemMeta, WorkbenchVersionFormattingRule } from './workbench-canvas/types'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -67,44 +67,52 @@ export interface WorkbenchModInfoMeta {
   version: string
   minVersion: string
   maxVersion: string
-  fileImport: boolean | null
+  fileImport: boolean
   fileImportList: string[]
   runtime: string
-  denoNet: boolean | null
-  denoRead: boolean | null
-  denoWrite: boolean | null
-  denoEnv: boolean | null
-  denoRun: boolean | null
-  denoHrtime: boolean | null
-  denoFfi: boolean | null
-  denoSys: boolean | null
-  denoAll: boolean | null
-  denoCustomPermissions: boolean | null
+  denoNet: boolean
+  denoRead: boolean
+  denoWrite: boolean
+  denoEnv: boolean
+  denoRun: boolean
+  denoHrtime: boolean
+  denoFfi: boolean
+  denoSys: boolean
+  denoAll: boolean
+  denoCustomPermissions: boolean
   denoPermissionList: string[]
   platforms: string[]
   schemaVersion: string
-  componentsEnvOutput: boolean | null
-  componentsEnvInput: boolean | null
+  componentsEnvOutput: boolean
+  componentsEnvInput: boolean
   componentsList: string[]
   components: WorkbenchComponentMeta[]
-  deployEnvOutput: boolean | null
-  deployEnvInput: boolean | null
+  deployEnvOutput: boolean
+  deployEnvInput: boolean
   deployList: string[]
   deployments: WorkbenchDeploymentMeta[]
+  configEnvOutput: boolean
+  configEnvInput: boolean
+  configList: string[]
+  configItems: WorkbenchConfigItemMeta[]
+  launchEnvOutput: boolean
+  launchEnvInput: boolean
+  launchList: string[]
+  launchItems: WorkbenchLaunchItemMeta[]
 }
 
 const emptyComponentMeta: WorkbenchComponentMeta = {
   name: '',
   id: '',
-  choose: null,
+  choose: false,
   runtime: '',
   commandTheme: 'classical',
-  install: null,
-  check: null,
+  install: false,
+  check: false,
   checkCommand: [],
   checkVersionContains: [],
   checkVersionRegex: [],
-  commandInstall: null,
+  commandInstall: false,
   installCommandList: [],
   getMethod: '',
   directLink: '',
@@ -118,33 +126,33 @@ const emptyComponentMeta: WorkbenchComponentMeta = {
   linkCustom: [],
   denoPermissions: [],
   jvm: [],
-  userChoose: null,
+  userChoose: false,
   chooseList: [],
-  formatVersion: null,
+  formatVersion: false,
   versionFormattingFormula: [],
   installOperate: '',
   installCustomList: [],
   installPath: '',
   customPath: '',
   splicingLink: '',
-  beforeCommand: null,
+  beforeCommand: false,
   beforeCommandList: [],
-  afterCommand: null,
+  afterCommand: false,
   afterCommandList: [],
-  envOutput: null,
+  envOutput: false,
   envOutputList: [],
-  envInput: null,
+  envInput: false,
   envInputList: [],
 }
 
 const emptyDeploymentMeta: WorkbenchDeploymentMeta = {
   name: '',
   id: '',
-  choose: null,
+  choose: false,
   runtime: '',
   commandTheme: 'classical',
-  deploy: null,
-  commandDeploy: null,
+  deploy: false,
+  commandDeploy: false,
   deployCommandList: [],
   deployMethod: '',
   baseLink: '',
@@ -159,21 +167,46 @@ const emptyDeploymentMeta: WorkbenchDeploymentMeta = {
   linkCustom: [],
   denoPermissions: [],
   jvm: [],
-  userChoose: null,
+  userChoose: false,
   chooseList: [],
-  formatVersion: null,
+  formatVersion: false,
   versionFormattingFormula: [],
   deployPath: '',
   customPath: '',
-  beforeCommand: null,
+  beforeCommand: false,
   beforeCommandList: [],
-  afterCommand: null,
+  afterCommand: false,
   afterCommandList: [],
   splicingLink: '',
-  envOutput: null,
+  envOutput: false,
   envOutputList: [],
-  envInput: null,
+  envInput: false,
   envInputList: [],
+}
+
+const emptyConfigItemMeta: WorkbenchConfigItemMeta = {
+  id: '',
+  name: '',
+  runtime: '',
+  commandTheme: 'classical',
+  filePath: '',
+  choose: false,
+  envInput: false,
+  envInputList: [],
+}
+
+const emptyLaunchItemMeta: WorkbenchLaunchItemMeta = {
+  id: '',
+  name: '',
+  choose: false,
+  runtime: '',
+  commandTheme: 'classical',
+  launch: false,
+  launchCommand: [],
+  envInput: false,
+  envInputList: [],
+  envOutput: false,
+  envOutputList: [],
 }
 
 const emptyModInfoMeta: WorkbenchModInfoMeta = {
@@ -185,30 +218,38 @@ const emptyModInfoMeta: WorkbenchModInfoMeta = {
   version: '',
   minVersion: '',
   maxVersion: '',
-  fileImport: null,
+  fileImport: false,
   fileImportList: [],
   runtime: 'powershell',
-  denoNet: null,
-  denoRead: null,
-  denoWrite: null,
-  denoEnv: null,
-  denoRun: null,
-  denoHrtime: null,
-  denoFfi: null,
-  denoSys: null,
-  denoAll: null,
-  denoCustomPermissions: null,
+  denoNet: false,
+  denoRead: false,
+  denoWrite: false,
+  denoEnv: false,
+  denoRun: false,
+  denoHrtime: false,
+  denoFfi: false,
+  denoSys: false,
+  denoAll: false,
+  denoCustomPermissions: false,
   denoPermissionList: [],
   platforms: ['windows'],
   schemaVersion: '',
-  componentsEnvOutput: null,
-  componentsEnvInput: null,
+  componentsEnvOutput: false,
+  componentsEnvInput: false,
   componentsList: [],
   components: [],
-  deployEnvOutput: null,
-  deployEnvInput: null,
+  deployEnvOutput: false,
+  deployEnvInput: false,
   deployList: [],
   deployments: [],
+  configEnvOutput: false,
+  configEnvInput: false,
+  configList: [],
+  configItems: [],
+  launchEnvOutput: false,
+  launchEnvInput: false,
+  launchList: [],
+  launchItems: [],
 }
 
 export interface WorkbenchRightSidebarProps {
@@ -386,6 +427,34 @@ function fillDeploymentsToIndex(deployments: WorkbenchDeploymentMeta[], index: n
   return [
     ...deployments,
     ...Array.from({ length: index - deployments.length + 1 }, () => ({ ...emptyDeploymentMeta })),
+  ]
+}
+
+function parseConfigItemBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('config-item:')) return null
+  const index = Number(blockId.slice('config-item:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function fillConfigItemsToIndex(configItems: WorkbenchConfigItemMeta[], index: number) {
+  if (configItems.length > index) return [...configItems]
+  return [
+    ...configItems,
+    ...Array.from({ length: index - configItems.length + 1 }, () => ({ ...emptyConfigItemMeta })),
+  ]
+}
+
+function parseLaunchItemBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('launch-item:')) return null
+  const index = Number(blockId.slice('launch-item:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function fillLaunchItemsToIndex(launchItems: WorkbenchLaunchItemMeta[], index: number) {
+  if (launchItems.length > index) return [...launchItems]
+  return [
+    ...launchItems,
+    ...Array.from({ length: index - launchItems.length + 1 }, () => ({ ...emptyLaunchItemMeta })),
   ]
 }
 
@@ -581,29 +650,29 @@ function BooleanSwitchField({
   value,
   onChange,
 }: {
-  value: boolean | null
-  onChange: (value: boolean | null) => void
+  value: boolean
+  onChange: (value: boolean) => void
 }) {
   return (
     <button
       type="button"
       role="switch"
-      aria-checked={value === true}
-      onClick={() => onChange(value === true ? false : true)}
+      aria-checked={value}
+      onClick={() => onChange(!value)}
       className="flex h-[42px] w-[142px] items-center rounded-[21px] border px-[5px] transition-colors"
       style={{
-        borderColor: value === true ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
-        background: value === true ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
+        borderColor: value ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+        background: value ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
         fontFamily: font,
       }}
-      title={value === null ? '未设置' : value ? '已启用' : '已关闭'}
+      title={value ? '已启用' : '已关闭'}
     >
       <span
         className="h-[30px] w-[30px] rounded-full border transition-transform duration-150 ease-out"
         style={{
-          transform: value === true ? 'translateX(96px)' : 'translateX(0)',
-          borderColor: value === true ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
-          background: value === true ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-bg)',
+          transform: value ? 'translateX(96px)' : 'translateX(0)',
+          borderColor: value ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-border)',
+          background: value ? 'var(--dfw-blue)' : 'var(--dfw-sidebar-bg)',
         }}
         aria-hidden
       />
@@ -2438,6 +2507,329 @@ function DeployMetaEditor({
   )
 }
 
+function ConfigMetaEditor({
+  meta,
+  updateMeta,
+  fieldAvailableWidth,
+  width,
+}: {
+  meta: WorkbenchModInfoMeta
+  updateMeta: (patch: Partial<WorkbenchModInfoMeta>) => void
+  fieldAvailableWidth: number
+  width: number
+}) {
+  return (
+    <div className="flex min-h-[390px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+      <section data-outline-target="config-env-output">
+        <FieldLabel>[CONFIG] 环境变量导出</FieldLabel>
+        <BooleanSwitchField
+          value={meta.configEnvOutput}
+          onChange={configEnvOutput => updateMeta({ configEnvOutput })}
+        />
+      </section>
+
+      <section data-outline-target="config-env-input">
+        <FieldLabel>[CONFIG] 环境变量导入</FieldLabel>
+        <BooleanSwitchField
+          value={meta.configEnvInput}
+          onChange={configEnvInput => updateMeta({ configEnvInput })}
+        />
+      </section>
+
+      <section data-outline-target="config-list">
+        <ArrayListField
+          label="配置ID列表"
+          values={meta.configList}
+          outlineTargetId="config-list"
+          onChange={configList => updateMeta({ configList })}
+          maxWidth={fieldAvailableWidth}
+          itemAriaLabel="配置ID"
+        />
+      </section>
+    </div>
+  )
+}
+
+function ConfigItemMetaEditor({
+  configItem,
+  updateConfigItem,
+  updateConfigItemId,
+  configItemOutlineTarget,
+  fieldAvailableWidth,
+  width,
+  configItemEnvInputList,
+  showConfigItemEnvInput,
+}: {
+  configItem: WorkbenchConfigItemMeta
+  updateConfigItem: (patch: Partial<WorkbenchConfigItemMeta>) => void
+  updateConfigItemId: (id: string) => void
+  configItemOutlineTarget: (fieldName: string) => string | undefined
+  fieldAvailableWidth: number
+  width: number
+  configItemEnvInputList: WorkbenchEnvVariableEntry[]
+  showConfigItemEnvInput: boolean
+}) {
+  return (
+    <div className="flex min-h-[1100px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+      <section data-outline-target={configItemOutlineTarget('id')}>
+        <FieldLabel>配置ID</FieldLabel>
+        <AutoGrowTextField
+          value={configItem.id}
+          onChange={updateConfigItemId}
+          maxWidth={fieldAvailableWidth}
+          ariaLabel="配置ID"
+        />
+      </section>
+
+      <section data-outline-target={configItemOutlineTarget('name')}>
+        <FieldLabel>配置名称</FieldLabel>
+        <AutoGrowTextField
+          value={configItem.name}
+          onChange={name => updateConfigItem({ name })}
+          maxWidth={fieldAvailableWidth}
+          ariaLabel="配置名称"
+        />
+      </section>
+
+      <section data-outline-target={configItemOutlineTarget('runtime')}>
+        <FieldLabel>运行时</FieldLabel>
+        <RuntimeSelectField
+          value={configItem.runtime}
+          onChange={runtime => updateConfigItem({ runtime })}
+          allowInherit
+        />
+      </section>
+
+      <section data-outline-target={configItemOutlineTarget('command-theme')}>
+        <FieldLabel>命令主题</FieldLabel>
+        <OptionSelectField
+          value={configItem.commandTheme}
+          options={commandThemeOptions}
+          onChange={commandTheme => updateConfigItem({ commandTheme })}
+          ariaLabel="命令主题"
+        />
+      </section>
+
+      <section data-outline-target={configItemOutlineTarget('file-path')}>
+        <FieldLabel>配置文件路径</FieldLabel>
+        <AutoGrowTextField
+          value={configItem.filePath}
+          onChange={filePath => updateConfigItem({ filePath })}
+          maxWidth={fieldAvailableWidth}
+          ariaLabel="配置文件路径"
+        />
+      </section>
+
+      <section data-outline-target={configItemOutlineTarget('choose')}>
+        <FieldLabel>用户可选配置</FieldLabel>
+        <BooleanSwitchField
+          value={configItem.choose}
+          onChange={choose => updateConfigItem({ choose })}
+        />
+      </section>
+
+      <section data-outline-target={configItemOutlineTarget('env-input')}>
+        <FieldLabel>环境变量导入</FieldLabel>
+        <BooleanSwitchField
+          value={configItem.envInput}
+          onChange={envInput => updateConfigItem({ envInput })}
+        />
+      </section>
+
+      <ConditionalField show={showConfigItemEnvInput}>
+        <section data-outline-target={configItemOutlineTarget('env-input-list')}>
+          <EnvVariableTableField
+            label="导入变量"
+            values={configItemEnvInputList}
+            onChange={envInputList => updateConfigItem({ envInputList })}
+            maxWidth={fieldAvailableWidth}
+            outlineTargetId={configItemOutlineTarget('env-input-list') ?? 'config-item-env-input-list'}
+          />
+        </section>
+      </ConditionalField>
+    </div>
+  )
+}
+
+function LaunchMetaEditor({
+  meta,
+  updateMeta,
+  fieldAvailableWidth,
+  width,
+}: {
+  meta: WorkbenchModInfoMeta
+  updateMeta: (patch: Partial<WorkbenchModInfoMeta>) => void
+  fieldAvailableWidth: number
+  width: number
+}) {
+  return (
+    <div className="flex min-h-[390px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+      <section data-outline-target="launch-env-output">
+        <FieldLabel>[LAUNCH] 环境变量导出</FieldLabel>
+        <BooleanSwitchField
+          value={meta.launchEnvOutput}
+          onChange={launchEnvOutput => updateMeta({ launchEnvOutput })}
+        />
+      </section>
+
+      <section data-outline-target="launch-env-input">
+        <FieldLabel>[LAUNCH] 环境变量导入</FieldLabel>
+        <BooleanSwitchField
+          value={meta.launchEnvInput}
+          onChange={launchEnvInput => updateMeta({ launchEnvInput })}
+        />
+      </section>
+
+      <section data-outline-target="launch-list">
+        <ArrayListField
+          label="启动ID列表"
+          values={meta.launchList}
+          outlineTargetId="launch-list"
+          onChange={launchList => updateMeta({ launchList })}
+          maxWidth={fieldAvailableWidth}
+          itemAriaLabel="启动ID"
+        />
+      </section>
+    </div>
+  )
+}
+
+function LaunchItemMetaEditor({
+  launchItem,
+  updateLaunchItem,
+  updateLaunchItemId,
+  launchItemOutlineTarget,
+  fieldAvailableWidth,
+  width,
+  launchItemEnvInputList,
+  launchItemEnvOutputList,
+  showLaunchItemEnvInput,
+  showLaunchItemEnvOutput,
+}: {
+  launchItem: WorkbenchLaunchItemMeta
+  updateLaunchItem: (patch: Partial<WorkbenchLaunchItemMeta>) => void
+  updateLaunchItemId: (id: string) => void
+  launchItemOutlineTarget: (fieldName: string) => string | undefined
+  fieldAvailableWidth: number
+  width: number
+  launchItemEnvInputList: WorkbenchEnvVariableEntry[]
+  launchItemEnvOutputList: WorkbenchEnvVariableEntry[]
+  showLaunchItemEnvInput: boolean
+  showLaunchItemEnvOutput: boolean
+}) {
+  return (
+    <div className="flex min-h-[1500px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+      <section data-outline-target={launchItemOutlineTarget('id')}>
+        <FieldLabel>启动ID</FieldLabel>
+        <AutoGrowTextField
+          value={launchItem.id}
+          onChange={updateLaunchItemId}
+          maxWidth={fieldAvailableWidth}
+          ariaLabel="启动ID"
+        />
+      </section>
+
+      <section data-outline-target={launchItemOutlineTarget('name')}>
+        <FieldLabel>启动名称</FieldLabel>
+        <AutoGrowTextField
+          value={launchItem.name}
+          onChange={name => updateLaunchItem({ name })}
+          maxWidth={fieldAvailableWidth}
+          ariaLabel="启动名称"
+        />
+      </section>
+
+      <section data-outline-target={launchItemOutlineTarget('choose')}>
+        <FieldLabel>用户可选启动</FieldLabel>
+        <BooleanSwitchField
+          value={launchItem.choose}
+          onChange={choose => updateLaunchItem({ choose })}
+        />
+      </section>
+
+      <section data-outline-target={launchItemOutlineTarget('runtime')}>
+        <FieldLabel>运行时</FieldLabel>
+        <RuntimeSelectField
+          value={launchItem.runtime}
+          onChange={runtime => updateLaunchItem({ runtime })}
+          allowInherit
+        />
+      </section>
+
+      <section data-outline-target={launchItemOutlineTarget('command-theme')}>
+        <FieldLabel>命令主题</FieldLabel>
+        <OptionSelectField
+          value={launchItem.commandTheme}
+          options={commandThemeOptions}
+          onChange={commandTheme => updateLaunchItem({ commandTheme })}
+          ariaLabel="命令主题"
+        />
+      </section>
+
+      <section data-outline-target={launchItemOutlineTarget('launch')}>
+        <FieldLabel>需要启动</FieldLabel>
+        <BooleanSwitchField
+          value={launchItem.launch}
+          onChange={launch => updateLaunchItem({ launch })}
+        />
+      </section>
+
+      <ConditionalField show={launchItem.launch === true}>
+        <section data-outline-target={launchItemOutlineTarget('launch-command')}>
+          <ArrayListField
+            label="启动命令"
+            values={launchItem.launchCommand}
+            outlineTargetId={launchItemOutlineTarget('launch-command') ?? 'launch-item-launch-command'}
+            onChange={launchCommand => updateLaunchItem({ launchCommand })}
+            maxWidth={fieldAvailableWidth}
+            itemAriaLabel="启动命令"
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={launchItemOutlineTarget('env-input')}>
+        <FieldLabel>环境变量导入</FieldLabel>
+        <BooleanSwitchField
+          value={launchItem.envInput}
+          onChange={envInput => updateLaunchItem({ envInput })}
+        />
+      </section>
+
+      <ConditionalField show={showLaunchItemEnvInput}>
+        <section data-outline-target={launchItemOutlineTarget('env-input-list')}>
+          <EnvVariableTableField
+            label="导入变量"
+            values={launchItemEnvInputList}
+            onChange={envInputList => updateLaunchItem({ envInputList })}
+            maxWidth={fieldAvailableWidth}
+            outlineTargetId={launchItemOutlineTarget('env-input-list') ?? 'launch-item-env-input-list'}
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={launchItemOutlineTarget('env-output')}>
+        <FieldLabel>环境变量导出</FieldLabel>
+        <BooleanSwitchField
+          value={launchItem.envOutput}
+          onChange={envOutput => updateLaunchItem({ envOutput })}
+        />
+      </section>
+
+      <ConditionalField show={showLaunchItemEnvOutput}>
+        <section data-outline-target={launchItemOutlineTarget('env-output-list')}>
+          <EnvVariableTableField
+            label="导出变量"
+            values={launchItemEnvOutputList}
+            onChange={envOutputList => updateLaunchItem({ envOutputList })}
+            maxWidth={fieldAvailableWidth}
+            outlineTargetId={launchItemOutlineTarget('env-output-list') ?? 'launch-item-env-output-list'}
+          />
+        </section>
+      </ConditionalField>
+    </div>
+  )
+}
+
 function DeploymentMetaEditor({
   deployment,
   updateDeployment,
@@ -2938,9 +3330,17 @@ export default function WorkbenchRightSidebar({
   }
 
   const selectedComponentIndex = parseComponentBlockIndex(selectedBlockId)
+  const selectedConfigItemIndex = parseConfigItemBlockIndex(selectedBlockId)
+  const selectedLaunchItemIndex = parseLaunchItemBlockIndex(selectedBlockId)
   const component = selectedComponentIndex === null
     ? emptyComponentMeta
     : { ...emptyComponentMeta, ...(meta.components[selectedComponentIndex] ?? {}) }
+  const configItem = selectedConfigItemIndex === null
+    ? emptyConfigItemMeta
+    : { ...emptyConfigItemMeta, ...(meta.configItems[selectedConfigItemIndex] ?? {}) }
+  const launchItem = selectedLaunchItemIndex === null
+    ? emptyLaunchItemMeta
+    : { ...emptyLaunchItemMeta, ...(meta.launchItems[selectedLaunchItemIndex] ?? {}) }
   const componentVersionFile = component.versionFile ?? []
   const componentVersionCustom = component.versionCustom ?? []
   const componentLinkFile = component.linkFile ?? []
@@ -3100,6 +3500,58 @@ export default function WorkbenchRightSidebar({
     })
   }
 
+  const updateConfigItem = (patch: Partial<WorkbenchConfigItemMeta>) => {
+    if (selectedConfigItemIndex === null) return
+    const nextConfigItems = fillConfigItemsToIndex(meta.configItems, selectedConfigItemIndex)
+    nextConfigItems[selectedConfigItemIndex] = { ...nextConfigItems[selectedConfigItemIndex], ...configItem, ...patch }
+    updateMeta({ configItems: nextConfigItems })
+  }
+
+  const updateConfigItemId = (id: string) => {
+    if (selectedConfigItemIndex === null) return
+    const previousId = configItem.id
+    const nextConfigItems = fillConfigItemsToIndex(meta.configItems, selectedConfigItemIndex).map((item, index) => (
+      index === selectedConfigItemIndex ? { ...item, ...configItem, id } : item
+    ))
+    const configItemIds = nextConfigItems.map(item => item.id).filter(Boolean)
+    const extraIds = meta.configList.filter(item => (
+      item
+      && item !== previousId
+      && !configItemIds.includes(item)
+    ))
+    const nextList = [...configItemIds, ...extraIds]
+    updateMeta({
+      configItems: nextConfigItems,
+      configList: arraysEqual(nextList, meta.configList) ? meta.configList : nextList,
+    })
+  }
+
+  const updateLaunchItem = (patch: Partial<WorkbenchLaunchItemMeta>) => {
+    if (selectedLaunchItemIndex === null) return
+    const nextLaunchItems = fillLaunchItemsToIndex(meta.launchItems, selectedLaunchItemIndex)
+    nextLaunchItems[selectedLaunchItemIndex] = { ...nextLaunchItems[selectedLaunchItemIndex], ...launchItem, ...patch }
+    updateMeta({ launchItems: nextLaunchItems })
+  }
+
+  const updateLaunchItemId = (id: string) => {
+    if (selectedLaunchItemIndex === null) return
+    const previousId = launchItem.id
+    const nextLaunchItems = fillLaunchItemsToIndex(meta.launchItems, selectedLaunchItemIndex).map((item, index) => (
+      index === selectedLaunchItemIndex ? { ...item, ...launchItem, id } : item
+    ))
+    const launchItemIds = nextLaunchItems.map(item => item.id).filter(Boolean)
+    const extraIds = meta.launchList.filter(item => (
+      item
+      && item !== previousId
+      && !launchItemIds.includes(item)
+    ))
+    const nextList = [...launchItemIds, ...extraIds]
+    updateMeta({
+      launchItems: nextLaunchItems,
+      launchList: arraysEqual(nextList, meta.launchList) ? meta.launchList : nextList,
+    })
+  }
+
   const startResize = (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()
@@ -3140,12 +3592,25 @@ export default function WorkbenchRightSidebar({
   const shouldShowComponentMeta = selectedComponentIndex !== null
   const shouldShowDeployMeta = selectedBlockId === 'deploy'
   const shouldShowDeploymentMeta = selectedDeploymentIndex !== null
+  const shouldShowConfigMeta = selectedBlockId === 'config'
+  const shouldShowConfigItemMeta = selectedConfigItemIndex !== null
+  const shouldShowLaunchMeta = selectedBlockId === 'launch'
+  const shouldShowLaunchItemMeta = selectedLaunchItemIndex !== null
   const componentOutlineTarget = (fieldName: string) => (
     selectedComponentIndex === null ? undefined : `component-${selectedComponentIndex}-${fieldName}`
   )
   const deploymentOutlineTarget = (fieldName: string) => (
     selectedDeploymentIndex === null ? undefined : `deployment-${selectedDeploymentIndex}-${fieldName}`
   )
+  const configItemOutlineTarget = (fieldName: string) => (
+    selectedConfigItemIndex === null ? undefined : `config-item-${selectedConfigItemIndex}-${fieldName}`
+  )
+  const launchItemOutlineTarget = (fieldName: string) => (
+    selectedLaunchItemIndex === null ? undefined : `launch-item-${selectedLaunchItemIndex}-${fieldName}`
+  )
+  const configItemEnvInputList = normalizeEnvVariableEntries(configItem.envInputList)
+  const launchItemEnvInputList = normalizeEnvVariableEntries(launchItem.envInputList)
+  const launchItemEnvOutputList = normalizeEnvVariableEntries(launchItem.envOutputList)
 
   useEffect(() => {
     if (!focusTarget || collapsed) return
@@ -3515,6 +3980,44 @@ export default function WorkbenchRightSidebar({
             updateMeta={updateMeta}
             fieldAvailableWidth={fieldAvailableWidth}
             width={width}
+          />
+        ) : shouldShowConfigMeta ? (
+          <ConfigMetaEditor
+            meta={meta}
+            updateMeta={updateMeta}
+            fieldAvailableWidth={fieldAvailableWidth}
+            width={width}
+          />
+        ) : shouldShowConfigItemMeta ? (
+          <ConfigItemMetaEditor
+            configItem={configItem}
+            updateConfigItem={updateConfigItem}
+            updateConfigItemId={updateConfigItemId}
+            configItemOutlineTarget={configItemOutlineTarget}
+            fieldAvailableWidth={fieldAvailableWidth}
+            width={width}
+            configItemEnvInputList={configItemEnvInputList}
+            showConfigItemEnvInput={configItem.envInput === true}
+          />
+        ) : shouldShowLaunchMeta ? (
+          <LaunchMetaEditor
+            meta={meta}
+            updateMeta={updateMeta}
+            fieldAvailableWidth={fieldAvailableWidth}
+            width={width}
+          />
+        ) : shouldShowLaunchItemMeta ? (
+          <LaunchItemMetaEditor
+            launchItem={launchItem}
+            updateLaunchItem={updateLaunchItem}
+            updateLaunchItemId={updateLaunchItemId}
+            launchItemOutlineTarget={launchItemOutlineTarget}
+            fieldAvailableWidth={fieldAvailableWidth}
+            width={width}
+            launchItemEnvInputList={launchItemEnvInputList}
+            launchItemEnvOutputList={launchItemEnvOutputList}
+            showLaunchItemEnvInput={launchItem.envInput === true}
+            showLaunchItemEnvOutput={launchItem.envOutput === true}
           />
         ) : shouldShowDeploymentMeta ? (
           <DeploymentMetaEditor
