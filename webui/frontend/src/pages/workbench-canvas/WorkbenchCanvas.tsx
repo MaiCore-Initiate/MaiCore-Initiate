@@ -15,6 +15,7 @@ import DeploymentBlock, { deploymentBlockInputOffset, deploymentBlockMinSize, re
 import InitBlock from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
 import FileConflictDialog, { type FileConflictResolution } from '../../components/FileConflictDialog'
+import NewFileDialog from '../../components/NewFileDialog'
 import { WORKBENCH_FILE_EXTENSIONS, createFileBlockId, parseFileBlockId, workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConfigItemBlockId, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchFileMeta, type WorkbenchLaunchItemBlockId, type WorkbenchLaunchItemMeta, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchUninstallItemBlockId, type WorkbenchUninstallItemMeta, type WorkbenchVisibleBlocks } from './types'
 
 const defaultComponentMeta: WorkbenchComponentMeta = {
@@ -384,6 +385,12 @@ export default function WorkbenchCanvas({
     suggestedName: string
   } | null>(null)
   const [fileImportError, setFileImportError] = useState<string | null>(null)
+  const [newFileDialogOpen, setNewFileDialogOpen] = useState(false)
+  const [newFileConflict, setNewFileConflict] = useState<{
+    name: string
+    suggestedName: string
+    payload: { name: string; content: string }
+  } | null>(null)
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -1677,6 +1684,75 @@ export default function WorkbenchCanvas({
     onOpenFileEditor?.(file.id)
   }
 
+  const openNewFileDialog = () => {
+    if (!projectSequence) {
+      setFileImportError('当前未关联工作台项目，无法新建文件。')
+      return
+    }
+    setNewFileDialogOpen(true)
+  }
+
+  const closeNewFileDialog = () => {
+    setNewFileDialogOpen(false)
+    setNewFileConflict(null)
+  }
+
+  const processNewFile = async (
+    payload: { name: string; content: string },
+    conflictResolution: FileConflictResolution | null,
+  ) => {
+    if (!projectSequence) return
+    try {
+      const res = await fetch(
+        `/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/create`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: payload.name,
+            content: payload.content,
+            conflictResolution,
+          }),
+        },
+      )
+      if (res.status === 409) {
+        const detail = await res.json().catch(() => null)
+        setNewFileConflict({
+          name: payload.name,
+          suggestedName: detail?.detail?.suggestion ?? '',
+          payload,
+        })
+        return
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        setFileImportError(`新建失败 (${res.status}): ${text || '未知错误'}`)
+        return
+      }
+      const newMeta: WorkbenchFileMeta = await res.json()
+      const nextIndex = meta.files.length
+      setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
+      onBlockMetaPatch?.({
+        files: [...meta.files, newMeta],
+        fileImportList: Array.from(new Set([...meta.fileImportList, newMeta.name])),
+        fileImport: true,
+      })
+      setNewFileDialogOpen(false)
+      setNewFileConflict(null)
+    } catch (err) {
+      setFileImportError(`新建异常: ${(err as Error).message ?? String(err)}`)
+    }
+  }
+
+  const handleNewFileConflictResolve = (resolution: FileConflictResolution) => {
+    if (!newFileConflict) return
+    const { payload } = newFileConflict
+    setNewFileConflict(null)
+    if (resolution === 'cancel') return
+    void processNewFile(payload, resolution)
+  }
+
 
   const addNodePopoverScreenPosition = addNodePopoverPosition
     ? {
@@ -2066,6 +2142,7 @@ export default function WorkbenchCanvas({
             onAddLaunchItem={addLaunchItemBlock}
             onAddUninstallItem={addUninstallItemBlock}
             onAddFile={triggerFileImport}
+            onAddNewFile={openNewFileDialog}
             onClose={() => {
               setAddNodePopoverPosition(null)
               setAddNodePopoverSource(null)
@@ -2104,6 +2181,14 @@ export default function WorkbenchCanvas({
         conflictingName={pendingFileConflict?.file.name ?? ''}
         suggestedName={pendingFileConflict?.suggestedName ?? ''}
         onResolve={handleFileConflictResolve}
+      />
+
+      <NewFileDialog
+        open={newFileDialogOpen}
+        conflictState={newFileConflict}
+        onClose={closeNewFileDialog}
+        onCreate={payload => void processNewFile(payload, null)}
+        onConflictResolve={handleNewFileConflictResolve}
       />
     </>
   )

@@ -234,6 +234,7 @@ export default function AddNodePopover({
   onAddLaunchItem,
   onAddUninstallItem,
   onAddFile,
+  onAddNewFile,
   onClose,
 }: {
   position: WorkbenchPoint
@@ -254,6 +255,7 @@ export default function AddNodePopover({
   onAddLaunchItem: () => void
   onAddUninstallItem: () => void
   onAddFile: () => void
+  onAddNewFile: () => void
   onClose: () => void
 }) {
   const [closeHovered, setCloseHovered] = useState(false)
@@ -317,6 +319,9 @@ export default function AddNodePopover({
   const fileRows = [
     ...(source === null
       ? [{ key: 'file', label: '导入文件', code: '[[File]]', fill: fileFill, stroke: fileAccent, disabled: false, onClick: onAddFile }]
+      : []),
+    ...(source === null
+      ? [{ key: 'file-new', label: '新建文件', code: '[[File]]', fill: fileFill, stroke: fileAccent, disabled: false, onClick: onAddNewFile }]
       : []),
   ]
 

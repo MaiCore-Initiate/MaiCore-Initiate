@@ -4,11 +4,12 @@
 
 为 MaiCore-Start 工作台提供文件块（FileBlock）的后端支持。
 - 元信息跟随 workbench project 走，存储在 config/MOD.json
-- 文件本体存储在 data/workbench_files/{sequence}/{filename}
+- 文件本体落到 workbench project 目录下（与模板 TOML 同级）
 """
 from __future__ import annotations
 
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -38,7 +39,6 @@ FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._\- ]{1,128}$")
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-FILES_ROOT = PROJECT_ROOT / "data" / "workbench_files"
 
 
 # ---------------- Pydantic Models ----------------
@@ -73,6 +73,13 @@ class RenamePayload(BaseModel):
     conflictResolution: Optional[str] = None
 
 
+class CreateFilePayload(BaseModel):
+    name: str
+    content: Optional[str] = None
+    conflictResolution: Optional[str] = None  # "rename" | "overwrite" | None
+    fileId: Optional[str] = None
+
+
 # ---------------- Helpers ----------------
 
 def _language_for(name: str) -> str:
@@ -101,8 +108,22 @@ def _validate_name(name: str) -> None:
         raise HTTPException(400, f"不支持的文件类型: {ext}")
 
 
+def _ensure_project(sequence: str) -> Dict[str, Any]:
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
+    return data[sequence]
+
+
 def _project_dir(sequence: str) -> Path:
-    project_dir = FILES_ROOT / sequence
+    """根据 project.path 解析出工作台项目目录（与模板 TOML 同级）。"""
+    project = _ensure_project(sequence)
+    raw_path = str(project.get("path", "")).strip()
+    if not raw_path:
+        raise HTTPException(400, f"工作台项目 '{sequence}' 未配置 path。")
+    project_dir = Path(raw_path)
+    if not project_dir.is_absolute():
+        project_dir = PROJECT_ROOT / raw_path
     project_dir.mkdir(parents=True, exist_ok=True)
     return project_dir
 
@@ -113,13 +134,6 @@ def _safe_join(project_dir: Path, filename: str) -> Path:
     if not str(target).startswith(str(project_dir.resolve())):
         raise HTTPException(400, "非法文件路径")
     return target
-
-
-def _ensure_project(sequence: str) -> Dict[str, Any]:
-    data = load_mod_index()
-    if sequence not in data:
-        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
-    return data[sequence]
 
 
 def _read_project_files(sequence: str) -> List[Dict[str, Any]]:
@@ -138,12 +152,16 @@ def _write_project_files(sequence: str, files: List[Dict[str, Any]]) -> None:
     save_mod_index(data)
 
 
-def _build_meta(file_id: str, name: str, abs_path: Path) -> Dict[str, Any]:
+def _build_meta(file_id: str, name: str, abs_path: Path, project_dir: Path) -> Dict[str, Any]:
     stat = abs_path.stat()
+    try:
+        rel = abs_path.relative_to(project_dir)
+    except ValueError:
+        rel = abs_path
     return {
         "id": file_id,
         "name": name,
-        "path": str(abs_path.relative_to(PROJECT_ROOT)),
+        "path": str(rel),
         "size": stat.st_size,
         "modifiedAt": datetime.utcfromtimestamp(stat.st_mtime).isoformat() + "Z",
         "binary": Path(name).suffix.lower() in BINARY_EXTENSIONS,
@@ -197,7 +215,7 @@ def check_name(sequence: str, payload: CheckNamePayload):
 
 @router.post(
     "/projects/{sequence}/files/upload",
-    summary="上传文件",
+    summary="上传文件（导入）",
     response_model=FileMeta,
 )
 async def upload_file(
@@ -240,7 +258,6 @@ async def upload_file(
                     raise HTTPException(413, f"文件超过 5MB 上限")
                 f.write(chunk)
     except HTTPException:
-        # 清理半成品
         if target_path.exists() and target_path.stat().st_size == 0:
             try:
                 target_path.unlink()
@@ -255,15 +272,58 @@ async def upload_file(
                 pass
         raise HTTPException(500, f"写入失败: {exc}") from exc
 
-    # 元信息入库
     files = _read_project_files(sequence)
-    # 移除已存在的同名记录（overwrite 场景）
     files = [f for f in files if f.get("name") != target_name]
     new_id = fileId or f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
-    meta = _build_meta(new_id, target_name, target_path)
+    meta = _build_meta(new_id, target_name, target_path, project_dir)
     files.append(meta)
     _write_project_files(sequence, files)
 
+    return meta
+
+
+@router.post(
+    "/projects/{sequence}/files/create",
+    summary="新建空文件（可在工作台直接创建）",
+    response_model=FileMeta,
+)
+def create_file(sequence: str, payload: CreateFilePayload):
+    _ensure_project(sequence)
+    _validate_name(payload.name)
+    if payload.conflictResolution and payload.conflictResolution not in ("rename", "overwrite"):
+        raise HTTPException(400, f"非法的 conflictResolution: {payload.conflictResolution}")
+    if payload.content is not None and len(payload.content.encode("utf-8")) > MAX_FILE_SIZE:
+        raise HTTPException(413, f"内容超过 5MB 上限")
+
+    project_dir = _project_dir(sequence)
+    target_name = payload.name
+    target_path = _safe_join(project_dir, target_name)
+
+    if target_path.exists():
+        if payload.conflictResolution == "rename":
+            target_name = _suggest_name(project_dir, payload.name)
+            target_path = _safe_join(project_dir, target_name)
+        elif payload.conflictResolution != "overwrite":
+            raise HTTPException(409, detail={
+                "code": "name_conflict",
+                "message": f"文件 '{payload.name}' 已存在",
+                "suggestion": _suggest_name(project_dir, payload.name),
+            })
+
+    try:
+        if payload.content is None:
+            target_path.touch()
+        else:
+            target_path.write_text(payload.content, encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(500, f"创建失败: {exc}") from exc
+
+    files = _read_project_files(sequence)
+    files = [f for f in files if f.get("name") != target_name]
+    new_id = payload.fileId or f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+    meta = _build_meta(new_id, target_name, target_path, project_dir)
+    files.append(meta)
+    _write_project_files(sequence, files)
     return meta
 
 
@@ -323,12 +383,11 @@ def write_file(sequence: str, filename: str, payload: WriteFilePayload):
         raise HTTPException(413, f"内容超过 5MB 上限")
 
     target.write_text(payload.content, encoding="utf-8")
-    # 更新元信息
     files = _read_project_files(sequence)
     meta = next((f for f in files if f.get("name") == filename), None)
     if not meta:
         raise HTTPException(404, f"文件 '{filename}' 在元信息中不存在")
-    new_meta = _build_meta(meta["id"], filename, target)
+    new_meta = _build_meta(meta["id"], filename, target, project_dir)
     files = [new_meta if f.get("id") == meta["id"] else f for f in files]
     _write_project_files(sequence, files)
     return new_meta
@@ -369,15 +428,14 @@ def rename_file(sequence: str, filename: str, payload: RenamePayload):
     new_meta: Optional[Dict[str, Any]] = None
     for f in files:
         if f.get("name") == filename:
-            meta = _build_meta(f["id"], target_name, target)
+            meta = _build_meta(f["id"], target_name, target, project_dir)
             new_meta = meta
             updated.append(meta)
         else:
             updated.append(f)
     if new_meta is None:
-        # 元信息缺失，从硬盘重建
         meta_id = f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
-        new_meta = _build_meta(meta_id, target_name, target)
+        new_meta = _build_meta(meta_id, target_name, target, project_dir)
         updated.append(new_meta)
     _write_project_files(sequence, updated)
     return new_meta

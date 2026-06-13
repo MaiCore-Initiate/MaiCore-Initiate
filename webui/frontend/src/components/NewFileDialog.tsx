@@ -1,0 +1,223 @@
+import { useEffect, useState, type ChangeEvent } from 'react'
+import { createPortal } from 'react-dom'
+import { WORKBENCH_FILE_EXTENSIONS, type WorkbenchFileLanguage } from '../pages/workbench-canvas/types'
+
+export interface NewFileDialogProps {
+  open: boolean
+  defaultName?: string
+  conflictState?: {
+    name: string
+    suggestedName: string
+  } | null
+  onClose: () => void
+  onCreate: (payload: { name: string; content: string; conflictResolution: 'rename' | 'overwrite' | null }) => void
+  onConflictResolve: (resolution: 'rename' | 'overwrite' | 'cancel') => void
+}
+
+function inferLanguage(name: string): WorkbenchFileLanguage {
+  const ext = name.toLowerCase().slice(name.lastIndexOf('.') + 1)
+  const table: Record<string, WorkbenchFileLanguage> = {
+    py: 'python',
+    ps1: 'powershell', cmd: 'powershell', bat: 'powershell',
+    sh: 'shell', bash: 'shell',
+    js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+    ts: 'typescript', tsx: 'typescript',
+    json: 'json', jsonl: 'json',
+    java: 'java',
+    toml: 'ini',
+    xml: 'xml', xaml: 'xml',
+    txt: 'plaintext', log: 'plaintext',
+  }
+  return table[ext] ?? 'plaintext'
+}
+
+function defaultContentFor(name: string): string {
+  const lang = inferLanguage(name)
+  switch (lang) {
+    case 'python':
+      return '# -*- coding: utf-8 -*-\n'
+    case 'shell':
+      return '#!/usr/bin/env bash\nset -euo pipefail\n'
+    case 'javascript':
+      return '// 新建 JS 文件\n'
+    case 'typescript':
+      return '// 新建 TS 文件\n'
+    case 'json':
+      return '{}\n'
+    case 'ini':
+      return '# 新建 TOML 文件\n'
+    case 'xml':
+      return '<?xml version="1.0" encoding="utf-8"?>\n<root>\n</root>\n'
+    default:
+      return ''
+  }
+}
+
+export default function NewFileDialog({
+  open,
+  defaultName = '',
+  conflictState,
+  onClose,
+  onCreate,
+  onConflictResolve,
+}: NewFileDialogProps) {
+  const [name, setName] = useState(defaultName)
+  const [content, setContent] = useState('')
+  const [initialized, setInitialized] = useState(false)
+
+  useEffect(() => {
+    if (open && !initialized) {
+      setName(defaultName)
+      setContent(defaultContentFor(defaultName))
+      setInitialized(true)
+    }
+    if (!open) {
+      setInitialized(false)
+    }
+  }, [open, defaultName, initialized])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+      } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        handleCreate()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, name, content])
+
+  if (!open) return null
+
+  const ext = name.toLowerCase().slice(name.lastIndexOf('.') + 1)
+  const extValid = WORKBENCH_FILE_EXTENSIONS.includes(`.${ext}` as (typeof WORKBENCH_FILE_EXTENSIONS)[number])
+  const nameValid = name.length > 0 && name.length <= 128
+  const canCreate = extValid && nameValid
+
+  const handleCreate = () => {
+    if (!canCreate) return
+    onCreate({ name, content, conflictResolution: null })
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-file-title"
+    >
+      <div
+        className="absolute inset-0 bg-black/30 backdrop-blur-[6px]"
+        onClick={onClose}
+      />
+      <div className="relative flex max-h-[90vh] w-[92%] max-w-2xl flex-col rounded-2xl border border-white/20 bg-[var(--dfw-bg)] shadow-2xl">
+        <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <h2 id="new-file-title" className="text-lg font-semibold text-[var(--dfw-text)]">
+            新建文件
+          </h2>
+          <button
+            type="button"
+            aria-label="关闭"
+            className="rounded-md p-1 text-[var(--dfw-text)] opacity-70 transition hover:bg-white/10"
+            onClick={onClose}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 6L18 18M6 18L18 6" strokeLinecap="round" />
+            </svg>
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-auto px-6 py-4">
+          <label className="block text-sm font-medium text-[var(--dfw-text)]">
+            文件名
+          </label>
+          <input
+            autoFocus
+            value={name}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => {
+              setName(event.target.value)
+              setInitialized(true)
+            }}
+            placeholder="例如 test.py"
+            className="mt-2 w-full rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
+          />
+          {!extValid && name.length > 0 && (
+            <div className="mt-2 text-xs text-amber-200">
+              ⚠ 当前后缀 <code>.{ext}</code> 不在白名单中。允许：{WORKBENCH_FILE_EXTENSIONS.map(e => e.replace('.', '')).join(' / ')}
+            </div>
+          )}
+
+          <label className="mt-4 block text-sm font-medium text-[var(--dfw-text)]">
+            初始内容（可选）
+          </label>
+          <textarea
+            value={content}
+            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setContent(event.target.value)}
+            placeholder="留空则创建空文件"
+            rows={10}
+            className="mt-2 w-full resize-y rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-xs text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
+          />
+          <div className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">
+            Ctrl/Cmd + Enter 创建
+          </div>
+        </div>
+
+        <footer className="flex items-center justify-end gap-2 border-t border-white/10 px-6 py-4">
+          <button
+            type="button"
+            className="rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm text-[var(--dfw-text)] transition hover:bg-white/5"
+            onClick={onClose}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="rounded-lg bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+            onClick={handleCreate}
+            disabled={!canCreate}
+          >
+            创建
+          </button>
+        </footer>
+      </div>
+
+      {conflictState && (
+        <div className="absolute left-1/2 top-[78%] z-[1010] w-[92%] max-w-md -translate-x-1/2 rounded-2xl border border-white/20 bg-[var(--dfw-bg)] p-5 shadow-2xl">
+          <h3 className="text-base font-semibold text-[var(--dfw-text)]">文件名冲突</h3>
+          <p className="mt-2 text-sm text-[var(--dfw-text)] opacity-80">
+            已存在同名文件 <span className="font-mono">{conflictState.name}</span>，请选择处理方式：
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <button
+              type="button"
+              className="w-full rounded-lg bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+              onClick={() => onConflictResolve('rename')}
+            >
+              重命名为 <span className="font-mono">{conflictState.suggestedName}</span>
+            </button>
+            <button
+              type="button"
+              className="w-full rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] transition hover:bg-white/5"
+              onClick={() => onConflictResolve('overwrite')}
+            >
+              覆盖现有文件
+            </button>
+            <button
+              type="button"
+              className="w-full rounded-lg border border-transparent bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] opacity-70 transition hover:opacity-100"
+              onClick={() => onConflictResolve('cancel')}
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body,
+  )
+}
