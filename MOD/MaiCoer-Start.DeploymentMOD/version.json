@@ -1,8 +1,0 @@
-{
-    "version": "1.0.0",
-    "description": "A simple example of a web app using the Google App Engine",
-    "dependencies": {
-        "express": "^4.x",
-        "ejs": "^2.x"
-    }
-}

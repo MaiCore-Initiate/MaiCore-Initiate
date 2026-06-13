@@ -1,5 +1,5 @@
 import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchDeploymentMeta, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConnectionSource, type WorkbenchDeploymentMeta, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
 
 export const deploymentBlockMinSize: WorkbenchSize = { width: 540, height: 430 }
 export const deploymentBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -96,6 +96,7 @@ export default function DeploymentBlock({
   linking = false,
   onSelect,
   onAddConnectorClick,
+  onConnectorDragStart,
   onDelete,
   deployment,
   dragHandlers,
@@ -108,6 +109,7 @@ export default function DeploymentBlock({
   linking?: boolean
   onSelect?: () => void
   onAddConnectorClick?: () => void
+  onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
   onDelete?: () => void
   deployment: WorkbenchDeploymentMeta
   dragHandlers?: WorkbenchBlockDragHandlers
@@ -196,7 +198,7 @@ export default function DeploymentBlock({
   ]
 
   return (
-    <g transform={`translate(${position.x} ${position.y})`}>
+    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id={`deployment:${blockIndex}`}>
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
@@ -300,7 +302,10 @@ export default function DeploymentBlock({
           event.stopPropagation()
           onAddConnectorClick?.()
         }}
-        onPointerDown={event => event.stopPropagation()}
+        onPointerDown={event => {
+          event.stopPropagation()
+          onConnectorDragStart?.('deployment-output', { x: position.x + outputOffset.x, y: position.y + connectorY }, event)
+        }}
       >
         <AddConnectorButton />
       </g>

@@ -49,6 +49,10 @@ export interface WorkbenchBlockMeta {
   launchEnvInput: boolean
   launchList: string[]
   launchItems: WorkbenchLaunchItemMeta[]
+  uninstallEnvOutput: boolean
+  uninstallEnvInput: boolean
+  uninstallList: string[]
+  uninstallItems: WorkbenchUninstallItemMeta[]
 }
 
 export interface WorkbenchComponentMeta {
@@ -164,6 +168,31 @@ export interface WorkbenchLaunchItemMeta {
   envOutputList: WorkbenchEnvVariableEntry[]
 }
 
+export interface WorkbenchUninstallItemMeta {
+  id: string
+  name: string
+  choose: boolean
+  runtime: string
+  commandTheme: string
+  uninstall: boolean
+  stopBeforeUninstall: boolean
+  stopCommandList: string[]
+  removeInstanceConfig: boolean
+  removeRuntimeFiles: boolean
+  removeDeployRoot: boolean
+  removeComponent: boolean
+  deploymentTargets: string[]
+  componentTargets: string[]
+  beforeCommand: boolean
+  beforeCommandList: string[]
+  afterCommand: boolean
+  afterCommandList: string[]
+  envInput: boolean
+  envInputList: WorkbenchEnvVariableEntry[]
+  envOutput: boolean
+  envOutputList: WorkbenchEnvVariableEntry[]
+}
+
 export interface WorkbenchEnvVariableEntry {
   name: string
   value: string
@@ -174,7 +203,7 @@ export interface WorkbenchPoint {
   y: number
 }
 
-export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component' | 'deploy-deployment' | 'deploy-config' | 'config-item' | 'config-launch' | 'launch-item' | 'launch-uninstall'
+export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component' | 'deploy-deployment' | 'deploy-config' | 'config-item' | 'config-launch' | 'launch-item' | 'launch-uninstall' | 'uninstall-item' | 'uninstall-end' | 'component-output' | 'deployment-output' | 'config-item-output' | 'launch-item-output' | 'uninstall-item-output'
 
 export interface WorkbenchAddNodeAnchor {
   id: number
@@ -202,17 +231,20 @@ export type WorkbenchComponentBlockId = `component:${number}`
 export type WorkbenchDeploymentBlockId = `deployment:${number}`
 export type WorkbenchConfigItemBlockId = `config-item:${number}`
 export type WorkbenchLaunchItemBlockId = `launch-item:${number}`
-export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | 'config' | 'launch' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId | WorkbenchConfigItemBlockId | WorkbenchLaunchItemBlockId
+export type WorkbenchUninstallItemBlockId = `uninstall-item:${number}`
+export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | 'config' | 'launch' | 'uninstall' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId | WorkbenchConfigItemBlockId | WorkbenchLaunchItemBlockId | WorkbenchUninstallItemBlockId
 
 export interface WorkbenchVisibleBlocks {
   components: boolean
   deploy: boolean
   config: boolean
   launch: boolean
+  uninstall: boolean
   componentCount: number
   deploymentCount: number
   configItemCount: number
   launchItemCount: number
+  uninstallItemCount: number
 }
 
 export interface WorkbenchBlockDragHandlers {

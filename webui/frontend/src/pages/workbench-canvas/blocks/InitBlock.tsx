@@ -1,5 +1,6 @@
 import { LinkPendingOutline } from './BlockFrameControls'
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockMeta, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import type { PointerEvent as ReactPointerEvent } from 'react'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockMeta, type WorkbenchBlockResizeHandlers, type WorkbenchConnectionSource, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 const inputPortOffset: WorkbenchPoint = { x: 5, y: 115.5 }
 
@@ -59,6 +60,7 @@ export default function InitBlock({
   linking = false,
   onSelect,
   onAddConnectorClick,
+  onConnectorDragStart,
   meta,
   dragHandlers,
   resizeHandlers,
@@ -69,6 +71,7 @@ export default function InitBlock({
   linking?: boolean
   onSelect?: () => void
   onAddConnectorClick?: () => void
+  onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: ReactPointerEvent<SVGGElement>) => void
   meta: WorkbenchBlockMeta
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
@@ -117,7 +120,7 @@ export default function InitBlock({
   ]
 
   return (
-    <g transform={`translate(${position.x} ${position.y})`}>
+    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id="init">
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
@@ -211,7 +214,10 @@ export default function InitBlock({
           event.stopPropagation()
           onAddConnectorClick?.()
         }}
-        onPointerDown={event => event.stopPropagation()}
+        onPointerDown={event => {
+          event.stopPropagation()
+          onConnectorDragStart?.('init-components', { x: position.x + connectorX, y: position.y + connectorY }, event)
+        }}
       >
         <AddConnectorButton />
         <circle cx="0" cy="12" r="18" fill="transparent" />

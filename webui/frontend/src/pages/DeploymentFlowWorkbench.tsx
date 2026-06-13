@@ -4,7 +4,7 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -30,10 +30,11 @@ const baseBlockNames = {
   deploy: '[DEPLOY]',
   config: '[CONFIG]',
   launch: '[LAUNCH]',
+  uninstall: '[UNINSTALL]',
 }
 
 type WorkbenchViewport = { scale: number; x: number; y: number }
-const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, config: false, launch: false, componentCount: 0, deploymentCount: 0, configItemCount: 0, launchItemCount: 0 }
+const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, config: false, launch: false, uninstall: false, componentCount: 0, deploymentCount: 0, configItemCount: 0, launchItemCount: 0, uninstallItemCount: 0 }
 
 export type OutlineIconType = 'boolean' | 'array' | 'object' | 'string' | 'number'
 export type OutlineNodeTone = 'normal' | 'locked' | 'note'
@@ -171,6 +172,31 @@ const emptyLaunchItemMeta: WorkbenchLaunchItemMeta = {
   envOutput: false,
   envOutputList: [],
 }
+
+const emptyUninstallItemMeta: WorkbenchUninstallItemMeta = {
+  id: '',
+  name: '',
+  choose: false,
+  runtime: '',
+  commandTheme: 'classical',
+  uninstall: false,
+  stopBeforeUninstall: false,
+  stopCommandList: [],
+  removeInstanceConfig: false,
+  removeRuntimeFiles: false,
+  removeDeployRoot: false,
+  removeComponent: false,
+  deploymentTargets: [],
+  componentTargets: [],
+  beforeCommand: false,
+  beforeCommandList: [],
+  afterCommand: false,
+  afterCommandList: [],
+  envInput: false,
+  envInputList: [],
+  envOutput: false,
+  envOutputList: [],
+}
 const defaultWorkbenchMeta: WorkbenchMetaState = {
   author: '',
   tags: [],
@@ -212,6 +238,10 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   launchEnvInput: false,
   launchList: [],
   launchItems: [],
+  uninstallEnvOutput: false,
+  uninstallEnvInput: false,
+  uninstallList: [],
+  uninstallItems: [],
 }
 
 function formatTomlString(value: string) {
@@ -341,6 +371,10 @@ function createLaunchItemBlockId(index: number): WorkbenchLaunchItemBlockId {
   return `launch-item:${index}`
 }
 
+function createUninstallItemBlockId(index: number): WorkbenchUninstallItemBlockId {
+  return `uninstall-item:${index}`
+}
+
 function parseComponentBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
   if (!blockId?.startsWith('component:')) return null
   const index = Number(blockId.slice('component:'.length))
@@ -365,6 +399,12 @@ function parseLaunchItemBlockIndex(blockId: WorkbenchBlockId | null | undefined)
   return Number.isInteger(index) && index >= 0 ? index : null
 }
 
+function parseUninstallItemBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('uninstall-item:')) return null
+  const index = Number(blockId.slice('uninstall-item:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
 function formatSelectedBlockName(blockId: WorkbenchBlockId | null, meta: WorkbenchMetaState) {
   if (!blockId) return '无'
   const componentIndex = parseComponentBlockIndex(blockId)
@@ -386,6 +426,11 @@ function formatSelectedBlockName(blockId: WorkbenchBlockId | null, meta: Workben
   if (launchItemIndex !== null) {
     const launchItemName = meta.launchItems[launchItemIndex]?.name
     return launchItemName ? `[[LaunchItem]] ${launchItemIndex}：${launchItemName}` : `[[LaunchItem]] ${launchItemIndex}`
+  }
+  const uninstallItemIndex = parseUninstallItemBlockIndex(blockId)
+  if (uninstallItemIndex !== null) {
+    const uninstallItemName = meta.uninstallItems[uninstallItemIndex]?.name
+    return uninstallItemName ? `[[UninstallItem]] ${uninstallItemIndex}：${uninstallItemName}` : `[[UninstallItem]] ${uninstallItemIndex}`
   }
   return baseBlockNames[blockId as keyof typeof baseBlockNames]
 }
@@ -660,6 +705,45 @@ function createLaunchItemOutlineChildren(launchItem: WorkbenchLaunchItemMeta, in
     ...(launchItem.envOutput === true ? [createEnvVariableOutlineNode(id('env-output-list'), 'env_output_list', launchItem.envOutputList)] : []),
   ]
 }
+
+function createUninstallItemOutlineChildren(uninstallItem: WorkbenchUninstallItemMeta, index: number): OutlineNode[] {
+  const id = (fieldName: string) => `uninstall-item-${index}-${fieldName}`
+
+  return [
+    { id: id('id'), label: `id = ${formatTomlString(uninstallItem.id)}`, icon: 'string' },
+    { id: id('name'), label: `name = ${formatTomlString(uninstallItem.name)}`, icon: 'string' },
+    createBooleanOutlineNode(id('choose'), 'choose', uninstallItem.choose),
+    { id: id('runtime'), label: `runtime = ${formatTomlString(uninstallItem.runtime)}`, icon: 'string' },
+    { id: id('command-theme'), label: `command_theme = ${formatTomlString(uninstallItem.commandTheme)}`, icon: 'string' },
+    createBooleanOutlineNode(id('uninstall'), 'uninstall', uninstallItem.uninstall),
+    createBooleanOutlineNode(id('stop-before-uninstall'), 'stop_before_uninstall', uninstallItem.stopBeforeUninstall),
+    ...(uninstallItem.stopBeforeUninstall === true
+      ? [createStringArrayOutlineNode(id('stop-command-list'), 'stop_command_list', uninstallItem.stopCommandList)]
+      : []),
+    createBooleanOutlineNode(id('remove-instance-config'), 'remove_instance_config', uninstallItem.removeInstanceConfig),
+    createBooleanOutlineNode(id('remove-runtime-files'), 'remove_runtime_files', uninstallItem.removeRuntimeFiles),
+    createBooleanOutlineNode(id('remove-deploy-root'), 'remove_deploy_root', uninstallItem.removeDeployRoot),
+    createBooleanOutlineNode(id('remove-component'), 'remove_component', uninstallItem.removeComponent),
+    ...(uninstallItem.removeDeployRoot === true
+      ? [createStringArrayOutlineNode(id('deployment-targets'), 'deployment_targets', uninstallItem.deploymentTargets)]
+      : []),
+    ...(uninstallItem.removeComponent === true
+      ? [createStringArrayOutlineNode(id('component-targets'), 'component_targets', uninstallItem.componentTargets)]
+      : []),
+    createBooleanOutlineNode(id('before-command'), 'before_command', uninstallItem.beforeCommand),
+    ...(uninstallItem.beforeCommand === true
+      ? [createStringArrayOutlineNode(id('before-command-list'), 'before_command_list', uninstallItem.beforeCommandList)]
+      : []),
+    createBooleanOutlineNode(id('after-command'), 'after_command', uninstallItem.afterCommand),
+    ...(uninstallItem.afterCommand === true
+      ? [createStringArrayOutlineNode(id('after-command-list'), 'after_command_list', uninstallItem.afterCommandList)]
+      : []),
+    createBooleanOutlineNode(id('env-input'), 'env_input', uninstallItem.envInput),
+    ...(uninstallItem.envInput === true ? [createEnvVariableOutlineNode(id('env-input-list'), 'env_input_list', uninstallItem.envInputList)] : []),
+    createBooleanOutlineNode(id('env-output'), 'env_output', uninstallItem.envOutput),
+    ...(uninstallItem.envOutput === true ? [createEnvVariableOutlineNode(id('env-output-list'), 'env_output_list', uninstallItem.envOutputList)] : []),
+  ]
+}
 function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisibleBlocks): OutlineNode[] {
   const nodes: OutlineNode[] = []
 
@@ -782,6 +866,37 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
         defaultExpanded: true,
         blockId: createLaunchItemBlockId(index),
         children: createLaunchItemOutlineChildren(meta.launchItems[index] ?? emptyLaunchItemMeta, index),
+      })),
+    })
+  }
+
+  if (visibleBlocks.uninstall) {
+    nodes.push({
+      id: 'uninstall',
+      label: '[UNINSTALL]',
+      defaultExpanded: true,
+      blockId: 'uninstall',
+      children: [
+        createBooleanOutlineNode('uninstall-env-output', 'env_output', meta.uninstallEnvOutput),
+        createBooleanOutlineNode('uninstall-env-input', 'env_input', meta.uninstallEnvInput),
+        createStringArrayOutlineNode('uninstall-list', 'list', meta.uninstallList, true),
+      ],
+    })
+  }
+
+  if (visibleBlocks.uninstallItemCount > 0) {
+    nodes.push({
+      id: 'uninstall-item-array',
+      label: '[[UninstallItem]]',
+      defaultExpanded: true,
+      selectable: false,
+      children: Array.from({ length: visibleBlocks.uninstallItemCount }, (_, index) => ({
+        id: `uninstall-item-${index}`,
+        label: String(index),
+        icon: 'object' as const,
+        defaultExpanded: true,
+        blockId: createUninstallItemBlockId(index),
+        children: createUninstallItemOutlineChildren(meta.uninstallItems[index] ?? emptyUninstallItemMeta, index),
       })),
     })
   }

@@ -1,5 +1,5 @@
 import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchEnvVariableEntry, type WorkbenchLaunchItemMeta, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConnectionSource, type WorkbenchEnvVariableEntry, type WorkbenchLaunchItemMeta, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 export const launchItemBlockMinSize: WorkbenchSize = { width: 520, height: 430 }
 export const launchItemBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -81,6 +81,7 @@ export default function LaunchItemBlock({
   linking = false,
   onSelect,
   onAddConnectorClick,
+  onConnectorDragStart,
   onDelete,
   launchItem,
   dragHandlers,
@@ -93,6 +94,7 @@ export default function LaunchItemBlock({
   linking?: boolean
   onSelect?: () => void
   onAddConnectorClick?: () => void
+  onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
   onDelete?: () => void
   launchItem: WorkbenchLaunchItemMeta
   dragHandlers?: WorkbenchBlockDragHandlers
@@ -129,7 +131,7 @@ export default function LaunchItemBlock({
   ]
 
   return (
-    <g transform={`translate(${position.x} ${position.y})`}>
+    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id={`launch-item:${blockIndex}`}>
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
@@ -233,7 +235,10 @@ export default function LaunchItemBlock({
           event.stopPropagation()
           onAddConnectorClick?.()
         }}
-        onPointerDown={event => event.stopPropagation()}
+        onPointerDown={event => {
+          event.stopPropagation()
+          onConnectorDragStart?.('launch-item-output', { x: position.x + outputOffset.x, y: position.y + connectorY }, event)
+        }}
       >
         <AddConnectorButton />
       </g>

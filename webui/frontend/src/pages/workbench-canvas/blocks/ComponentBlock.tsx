@@ -1,5 +1,5 @@
 import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchConnectionSource, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
 
 export const componentBlockMinSize: WorkbenchSize = { width: 520, height: 430 }
 export const componentBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -95,6 +95,7 @@ export default function ComponentBlock({
   linking = false,
   onSelect,
   onAddConnectorClick,
+  onConnectorDragStart,
   onDelete,
   component,
   dragHandlers,
@@ -107,6 +108,7 @@ export default function ComponentBlock({
   linking?: boolean
   onSelect?: () => void
   onAddConnectorClick?: () => void
+  onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
   onDelete?: () => void
   component: WorkbenchComponentMeta
   dragHandlers?: WorkbenchBlockDragHandlers
@@ -206,7 +208,7 @@ export default function ComponentBlock({
   ]
 
   return (
-    <g transform={`translate(${position.x} ${position.y})`}>
+    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id={`component:${blockIndex}`}>
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
@@ -310,7 +312,10 @@ export default function ComponentBlock({
           event.stopPropagation()
           onAddConnectorClick?.()
         }}
-        onPointerDown={event => event.stopPropagation()}
+        onPointerDown={event => {
+          event.stopPropagation()
+          onConnectorDragStart?.('component-output', { x: position.x + outputOffset.x, y: position.y + connectorY }, event)
+        }}
       >
         <AddConnectorButton />
       </g>

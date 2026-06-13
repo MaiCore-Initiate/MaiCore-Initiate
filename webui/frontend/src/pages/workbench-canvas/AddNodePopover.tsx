@@ -17,6 +17,10 @@ const launchAccent = '#0f766e'
 const launchFill = '#14b8a6'
 const launchItemAccent = '#2dd4bf'
 const launchItemFill = '#99f6e4'
+const uninstallAccent = '#991b1b'
+const uninstallFill = '#dc2626'
+const uninstallItemAccent = '#f87171'
+const uninstallItemFill = '#fecaca'
 
 const POPOVER_WIDTH = 296
 const POPOVER_MAX_HEIGHT = 420
@@ -168,6 +172,14 @@ function shouldShowLaunchItem(source: WorkbenchConnectionSource | null) {
   return source === null || source === 'launch-item'
 }
 
+function shouldShowUninstall(source: WorkbenchConnectionSource | null) {
+  return source === null || source === 'launch-uninstall'
+}
+
+function shouldShowUninstallItem(source: WorkbenchConnectionSource | null) {
+  return source === null || source === 'uninstall-item'
+}
+
 function GroupTitle({
   y,
   label,
@@ -207,15 +219,18 @@ export default function AddNodePopover({
   deployVisible,
   configVisible,
   launchVisible,
+  uninstallVisible,
   source = null,
   onAddComponents,
   onAddDeploy,
   onAddConfig,
   onAddLaunch,
+  onAddUninstall,
   onAddComponent,
   onAddDeployment,
   onAddConfigItem,
   onAddLaunchItem,
+  onAddUninstallItem,
   onClose,
 }: {
   position: WorkbenchPoint
@@ -223,15 +238,18 @@ export default function AddNodePopover({
   deployVisible: boolean
   configVisible: boolean
   launchVisible: boolean
+  uninstallVisible: boolean
   source?: WorkbenchConnectionSource | null
   onAddComponents: () => void
   onAddDeploy: () => void
   onAddConfig: () => void
   onAddLaunch: () => void
+  onAddUninstall: () => void
   onAddComponent: () => void
   onAddDeployment: () => void
   onAddConfigItem: () => void
   onAddLaunchItem: () => void
+  onAddUninstallItem: () => void
   onClose: () => void
 }) {
   const [closeHovered, setCloseHovered] = useState(false)
@@ -284,6 +302,14 @@ export default function AddNodePopover({
       ? [{ key: 'launch-item', label: '启动项', code: '[[LaunchItem]]', fill: launchItemFill, stroke: launchItemAccent, disabled: false, onClick: onAddLaunchItem }]
       : []),
   ]
+  const uninstallRows = [
+    ...(shouldShowUninstall(source)
+      ? [{ key: 'uninstall', label: '卸载管理闸', code: '[UNINSTALL]', fill: uninstallFill, stroke: uninstallAccent, disabled: uninstallVisible, onClick: onAddUninstall }]
+      : []),
+    ...(shouldShowUninstallItem(source)
+      ? [{ key: 'uninstall-item', label: '卸载项', code: '[[UninstallItem]]', fill: uninstallItemFill, stroke: uninstallItemAccent, disabled: false, onClick: onAddUninstallItem }]
+      : []),
+  ]
 
   const lastComponentRowY = componentRows.length > 0
     ? FIRST_ROW_Y + (componentRows.length - 1) * ROW_SPACING
@@ -300,12 +326,18 @@ export default function AddNodePopover({
     : configRowStartY - GROUP_GAP
   const launchTitleY = lastConfigRowY + GROUP_GAP
   const launchRowStartY = launchTitleY + TITLE_GAP
+  const lastLaunchRowY = launchRows.length > 0
+    ? launchRowStartY + (launchRows.length - 1) * ROW_SPACING
+    : launchRowStartY - GROUP_GAP
+  const uninstallTitleY = lastLaunchRowY + GROUP_GAP
+  const uninstallRowStartY = uninstallTitleY + TITLE_GAP
 
   const lastRowBottomY = Math.max(
     componentRows.length > 0 ? FIRST_ROW_Y + (componentRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
     deployRows.length > 0 ? deployRowStartY + (deployRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
     configRows.length > 0 ? configRowStartY + (configRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
     launchRows.length > 0 ? launchRowStartY + (launchRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
+    uninstallRows.length > 0 ? uninstallRowStartY + (uninstallRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
   )
   const popoverHeight = TOP_PADDING + Math.max(TITLE_HEIGHT, lastRowBottomY) + BOTTOM_PADDING
 
@@ -434,6 +466,23 @@ export default function AddNodePopover({
             <ComponentNodeRow
               key={row.key}
               y={launchRowStartY + index * ROW_SPACING}
+              label={row.label}
+              code={row.code}
+              swatchFill={row.fill}
+              swatchStroke={row.stroke}
+              disabled={row.disabled}
+              onClick={row.onClick}
+            />
+          ))}
+
+          {uninstallRows.length > 0 && (
+            <GroupTitle y={uninstallTitleY} label="卸载" accent="#dc2626" />
+          )}
+
+          {uninstallRows.map((row, index) => (
+            <ComponentNodeRow
+              key={row.key}
+              y={uninstallRowStartY + index * ROW_SPACING}
               label={row.label}
               code={row.code}
               swatchFill={row.fill}

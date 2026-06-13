@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import type { WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchConfigItemMeta, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchLaunchItemMeta, WorkbenchVersionFormattingRule } from './workbench-canvas/types'
+import type { WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchConfigItemMeta, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchLaunchItemMeta, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule } from './workbench-canvas/types'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -99,6 +99,10 @@ export interface WorkbenchModInfoMeta {
   launchEnvInput: boolean
   launchList: string[]
   launchItems: WorkbenchLaunchItemMeta[]
+  uninstallEnvOutput: boolean
+  uninstallEnvInput: boolean
+  uninstallList: string[]
+  uninstallItems: WorkbenchUninstallItemMeta[]
 }
 
 const emptyComponentMeta: WorkbenchComponentMeta = {
@@ -209,6 +213,31 @@ const emptyLaunchItemMeta: WorkbenchLaunchItemMeta = {
   envOutputList: [],
 }
 
+const emptyUninstallItemMeta: WorkbenchUninstallItemMeta = {
+  id: '',
+  name: '',
+  choose: false,
+  runtime: '',
+  commandTheme: 'classical',
+  uninstall: false,
+  stopBeforeUninstall: false,
+  stopCommandList: [],
+  removeInstanceConfig: false,
+  removeRuntimeFiles: false,
+  removeDeployRoot: false,
+  removeComponent: false,
+  deploymentTargets: [],
+  componentTargets: [],
+  beforeCommand: false,
+  beforeCommandList: [],
+  afterCommand: false,
+  afterCommandList: [],
+  envInput: false,
+  envInputList: [],
+  envOutput: false,
+  envOutputList: [],
+}
+
 const emptyModInfoMeta: WorkbenchModInfoMeta = {
   author: '',
   tags: [],
@@ -250,6 +279,10 @@ const emptyModInfoMeta: WorkbenchModInfoMeta = {
   launchEnvInput: false,
   launchList: [],
   launchItems: [],
+  uninstallEnvOutput: false,
+  uninstallEnvInput: false,
+  uninstallList: [],
+  uninstallItems: [],
 }
 
 export interface WorkbenchRightSidebarProps {
@@ -455,6 +488,20 @@ function fillLaunchItemsToIndex(launchItems: WorkbenchLaunchItemMeta[], index: n
   return [
     ...launchItems,
     ...Array.from({ length: index - launchItems.length + 1 }, () => ({ ...emptyLaunchItemMeta })),
+  ]
+}
+
+function parseUninstallItemBlockIndex(blockId: WorkbenchBlockId | null | undefined) {
+  if (!blockId?.startsWith('uninstall-item:')) return null
+  const index = Number(blockId.slice('uninstall-item:'.length))
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function fillUninstallItemsToIndex(uninstallItems: WorkbenchUninstallItemMeta[], index: number) {
+  if (uninstallItems.length > index) return [...uninstallItems]
+  return [
+    ...uninstallItems,
+    ...Array.from({ length: index - uninstallItems.length + 1 }, () => ({ ...emptyUninstallItemMeta })),
   ]
 }
 
@@ -2830,6 +2877,293 @@ function LaunchItemMetaEditor({
   )
 }
 
+function UninstallMetaEditor({
+  meta,
+  updateMeta,
+  fieldAvailableWidth,
+  width,
+}: {
+  meta: WorkbenchModInfoMeta
+  updateMeta: (patch: Partial<WorkbenchModInfoMeta>) => void
+  fieldAvailableWidth: number
+  width: number
+}) {
+  return (
+    <div className="flex min-h-[390px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+      <section data-outline-target="uninstall-env-output">
+        <FieldLabel>[UNINSTALL] 环境变量导出</FieldLabel>
+        <BooleanSwitchField
+          value={meta.uninstallEnvOutput}
+          onChange={uninstallEnvOutput => updateMeta({ uninstallEnvOutput })}
+        />
+      </section>
+
+      <section data-outline-target="uninstall-env-input">
+        <FieldLabel>[UNINSTALL] 环境变量导入</FieldLabel>
+        <BooleanSwitchField
+          value={meta.uninstallEnvInput}
+          onChange={uninstallEnvInput => updateMeta({ uninstallEnvInput })}
+        />
+      </section>
+
+      <section data-outline-target="uninstall-list">
+        <ArrayListField
+          label="卸载ID列表"
+          values={meta.uninstallList}
+          outlineTargetId="uninstall-list"
+          onChange={uninstallList => updateMeta({ uninstallList })}
+          maxWidth={fieldAvailableWidth}
+          itemAriaLabel="卸载ID"
+        />
+      </section>
+    </div>
+  )
+}
+
+function UninstallItemMetaEditor({
+  uninstallItem,
+  updateUninstallItem,
+  updateUninstallItemId,
+  uninstallItemOutlineTarget,
+  fieldAvailableWidth,
+  width,
+  uninstallItemEnvInputList,
+  uninstallItemEnvOutputList,
+  showUninstallItemEnvInput,
+  showUninstallItemEnvOutput,
+}: {
+  uninstallItem: WorkbenchUninstallItemMeta
+  updateUninstallItem: (patch: Partial<WorkbenchUninstallItemMeta>) => void
+  updateUninstallItemId: (id: string) => void
+  uninstallItemOutlineTarget: (fieldName: string) => string | undefined
+  fieldAvailableWidth: number
+  width: number
+  uninstallItemEnvInputList: WorkbenchEnvVariableEntry[]
+  uninstallItemEnvOutputList: WorkbenchEnvVariableEntry[]
+  showUninstallItemEnvInput: boolean
+  showUninstallItemEnvOutput: boolean
+}) {
+  return (
+    <div className="flex min-h-[2000px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
+      <section data-outline-target={uninstallItemOutlineTarget('id')}>
+        <FieldLabel>卸载ID</FieldLabel>
+        <AutoGrowTextField
+          value={uninstallItem.id}
+          onChange={updateUninstallItemId}
+          maxWidth={fieldAvailableWidth}
+          ariaLabel="卸载ID"
+        />
+      </section>
+
+      <section data-outline-target={uninstallItemOutlineTarget('name')}>
+        <FieldLabel>卸载名称</FieldLabel>
+        <AutoGrowTextField
+          value={uninstallItem.name}
+          onChange={name => updateUninstallItem({ name })}
+          maxWidth={fieldAvailableWidth}
+          ariaLabel="卸载名称"
+        />
+      </section>
+
+      <section data-outline-target={uninstallItemOutlineTarget('choose')}>
+        <FieldLabel>用户可选卸载</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.choose}
+          onChange={choose => updateUninstallItem({ choose })}
+        />
+      </section>
+
+      <section data-outline-target={uninstallItemOutlineTarget('runtime')}>
+        <FieldLabel>运行时</FieldLabel>
+        <RuntimeSelectField
+          value={uninstallItem.runtime}
+          onChange={runtime => updateUninstallItem({ runtime })}
+          allowInherit
+        />
+      </section>
+
+      <section data-outline-target={uninstallItemOutlineTarget('command-theme')}>
+        <FieldLabel>命令主题</FieldLabel>
+        <OptionSelectField
+          value={uninstallItem.commandTheme}
+          options={commandThemeOptions}
+          onChange={commandTheme => updateUninstallItem({ commandTheme })}
+          ariaLabel="命令主题"
+        />
+      </section>
+
+      <section data-outline-target={uninstallItemOutlineTarget('uninstall')}>
+        <FieldLabel>需要卸载</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.uninstall}
+          onChange={uninstall => updateUninstallItem({ uninstall })}
+        />
+      </section>
+
+      <section data-outline-target={uninstallItemOutlineTarget('stop-before-uninstall')}>
+        <FieldLabel>卸载前停止</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.stopBeforeUninstall}
+          onChange={stopBeforeUninstall => updateUninstallItem({ stopBeforeUninstall })}
+        />
+      </section>
+
+      <ConditionalField show={uninstallItem.stopBeforeUninstall === true}>
+        <section data-outline-target={uninstallItemOutlineTarget('stop-command-list')}>
+          <ArrayListField
+            label="停止命令"
+            values={uninstallItem.stopCommandList}
+            outlineTargetId={uninstallItemOutlineTarget('stop-command-list') ?? 'uninstall-item-stop-command-list'}
+            onChange={stopCommandList => updateUninstallItem({ stopCommandList })}
+            maxWidth={fieldAvailableWidth}
+            itemAriaLabel="停止命令"
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={uninstallItemOutlineTarget('remove-instance-config')}>
+        <FieldLabel>删除实例配置</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.removeInstanceConfig}
+          onChange={removeInstanceConfig => updateUninstallItem({ removeInstanceConfig })}
+        />
+      </section>
+
+      <section data-outline-target={uninstallItemOutlineTarget('remove-runtime-files')}>
+        <FieldLabel>删除运行时状态</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.removeRuntimeFiles}
+          onChange={removeRuntimeFiles => updateUninstallItem({ removeRuntimeFiles })}
+        />
+      </section>
+
+      <section data-outline-target={uninstallItemOutlineTarget('remove-deploy-root')}>
+        <FieldLabel>删除部署目录</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.removeDeployRoot}
+          onChange={removeDeployRoot => updateUninstallItem({ removeDeployRoot })}
+        />
+      </section>
+
+      <section data-outline-target={uninstallItemOutlineTarget('remove-component')}>
+        <FieldLabel>删除组件目录</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.removeComponent}
+          onChange={removeComponent => updateUninstallItem({ removeComponent })}
+        />
+      </section>
+
+      <ConditionalField show={uninstallItem.removeDeployRoot === true}>
+        <section data-outline-target={uninstallItemOutlineTarget('deployment-targets')}>
+          <ArrayListField
+            label="部署目标"
+            values={uninstallItem.deploymentTargets}
+            outlineTargetId={uninstallItemOutlineTarget('deployment-targets') ?? 'uninstall-item-deployment-targets'}
+            onChange={deploymentTargets => updateUninstallItem({ deploymentTargets })}
+            maxWidth={fieldAvailableWidth}
+            itemAriaLabel="部署目标"
+          />
+        </section>
+      </ConditionalField>
+
+      <ConditionalField show={uninstallItem.removeComponent === true}>
+        <section data-outline-target={uninstallItemOutlineTarget('component-targets')}>
+          <ArrayListField
+            label="组件目标"
+            values={uninstallItem.componentTargets}
+            outlineTargetId={uninstallItemOutlineTarget('component-targets') ?? 'uninstall-item-component-targets'}
+            onChange={componentTargets => updateUninstallItem({ componentTargets })}
+            maxWidth={fieldAvailableWidth}
+            itemAriaLabel="组件目标"
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={uninstallItemOutlineTarget('before-command')}>
+        <FieldLabel>卸载前操作</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.beforeCommand}
+          onChange={beforeCommand => updateUninstallItem({ beforeCommand })}
+        />
+      </section>
+
+      <ConditionalField show={uninstallItem.beforeCommand === true}>
+        <section data-outline-target={uninstallItemOutlineTarget('before-command-list')}>
+          <ArrayListField
+            label="卸载前命令"
+            values={uninstallItem.beforeCommandList}
+            outlineTargetId={uninstallItemOutlineTarget('before-command-list') ?? 'uninstall-item-before-command-list'}
+            onChange={beforeCommandList => updateUninstallItem({ beforeCommandList })}
+            maxWidth={fieldAvailableWidth}
+            itemAriaLabel="卸载前命令"
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={uninstallItemOutlineTarget('after-command')}>
+        <FieldLabel>卸载后操作</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.afterCommand}
+          onChange={afterCommand => updateUninstallItem({ afterCommand })}
+        />
+      </section>
+
+      <ConditionalField show={uninstallItem.afterCommand === true}>
+        <section data-outline-target={uninstallItemOutlineTarget('after-command-list')}>
+          <ArrayListField
+            label="卸载后命令"
+            values={uninstallItem.afterCommandList}
+            outlineTargetId={uninstallItemOutlineTarget('after-command-list') ?? 'uninstall-item-after-command-list'}
+            onChange={afterCommandList => updateUninstallItem({ afterCommandList })}
+            maxWidth={fieldAvailableWidth}
+            itemAriaLabel="卸载后命令"
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={uninstallItemOutlineTarget('env-input')}>
+        <FieldLabel>环境变量导入</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.envInput}
+          onChange={envInput => updateUninstallItem({ envInput })}
+        />
+      </section>
+
+      <ConditionalField show={showUninstallItemEnvInput}>
+        <section data-outline-target={uninstallItemOutlineTarget('env-input-list')}>
+          <EnvVariableTableField
+            label="导入变量"
+            values={uninstallItemEnvInputList}
+            onChange={envInputList => updateUninstallItem({ envInputList })}
+            maxWidth={fieldAvailableWidth}
+            outlineTargetId={uninstallItemOutlineTarget('env-input-list') ?? 'uninstall-item-env-input-list'}
+          />
+        </section>
+      </ConditionalField>
+
+      <section data-outline-target={uninstallItemOutlineTarget('env-output')}>
+        <FieldLabel>环境变量导出</FieldLabel>
+        <BooleanSwitchField
+          value={uninstallItem.envOutput}
+          onChange={envOutput => updateUninstallItem({ envOutput })}
+        />
+      </section>
+
+      <ConditionalField show={showUninstallItemEnvOutput}>
+        <section data-outline-target={uninstallItemOutlineTarget('env-output-list')}>
+          <EnvVariableTableField
+            label="导出变量"
+            values={uninstallItemEnvOutputList}
+            onChange={envOutputList => updateUninstallItem({ envOutputList })}
+            maxWidth={fieldAvailableWidth}
+            outlineTargetId={uninstallItemOutlineTarget('env-output-list') ?? 'uninstall-item-env-output-list'}
+          />
+        </section>
+      </ConditionalField>
+    </div>
+  )
+}
+
 function DeploymentMetaEditor({
   deployment,
   updateDeployment,
@@ -3332,6 +3666,7 @@ export default function WorkbenchRightSidebar({
   const selectedComponentIndex = parseComponentBlockIndex(selectedBlockId)
   const selectedConfigItemIndex = parseConfigItemBlockIndex(selectedBlockId)
   const selectedLaunchItemIndex = parseLaunchItemBlockIndex(selectedBlockId)
+  const selectedUninstallItemIndex = parseUninstallItemBlockIndex(selectedBlockId)
   const component = selectedComponentIndex === null
     ? emptyComponentMeta
     : { ...emptyComponentMeta, ...(meta.components[selectedComponentIndex] ?? {}) }
@@ -3341,6 +3676,9 @@ export default function WorkbenchRightSidebar({
   const launchItem = selectedLaunchItemIndex === null
     ? emptyLaunchItemMeta
     : { ...emptyLaunchItemMeta, ...(meta.launchItems[selectedLaunchItemIndex] ?? {}) }
+  const uninstallItem = selectedUninstallItemIndex === null
+    ? emptyUninstallItemMeta
+    : { ...emptyUninstallItemMeta, ...(meta.uninstallItems[selectedUninstallItemIndex] ?? {}) }
   const componentVersionFile = component.versionFile ?? []
   const componentVersionCustom = component.versionCustom ?? []
   const componentLinkFile = component.linkFile ?? []
@@ -3552,6 +3890,32 @@ export default function WorkbenchRightSidebar({
     })
   }
 
+  const updateUninstallItem = (patch: Partial<WorkbenchUninstallItemMeta>) => {
+    if (selectedUninstallItemIndex === null) return
+    const nextUninstallItems = fillUninstallItemsToIndex(meta.uninstallItems, selectedUninstallItemIndex)
+    nextUninstallItems[selectedUninstallItemIndex] = { ...nextUninstallItems[selectedUninstallItemIndex], ...uninstallItem, ...patch }
+    updateMeta({ uninstallItems: nextUninstallItems })
+  }
+
+  const updateUninstallItemId = (id: string) => {
+    if (selectedUninstallItemIndex === null) return
+    const previousId = uninstallItem.id
+    const nextUninstallItems = fillUninstallItemsToIndex(meta.uninstallItems, selectedUninstallItemIndex).map((item, index) => (
+      index === selectedUninstallItemIndex ? { ...item, ...uninstallItem, id } : item
+    ))
+    const uninstallItemIds = nextUninstallItems.map(item => item.id).filter(Boolean)
+    const extraIds = meta.uninstallList.filter(item => (
+      item
+      && item !== previousId
+      && !uninstallItemIds.includes(item)
+    ))
+    const nextList = [...uninstallItemIds, ...extraIds]
+    updateMeta({
+      uninstallItems: nextUninstallItems,
+      uninstallList: arraysEqual(nextList, meta.uninstallList) ? meta.uninstallList : nextList,
+    })
+  }
+
   const startResize = (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.stopPropagation()
@@ -3596,6 +3960,8 @@ export default function WorkbenchRightSidebar({
   const shouldShowConfigItemMeta = selectedConfigItemIndex !== null
   const shouldShowLaunchMeta = selectedBlockId === 'launch'
   const shouldShowLaunchItemMeta = selectedLaunchItemIndex !== null
+  const shouldShowUninstallMeta = selectedBlockId === 'uninstall'
+  const shouldShowUninstallItemMeta = selectedUninstallItemIndex !== null
   const componentOutlineTarget = (fieldName: string) => (
     selectedComponentIndex === null ? undefined : `component-${selectedComponentIndex}-${fieldName}`
   )
@@ -3608,9 +3974,14 @@ export default function WorkbenchRightSidebar({
   const launchItemOutlineTarget = (fieldName: string) => (
     selectedLaunchItemIndex === null ? undefined : `launch-item-${selectedLaunchItemIndex}-${fieldName}`
   )
+  const uninstallItemOutlineTarget = (fieldName: string) => (
+    selectedUninstallItemIndex === null ? undefined : `uninstall-item-${selectedUninstallItemIndex}-${fieldName}`
+  )
   const configItemEnvInputList = normalizeEnvVariableEntries(configItem.envInputList)
   const launchItemEnvInputList = normalizeEnvVariableEntries(launchItem.envInputList)
   const launchItemEnvOutputList = normalizeEnvVariableEntries(launchItem.envOutputList)
+  const uninstallItemEnvInputList = normalizeEnvVariableEntries(uninstallItem.envInputList)
+  const uninstallItemEnvOutputList = normalizeEnvVariableEntries(uninstallItem.envOutputList)
 
   useEffect(() => {
     if (!focusTarget || collapsed) return
@@ -4018,6 +4389,26 @@ export default function WorkbenchRightSidebar({
             launchItemEnvOutputList={launchItemEnvOutputList}
             showLaunchItemEnvInput={launchItem.envInput === true}
             showLaunchItemEnvOutput={launchItem.envOutput === true}
+          />
+        ) : shouldShowUninstallMeta ? (
+          <UninstallMetaEditor
+            meta={meta}
+            updateMeta={updateMeta}
+            fieldAvailableWidth={fieldAvailableWidth}
+            width={width}
+          />
+        ) : shouldShowUninstallItemMeta ? (
+          <UninstallItemMetaEditor
+            uninstallItem={uninstallItem}
+            updateUninstallItem={updateUninstallItem}
+            updateUninstallItemId={updateUninstallItemId}
+            uninstallItemOutlineTarget={uninstallItemOutlineTarget}
+            fieldAvailableWidth={fieldAvailableWidth}
+            width={width}
+            uninstallItemEnvInputList={uninstallItemEnvInputList}
+            uninstallItemEnvOutputList={uninstallItemEnvOutputList}
+            showUninstallItemEnvInput={uninstallItem.envInput === true}
+            showUninstallItemEnvOutput={uninstallItem.envOutput === true}
           />
         ) : shouldShowDeploymentMeta ? (
           <DeploymentMetaEditor

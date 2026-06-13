@@ -1,24 +1,24 @@
 import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
 import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConnectionSource, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
-export const componentsBlockMinSize: WorkbenchSize = { width: 456, height: 240 }
-export const componentsBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
+export const uninstallBlockMinSize: WorkbenchSize = { width: 456, height: 240 }
+export const uninstallBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
 
 const bodyX = 5
 const bodyY = 5
-const accent = '#22b386'
+const accent = '#dc2626'
 
-export function resolveComponentsBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
+export function resolveUninstallBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
   return {
-    x: bodyX + Math.max(componentsBlockMinSize.width, size.width),
-    y: bodyY + Math.max(componentsBlockMinSize.height, size.height) / 2,
+    x: bodyX + Math.max(uninstallBlockMinSize.width, size.width),
+    y: bodyY + Math.max(uninstallBlockMinSize.height, size.height) / 2,
   }
 }
 
-export function resolveComponentsBlockComponentOutputOffset(size: WorkbenchSize): WorkbenchPoint {
+export function resolveUninstallBlockItemOutputOffset(size: WorkbenchSize): WorkbenchPoint {
   return {
-    x: bodyX + Math.max(componentsBlockMinSize.width, size.width) / 2,
-    y: bodyY + Math.max(componentsBlockMinSize.height, size.height),
+    x: bodyX + Math.max(uninstallBlockMinSize.width, size.width) / 2,
+    y: bodyY + Math.max(uninstallBlockMinSize.height, size.height),
   }
 }
 
@@ -35,7 +35,7 @@ function AddConnectorButton({ label }: { label?: string }) {
 
 function InputPort() {
   return (
-    <g transform={`translate(${componentsBlockInputOffset.x - 2.5} ${componentsBlockInputOffset.y - 2.5})`}>
+    <g transform={`translate(${uninstallBlockInputOffset.x - 2.5} ${uninstallBlockInputOffset.y - 2.5})`}>
       <circle cx="2.5" cy="2.5" r="2.5" fill={accent} stroke={accent} strokeWidth="2" />
       <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke={accent} strokeWidth="2" />
     </g>
@@ -77,19 +77,19 @@ function formatTomlBoolean(value: boolean) {
   return value ? 'true' : 'false'
 }
 
-export default function ComponentsBlock({
+export default function UninstallBlock({
   position,
   size,
   selected,
   linking = false,
   onSelect,
-  onDeployConnectorClick,
-  onComponentConnectorClick,
+  onNextConnectorClick,
+  onItemConnectorClick,
   onConnectorDragStart,
   onDelete,
-  componentsEnvOutput,
-  componentsEnvInput,
-  componentsList,
+  uninstallEnvOutput,
+  uninstallEnvInput,
+  uninstallList,
   dragHandlers,
   resizeHandlers,
 }: {
@@ -98,18 +98,18 @@ export default function ComponentsBlock({
   selected: boolean
   linking?: boolean
   onSelect?: () => void
-  onDeployConnectorClick?: () => void
-  onComponentConnectorClick?: () => void
+  onNextConnectorClick?: () => void
+  onItemConnectorClick?: () => void
   onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
   onDelete?: () => void
-  componentsEnvOutput: boolean
-  componentsEnvInput: boolean
-  componentsList: string[]
+  uninstallEnvOutput: boolean
+  uninstallEnvInput: boolean
+  uninstallList: string[]
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
 }) {
-  const bodyWidth = Math.max(componentsBlockMinSize.width, size.width)
-  const bodyHeight = Math.max(componentsBlockMinSize.height, size.height)
+  const bodyWidth = Math.max(uninstallBlockMinSize.width, size.width)
+  const bodyHeight = Math.max(uninstallBlockMinSize.height, size.height)
   const selectWidth = bodyWidth + 10
   const selectHeight = bodyHeight + 10
   const headerHeight = 58
@@ -117,20 +117,20 @@ export default function ComponentsBlock({
   const delimiterWidth = Math.max(140, bodyWidth - 70)
   const delimiterX = bodyX + (bodyWidth - delimiterWidth) / 2
   const delimiterY = bodyY + bodyHeight - 57
-  const sectionClipId = 'dfw-components-block-section-clip'
-  const deployOutputOffset = resolveComponentsBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
-  const deployConnectorY = deployOutputOffset.y - 12
-  const componentOutputOffset = resolveComponentsBlockComponentOutputOffset({ width: bodyWidth, height: bodyHeight })
-  const componentConnectorX = componentOutputOffset.x
-  const componentConnectorY = componentOutputOffset.y - 12
+  const sectionClipId = 'dfw-uninstall-block-section-clip'
+  const nextOutputOffset = resolveUninstallBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
+  const nextConnectorY = nextOutputOffset.y - 12
+  const itemOutputOffset = resolveUninstallBlockItemOutputOffset({ width: bodyWidth, height: bodyHeight })
+  const itemConnectorX = itemOutputOffset.x
+  const itemConnectorY = itemOutputOffset.y - 12
   const sectionRows = [
-    { label: '环境变量导出：', value: formatTomlBoolean(componentsEnvOutput) },
-    { label: '环境变量导入：', value: formatTomlBoolean(componentsEnvInput) },
-    { label: '组件ID列表：', value: formatTomlArray(componentsList) },
+    { label: '环境变量导出：', value: formatTomlBoolean(uninstallEnvOutput) },
+    { label: '环境变量导入：', value: formatTomlBoolean(uninstallEnvInput) },
+    { label: '卸载ID列表：', value: formatTomlArray(uninstallList) },
   ]
 
   return (
-    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id="components">
+    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id="uninstall">
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
@@ -166,7 +166,7 @@ export default function ComponentsBlock({
       </defs>
 
       <text x="22" y="44" fontSize="25" fontFamily={workbenchCanvasFont} fontWeight="600" fill="currentColor">
-        [COMPONENTS]
+        [UNINSTALL]
       </text>
       {sectionRows.map((row, index) => (
         <TextLine
@@ -199,7 +199,7 @@ export default function ComponentsBlock({
         fill="currentColor"
         opacity="0.86"
       >
-        界定器
+        卸载项
       </text>
 
       <rect
@@ -272,34 +272,34 @@ export default function ComponentsBlock({
       />
 
       <g
-        transform={`translate(${deployOutputOffset.x} ${deployConnectorY})`}
+        transform={`translate(${nextOutputOffset.x} ${nextConnectorY})`}
         className="cursor-crosshair"
         onClick={event => {
           event.stopPropagation()
-          onDeployConnectorClick?.()
+          onNextConnectorClick?.()
         }}
         onPointerDown={event => {
           event.stopPropagation()
-          onConnectorDragStart?.('components-deploy', { x: position.x + deployOutputOffset.x, y: position.y + deployConnectorY }, event)
+          onConnectorDragStart?.('uninstall-end', { x: position.x + nextOutputOffset.x, y: position.y + nextConnectorY }, event)
         }}
       >
-        <AddConnectorButton label="连接部署管理闸" />
+        <AddConnectorButton label="连接下一阶段" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
       </g>
 
       <g
-        transform={`translate(${componentConnectorX} ${componentConnectorY})`}
+        transform={`translate(${itemConnectorX} ${itemConnectorY})`}
         className="cursor-crosshair"
         onClick={event => {
           event.stopPropagation()
-          onComponentConnectorClick?.()
+          onItemConnectorClick?.()
         }}
         onPointerDown={event => {
           event.stopPropagation()
-          onConnectorDragStart?.('components-component', { x: position.x + componentConnectorX, y: position.y + componentConnectorY }, event)
+          onConnectorDragStart?.('uninstall-item', { x: position.x + itemConnectorX, y: position.y + itemConnectorY }, event)
         }}
       >
-        <AddConnectorButton label="连接组件界定器" />
+        <AddConnectorButton label="连接卸载项" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
       </g>
       <DeleteBlockButton x={bodyX + bodyWidth - 43} y={bodyY + 15} onDelete={onDelete} />

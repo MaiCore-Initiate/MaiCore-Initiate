@@ -4,10 +4,12 @@ export default function CanvasConnectionLayer({
   from,
   to,
   stroke = 'currentColor',
+  strokeWidth = 4,
 }: {
   from: WorkbenchPoint
   to: WorkbenchPoint
   stroke?: string
+  strokeWidth?: number
 }) {
   const controlDirection = to.x >= from.x ? 1 : -1
   const controlOffset = Math.max(68, Math.abs(to.x - from.x) * 0.46)
@@ -15,7 +17,7 @@ export default function CanvasConnectionLayer({
 
   return (
     <g pointerEvents="none">
-      <path d={path} fill="none" stroke={stroke} strokeLinecap="round" strokeWidth="4" />
+      <path d={path} fill="none" stroke={stroke} strokeLinecap="round" strokeWidth={strokeWidth} />
     </g>
   )
 }

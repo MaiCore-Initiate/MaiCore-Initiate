@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_图层_2" data-name="图层 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 352 502">
+  <defs>
+    <style>
+      .cls-1 {
+        font-family: 'HarmonyOS_Sans_SC_Medium', 'HarmonyOS Sans SC';
+        font-size: 30px;
+      }
+
+      .cls-2 {
+        font-family: 'HarmonyOS_Sans_SC_Light', 'HarmonyOS Sans SC';
+      }
+
+      .cls-3 {
+        fill: #7fff9f;
+        stroke: #00d000;
+      }
+
+      .cls-3, .cls-4 {
+        opacity: .7;
+      }
+
+      .cls-3, .cls-4, .cls-5, .cls-6 {
+        stroke-miterlimit: 10;
+      }
+
+      .cls-3, .cls-4, .cls-6 {
+        stroke-width: 2px;
+      }
+
+      .cls-4 {
+        fill: #009200;
+        stroke: #127439;
+      }
+
+      .cls-5, .cls-6 {
+        fill: #fff;
+        stroke: #000;
+      }
+
+      .cls-7 {
+        font-size: 20px;
+      }
+
+      .cls-8 {
+        letter-spacing: 0em;
+      }
+
+      .cls-8, .cls-9, .cls-10 {
+        fill: #7f7f7f;
+        font-size: 15px;
+      }
+
+      .cls-10 {
+        letter-spacing: -.02em;
+      }
+    </style>
+  </defs>
+  <g id="_图层_1-2" data-name=" 图层 1">
+    <rect id="_总背景" data-name="总背景" class="cls-6" x="1" y="1" width="350" height="500" rx="30" ry="30"/>
+    <text class="cls-1" transform="translate(21 49.85)"><tspan x="0" y="0">组件</tspan></text>
+    <rect id="_COMPONENTS_背景" data-name="[COMPONENTS] 背景" class="cls-5" x="21" y="57" width="300" height="28" rx="5" ry="5"/>
+    <rect id="_COMPONENTS_主题色" data-name="[COMPONENTS]主题色" class="cls-4" x="24.09" y="60" width="22" height="22" rx="3" ry="3"/>
+    <text class="cls-2" transform="translate(49.79 78.34)"><tspan class="cls-7" x="0" y="0">组件管理闸 </tspan><tspan class="cls-9" x="105.4" y="0">[</tspan><tspan class="cls-10" x="110.11" y="0">C</tspan><tspan class="cls-9" x="119.48" y="0">OMPONENTS] </tspan></text>
+    <rect id="_Component_背景" data-name="[[Component]]背景" class="cls-5" x="21" y="92" width="300" height="28" rx="5" ry="5"/>
+    <rect id="_Component_主题色" data-name="[[Component]]主题色" class="cls-3" x="24.09" y="95" width="22" height="22" rx="3" ry="3"/>
+    <text class="cls-2" transform="translate(49.79 113.34)"><tspan class="cls-7" x="0" y="0">组件界定器 </tspan><tspan class="cls-9" x="105.4" y="0">[[Componen</tspan><tspan class="cls-8" x="188.83" y="0">t</tspan><tspan class="cls-9" x="194.09" y="0">]] </tspan></text>
+  </g>
+</svg>

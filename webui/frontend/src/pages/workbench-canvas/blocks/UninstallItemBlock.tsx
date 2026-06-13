@@ -1,17 +1,17 @@
 import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConnectionSource, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchUninstallItemMeta } from '../types'
 
-export const configItemBlockMinSize: WorkbenchSize = { width: 520, height: 430 }
-export const configItemBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
+export const uninstallItemBlockMinSize: WorkbenchSize = { width: 520, height: 430 }
+export const uninstallItemBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
 
 const bodyX = 5
 const bodyY = 5
-const accent = '#8b5cf6'
+const accent = '#dc2626'
 
-export function resolveConfigItemBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
+export function resolveUninstallItemBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
   return {
-    x: bodyX + Math.max(configItemBlockMinSize.width, size.width),
-    y: bodyY + Math.max(configItemBlockMinSize.height, size.height) / 2,
+    x: bodyX + Math.max(uninstallItemBlockMinSize.width, size.width),
+    y: bodyY + Math.max(uninstallItemBlockMinSize.height, size.height) / 2,
   }
 }
 
@@ -27,7 +27,7 @@ function AddConnectorButton() {
 
 function InputPort() {
   return (
-    <g transform={`translate(${configItemBlockInputOffset.x - 2.5} ${configItemBlockInputOffset.y - 2.5})`}>
+    <g transform={`translate(${uninstallItemBlockInputOffset.x - 2.5} ${uninstallItemBlockInputOffset.y - 2.5})`}>
       <circle cx="2.5" cy="2.5" r="2.5" fill={accent} stroke={accent} strokeWidth="2" />
       <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke={accent} strokeWidth="2" />
     </g>
@@ -57,6 +57,10 @@ function formatTomlString(value: string) {
   return value ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : ''
 }
 
+function formatTomlArray(values: string[]) {
+  return values.length ? `[${values.map(formatTomlString).join(', ')}]` : ''
+}
+
 function formatTomlBoolean(value: boolean) {
   return value ? 'true' : 'false'
 }
@@ -69,7 +73,7 @@ function formatTomlInlineTableArray<T>(values: T[], formatter: (value: T) => str
   return values.length ? `[${values.map(formatter).join(', ')}]` : ''
 }
 
-export default function ConfigItemBlock({
+export default function UninstallItemBlock({
   blockIndex,
   position,
   size,
@@ -79,7 +83,7 @@ export default function ConfigItemBlock({
   onAddConnectorClick,
   onConnectorDragStart,
   onDelete,
-  configItem,
+  uninstallItem,
   dragHandlers,
   resizeHandlers,
 }: {
@@ -92,34 +96,61 @@ export default function ConfigItemBlock({
   onAddConnectorClick?: () => void
   onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
   onDelete?: () => void
-  configItem: WorkbenchConfigItemMeta
+  uninstallItem: WorkbenchUninstallItemMeta
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
 }) {
-  const bodyWidth = Math.max(configItemBlockMinSize.width, size.width)
-  const bodyHeight = Math.max(configItemBlockMinSize.height, size.height)
+  const bodyWidth = Math.max(uninstallItemBlockMinSize.width, size.width)
+  const bodyHeight = Math.max(uninstallItemBlockMinSize.height, size.height)
   const selectWidth = bodyWidth + 10
   const selectHeight = bodyHeight + 10
   const headerHeight = 58
-  const contentClipId = `dfw-config-item-block-content-clip-${blockIndex}`
-  const outputOffset = resolveConfigItemBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
+  const contentClipId = `dfw-uninstall-item-block-content-clip-${blockIndex}`
+  const outputOffset = resolveUninstallItemBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
   const connectorY = outputOffset.y - 12
-  const envInputList = configItem.envInputList ?? []
+  const envInputList = uninstallItem.envInputList ?? []
+  const envOutputList = uninstallItem.envOutputList ?? []
   const rows = [
-    { label: '配置ID：', value: formatTomlString(configItem.id) },
-    { label: '配置名称：', value: formatTomlString(configItem.name) },
-    { label: '运行时：', value: formatTomlString(configItem.runtime) },
-    { label: '命令主题：', value: formatTomlString(configItem.commandTheme) },
-    { label: '配置文件路径：', value: formatTomlString(configItem.filePath) },
-    { label: '用户可选配置：', value: formatTomlBoolean(configItem.choose) },
-    { label: '环境变量导入：', value: formatTomlBoolean(configItem.envInput) },
-    ...(configItem.envInput === true
+    { label: '卸载ID：', value: formatTomlString(uninstallItem.id) },
+    { label: '卸载名称：', value: formatTomlString(uninstallItem.name) },
+    { label: '用户可选卸载：', value: formatTomlBoolean(uninstallItem.choose) },
+    { label: '运行时：', value: formatTomlString(uninstallItem.runtime) },
+    { label: '命令主题：', value: formatTomlString(uninstallItem.commandTheme) },
+    { label: '需要卸载：', value: formatTomlBoolean(uninstallItem.uninstall) },
+    { label: '卸载前停止：', value: formatTomlBoolean(uninstallItem.stopBeforeUninstall) },
+    ...(uninstallItem.stopBeforeUninstall === true
+      ? [{ label: '停止命令：', value: formatTomlArray(uninstallItem.stopCommandList ?? []) }]
+      : []),
+    { label: '删除实例配置：', value: formatTomlBoolean(uninstallItem.removeInstanceConfig) },
+    { label: '删除运行时状态：', value: formatTomlBoolean(uninstallItem.removeRuntimeFiles) },
+    { label: '删除部署目录：', value: formatTomlBoolean(uninstallItem.removeDeployRoot) },
+    { label: '删除组件目录：', value: formatTomlBoolean(uninstallItem.removeComponent) },
+    ...(uninstallItem.removeDeployRoot === true
+      ? [{ label: '部署目标：', value: formatTomlArray(uninstallItem.deploymentTargets ?? []) }]
+      : []),
+    ...(uninstallItem.removeComponent === true
+      ? [{ label: '组件目标：', value: formatTomlArray(uninstallItem.componentTargets ?? []) }]
+      : []),
+    { label: '卸载前操作：', value: formatTomlBoolean(uninstallItem.beforeCommand) },
+    ...(uninstallItem.beforeCommand === true
+      ? [{ label: '卸载前命令：', value: formatTomlArray(uninstallItem.beforeCommandList ?? []) }]
+      : []),
+    { label: '卸载后操作：', value: formatTomlBoolean(uninstallItem.afterCommand) },
+    ...(uninstallItem.afterCommand === true
+      ? [{ label: '卸载后命令：', value: formatTomlArray(uninstallItem.afterCommandList ?? []) }]
+      : []),
+    { label: '环境变量导入：', value: formatTomlBoolean(uninstallItem.envInput) },
+    ...(uninstallItem.envInput === true
       ? [{ label: '导入变量：', value: formatTomlInlineTableArray(envInputList, formatTomlEnvVariableEntry) }]
+      : []),
+    { label: '环境变量导出：', value: formatTomlBoolean(uninstallItem.envOutput) },
+    ...(uninstallItem.envOutput === true
+      ? [{ label: '导出变量：', value: formatTomlInlineTableArray(envOutputList, formatTomlEnvVariableEntry) }]
       : []),
   ]
 
   return (
-    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id={`config-item:${blockIndex}`}>
+    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id={`uninstall-item:${blockIndex}`}>
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
@@ -136,7 +167,7 @@ export default function ConfigItemBlock({
       </defs>
 
       <text x="22" y="44" fontSize="25" fontFamily={workbenchCanvasFont} fontWeight="600" fill="currentColor" opacity="0.82">
-        [[ConfigItem]] {blockIndex}
+        [[UninstallItem]] {blockIndex}
       </text>
       {rows.map((row, index) => (
         <TextLine
@@ -225,7 +256,7 @@ export default function ConfigItemBlock({
         }}
         onPointerDown={event => {
           event.stopPropagation()
-          onConnectorDragStart?.('config-item-output', { x: position.x + outputOffset.x, y: position.y + connectorY }, event)
+          onConnectorDragStart?.('uninstall-item-output', { x: position.x + outputOffset.x, y: position.y + connectorY }, event)
         }}
       >
         <AddConnectorButton />

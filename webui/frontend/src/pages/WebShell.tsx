@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Terminal as XTerm } from 'xterm'
+import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
 import { Plus, X, Maximize2, Minimize2 } from 'lucide-react'
-import 'xterm/css/xterm.css'
+import '@xterm/xterm/css/xterm.css'
+import '@xterm/addon-webgl/css/addon-webgl.css'
 
 interface Terminal {
   id: string
@@ -58,7 +60,7 @@ export default function WebShell() {
       const xterm = new XTerm({
         cursorBlink: true,
         fontSize,
-        fontFamily: '"JetBrainsMono Nerd Font", "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace',
+        fontFamily: '"JetBrainsMono Nerd Font", "Noto Sans SC", "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace',
         allowTransparency: true,
         scrollback: 2000,
         letterSpacing: 0,
@@ -191,18 +193,46 @@ export default function WebShell() {
         if (container) {
           xterm.open(container)
 
+          // 加载 WebGL 渲染插件（必须在 open() 之后，此时渲染上下文才存在）。
+          // 创建失败或运行中 WebGL 上下文丢失时，自动 dispose 回退到默认 Canvas 渲染。
+          try {
+            const webglAddon = new WebglAddon()
+            webglAddon.onContextLoss(() => {
+              webglAddon.dispose()
+            })
+            xterm.loadAddon(webglAddon)
+          } catch (err) {
+            console.warn('[WebShell] WebGL 渲染不可用，已回退到默认渲染', err)
+          }
+
           // 使用 ResizeObserver 自动调整终端大小
           const resizeObserver = new ResizeObserver(() => {
             fitAddon.fit()
             sendTerminalResize()
           })
 
-          // 等待字体加载完成后再调整大小
-          document.fonts.ready.then(() => {
+          // 关键：必须等字体真正加载完成后再 fit，否则 xterm 用 fallback 字体
+          // 测量字符宽度，等首选字体 swap 进来后字符宽度变了却不会重新测量，
+          // 导致框选起终点相对鼠标固定偏移（往左上飘几个字符）。
+          // document.fonts.ready 在字体还没开始加载时会立即 resolve，不可靠，
+          // 这里显式 load 字体（同时声明 fontSize 和字体名）确保真正可用。
+          const ensureFontReady = async () => {
+            try {
+              await Promise.all([
+                document.fonts.load(`${fontSize}px "JetBrainsMono Nerd Font"`),
+                document.fonts.load(`${fontSize}px "Noto Sans SC"`),
+              ])
+              await document.fonts.ready
+            } catch {
+              // 字体加载失败也继续，至少 fit 一次
+            }
+            // 重新赋值 fontFamily 触发 xterm 重新测量字符尺寸（remeasure）
+            xterm.options.fontFamily = xterm.options.fontFamily
             fitAddon.fit()
             sendTerminalResize()
             resizeObserver.observe(container)
-          })
+          }
+          void ensureFontReady()
 
           xterm.focus()
 
@@ -539,12 +569,13 @@ export default function WebShell() {
           terminals.map(terminal => (
             <div
               key={terminal.id}
-              id={`terminal-${terminal.id}`}
-              className={`absolute inset-0 webshell-terminal ${showImmersiveShell ? 'px-5 pt-5 pb-8' : 'px-4 pt-4 pb-7'} ${activeTerminalId === terminal.id ? 'block' : 'hidden'}`}
-              style={{
-                fontFamily: 'Consolas, "Courier New", monospace'
-              }}
-            />
+              className={`absolute inset-0 ${showImmersiveShell ? 'px-5 pt-5 pb-8' : 'px-4 pt-4 pb-7'} ${activeTerminalId === terminal.id ? 'block' : 'hidden'}`}
+            >
+              <div
+                id={`terminal-${terminal.id}`}
+                className="webshell-terminal h-full w-full"
+              />
+            </div>
           ))
         )}
       </div>

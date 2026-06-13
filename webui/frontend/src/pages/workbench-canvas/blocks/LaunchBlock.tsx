@@ -1,5 +1,5 @@
 import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConnectionSource, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 export const launchBlockMinSize: WorkbenchSize = { width: 456, height: 240 }
 export const launchBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -85,6 +85,7 @@ export default function LaunchBlock({
   onSelect,
   onNextConnectorClick,
   onItemConnectorClick,
+  onConnectorDragStart,
   onDelete,
   launchEnvOutput,
   launchEnvInput,
@@ -99,6 +100,7 @@ export default function LaunchBlock({
   onSelect?: () => void
   onNextConnectorClick?: () => void
   onItemConnectorClick?: () => void
+  onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
   onDelete?: () => void
   launchEnvOutput: boolean
   launchEnvInput: boolean
@@ -128,7 +130,7 @@ export default function LaunchBlock({
   ]
 
   return (
-    <g transform={`translate(${position.x} ${position.y})`}>
+    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id="launch">
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
@@ -276,7 +278,10 @@ export default function LaunchBlock({
           event.stopPropagation()
           onNextConnectorClick?.()
         }}
-        onPointerDown={event => event.stopPropagation()}
+        onPointerDown={event => {
+          event.stopPropagation()
+          onConnectorDragStart?.('launch-uninstall', { x: position.x + nextOutputOffset.x, y: position.y + nextConnectorY }, event)
+        }}
       >
         <AddConnectorButton label="连接下一阶段" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
@@ -289,7 +294,10 @@ export default function LaunchBlock({
           event.stopPropagation()
           onItemConnectorClick?.()
         }}
-        onPointerDown={event => event.stopPropagation()}
+        onPointerDown={event => {
+          event.stopPropagation()
+          onConnectorDragStart?.('launch-item', { x: position.x + itemConnectorX, y: position.y + itemConnectorY }, event)
+        }}
       >
         <AddConnectorButton label="连接启动项" />
         <circle cx="0" cy="12" r="18" fill="transparent" />

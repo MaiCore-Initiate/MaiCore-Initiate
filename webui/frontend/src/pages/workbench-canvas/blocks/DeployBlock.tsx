@@ -1,5 +1,5 @@
 import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchPoint, type WorkbenchSize } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchConnectionSource, type WorkbenchPoint, type WorkbenchSize } from '../types'
 
 export const deployBlockMinSize: WorkbenchSize = { width: 456, height: 240 }
 export const deployBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -83,6 +83,7 @@ export default function DeployBlock({
   onSelect,
   onDeploymentConnectorClick,
   onConfigConnectorClick,
+  onConnectorDragStart,
   onDelete,
   deployEnvOutput,
   deployEnvInput,
@@ -97,6 +98,7 @@ export default function DeployBlock({
   onSelect?: () => void
   onDeploymentConnectorClick?: () => void
   onConfigConnectorClick?: () => void
+  onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
   onDelete?: () => void
   deployEnvOutput: boolean
   deployEnvInput: boolean
@@ -127,7 +129,7 @@ export default function DeployBlock({
   ]
 
   return (
-    <g transform={`translate(${position.x} ${position.y})`}>
+    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id="deploy">
       {selected && (
         <rect x="0" y="0" width={selectWidth} height={selectHeight} rx="36" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
@@ -256,7 +258,10 @@ export default function DeployBlock({
           event.stopPropagation()
           onDeploymentConnectorClick?.()
         }}
-        onPointerDown={event => event.stopPropagation()}
+        onPointerDown={event => {
+          event.stopPropagation()
+          onConnectorDragStart?.('deploy-deployment', { x: position.x + deploymentConnectorX, y: position.y + deploymentConnectorY }, event)
+        }}
       >
         <AddConnectorButton label="连接部署界定器" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
@@ -268,7 +273,10 @@ export default function DeployBlock({
           event.stopPropagation()
           onConfigConnectorClick?.()
         }}
-        onPointerDown={event => event.stopPropagation()}
+        onPointerDown={event => {
+          event.stopPropagation()
+          onConnectorDragStart?.('deploy-config', { x: position.x + configConnectorX, y: position.y + configConnectorY }, event)
+        }}
       >
         <AddConnectorButton label="连接配置管理闸" />
         <circle cx="0" cy="12" r="18" fill="transparent" />
