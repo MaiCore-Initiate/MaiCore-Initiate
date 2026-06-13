@@ -203,7 +203,7 @@ export interface WorkbenchPoint {
   y: number
 }
 
-export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component' | 'deploy-deployment' | 'deploy-config' | 'config-item' | 'config-launch' | 'launch-item' | 'launch-uninstall' | 'uninstall-item' | 'uninstall-end' | 'component-output' | 'deployment-output' | 'config-item-output' | 'launch-item-output' | 'uninstall-item-output'
+export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component' | 'deploy-deployment' | 'deploy-config' | 'config-item' | 'config-launch' | 'launch-item' | 'launch-uninstall' | 'uninstall-item' | 'uninstall-end' | 'component-output' | 'deployment-output' | 'config-item-output' | 'launch-item-output' | 'uninstall-item-output' | 'disconnect'
 
 export interface WorkbenchAddNodeAnchor {
   id: number

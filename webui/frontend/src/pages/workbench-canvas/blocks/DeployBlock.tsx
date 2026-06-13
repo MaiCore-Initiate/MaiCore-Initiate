@@ -33,11 +33,19 @@ function AddConnectorButton({ label }: { label?: string }) {
   )
 }
 
-function InputPort() {
+function InputPort({ onDragStart, draggable }: { onDragStart?: (event: React.PointerEvent<SVGGElement>) => void; draggable?: boolean }) {
   return (
-    <g transform={`translate(${deployBlockInputOffset.x - 2.5} ${deployBlockInputOffset.y - 2.5})`}>
+    <g
+      transform={`translate(${deployBlockInputOffset.x - 2.5} ${deployBlockInputOffset.y - 2.5})`}
+      className={draggable ? 'cursor-grab active:cursor-grabbing' : undefined}
+      onPointerDown={draggable ? event => {
+        event.stopPropagation()
+        onDragStart?.(event)
+      } : undefined}
+    >
       <circle cx="2.5" cy="2.5" r="2.5" fill={accent} stroke={accent} strokeWidth="2" />
       <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke={accent} strokeWidth="2" />
+      {draggable ? <circle cx="2.5" cy="2.5" r="12" fill="transparent" /> : null}
     </g>
   )
 }
@@ -84,6 +92,8 @@ export default function DeployBlock({
   onDeploymentConnectorClick,
   onConfigConnectorClick,
   onConnectorDragStart,
+  onInputDragStart,
+  inputConnected = false,
   onDelete,
   deployEnvOutput,
   deployEnvInput,
@@ -99,6 +109,8 @@ export default function DeployBlock({
   onDeploymentConnectorClick?: () => void
   onConfigConnectorClick?: () => void
   onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
+  onInputDragStart?: (event: React.PointerEvent<SVGGElement>) => void
+  inputConnected?: boolean
   onDelete?: () => void
   deployEnvOutput: boolean
   deployEnvInput: boolean
@@ -197,7 +209,7 @@ export default function DeployBlock({
         onPointerDown={event => event.stopPropagation()}
       />
 
-      <InputPort />
+      <InputPort onDragStart={onInputDragStart} draggable={inputConnected} />
 
       <g
         className="cursor-grab active:cursor-grabbing"

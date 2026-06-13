@@ -203,6 +203,11 @@ const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy
 type DraggableBlockId = WorkbenchBlockId
 type ResizableBlockId = Exclude<WorkbenchBlockId, 'start'>
 type ManualConnection = { id: string; from: WorkbenchBlockId; to: WorkbenchBlockId }
+type DraggingConnection = {
+  sourceBlockId: WorkbenchBlockId
+  sourcePoint: WorkbenchPoint
+  targetBlockId: WorkbenchBlockId
+}
 
 function resolveInitBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
   return {
@@ -366,6 +371,7 @@ export default function WorkbenchCanvas({
   } | null>(null)
   const [dragCursor, setDragCursor] = useState<WorkbenchPoint | null>(null)
   const [hoveredDropBlockId, setHoveredDropBlockId] = useState<WorkbenchBlockId | null>(null)
+  const [draggingConnection, setDraggingConnection] = useState<DraggingConnection | null>(null)
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<{
@@ -969,6 +975,118 @@ export default function WorkbenchCanvas({
     })
   }
 
+  const findIncomingConnection = (targetBlockId: WorkbenchBlockId): DraggingConnection | null => {
+    if (targetBlockId === 'components' && componentsConnected) {
+      return { sourceBlockId: 'init', sourcePoint: initBlockOutput, targetBlockId }
+    }
+    if (targetBlockId === 'deploy' && deployConnected) {
+      return { sourceBlockId: 'components', sourcePoint: componentsDeployOutput, targetBlockId }
+    }
+    if (targetBlockId === 'config' && configConnected) {
+      return { sourceBlockId: 'deploy', sourcePoint: deployConfigOutput, targetBlockId }
+    }
+    if (targetBlockId === 'launch' && launchConnected) {
+      return { sourceBlockId: 'config', sourcePoint: configBlockOutput, targetBlockId }
+    }
+    if (targetBlockId === 'uninstall' && uninstallConnected) {
+      return { sourceBlockId: 'launch', sourcePoint: launchBlockOutput, targetBlockId }
+    }
+
+    const componentIndex = parseComponentBlockIndex(targetBlockId)
+    if (componentIndex !== null && componentConnections[componentIndex]) {
+      return { sourceBlockId: 'components', sourcePoint: componentsComponentOutput, targetBlockId }
+    }
+    const deploymentIndex = parseDeploymentBlockIndex(targetBlockId)
+    if (deploymentIndex !== null && deploymentConnections[deploymentIndex]) {
+      return { sourceBlockId: 'deploy', sourcePoint: deployBlockOutput, targetBlockId }
+    }
+    const configItemIndex = parseConfigItemBlockIndex(targetBlockId)
+    if (configItemIndex !== null && configItemConnections[configItemIndex]) {
+      return { sourceBlockId: 'config', sourcePoint: configItemBlockOutput, targetBlockId }
+    }
+    const launchItemIndex = parseLaunchItemBlockIndex(targetBlockId)
+    if (launchItemIndex !== null && launchItemConnections[launchItemIndex]) {
+      return { sourceBlockId: 'launch', sourcePoint: launchItemBlockOutput, targetBlockId }
+    }
+    const uninstallItemIndex = parseUninstallItemBlockIndex(targetBlockId)
+    if (uninstallItemIndex !== null && uninstallItemConnections[uninstallItemIndex]) {
+      return { sourceBlockId: 'uninstall', sourcePoint: uninstallItemBlockOutput, targetBlockId }
+    }
+
+    for (const conn of manualConnections) {
+      if (conn.to === targetBlockId) {
+        const from = resolveBlockOutputPoint(conn.from)
+        if (from) return { sourceBlockId: conn.from, sourcePoint: from, targetBlockId }
+      }
+    }
+    return null
+  }
+
+  const isInputConnected = (blockId: WorkbenchBlockId): boolean => {
+    return findIncomingConnection(blockId) !== null
+  }
+
+  const removeConnection = (sourceBlockId: WorkbenchBlockId, targetBlockId: WorkbenchBlockId) => {
+    if (sourceBlockId === 'init' && targetBlockId === 'components') {
+      setComponentsConnected(false)
+      return
+    }
+    if (sourceBlockId === 'components' && targetBlockId === 'deploy') {
+      setDeployConnected(false)
+      return
+    }
+    if (sourceBlockId === 'deploy' && targetBlockId === 'config') {
+      setConfigConnected(false)
+      return
+    }
+    if (sourceBlockId === 'config' && targetBlockId === 'launch') {
+      setLaunchConnected(false)
+      return
+    }
+    if (sourceBlockId === 'launch' && targetBlockId === 'uninstall') {
+      setUninstallConnected(false)
+      return
+    }
+
+    if (sourceBlockId === 'components') {
+      const componentIndex = parseComponentBlockIndex(targetBlockId)
+      if (componentIndex !== null) {
+        setComponentConnections(current => current.map((item, index) => (index === componentIndex ? false : item)))
+        return
+      }
+    }
+    if (sourceBlockId === 'deploy') {
+      const deploymentIndex = parseDeploymentBlockIndex(targetBlockId)
+      if (deploymentIndex !== null) {
+        setDeploymentConnections(current => current.map((item, index) => (index === deploymentIndex ? false : item)))
+        return
+      }
+    }
+    if (sourceBlockId === 'config') {
+      const configItemIndex = parseConfigItemBlockIndex(targetBlockId)
+      if (configItemIndex !== null) {
+        setConfigItemConnections(current => current.map((item, index) => (index === configItemIndex ? false : item)))
+        return
+      }
+    }
+    if (sourceBlockId === 'launch') {
+      const launchItemIndex = parseLaunchItemBlockIndex(targetBlockId)
+      if (launchItemIndex !== null) {
+        setLaunchItemConnections(current => current.map((item, index) => (index === launchItemIndex ? false : item)))
+        return
+      }
+    }
+    if (sourceBlockId === 'uninstall') {
+      const uninstallItemIndex = parseUninstallItemBlockIndex(targetBlockId)
+      if (uninstallItemIndex !== null) {
+        setUninstallItemConnections(current => current.map((item, index) => (index === uninstallItemIndex ? false : item)))
+        return
+      }
+    }
+
+    setManualConnections(current => current.filter(connection => !(connection.from === sourceBlockId && connection.to === targetBlockId)))
+  }
+
   const startDragConnector = (
     source: WorkbenchConnectionSource,
     _fromPoint: WorkbenchPoint,
@@ -1041,6 +1159,89 @@ export default function WorkbenchCanvas({
         !connectKnownRelation(dropTarget, startBlockId)
       ) {
         addManualConnection(startBlockId, dropTarget)
+      }
+    }
+
+    document.addEventListener('pointermove', handleMove)
+    document.addEventListener('pointerup', handleUp)
+    document.addEventListener('pointercancel', handleUp)
+  }
+
+  const startInputDragDisconnect = (
+    targetBlockId: WorkbenchBlockId,
+    event: PointerEvent<SVGGElement>,
+  ) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const incoming = findIncomingConnection(targetBlockId)
+    if (!incoming) return
+
+    const sourceBlockId = incoming.sourceBlockId
+    const sourcePoint = incoming.sourcePoint
+    const pointerId = event.pointerId
+    const startClientX = event.clientX
+    const startClientY = event.clientY
+    const startRect = canvasRef.current?.getBoundingClientRect()
+    if (!startRect) return
+    const startScale = startRect.width / 1920
+
+    setDraggingConnection(incoming)
+    setDragConnector({ source: 'disconnect', from: sourcePoint, fromBlockId: sourceBlockId })
+    setDragCursor({
+      x: (event.clientX - startRect.left) / startScale,
+      y: (event.clientY - startRect.top) / startScale,
+    })
+
+    let dropTarget: WorkbenchBlockId | null = null
+
+    const detectDropTarget = (clientX: number, clientY: number): WorkbenchBlockId | null => {
+      const target = document.elementFromPoint(clientX, clientY)
+      const blockEl = target?.closest('[data-workbench-block-id]')
+      if (!blockEl) return null
+      const blockId = blockEl.getAttribute('data-workbench-block-id') as WorkbenchBlockId | null
+      if (!blockId || blockId === targetBlockId || blockId === sourceBlockId) return null
+      return isBlockVisible(blockId) ? blockId : null
+    }
+
+    const handleMove = (e: globalThis.PointerEvent) => {
+      if (e.pointerId !== pointerId) return
+      e.preventDefault()
+      const moveRect = canvasRef.current?.getBoundingClientRect()
+      if (moveRect) {
+        const moveScale = moveRect.width / 1920
+        setDragCursor({
+          x: (e.clientX - moveRect.left) / moveScale,
+          y: (e.clientY - moveRect.top) / moveScale,
+        })
+      } else {
+        setDragCursor({ x: e.clientX, y: e.clientY })
+      }
+      const next = detectDropTarget(e.clientX, e.clientY)
+      if (next !== dropTarget) {
+        dropTarget = next
+        setHoveredDropBlockId(next)
+      }
+    }
+
+    const handleUp = (e: globalThis.PointerEvent) => {
+      if (e.pointerId !== pointerId) return
+      document.removeEventListener('pointermove', handleMove)
+      document.removeEventListener('pointerup', handleUp)
+      document.removeEventListener('pointercancel', handleUp)
+      const distance = Math.hypot(e.clientX - startClientX, e.clientY - startClientY)
+      setDragConnector(null)
+      setDragCursor(null)
+      setHoveredDropBlockId(null)
+      setDraggingConnection(null)
+      if (distance < 5) return
+      removeConnection(sourceBlockId, targetBlockId)
+      if (!dropTarget || dropTarget === targetBlockId) return
+      if (
+        !connectKnownRelation(sourceBlockId, dropTarget) &&
+        !connectKnownRelation(dropTarget, sourceBlockId)
+      ) {
+        addManualConnection(sourceBlockId, dropTarget)
       }
     }
 
@@ -1342,6 +1543,11 @@ export default function WorkbenchCanvas({
     }
     : null
 
+  const isConnectionBeingDragged = (source: WorkbenchBlockId, target: WorkbenchBlockId): boolean => {
+    if (!draggingConnection) return false
+    return draggingConnection.sourceBlockId === source && draggingConnection.targetBlockId === target
+  }
+
   return (
     <>
       <div
@@ -1366,22 +1572,22 @@ export default function WorkbenchCanvas({
           style={{ fill: 'currentColor', userSelect: 'none', WebkitUserSelect: 'none' }}
         >
           <CanvasConnectionLayer from={startEndpointOutput} to={initBlockInput} />
-          {blockVisibility.components && componentsConnected && (
+          {blockVisibility.components && componentsConnected && !isConnectionBeingDragged('init', 'components') && (
             <CanvasConnectionLayer from={initBlockOutput} to={componentsBlockInput} stroke="#22b386" />
           )}
-          {blockVisibility.deploy && deployConnected && (
+          {blockVisibility.deploy && deployConnected && !isConnectionBeingDragged('components', 'deploy') && (
             <CanvasConnectionLayer from={componentsDeployOutput} to={deployBlockInput} stroke="#d97706" />
           )}
-          {blockVisibility.config && configConnected && (
+          {blockVisibility.config && configConnected && !isConnectionBeingDragged('deploy', 'config') && (
             <CanvasConnectionLayer from={deployConfigOutput} to={configBlockInput} stroke="#8b5cf6" />
           )}
-          {blockVisibility.launch && launchConnected && (
+          {blockVisibility.launch && launchConnected && !isConnectionBeingDragged('config', 'launch') && (
             <CanvasConnectionLayer from={configBlockOutput} to={launchBlockInput} stroke="#14b8a6" />
           )}
-          {blockVisibility.uninstall && uninstallConnected && (
+          {blockVisibility.uninstall && uninstallConnected && !isConnectionBeingDragged('launch', 'uninstall') && (
             <CanvasConnectionLayer from={launchBlockOutput} to={uninstallBlockInput} stroke="#dc2626" />
           )}
-          {componentBlocks.filter(block => block.connected).map(block => (
+          {componentBlocks.filter(block => block.connected && !isConnectionBeingDragged('components', block.blockId)).map(block => (
             <CanvasConnectionLayer
               key={`component-line-${block.index}`}
               from={componentsComponentOutput}
@@ -1389,7 +1595,7 @@ export default function WorkbenchCanvas({
               stroke="#22b386"
             />
           ))}
-          {deploymentBlocks.filter(block => block.connected).map(block => (
+          {deploymentBlocks.filter(block => block.connected && !isConnectionBeingDragged('deploy', block.blockId)).map(block => (
             <CanvasConnectionLayer
               key={`deployment-line-${block.index}`}
               from={deployBlockOutput}
@@ -1397,7 +1603,7 @@ export default function WorkbenchCanvas({
               stroke="#d97706"
             />
           ))}
-          {configItemBlocks.filter(block => block.connected).map(block => (
+          {configItemBlocks.filter(block => block.connected && !isConnectionBeingDragged('config', block.blockId)).map(block => (
             <CanvasConnectionLayer
               key={`config-item-line-${block.index}`}
               from={configItemBlockOutput}
@@ -1405,7 +1611,7 @@ export default function WorkbenchCanvas({
               stroke="#8b5cf6"
             />
           ))}
-          {launchItemBlocks.filter(block => block.connected).map(block => (
+          {launchItemBlocks.filter(block => block.connected && !isConnectionBeingDragged('launch', block.blockId)).map(block => (
             <CanvasConnectionLayer
               key={`launch-item-line-${block.index}`}
               from={launchItemBlockOutput}
@@ -1413,7 +1619,7 @@ export default function WorkbenchCanvas({
               stroke="#14b8a6"
             />
           ))}
-          {uninstallItemBlocks.filter(block => block.connected).map(block => (
+          {uninstallItemBlocks.filter(block => block.connected && !isConnectionBeingDragged('uninstall', block.blockId)).map(block => (
             <CanvasConnectionLayer
               key={`uninstall-item-line-${block.index}`}
               from={uninstallItemBlockOutput}
@@ -1422,6 +1628,7 @@ export default function WorkbenchCanvas({
             />
           ))}
           {manualConnections.map(connection => {
+            if (isConnectionBeingDragged(connection.from, connection.to)) return null
             const from = resolveBlockOutputPoint(connection.from)
             const to = resolveBlockInputPoint(connection.to)
             if (!from || !to) return null
@@ -1477,6 +1684,8 @@ export default function WorkbenchCanvas({
               onDeployConnectorClick={() => openAddNodePopover(componentsDeployOutput, 'components-deploy')}
               onComponentConnectorClick={() => openAddNodePopover(componentsComponentOutput, 'components-component')}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, 'components', event)}
+              onInputDragStart={event => startInputDragDisconnect('components', event)}
+              inputConnected={isInputConnected('components')}
               onDelete={deleteComponentsBlock}
               componentsEnvOutput={meta.componentsEnvOutput}
               componentsEnvInput={meta.componentsEnvInput}
@@ -1495,6 +1704,8 @@ export default function WorkbenchCanvas({
               onDeploymentConnectorClick={() => openAddNodePopover(deployBlockOutput, 'deploy-deployment')}
               onConfigConnectorClick={() => openAddNodePopover(deployConfigOutput, 'deploy-config')}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, 'deploy', event)}
+              onInputDragStart={event => startInputDragDisconnect('deploy', event)}
+              inputConnected={isInputConnected('deploy')}
               onDelete={deleteDeployBlock}
               deployEnvOutput={meta.deployEnvOutput}
               deployEnvInput={meta.deployEnvInput}
@@ -1513,6 +1724,8 @@ export default function WorkbenchCanvas({
               onNextConnectorClick={() => openAddNodePopover(configBlockOutput, 'config-launch')}
               onItemConnectorClick={() => openAddNodePopover(configItemBlockOutput, 'config-item')}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, 'config', event)}
+              onInputDragStart={event => startInputDragDisconnect('config', event)}
+              inputConnected={isInputConnected('config')}
               onDelete={deleteConfigBlock}
               configEnvOutput={meta.configEnvOutput}
               configEnvInput={meta.configEnvInput}
@@ -1531,6 +1744,8 @@ export default function WorkbenchCanvas({
               onNextConnectorClick={() => openAddNodePopover(launchBlockOutput, 'launch-uninstall')}
               onItemConnectorClick={() => openAddNodePopover(launchItemBlockOutput, 'launch-item')}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, 'launch', event)}
+              onInputDragStart={event => startInputDragDisconnect('launch', event)}
+              inputConnected={isInputConnected('launch')}
               onDelete={deleteLaunchBlock}
               launchEnvOutput={meta.launchEnvOutput}
               launchEnvInput={meta.launchEnvInput}
@@ -1549,6 +1764,8 @@ export default function WorkbenchCanvas({
               onNextConnectorClick={() => openAddNodePopover(uninstallBlockOutput, 'uninstall-end')}
               onItemConnectorClick={() => openAddNodePopover(uninstallItemBlockOutput, 'uninstall-item')}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, 'uninstall', event)}
+              onInputDragStart={event => startInputDragDisconnect('uninstall', event)}
+              inputConnected={isInputConnected('uninstall')}
               onDelete={deleteUninstallBlock}
               uninstallEnvOutput={meta.uninstallEnvOutput}
               uninstallEnvInput={meta.uninstallEnvInput}
@@ -1568,6 +1785,8 @@ export default function WorkbenchCanvas({
               onSelect={() => onSelectedBlockChange?.(block.blockId)}
               onAddConnectorClick={() => openAddNodePopover(block.output)}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, block.blockId, event)}
+              onInputDragStart={event => startInputDragDisconnect(block.blockId, event)}
+              inputConnected={isInputConnected(block.blockId)}
               onDelete={() => deleteComponentBlock(block.index)}
               component={meta.components[block.index] ?? defaultComponentMeta}
               linking={linkSourceBlockId === block.blockId}
@@ -1585,6 +1804,8 @@ export default function WorkbenchCanvas({
               onSelect={() => onSelectedBlockChange?.(block.blockId)}
               onAddConnectorClick={() => openAddNodePopover(block.output)}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, block.blockId, event)}
+              onInputDragStart={event => startInputDragDisconnect(block.blockId, event)}
+              inputConnected={isInputConnected(block.blockId)}
               onDelete={() => deleteDeploymentBlock(block.index)}
               deployment={meta.deployments[block.index] ?? defaultDeploymentMeta}
               linking={linkSourceBlockId === block.blockId}
@@ -1602,6 +1823,8 @@ export default function WorkbenchCanvas({
               onSelect={() => onSelectedBlockChange?.(block.blockId)}
               onAddConnectorClick={() => openAddNodePopover(block.output)}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, block.blockId, event)}
+              onInputDragStart={event => startInputDragDisconnect(block.blockId, event)}
+              inputConnected={isInputConnected(block.blockId)}
               onDelete={() => deleteConfigItemBlock(block.index)}
               configItem={meta.configItems[block.index] ?? defaultConfigItemMeta}
               linking={linkSourceBlockId === block.blockId}
@@ -1619,6 +1842,8 @@ export default function WorkbenchCanvas({
               onSelect={() => onSelectedBlockChange?.(block.blockId)}
               onAddConnectorClick={() => openAddNodePopover(block.output)}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, block.blockId, event)}
+              onInputDragStart={event => startInputDragDisconnect(block.blockId, event)}
+              inputConnected={isInputConnected(block.blockId)}
               onDelete={() => deleteLaunchItemBlock(block.index)}
               launchItem={meta.launchItems[block.index] ?? defaultLaunchItemMeta}
               linking={linkSourceBlockId === block.blockId}
@@ -1636,6 +1861,8 @@ export default function WorkbenchCanvas({
               onSelect={() => onSelectedBlockChange?.(block.blockId)}
               onAddConnectorClick={() => openAddNodePopover(block.output)}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, block.blockId, event)}
+              onInputDragStart={event => startInputDragDisconnect(block.blockId, event)}
+              inputConnected={isInputConnected(block.blockId)}
               onDelete={() => deleteUninstallItemBlock(block.index)}
               uninstallItem={meta.uninstallItems[block.index] ?? defaultUninstallItemMeta}
               linking={linkSourceBlockId === block.blockId}

@@ -25,11 +25,19 @@ function AddConnectorButton() {
   )
 }
 
-function InputPort() {
+function InputPort({ onDragStart, draggable }: { onDragStart?: (event: React.PointerEvent<SVGGElement>) => void; draggable?: boolean }) {
   return (
-    <g transform={`translate(${uninstallItemBlockInputOffset.x - 2.5} ${uninstallItemBlockInputOffset.y - 2.5})`}>
+    <g
+      transform={`translate(${uninstallItemBlockInputOffset.x - 2.5} ${uninstallItemBlockInputOffset.y - 2.5})`}
+      className={draggable ? 'cursor-grab active:cursor-grabbing' : undefined}
+      onPointerDown={draggable ? event => {
+        event.stopPropagation()
+        onDragStart?.(event)
+      } : undefined}
+    >
       <circle cx="2.5" cy="2.5" r="2.5" fill={accent} stroke={accent} strokeWidth="2" />
       <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke={accent} strokeWidth="2" />
+      {draggable ? <circle cx="2.5" cy="2.5" r="12" fill="transparent" /> : null}
     </g>
   )
 }
@@ -82,6 +90,8 @@ export default function UninstallItemBlock({
   onSelect,
   onAddConnectorClick,
   onConnectorDragStart,
+  onInputDragStart,
+  inputConnected = false,
   onDelete,
   uninstallItem,
   dragHandlers,
@@ -95,6 +105,8 @@ export default function UninstallItemBlock({
   onSelect?: () => void
   onAddConnectorClick?: () => void
   onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
+  onInputDragStart?: (event: React.PointerEvent<SVGGElement>) => void
+  inputConnected?: boolean
   onDelete?: () => void
   uninstallItem: WorkbenchUninstallItemMeta
   dragHandlers?: WorkbenchBlockDragHandlers
@@ -194,7 +206,7 @@ export default function UninstallItemBlock({
         onPointerDown={event => event.stopPropagation()}
       />
 
-      <InputPort />
+      <InputPort onDragStart={onInputDragStart} draggable={inputConnected} />
 
       <g
         className="cursor-grab active:cursor-grabbing"
