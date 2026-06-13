@@ -41,7 +41,7 @@ const optionLabels: Record<string, string> = {
   user_input: '用户输入',
   auto: '自动处理',
   gitclone: 'Git 克隆',
-  '!gitclone': '非 Git 获取',
+  '!gitclone': '强制 Git 克隆',
   getfile: '获取文件',
   no: '不处理',
   windows: 'Windows',
