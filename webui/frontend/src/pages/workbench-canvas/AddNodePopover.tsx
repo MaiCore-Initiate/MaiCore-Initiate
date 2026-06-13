@@ -21,6 +21,8 @@ const uninstallAccent = '#991b1b'
 const uninstallFill = '#dc2626'
 const uninstallItemAccent = '#f87171'
 const uninstallItemFill = '#fecaca'
+const fileAccent = '#b45309'
+const fileFill = '#f59e0b'
 
 const POPOVER_WIDTH = 296
 const POPOVER_MAX_HEIGHT = 420
@@ -231,6 +233,7 @@ export default function AddNodePopover({
   onAddConfigItem,
   onAddLaunchItem,
   onAddUninstallItem,
+  onAddFile,
   onClose,
 }: {
   position: WorkbenchPoint
@@ -250,6 +253,7 @@ export default function AddNodePopover({
   onAddConfigItem: () => void
   onAddLaunchItem: () => void
   onAddUninstallItem: () => void
+  onAddFile: () => void
   onClose: () => void
 }) {
   const [closeHovered, setCloseHovered] = useState(false)
@@ -310,6 +314,11 @@ export default function AddNodePopover({
       ? [{ key: 'uninstall-item', label: '卸载项', code: '[[UninstallItem]]', fill: uninstallItemFill, stroke: uninstallItemAccent, disabled: false, onClick: onAddUninstallItem }]
       : []),
   ]
+  const fileRows = [
+    ...(source === null
+      ? [{ key: 'file', label: '导入文件', code: '[[File]]', fill: fileFill, stroke: fileAccent, disabled: false, onClick: onAddFile }]
+      : []),
+  ]
 
   const lastComponentRowY = componentRows.length > 0
     ? FIRST_ROW_Y + (componentRows.length - 1) * ROW_SPACING
@@ -331,6 +340,11 @@ export default function AddNodePopover({
     : launchRowStartY - GROUP_GAP
   const uninstallTitleY = lastLaunchRowY + GROUP_GAP
   const uninstallRowStartY = uninstallTitleY + TITLE_GAP
+  const lastUninstallRowY = uninstallRows.length > 0
+    ? uninstallRowStartY + (uninstallRows.length - 1) * ROW_SPACING
+    : uninstallRowStartY - GROUP_GAP
+  const fileTitleY = lastUninstallRowY + GROUP_GAP
+  const fileRowStartY = fileTitleY + TITLE_GAP
 
   const lastRowBottomY = Math.max(
     componentRows.length > 0 ? FIRST_ROW_Y + (componentRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
@@ -338,6 +352,7 @@ export default function AddNodePopover({
     configRows.length > 0 ? configRowStartY + (configRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
     launchRows.length > 0 ? launchRowStartY + (launchRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
     uninstallRows.length > 0 ? uninstallRowStartY + (uninstallRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
+    fileRows.length > 0 ? fileRowStartY + (fileRows.length - 1) * ROW_SPACING + ROW_HEIGHT : 0,
   )
   const popoverHeight = TOP_PADDING + Math.max(TITLE_HEIGHT, lastRowBottomY) + BOTTOM_PADDING
 
@@ -483,6 +498,23 @@ export default function AddNodePopover({
             <ComponentNodeRow
               key={row.key}
               y={uninstallRowStartY + index * ROW_SPACING}
+              label={row.label}
+              code={row.code}
+              swatchFill={row.fill}
+              swatchStroke={row.stroke}
+              disabled={row.disabled}
+              onClick={row.onClick}
+            />
+          ))}
+
+          {fileRows.length > 0 && (
+            <GroupTitle y={fileTitleY} label="文件" accent={fileAccent} />
+          )}
+
+          {fileRows.map((row, index) => (
+            <ComponentNodeRow
+              key={row.key}
+              y={fileRowStartY + index * ROW_SPACING}
               label={row.label}
               code={row.code}
               swatchFill={row.fill}

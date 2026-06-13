@@ -1,7 +1,7 @@
 import json
 import secrets
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -15,6 +15,7 @@ class WorkbenchProject(BaseModel):
     sequence: str
     mod_name: str
     path: str
+    files: List[Dict[str, Any]] = []
 
 
 class CreateWorkbenchProjectPayload(BaseModel):
@@ -23,7 +24,7 @@ class CreateWorkbenchProjectPayload(BaseModel):
     sequence: Optional[str] = None
 
 
-def load_mod_index() -> Dict[str, Dict[str, str]]:
+def load_mod_index() -> Dict[str, Dict[str, Any]]:
     try:
         with CONFIG_FILE_PATH.open("r", encoding="utf-8") as file:
             data = json.load(file)
@@ -34,7 +35,7 @@ def load_mod_index() -> Dict[str, Dict[str, str]]:
         raise HTTPException(status_code=500, detail=f"读取 MOD.json 失败: {exc}") from exc
 
 
-def save_mod_index(data: Dict[str, Dict[str, str]]) -> None:
+def save_mod_index(data: Dict[str, Dict[str, Any]]) -> None:
     try:
         CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with CONFIG_FILE_PATH.open("w", encoding="utf-8") as file:
@@ -44,18 +45,20 @@ def save_mod_index(data: Dict[str, Dict[str, str]]) -> None:
         raise HTTPException(status_code=500, detail=f"保存 MOD.json 失败: {exc}") from exc
 
 
-def generate_sequence(existing: Dict[str, Dict[str, str]]) -> str:
+def generate_sequence(existing: Dict[str, Dict[str, Any]]) -> str:
     while True:
         sequence = secrets.token_hex(32)
         if sequence not in existing:
             return sequence
 
 
-def to_project(sequence: str, data: Dict[str, str]) -> WorkbenchProject:
+def to_project(sequence: str, data: Dict[str, Any]) -> WorkbenchProject:
+    files = data.get("files", [])
     return WorkbenchProject(
         sequence=sequence,
         mod_name=str(data.get("mod_name", "")),
         path=str(data.get("path", "")),
+        files=files if isinstance(files, list) else [],
     )
 
 
@@ -83,6 +86,7 @@ def create_project(payload: CreateWorkbenchProjectPayload):
     data[sequence] = {
         "mod_name": payload.mod_name,
         "path": payload.path,
+        "files": [],
     }
     save_mod_index(data)
     return to_project(sequence, data[sequence])

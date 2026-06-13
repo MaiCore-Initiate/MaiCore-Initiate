@@ -6,6 +6,7 @@ import ComponentsBlock, { componentsBlockInputOffset, componentsBlockMinSize, re
 import ConfigBlock, { configBlockInputOffset, configBlockMinSize, resolveConfigBlockItemOutputOffset, resolveConfigBlockOutputOffset } from './blocks/ConfigBlock'
 import ConfigItemBlock, { configItemBlockInputOffset, configItemBlockMinSize, resolveConfigItemBlockOutputOffset } from './blocks/ConfigItemBlock'
 import DeployBlock, { deployBlockInputOffset, deployBlockMinSize, resolveDeployBlockConfigOutputOffset, resolveDeployBlockOutputOffset } from './blocks/DeployBlock'
+import FileBlock, { fileBlockMinSize } from './blocks/FileBlock'
 import LaunchBlock, { launchBlockInputOffset, launchBlockMinSize, resolveLaunchBlockItemOutputOffset, resolveLaunchBlockOutputOffset } from './blocks/LaunchBlock'
 import LaunchItemBlock, { launchItemBlockInputOffset, launchItemBlockMinSize, resolveLaunchItemBlockOutputOffset } from './blocks/LaunchItemBlock'
 import UninstallBlock, { uninstallBlockInputOffset, uninstallBlockMinSize, resolveUninstallBlockItemOutputOffset } from './blocks/UninstallBlock'
@@ -13,7 +14,8 @@ import UninstallItemBlock, { uninstallItemBlockInputOffset, uninstallItemBlockMi
 import DeploymentBlock, { deploymentBlockInputOffset, deploymentBlockMinSize, resolveDeploymentBlockOutputOffset } from './blocks/DeploymentBlock'
 import InitBlock from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
-import { workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConfigItemBlockId, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchLaunchItemBlockId, type WorkbenchLaunchItemMeta, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchUninstallItemBlockId, type WorkbenchUninstallItemMeta, type WorkbenchVisibleBlocks } from './types'
+import FileConflictDialog, { type FileConflictResolution } from '../../components/FileConflictDialog'
+import { WORKBENCH_FILE_EXTENSIONS, createFileBlockId, parseFileBlockId, workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConfigItemBlockId, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchFileMeta, type WorkbenchLaunchItemBlockId, type WorkbenchLaunchItemMeta, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchUninstallItemBlockId, type WorkbenchUninstallItemMeta, type WorkbenchVisibleBlocks } from './types'
 
 const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
@@ -193,6 +195,7 @@ const defaultBlockMeta: WorkbenchBlockMeta = {
   uninstallEnvInput: false,
   uninstallList: [],
   uninstallItems: [],
+  files: [],
 }
 
 const initBlockInputOffset: WorkbenchPoint = { x: 5, y: 115.5 }
@@ -324,6 +327,8 @@ export default function WorkbenchCanvas({
   onVisibleBlocksChange,
   blockMeta,
   onBlockMetaPatch,
+  onOpenFileEditor,
+  projectSequence = null,
 }: WorkbenchCanvasProps) {
   const meta = { ...defaultBlockMeta, ...blockMeta }
   const blockVisibility = { ...defaultVisibleBlocks, ...visibleBlocks }
@@ -355,6 +360,8 @@ export default function WorkbenchCanvas({
   const [uninstallItemBlockPositions, setUninstallItemBlockPositions] = useState<WorkbenchPoint[]>([])
   const [uninstallItemBlockSizes, setUninstallItemBlockSizes] = useState<WorkbenchSize[]>([])
   const [uninstallItemConnections, setUninstallItemConnections] = useState<boolean[]>([])
+  const [fileBlockPositions, setFileBlockPositions] = useState<Record<string, WorkbenchPoint>>({})
+  const [fileBlockSizes, setFileBlockSizes] = useState<Record<string, WorkbenchSize>>({})
   const [componentsConnected, setComponentsConnected] = useState(false)
   const [deployConnected, setDeployConnected] = useState(false)
   const [configConnected, setConfigConnected] = useState(false)
@@ -372,8 +379,14 @@ export default function WorkbenchCanvas({
   const [dragCursor, setDragCursor] = useState<WorkbenchPoint | null>(null)
   const [hoveredDropBlockId, setHoveredDropBlockId] = useState<WorkbenchBlockId | null>(null)
   const [draggingConnection, setDraggingConnection] = useState<DraggingConnection | null>(null)
+  const [pendingFileConflict, setPendingFileConflict] = useState<{
+    file: File
+    suggestedName: string
+  } | null>(null)
+  const [fileImportError, setFileImportError] = useState<string | null>(null)
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const dragRef = useRef<{
     pointerId: number
     blockId: DraggableBlockId
@@ -440,6 +453,7 @@ export default function WorkbenchCanvas({
     const configItemIndex = parseConfigItemBlockIndex(blockId)
     const launchItemIndex = parseLaunchItemBlockIndex(blockId)
     const uninstallItemIndex = parseUninstallItemBlockIndex(blockId)
+    const fileId = parseFileBlockId(blockId)
     if (blockId === 'init') setInitBlockPosition(position)
     else if (blockId === 'components') setComponentsBlockPosition(position)
     else if (blockId === 'deploy') setDeployBlockPosition(position)
@@ -456,6 +470,8 @@ export default function WorkbenchCanvas({
       setLaunchItemBlockPositions(current => current.map((item, index) => (index === launchItemIndex ? position : item)))
     } else if (uninstallItemIndex !== null) {
       setUninstallItemBlockPositions(current => current.map((item, index) => (index === uninstallItemIndex ? position : item)))
+    } else if (fileId !== null) {
+      setFileBlockPositions(current => ({ ...current, [fileId]: position }))
     }
     else setStartEndpointPosition(position)
   }
@@ -534,7 +550,9 @@ export default function WorkbenchCanvas({
                       ? configItemBlockSizes[parseConfigItemBlockIndex(blockId) ?? -1] ?? configItemBlockMinSize
                       : parseLaunchItemBlockIndex(blockId) !== null
                         ? launchItemBlockSizes[parseLaunchItemBlockIndex(blockId) ?? -1] ?? launchItemBlockMinSize
-                        : uninstallItemBlockSizes[parseUninstallItemBlockIndex(blockId) ?? -1] ?? uninstallItemBlockMinSize
+                        : parseFileBlockId(blockId) !== null
+                          ? fileBlockSizes[parseFileBlockId(blockId) ?? ''] ?? fileBlockMinSize
+                          : uninstallItemBlockSizes[parseUninstallItemBlockIndex(blockId) ?? -1] ?? uninstallItemBlockMinSize
   )
 
   const resizeBlock = (blockId: ResizableBlockId, size: WorkbenchSize) => {
@@ -1528,6 +1546,137 @@ export default function WorkbenchCanvas({
     setAddNodePopoverSource(null)
   }
 
+  const defaultFilePosition = (index: number): WorkbenchPoint => ({
+    x: 4860 + (index % 5) * 220,
+    y: 330 + Math.floor(index / 5) * 140,
+  })
+
+  const triggerFileImport = () => {
+    if (!projectSequence) {
+      setFileImportError('当前未关联工作台项目，无法导入文件。')
+      return
+    }
+    fileInputRef.current?.click()
+  }
+
+  const handleFileInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    event.target.value = ''
+    if (!files || files.length === 0) return
+    if (!projectSequence) {
+      setFileImportError('未关联工作台项目，无法导入。')
+      return
+    }
+    setFileImportError(null)
+    for (const file of Array.from(files)) {
+      await processFileUpload(file, null)
+    }
+  }
+
+  const processFileUpload = async (file: File, conflictResolution: FileConflictResolution | null) => {
+    if (!projectSequence) return
+    const name = file.name
+    try {
+      const checkRes = await fetch(
+        `/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/check-name`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        },
+      )
+      if (!checkRes.ok) {
+        setFileImportError(`检测文件名失败 (${checkRes.status})`)
+        return
+      }
+      const check: { available: boolean; suggestion: string } = await checkRes.json()
+      let uploadName = name
+      let resolution = conflictResolution
+      if (!check.available) {
+        if (!resolution) {
+          setPendingFileConflict({ file, suggestedName: check.suggestion })
+          return
+        }
+        if (resolution === 'rename') {
+          uploadName = check.suggestion
+        }
+      }
+      const params = new URLSearchParams({ filename: uploadName })
+      if (resolution) params.set('conflictResolution', resolution)
+      const form = new FormData()
+      form.append('file', file)
+      const uploadRes = await fetch(
+        `/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/upload?${params.toString()}`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          body: form,
+        },
+      )
+      if (uploadRes.status === 409) {
+        const detail = await uploadRes.json().catch(() => null)
+        const suggestion = detail?.detail?.suggestion ?? check.suggestion
+        setPendingFileConflict({ file, suggestedName: suggestion })
+        return
+      }
+      if (!uploadRes.ok) {
+        const text = await uploadRes.text().catch(() => '')
+        setFileImportError(`上传失败 (${uploadRes.status}): ${text || '未知错误'}`)
+        return
+      }
+      const newMeta: WorkbenchFileMeta = await uploadRes.json()
+      const nextIndex = meta.files.length
+      setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
+      onBlockMetaPatch?.({
+        files: [...meta.files, newMeta],
+        fileImportList: Array.from(new Set([...meta.fileImportList, newMeta.name])),
+        fileImport: true,
+      })
+    } catch (err) {
+      setFileImportError(`上传异常: ${(err as Error).message ?? String(err)}`)
+    }
+  }
+
+  const handleFileConflictResolve = (resolution: FileConflictResolution) => {
+    if (!pendingFileConflict) return
+    const { file } = pendingFileConflict
+    setPendingFileConflict(null)
+    if (resolution === 'cancel') return
+    void processFileUpload(file, resolution)
+  }
+
+  const deleteFileBlock = async (file: WorkbenchFileMeta) => {
+    if (!projectSequence) return
+    try {
+      await fetch(
+        `/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/${encodeURIComponent(file.name)}`,
+        { method: 'DELETE', credentials: 'include' },
+      )
+    } catch (err) {
+      setFileImportError(`删除失败: ${(err as Error).message ?? String(err)}`)
+    }
+    setFileBlockPositions(current => {
+      const next = { ...current }
+      delete next[file.id]
+      return next
+    })
+    setFileBlockSizes(current => {
+      const next = { ...current }
+      delete next[file.id]
+      return next
+    })
+    onBlockMetaPatch?.({
+      files: meta.files.filter(f => f.id !== file.id),
+      fileImportList: meta.fileImportList.filter(n => n !== file.name),
+    })
+    if (selectedBlockId === createFileBlockId(file.id)) onSelectedBlockChange?.(null)
+  }
+
+  const openFileEditorForBlock = (file: WorkbenchFileMeta) => {
+    onOpenFileEditor?.(file.id)
+  }
+
 
   const addNodePopoverScreenPosition = addNodePopoverPosition
     ? {
@@ -1862,6 +2011,25 @@ export default function WorkbenchCanvas({
               resizeHandlers={createResizeHandlers(block.blockId)}
             />
           ))}
+          {meta.files.map(file => {
+            const blockId = createFileBlockId(file.id)
+            const position = fileBlockPositions[file.id] ?? defaultFilePosition(meta.files.indexOf(file))
+            const size = fileBlockSizes[file.id] ?? fileBlockMinSize
+            return (
+              <FileBlock
+                key={blockId}
+                blockId={blockId}
+                file={file}
+                position={position}
+                size={size}
+                selected={selectedBlockId === blockId}
+                onSelect={() => onSelectedBlockChange?.(blockId)}
+                onBodyDoubleClick={() => openFileEditorForBlock(file)}
+                onDelete={() => void deleteFileBlock(file)}
+                dragHandlers={createDragHandlers(blockId, position)}
+              />
+            )
+          })}
         </svg>
       </div>
 
@@ -1897,6 +2065,7 @@ export default function WorkbenchCanvas({
             onAddConfigItem={addConfigItemBlock}
             onAddLaunchItem={addLaunchItemBlock}
             onAddUninstallItem={addUninstallItemBlock}
+            onAddFile={triggerFileImport}
             onClose={() => {
               setAddNodePopoverPosition(null)
               setAddNodePopoverSource(null)
@@ -1904,6 +2073,38 @@ export default function WorkbenchCanvas({
           />
         </>
       )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        hidden
+        multiple
+        accept={WORKBENCH_FILE_EXTENSIONS.join(',')}
+        onChange={handleFileInputChange}
+      />
+
+      {fileImportError && (
+        <div
+          className="absolute right-4 top-4 z-30 max-w-sm rounded-lg border border-red-400/40 bg-red-500/15 px-4 py-2 text-sm text-red-100 shadow-lg"
+          role="alert"
+        >
+          {fileImportError}
+          <button
+            type="button"
+            className="ml-3 text-red-100/80 underline hover:text-red-50"
+            onClick={() => setFileImportError(null)}
+          >
+            关闭
+          </button>
+        </div>
+      )}
+
+      <FileConflictDialog
+        open={pendingFileConflict !== null}
+        conflictingName={pendingFileConflict?.file.name ?? ''}
+        suggestedName={pendingFileConflict?.suggestedName ?? ''}
+        onResolve={handleFileConflictResolve}
+      />
     </>
   )
 }

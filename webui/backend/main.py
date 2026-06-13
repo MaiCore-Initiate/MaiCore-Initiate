@@ -67,6 +67,7 @@ from src.webui_api import (
 )
 from src.webui_api.pet_api_v2 import router as pet_v2_router
 from webui.backend.api.template_workbench import router as template_workbench_router
+from webui.backend.api.workbench_files import router as workbench_files_router
 from src.webui_api.auth_core import (
     account_store,
     attach_request_auth_state,
@@ -383,6 +384,8 @@ app.include_router(components_router, tags=["组件下载"], dependencies=auth_d
 
 # 模板工作台API
 app.include_router(template_workbench_router, prefix="/api/template-workbench", tags=["模板工作台"], dependencies=auth_dep)
+# 模板工作台 - 文件块 API（与 template_workbench_router 共用前缀）
+app.include_router(workbench_files_router, prefix="/api/template-workbench", tags=["工作台文件"], dependencies=auth_dep)
 
 # 终端管理API
 app.include_router(terminal_router, tags=["终端管理"], dependencies=auth_dep)

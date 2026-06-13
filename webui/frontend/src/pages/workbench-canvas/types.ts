@@ -53,6 +53,7 @@ export interface WorkbenchBlockMeta {
   uninstallEnvInput: boolean
   uninstallList: string[]
   uninstallItems: WorkbenchUninstallItemMeta[]
+  files: WorkbenchFileMeta[]
 }
 
 export interface WorkbenchComponentMeta {
@@ -225,6 +226,8 @@ export interface WorkbenchCanvasProps {
   onVisibleBlocksChange?: (patch: Partial<WorkbenchVisibleBlocks>) => void
   blockMeta?: Partial<WorkbenchBlockMeta>
   onBlockMetaPatch?: (patch: Partial<WorkbenchBlockMeta>) => void
+  onOpenFileEditor?: (fileId: string) => void
+  projectSequence?: string | null
 }
 
 export type WorkbenchComponentBlockId = `component:${number}`
@@ -232,7 +235,47 @@ export type WorkbenchDeploymentBlockId = `deployment:${number}`
 export type WorkbenchConfigItemBlockId = `config-item:${number}`
 export type WorkbenchLaunchItemBlockId = `launch-item:${number}`
 export type WorkbenchUninstallItemBlockId = `uninstall-item:${number}`
-export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | 'config' | 'launch' | 'uninstall' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId | WorkbenchConfigItemBlockId | WorkbenchLaunchItemBlockId | WorkbenchUninstallItemBlockId
+export type WorkbenchFileBlockId = `file:${string}`
+export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | 'config' | 'launch' | 'uninstall' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId | WorkbenchConfigItemBlockId | WorkbenchLaunchItemBlockId | WorkbenchUninstallItemBlockId | WorkbenchFileBlockId
+
+export const WORKBENCH_FILE_EXTENSIONS = [
+  '.py', '.cmd', '.bat', '.ps1', '.sh', '.js', '.ts',
+  '.json', '.txt', '.jsonl', '.log', '.java', '.jar', '.toml', '.exe',
+  '.xaml', '.xml',
+] as const
+
+export type WorkbenchFileExtension = (typeof WORKBENCH_FILE_EXTENSIONS)[number]
+
+export type WorkbenchFileLanguage =
+  | 'python'
+  | 'powershell'
+  | 'shell'
+  | 'javascript'
+  | 'typescript'
+  | 'json'
+  | 'plaintext'
+  | 'java'
+  | 'ini'
+  | 'xml'
+
+export interface WorkbenchFileMeta {
+  id: string
+  name: string
+  path: string
+  size: number
+  modifiedAt: string
+  binary: boolean
+  language: WorkbenchFileLanguage
+}
+
+export function parseFileBlockId(blockId: WorkbenchBlockId | null | undefined): string | null {
+  if (!blockId?.startsWith('file:')) return null
+  return blockId.slice('file:'.length)
+}
+
+export function createFileBlockId(fileId: string): WorkbenchFileBlockId {
+  return `file:${fileId}` as WorkbenchFileBlockId
+}
 
 export interface WorkbenchVisibleBlocks {
   components: boolean
