@@ -8,7 +8,7 @@ import ConfigItemBlock, { configItemBlockInputOffset, configItemBlockMinSize, re
 import DeployBlock, { deployBlockInputOffset, deployBlockMinSize, resolveDeployBlockConfigOutputOffset, resolveDeployBlockOutputOffset } from './blocks/DeployBlock'
 import LaunchBlock, { launchBlockInputOffset, launchBlockMinSize, resolveLaunchBlockItemOutputOffset, resolveLaunchBlockOutputOffset } from './blocks/LaunchBlock'
 import LaunchItemBlock, { launchItemBlockInputOffset, launchItemBlockMinSize, resolveLaunchItemBlockOutputOffset } from './blocks/LaunchItemBlock'
-import UninstallBlock, { uninstallBlockInputOffset, uninstallBlockMinSize, resolveUninstallBlockItemOutputOffset, resolveUninstallBlockOutputOffset } from './blocks/UninstallBlock'
+import UninstallBlock, { uninstallBlockInputOffset, uninstallBlockMinSize, resolveUninstallBlockItemOutputOffset } from './blocks/UninstallBlock'
 import UninstallItemBlock, { uninstallItemBlockInputOffset, uninstallItemBlockMinSize, resolveUninstallItemBlockOutputOffset } from './blocks/UninstallItemBlock'
 import DeploymentBlock, { deploymentBlockInputOffset, deploymentBlockMinSize, resolveDeploymentBlockOutputOffset } from './blocks/DeploymentBlock'
 import InitBlock from './blocks/InitBlock'
@@ -711,11 +711,6 @@ export default function WorkbenchCanvas({
     x: uninstallBlockPosition.x + uninstallBlockInputOffset.x,
     y: uninstallBlockPosition.y + uninstallBlockInputOffset.y,
   }
-  const uninstallBlockOutputOffset = resolveUninstallBlockOutputOffset(uninstallBlockSize)
-  const uninstallBlockOutput = {
-    x: uninstallBlockPosition.x + uninstallBlockOutputOffset.x,
-    y: uninstallBlockPosition.y + uninstallBlockOutputOffset.y,
-  }
   const uninstallItemOutputOffset = resolveUninstallBlockItemOutputOffset(uninstallBlockSize)
   const uninstallItemBlockOutput = {
     x: uninstallBlockPosition.x + uninstallItemOutputOffset.x,
@@ -841,7 +836,6 @@ export default function WorkbenchCanvas({
     if (blockId === 'deploy') return deployBlockOutput
     if (blockId === 'config') return configBlockOutput
     if (blockId === 'launch') return launchBlockOutput
-    if (blockId === 'uninstall') return uninstallBlockOutput
     const componentIndex = parseComponentBlockIndex(blockId)
     if (componentIndex !== null) return componentBlocks[componentIndex]?.output ?? null
     const deploymentIndex = parseDeploymentBlockIndex(blockId)
@@ -866,7 +860,6 @@ export default function WorkbenchCanvas({
       case 'config-item':          return configItemBlockOutput
       case 'launch-uninstall':     return launchBlockOutput
       case 'launch-item':          return launchItemBlockOutput
-      case 'uninstall-end':        return uninstallBlockOutput
       case 'uninstall-item':       return uninstallItemBlockOutput
       case 'component-output':
       case 'deployment-output':
@@ -1761,7 +1754,6 @@ export default function WorkbenchCanvas({
               size={uninstallBlockSize}
               selected={selectedBlockId === 'uninstall'}
               onSelect={() => onSelectedBlockChange?.('uninstall')}
-              onNextConnectorClick={() => openAddNodePopover(uninstallBlockOutput, 'uninstall-end')}
               onItemConnectorClick={() => openAddNodePopover(uninstallItemBlockOutput, 'uninstall-item')}
               onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, 'uninstall', event)}
               onInputDragStart={event => startInputDragDisconnect('uninstall', event)}

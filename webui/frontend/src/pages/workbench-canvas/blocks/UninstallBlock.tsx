@@ -8,13 +8,6 @@ const bodyX = 5
 const bodyY = 5
 const accent = '#dc2626'
 
-export function resolveUninstallBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
-  return {
-    x: bodyX + Math.max(uninstallBlockMinSize.width, size.width),
-    y: bodyY + Math.max(uninstallBlockMinSize.height, size.height) / 2,
-  }
-}
-
 export function resolveUninstallBlockItemOutputOffset(size: WorkbenchSize): WorkbenchPoint {
   return {
     x: bodyX + Math.max(uninstallBlockMinSize.width, size.width) / 2,
@@ -91,7 +84,6 @@ export default function UninstallBlock({
   selected,
   linking = false,
   onSelect,
-  onNextConnectorClick,
   onItemConnectorClick,
   onConnectorDragStart,
   onInputDragStart,
@@ -108,7 +100,6 @@ export default function UninstallBlock({
   selected: boolean
   linking?: boolean
   onSelect?: () => void
-  onNextConnectorClick?: () => void
   onItemConnectorClick?: () => void
   onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: React.PointerEvent<SVGGElement>) => void
   onInputDragStart?: (event: React.PointerEvent<SVGGElement>) => void
@@ -130,8 +121,6 @@ export default function UninstallBlock({
   const delimiterX = bodyX + (bodyWidth - delimiterWidth) / 2
   const delimiterY = bodyY + bodyHeight - 57
   const sectionClipId = 'dfw-uninstall-block-section-clip'
-  const nextOutputOffset = resolveUninstallBlockOutputOffset({ width: bodyWidth, height: bodyHeight })
-  const nextConnectorY = nextOutputOffset.y - 12
   const itemOutputOffset = resolveUninstallBlockItemOutputOffset({ width: bodyWidth, height: bodyHeight })
   const itemConnectorX = itemOutputOffset.x
   const itemConnectorY = itemOutputOffset.y - 12
@@ -282,22 +271,6 @@ export default function UninstallBlock({
         onPointerUp={resizeHandlers?.onResizePointerUp}
         onPointerCancel={resizeHandlers?.onResizePointerCancel}
       />
-
-      <g
-        transform={`translate(${nextOutputOffset.x} ${nextConnectorY})`}
-        className="cursor-crosshair"
-        onClick={event => {
-          event.stopPropagation()
-          onNextConnectorClick?.()
-        }}
-        onPointerDown={event => {
-          event.stopPropagation()
-          onConnectorDragStart?.('uninstall-end', { x: position.x + nextOutputOffset.x, y: position.y + nextConnectorY }, event)
-        }}
-      >
-        <AddConnectorButton label="连接下一阶段" />
-        <circle cx="0" cy="12" r="18" fill="transparent" />
-      </g>
 
       <g
         transform={`translate(${itemConnectorX} ${itemConnectorY})`}
