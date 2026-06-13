@@ -63,6 +63,10 @@ interface WorkbenchProjectInfo {
   sequence: string
   mod_name: string
   path: string
+  mod_id?: string
+  description?: string
+  author?: string
+  cover?: string | null
 }
 
 type WorkbenchMetaState = WorkbenchModInfoMeta
@@ -1568,7 +1572,9 @@ export default function DeploymentFlowWorkbench({
           setMeta(prev => ({
             ...prev,
             modName: project.mod_name || prev.modName,
-            modId: project.path ? project.path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || prev.modId : prev.modId,
+            modId: project.mod_id || (project.path ? project.path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') : '') || prev.modId,
+            description: project.description || prev.description,
+            author: project.author || prev.author,
           }))
         }
       } catch (error) {

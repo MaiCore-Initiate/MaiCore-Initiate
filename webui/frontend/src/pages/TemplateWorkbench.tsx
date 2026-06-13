@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import CreateProjectDialog, { type CreatedProjectInfo } from '../components/CreateProjectDialog'
 import {
   CirclePlus,
   Clock,
@@ -29,6 +30,10 @@ interface WorkbenchProjectIndex {
   sequence: string
   mod_name: string
   path: string
+  mod_id?: string
+  description?: string
+  author?: string
+  cover?: string | null
 }
 
 export interface TemplateWorkbenchSlots {
@@ -442,6 +447,7 @@ export default function TemplateWorkbench({
   const [activeSection, setActiveSection] = useState<TemplateWorkbenchSection>('my-templates')
   const [layoutMode, setLayoutMode] = useState<TemplateWorkbenchLayout>('card')
   const [registeredProjects, setRegisteredProjects] = useState<WorkbenchProjectIndex[]>([])
+  const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
   const projectItems = useMemo(() => {
     if (items) return items
     if (!registeredProjects.length) return defaultItems
@@ -503,15 +509,15 @@ export default function TemplateWorkbench({
     return project
   }
 
-  const createDeploymentProject = async () => {
+  const createDeploymentProject = () => {
     onCreateProject?.()
-    try {
-      const name = `未命名${registeredProjects.length ? registeredProjects.length : ''}`
-      const project = await createProjectIndex(name, defaultTemplatePath)
-      onOpenWorkbenchCanvas?.(project.sequence)
-    } catch (error) {
-      console.error(error)
-    }
+    setCreateProjectDialogOpen(true)
+  }
+
+  const handleCreatedProject = (project: CreatedProjectInfo) => {
+    setCreateProjectDialogOpen(false)
+    setRegisteredProjects(prev => prev.some(item => item.sequence === project.sequence) ? prev : [...prev, project])
+    onOpenWorkbenchCanvas?.(project.sequence)
   }
 
   const openItem = async (item: TemplateWorkbenchItem) => {
@@ -680,6 +686,12 @@ export default function TemplateWorkbench({
 
         {slots?.contentTrailing}
       </main>
+
+      <CreateProjectDialog
+        open={createProjectDialogOpen}
+        onClose={() => setCreateProjectDialogOpen(false)}
+        onCreated={handleCreatedProject}
+      />
     </div>
   )
 }
