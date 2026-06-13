@@ -2,10 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { WebglAddon } from '@xterm/addon-webgl'
 import { Plus, X, Maximize2, Minimize2 } from 'lucide-react'
 import '@xterm/xterm/css/xterm.css'
-import '@xterm/addon-webgl/css/addon-webgl.css'
 
 interface Terminal {
   id: string
@@ -192,18 +190,6 @@ export default function WebShell() {
         const container = document.getElementById(`terminal-${terminalId}`)
         if (container) {
           xterm.open(container)
-
-          // 加载 WebGL 渲染插件（必须在 open() 之后，此时渲染上下文才存在）。
-          // 创建失败或运行中 WebGL 上下文丢失时，自动 dispose 回退到默认 Canvas 渲染。
-          try {
-            const webglAddon = new WebglAddon()
-            webglAddon.onContextLoss(() => {
-              webglAddon.dispose()
-            })
-            xterm.loadAddon(webglAddon)
-          } catch (err) {
-            console.warn('[WebShell] WebGL 渲染不可用，已回退到默认渲染', err)
-          }
 
           // 使用 ResizeObserver 自动调整终端大小
           const resizeObserver = new ResizeObserver(() => {

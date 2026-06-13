@@ -447,12 +447,12 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
     <div
       className="bg-white/5 border-2 border-black/30 backdrop-blur-[50px] shadow-login-card animate-scale-fade-in"
       style={{
-        width: isLoginView ? 'min(720px, calc(100vw - 22px))' : 'min(720px, calc(100vw - 36px))',
-        height: isLoginView ? 'calc(100vh - 2px)' : 'auto',
-        maxHeight: 'calc(100vh - 2px)',
+        width: 720,
+        height: isLoginView ? 960 : 'auto',
+        maxHeight: 'calc(100% - 16px)',
         overflowY: isLoginView ? 'hidden' : 'auto',
         borderRadius: 30,
-        padding: isLoginView ? '20px clamp(18px,4vw,30px) 16px' : '30px clamp(18px,4vw,38px) 26px',
+        padding: isLoginView ? '20px 30px 16px' : '30px 38px 26px',
         display: 'flex',
         flexDirection: 'column',
       }}
