@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
-import type { WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchConfigItemMeta, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchLaunchItemMeta, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule } from './workbench-canvas/types'
+import type { WorkbenchBlockId, WorkbenchComponentMeta, WorkbenchConfigItemMeta, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemMeta, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule } from './workbench-canvas/types'
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const fieldLineHeight = 30
@@ -103,6 +103,7 @@ export interface WorkbenchModInfoMeta {
   uninstallEnvInput: boolean
   uninstallList: string[]
   uninstallItems: WorkbenchUninstallItemMeta[]
+  files: WorkbenchFileMeta[]
 }
 
 const emptyComponentMeta: WorkbenchComponentMeta = {
@@ -283,6 +284,7 @@ const emptyModInfoMeta: WorkbenchModInfoMeta = {
   uninstallEnvInput: false,
   uninstallList: [],
   uninstallItems: [],
+  files: [],
 }
 
 export interface WorkbenchRightSidebarProps {
@@ -295,6 +297,7 @@ export interface WorkbenchRightSidebarProps {
   focusTarget?: { id: string; nonce: number } | null
   meta?: WorkbenchModInfoMeta
   onMetaPatch?: (patch: Partial<WorkbenchModInfoMeta>) => void
+  onOpenFileEditor?: (fileId: string) => void
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -3653,6 +3656,7 @@ export default function WorkbenchRightSidebar({
   focusTarget = null,
   meta = emptyModInfoMeta,
   onMetaPatch,
+  onOpenFileEditor,
 }: WorkbenchRightSidebarProps) {
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
@@ -3962,6 +3966,11 @@ export default function WorkbenchRightSidebar({
   const shouldShowLaunchItemMeta = selectedLaunchItemIndex !== null
   const shouldShowUninstallMeta = selectedBlockId === 'uninstall'
   const shouldShowUninstallItemMeta = selectedUninstallItemIndex !== null
+  const selectedFileId = selectedBlockId?.startsWith('file:')
+    ? selectedBlockId.slice('file:'.length)
+    : null
+  const selectedFile = selectedFileId ? meta.files.find(f => f.id === selectedFileId) ?? null : null
+  const shouldShowFileMeta = selectedFile !== null
   const componentOutlineTarget = (fieldName: string) => (
     selectedComponentIndex === null ? undefined : `component-${selectedComponentIndex}-${fieldName}`
   )
@@ -4410,6 +4419,47 @@ export default function WorkbenchRightSidebar({
             showUninstallItemEnvInput={uninstallItem.envInput === true}
             showUninstallItemEnvOutput={uninstallItem.envOutput === true}
           />
+        ) : shouldShowFileMeta && selectedFile ? (
+          <div className="space-y-4">
+            <FieldLabel>文件块</FieldLabel>
+            <div className="space-y-3">
+              <div>
+                <div className="text-xs opacity-60">文件名</div>
+                <div className="break-all text-sm font-medium">{selectedFile.name}</div>
+              </div>
+              <div>
+                <div className="text-xs opacity-60">路径</div>
+                <div className="break-all font-mono text-xs opacity-80">{selectedFile.path}</div>
+              </div>
+              <div>
+                <div className="text-xs opacity-60">大小</div>
+                <div className="text-sm">{(selectedFile.size / 1024).toFixed(1)} KB</div>
+              </div>
+              <div>
+                <div className="text-xs opacity-60">最后修改</div>
+                <div className="text-sm">{new Date(selectedFile.modifiedAt).toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs opacity-60">语言</div>
+                <div className="text-sm">{selectedFile.language}</div>
+              </div>
+            </div>
+            {selectedFile.binary && (
+              <div className="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                ⚠ 二进制文件，不可在编辑器中预览/编辑。可在编辑器中下载。
+              </div>
+            )}
+            <button
+              type="button"
+              className="w-full rounded-md bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+              onClick={() => onOpenFileEditor?.(selectedFile.id)}
+            >
+              在编辑器中打开
+            </button>
+            <p className="text-xs text-[var(--dfw-text)] opacity-60">
+              双击画布上的文件块也可以打开编辑器。
+            </p>
+          </div>
         ) : shouldShowDeploymentMeta ? (
           <DeploymentMetaEditor
             deployment={deployment}

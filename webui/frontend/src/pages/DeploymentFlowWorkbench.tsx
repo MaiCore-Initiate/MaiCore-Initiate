@@ -4,7 +4,8 @@ import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpandedWidth, type WorkbenchModInfoMeta } from './WorkbenchRightSidebar'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import FileEditorModal from './FileEditorModal'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -242,6 +243,7 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   uninstallEnvInput: false,
   uninstallList: [],
   uninstallItems: [],
+  files: [],
 }
 
 function formatTomlString(value: string) {
@@ -1456,6 +1458,7 @@ export default function DeploymentFlowWorkbench({
   const [selectedBlockId, setSelectedBlockId] = useState<WorkbenchBlockId | null>(null)
   const [rightSidebarFocusTarget, setRightSidebarFocusTarget] = useState<{ id: string; nonce: number } | null>(null)
   const [addNodeAnchor, setAddNodeAnchor] = useState<WorkbenchAddNodeAnchor | null>(null)
+  const [openFileEditorFileId, setOpenFileEditorFileId] = useState<string | null>(null)
   const [meta, setMeta] = useState<WorkbenchMetaState>(defaultWorkbenchMeta)
   const [visibleBlocks, setVisibleBlocks] = useState<WorkbenchVisibleBlocks>(defaultVisibleBlocks)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
@@ -1736,6 +1739,8 @@ export default function DeploymentFlowWorkbench({
         onVisibleBlocksChange={patch => setVisibleBlocks(prev => ({ ...prev, ...patch }))}
         blockMeta={blockMeta}
         onBlockMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
+        onOpenFileEditor={setOpenFileEditorFileId}
+        projectSequence={projectSequence}
       />
       <WorkbenchLeftSidebar
         collapsed={leftSidebarCollapsed}
@@ -1762,6 +1767,7 @@ export default function DeploymentFlowWorkbench({
         selectedName={formatSelectedBlockName(selectedBlockId, meta)}
         selectedBlockId={selectedBlockId}
         focusTarget={rightSidebarFocusTarget}
+        onOpenFileEditor={setOpenFileEditorFileId}
         meta={meta}
         onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
       />
@@ -1772,6 +1778,37 @@ export default function DeploymentFlowWorkbench({
         collapsedLeft={leftSidebarRight + 30}
         onScaleChange={setScaleFromBottomBar}
         onAddNode={openAddNodeFromBottomBar}
+      />
+      <FileEditorModal
+        file={
+          openFileEditorFileId
+            ? meta.files.find(f => f.id === openFileEditorFileId) ?? null
+            : null
+        }
+        projectSequence={projectSequence ?? null}
+        onClose={() => setOpenFileEditorFileId(null)}
+        onRenamed={(newMeta: WorkbenchFileMeta) => {
+          setMeta(prev => ({
+            ...prev,
+            files: prev.files.map(f => (f.id === newMeta.id ? newMeta : f)),
+            fileImportList: Array.from(
+              new Set([...prev.fileImportList.filter(n => n !== prev.files.find(x => x.id === newMeta.id)?.name), newMeta.name]),
+            ),
+          }))
+        }}
+        onDeleted={() => {
+          if (openFileEditorFileId) {
+            const removed = meta.files.find(f => f.id === openFileEditorFileId)
+            setMeta(prev => ({
+              ...prev,
+              files: prev.files.filter(f => f.id !== openFileEditorFileId),
+              fileImportList: removed
+                ? prev.fileImportList.filter(n => n !== removed.name)
+                : prev.fileImportList,
+            }))
+            setOpenFileEditorFileId(null)
+          }
+        }}
       />
     </div>
   )
