@@ -30,6 +30,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.576.0",
     "monaco-editor": "^0.52.2",
+    "pinyin-pro": "^3.28.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

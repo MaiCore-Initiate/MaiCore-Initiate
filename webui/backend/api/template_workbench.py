@@ -14,7 +14,7 @@ router = APIRouter()
 
 CONFIG_FILE_PATH = Path("config") / "MOD.json"
 
-MOD_ID_PATTERN = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
+MOD_ID_PATTERN = re.compile(r"^[A-Za-z0-9_\-\.]{1,128}$")
 COVER_ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 COVER_MAX_BYTES = 5 * 1024 * 1024
 TOML_STRING_ESCAPE = re.compile(r'["\\\b\f\n\r\t]')
@@ -132,7 +132,7 @@ def to_project(sequence: str, data: Dict[str, Any]) -> WorkbenchProject:
 
 def _validate_mod_id(mod_id: str) -> None:
     if not mod_id or not MOD_ID_PATTERN.match(mod_id):
-        raise HTTPException(400, f"非法的 mod_id: {mod_id!r}（仅允许字母/数字/下划线/连字符，1-64 字符）")
+        raise HTTPException(400, f"非法的 mod_id: {mod_id!r}（仅允许字母/数字/下划线/连字符/点，1-128 字符）")
 
 
 def _validate_base_path(base_path: str) -> Path:

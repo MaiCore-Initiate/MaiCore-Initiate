@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { pinyin } from 'pinyin-pro'
 import FileConflictDialog, { type FileConflictResolution } from './FileConflictDialog'
 
 export interface CreatedProjectInfo {
@@ -42,15 +43,37 @@ interface CheckProjectPathResponse {
   reason?: string
 }
 
-function deriveModIdFromName(modName: string): string {
-  const cleaned = modName
-    .normalize('NFKD')
-    .replace(/[^\w\-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase()
-    .slice(0, 64)
-  if (!cleaned) return ''
-  return cleaned.replace(/[^A-Za-z0-9_\-]/g, '').slice(0, 64) || ''
+function camelCaseSegment(text: string): string {
+  if (!text) return ''
+  // 按空白/连字符/下划线/点分段
+  const words = text.split(/[\s\-_.\/\\]+/).map(w => w.trim()).filter(w => w.length > 0)
+  if (words.length === 0) return ''
+  return words
+    .map(word => {
+      // 含中文 → 走 pinyin-pro 转拼音
+      if (/[一-鿿]/.test(word)) {
+        try {
+          const segments = pinyin(word, { toneType: 'none', type: 'array' }) as string[]
+          return segments
+            .filter(s => s && s.length > 0)
+            .map(s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase())
+            .join('')
+        } catch {
+          return ''
+        }
+      }
+      // 纯英文/数字 → 首字母大写其余小写
+      return word.charAt(0).toUpperCase() + word.slice(1)
+    })
+    .filter(s => s.length > 0)
+    .join('')
+}
+
+function deriveModIdFromName(modName: string, githubLogin: string): string {
+  const login = (githubLogin ?? '').trim()
+  if (!login) return ''
+  if (!modName || !modName.trim()) return `${login}.`
+  return `${login}.${camelCaseSegment(modName)}`
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -91,7 +114,6 @@ export default function CreateProjectDialog({
     login: string
     message: string
   }>({ loaded: false, loggedIn: false, bound: false, login: '', message: '' })
-  const [modIdTouched, setModIdTouched] = useState(false)
   const coverInputRef = useRef<HTMLInputElement | null>(null)
 
   // 加载 GitHub 状态
@@ -161,14 +183,12 @@ export default function CreateProjectDialog({
       setSubmitting(false)
       setError(null)
       setConflict(null)
-      setModIdTouched(false)
     }
   }, [open])
 
   useEffect(() => {
-    if (modIdTouched) return
-    setModId(deriveModIdFromName(modName))
-  }, [modName, modIdTouched])
+    setModId(deriveModIdFromName(modName, githubStatus.login))
+  }, [modName, githubStatus.login])
 
   useEffect(() => {
     if (!open) return
@@ -304,7 +324,6 @@ export default function CreateProjectDialog({
       if (resolution === 'rename') {
         finalModId = conflict.suggestedName
         setModId(finalModId)
-        setModIdTouched(true)
       }
       const project = await callCreate(finalModId, resolution)
       onCreated(project)
@@ -412,16 +431,12 @@ export default function CreateProjectDialog({
 
           {/* 项目 ID */}
           <div>
-            <label className="block text-sm font-medium text-[var(--dfw-text)]">项目 ID (mod_id)</label>
+            <label className="block text-sm font-medium text-[var(--dfw-text)]">项目 ID（自动从 GitHub 用户名 + 项目名派生，驼峰命名）</label>
             <input
               value={modId}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                setModId(event.target.value)
-                setModIdTouched(true)
-              }}
-              placeholder="小写字母/数字/下划线/连字符"
-              className="mt-2 w-full rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)] disabled:opacity-50"
-              disabled={!githubReady}
+              readOnly
+              placeholder="格式：GitHubUsername.MODName"
+              className="mt-2 w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 font-mono text-sm text-[var(--dfw-text)] opacity-80"
             />
             {!modIdValid && modId.length > 0 && (
               <p className="mt-1 text-xs text-amber-300">
