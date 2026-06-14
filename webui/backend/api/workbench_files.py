@@ -29,7 +29,7 @@ router = APIRouter()
 ALLOWED_EXTENSIONS = {
     ".py", ".cmd", ".bat", ".ps1", ".sh", ".js", ".ts",
     ".json", ".txt", ".jsonl", ".log", ".java", ".jar", ".toml", ".exe",
-    ".xaml", ".xml",
+    ".yaml", ".xml",
 }
 # 视为二进制的后缀
 BINARY_EXTENSIONS = {".jar", ".exe"}
@@ -93,7 +93,7 @@ def _language_for(name: str) -> str:
         ".json": "json", ".jsonl": "json",
         ".java": "java",
         ".toml": "ini",
-        ".xml": "xml", ".xaml": "xml",
+        ".xml": "xml", ".yaml": "yaml", ".yml": "yaml",
         ".txt": "plaintext", ".log": "plaintext",
         ".jar": "plaintext", ".exe": "plaintext",
     }

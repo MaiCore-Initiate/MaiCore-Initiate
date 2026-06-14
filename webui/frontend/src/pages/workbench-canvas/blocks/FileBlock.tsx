@@ -45,7 +45,8 @@ const LANGUAGE_LABEL: Record<string, string> = {
   plaintext: 'Plain Text',
   java: 'Java',
   ini: 'INI / TOML',
-  xml: 'XML / XAML',
+  xml: 'XML',
+  yaml: 'YAML',
 }
 
 export default function FileBlock({

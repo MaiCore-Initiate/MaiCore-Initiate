@@ -25,7 +25,8 @@ function inferLanguage(name: string): WorkbenchFileLanguage {
     json: 'json', jsonl: 'json',
     java: 'java',
     toml: 'ini',
-    xml: 'xml', xaml: 'xml',
+    xml: 'xml',
+    yaml: 'yaml', yml: 'yaml',
     txt: 'plaintext', log: 'plaintext',
   }
   return (table[ext] ?? 'plaintext') as WorkbenchFileLanguage

@@ -241,7 +241,7 @@ export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | 'con
 export const WORKBENCH_FILE_EXTENSIONS = [
   '.py', '.cmd', '.bat', '.ps1', '.sh', '.js', '.ts',
   '.json', '.txt', '.jsonl', '.log', '.java', '.jar', '.toml', '.exe',
-  '.xaml', '.xml',
+  '.yaml', '.xml',
 ] as const
 
 export type WorkbenchFileExtension = (typeof WORKBENCH_FILE_EXTENSIONS)[number]
@@ -257,6 +257,7 @@ export type WorkbenchFileLanguage =
   | 'java'
   | 'ini'
   | 'xml'
+  | 'yaml'
 
 export interface WorkbenchFileMeta {
   id: string
