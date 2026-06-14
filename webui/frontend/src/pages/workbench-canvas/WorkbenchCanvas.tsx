@@ -1893,7 +1893,7 @@ export default function WorkbenchCanvas({
     void syncProjectFiles()
     timer = window.setInterval(() => {
       void syncProjectFiles()
-    }, 2000)
+    }, 5000)
 
     return () => {
       cancelled = true

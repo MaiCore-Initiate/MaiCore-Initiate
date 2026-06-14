@@ -177,8 +177,7 @@ def _build_meta(file_id: str, name: str, abs_path: Path, project_dir: Path) -> D
     }
 
 
-def _reserved_project_names(sequence: str) -> set[str]:
-    project = _ensure_project(sequence)
+def _reserved_project_names_from_project(project: Dict[str, Any]) -> set[str]:
     names: set[str] = set()
     mod_id = str(project.get("mod_id", "")).strip()
     if mod_id:
@@ -189,11 +188,36 @@ def _reserved_project_names(sequence: str) -> set[str]:
     return names
 
 
+def _file_meta_signature(item: Dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        item.get("id"),
+        item.get("name"),
+        item.get("path"),
+        item.get("size"),
+        item.get("modifiedAt"),
+        item.get("binary"),
+        item.get("language"),
+    )
+
+
 def _sync_project_files(sequence: str) -> List[Dict[str, Any]]:
-    project_dir = _project_dir(sequence)
-    tracked = _read_project_files(sequence)
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
+    project = data[sequence]
+    raw_path = str(project.get("path", "")).strip()
+    if not raw_path:
+        raise HTTPException(400, f"工作台项目 '{sequence}' 未配置 path。")
+    project_dir = Path(raw_path)
+    if not project_dir.is_absolute():
+        project_dir = PROJECT_ROOT / raw_path
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    tracked = project.get("files", [])
+    if not isinstance(tracked, list):
+        tracked = []
     tracked_by_name = {str(item.get("name", "")): item for item in tracked if str(item.get("name", "")).strip()}
-    reserved_names = _reserved_project_names(sequence)
+    reserved_names = _reserved_project_names_from_project(project)
     synced: List[Dict[str, Any]] = []
 
     for entry in sorted(project_dir.iterdir(), key=lambda item: item.name.lower()):
@@ -211,7 +235,11 @@ def _sync_project_files(sequence: str) -> List[Dict[str, Any]]:
         file_id = str(tracked_item.get("id")) if tracked_item and tracked_item.get("id") else f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
         synced.append(_build_meta(file_id, name, entry, project_dir))
 
-    _write_project_files(sequence, synced)
+    tracked_signature = [_file_meta_signature(item) for item in tracked if isinstance(item, dict)]
+    synced_signature = [_file_meta_signature(item) for item in synced]
+    if tracked_signature != synced_signature:
+        project["files"] = synced
+        save_mod_index(data)
     return synced
 
 
