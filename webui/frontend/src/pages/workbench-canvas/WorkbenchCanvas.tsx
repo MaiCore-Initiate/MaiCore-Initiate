@@ -2290,8 +2290,10 @@ export default function WorkbenchCanvas({
 
       {fileImportError && (
         <div
+          data-workbench-ui
           className="absolute right-4 top-4 z-30 max-w-sm rounded-lg border border-red-400/40 bg-red-500/15 px-4 py-2 text-sm text-red-100 shadow-lg"
           role="alert"
+          onPointerDown={event => event.stopPropagation()}
         >
           {fileImportError}
           <button
