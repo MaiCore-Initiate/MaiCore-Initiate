@@ -239,7 +239,7 @@ export type WorkbenchFileBlockId = `file:${string}`
 export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | 'config' | 'launch' | 'uninstall' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId | WorkbenchConfigItemBlockId | WorkbenchLaunchItemBlockId | WorkbenchUninstallItemBlockId | WorkbenchFileBlockId
 
 export const WORKBENCH_FILE_EXTENSIONS = [
-  '.py', '.cmd', '.bat', '.ps1', '.sh', '.js', '.ts',
+  '.py', '.cmd', '.bat', '.ps1', '.sh', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
   '.json', '.txt', '.jsonl', '.log', '.java', '.jar', '.toml', '.exe',
   '.yaml', '.xml',
 ] as const

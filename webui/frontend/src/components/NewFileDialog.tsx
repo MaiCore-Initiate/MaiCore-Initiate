@@ -20,7 +20,7 @@ function inferLanguage(name: string): WorkbenchFileLanguage {
     py: 'python',
     ps1: 'powershell', cmd: 'powershell', bat: 'powershell',
     sh: 'shell', bash: 'shell',
-    js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+    js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
     ts: 'typescript', tsx: 'typescript',
     json: 'json', jsonl: 'json',
     java: 'java',
