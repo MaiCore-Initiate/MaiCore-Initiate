@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react'
 import CreateProjectDialog, { type CreatedProjectInfo } from '../components/CreateProjectDialog'
+import EditProjectDialog, { type EditableProject } from '../components/EditProjectDialog'
+import DeleteConfirmDialog from '../components/DeleteConfirmDialog'
+import ProjectContextMenu, { type ProjectContextAction } from '../components/ProjectContextMenu'
 import {
   CirclePlus,
   Clock,
   File,
+  Folder,
   Globe,
   Plus,
   Search,
@@ -24,6 +28,10 @@ export interface TemplateWorkbenchItem {
   childCount?: number
   templatePath?: string
   sequence?: string
+  cover?: string | null
+  forceFolder?: boolean | null
+  displayMode?: 'folder' | 'card'
+  fileCount?: number
 }
 
 interface WorkbenchProjectIndex {
@@ -34,6 +42,17 @@ interface WorkbenchProjectIndex {
   description?: string
   author?: string
   cover?: string | null
+  files?: Array<{
+    id: string
+    name: string
+    path: string
+    size: number
+    modifiedAt: string
+    binary: boolean
+    language: string
+  }>
+  force_folder?: boolean | null
+  display_mode?: 'folder' | 'card'
 }
 
 export interface TemplateWorkbenchSlots {
@@ -94,19 +113,41 @@ function FileCard({
   left,
   top,
   onOpen,
+  onContextMenu,
 }: {
   item: TemplateWorkbenchItem
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
+  onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
 }) {
   return (
     <button
       type="button"
       onClick={() => onOpen?.(item)}
-      className="absolute rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
+      onContextMenu={event => {
+        if (!onContextMenu) return
+        event.preventDefault()
+        onContextMenu(event, item)
+      }}
+      className="absolute overflow-hidden rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
       style={{ left, top, width: 272, height: 206.72, borderColor: 'var(--twb-card-border)', color: 'var(--twb-text)' }}
     >
+      {item.cover ? (
+        <div
+          className="absolute inset-x-[-1px] top-[-1px] rounded-t-[10px] bg-cover bg-center"
+          style={{
+            height: 153,
+            backgroundImage: `url("${item.cover}")`,
+            backgroundColor: 'var(--twb-bg)',
+          }}
+        />
+      ) : (
+        <div
+          className="absolute inset-x-[-1px] top-[-1px] rounded-t-[10px]"
+          style={{ height: 153, background: 'var(--twb-bg)' }}
+        />
+      )}
       <div
         className="absolute inset-x-[-1px] bottom-[-1px] rounded-b-[10px] border"
         style={{ height: 53.72, borderColor: 'var(--twb-card-border)', background: 'var(--twb-bg)' }}
@@ -125,16 +166,23 @@ function FolderCard({
   left,
   top,
   onOpen,
+  onContextMenu,
 }: {
   item: TemplateWorkbenchItem
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
+  onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
 }) {
   return (
     <button
       type="button"
       onClick={() => onOpen?.(item)}
+      onContextMenu={event => {
+        if (!onContextMenu) return
+        event.preventDefault()
+        onContextMenu(event, item)
+      }}
       className="absolute text-left transition-transform hover:-translate-y-[1px]"
       style={{ left, top, width: 273, height: 207, color: 'var(--twb-text)' }}
     >
@@ -162,19 +210,99 @@ function FolderCard({
   )
 }
 
-function ProjectCard({
+function ProjectFolderCard({
   item,
   left,
   top,
   onOpen,
+  onContextMenu,
 }: {
   item: TemplateWorkbenchItem
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
+  onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
 }) {
-  if (item.type === 'folder') return <FolderCard item={item} left={left} top={top} onOpen={onOpen} />
-  return <FileCard item={item} left={left} top={top} onOpen={onOpen} />
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen?.(item)}
+      onContextMenu={event => {
+        if (!onContextMenu) return
+        event.preventDefault()
+        onContextMenu(event, item)
+      }}
+      className="absolute text-left transition-transform hover:-translate-y-[1px]"
+      style={{ left, top, width: 273, height: 207, color: 'var(--twb-text)' }}
+    >
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 273 207" fill="none" aria-hidden>
+        <path
+          d="M12 1H88C90.4 1 92.7 1.8 94.7 3.2L134 31.5C136 32.9 138.3 33.7 140.7 33.7H261C267.1 33.7 272 38.6 272 44.7V195C272 201.1 267.1 206 261 206H12C5.9 206 1 201.1 1 195V12C1 5.9 5.9 1 12 1Z"
+          fill="var(--twb-folder-fill)"
+          stroke="var(--twb-folder-border)"
+          strokeWidth="4"
+          strokeLinejoin="round"
+        />
+        <path d="M2 154H271V195C271 200.5 266.5 205 261 205H12C6.5 205 2 200.5 2 195V154Z" fill="var(--twb-folder-band)" />
+        <path d="M2 154H271" stroke="var(--twb-card-border)" />
+      </svg>
+      {/* 封面：嵌入到文件夹中部区域 */}
+      <div
+        className="absolute overflow-hidden rounded-md"
+        style={{
+          left: 20,
+          right: 20,
+          top: 48,
+          height: 96,
+          background: item.cover ? 'transparent' : 'var(--twb-bg)',
+          border: '1px solid var(--twb-card-border)',
+        }}
+      >
+        {item.cover ? (
+          <img
+            src={item.cover}
+            alt="项目封面"
+            className="h-full w-full object-cover"
+            onError={event => {
+              // 封面丢失时降级为 Folder 图标
+              event.currentTarget.style.display = 'none'
+            }}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <Folder size={40} strokeWidth={1.2} className="opacity-30" />
+          </div>
+        )}
+      </div>
+      <div className="absolute" style={{ left: 7, top: 162 }}>
+        <div className="leading-none" style={{ fontFamily: font, fontSize: 18, fontWeight: 700 }}>{item.name}</div>
+        <div className="mt-[7px] leading-none" style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 15, fontWeight: 300 }}>{item.updatedAt}</div>
+      </div>
+      {typeof item.fileCount === 'number' && item.fileCount > 0 && (
+        <div className="absolute leading-none" style={{ right: 20, top: 170, fontFamily: font, fontSize: 20, fontWeight: 500 }}>
+          +{item.fileCount}
+        </div>
+      )}
+    </button>
+  )
+}
+
+function ProjectCard({
+  item,
+  left,
+  top,
+  onOpen,
+  onContextMenu,
+}: {
+  item: TemplateWorkbenchItem
+  left: number
+  top: number
+  onOpen?: (item: TemplateWorkbenchItem) => void
+  onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
+}) {
+  if (item.type === 'folder') return <FolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
+  if (item.displayMode === 'folder') return <ProjectFolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
+  return <FileCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
 }
 
 function ListStarGlyph() {
@@ -448,27 +576,52 @@ export default function TemplateWorkbench({
   const [layoutMode, setLayoutMode] = useState<TemplateWorkbenchLayout>('card')
   const [registeredProjects, setRegisteredProjects] = useState<WorkbenchProjectIndex[]>([])
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
+  const [contextMenu, setContextMenu] = useState<
+    | { x: number; y: number; project: WorkbenchProjectIndex }
+    | null
+  >(null)
+  const [editTarget, setEditTarget] = useState<WorkbenchProjectIndex | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<WorkbenchProjectIndex | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const reloadProjects = useCallback(async () => {
+    try {
+      const res = await fetch('/api/template-workbench/projects', { credentials: 'include' })
+      if (!res.ok) return
+      const projects = await res.json() as WorkbenchProjectIndex[]
+      setRegisteredProjects(projects)
+    } catch (err) {
+      console.error(err)
+    }
+  }, [])
+
   const projectItems = useMemo(() => {
     if (items) return items
     if (!registeredProjects.length) return defaultItems
 
-    return [
-      ...registeredProjects.map(project => ({
+    return registeredProjects.map(project => {
+      const fileCount = project.files?.length ?? 0
+      const coverUrl = project.cover
+        ? `/api/template-workbench/projects/${encodeURIComponent(project.sequence)}/cover`
+        : null
+      return {
         id: project.sequence,
         name: project.mod_name || '未命名',
         type: 'deployment-flow' as const,
         updatedAt: '已保存',
         templatePath: project.path,
         sequence: project.sequence,
-      })),
-      defaultItems.find(item => item.type === 'folder') ?? defaultItems[defaultItems.length - 1],
-    ]
+        cover: coverUrl,
+        forceFolder: project.force_folder ?? null,
+        displayMode: project.display_mode ?? (fileCount > 0 || project.cover ? 'folder' : 'card'),
+        fileCount,
+      }
+    })
   }, [items, registeredProjects])
 
   useEffect(() => {
     let cancelled = false
-
-    const loadProjects = async () => {
+    void (async () => {
       try {
         const response = await fetch('/api/template-workbench/projects', { credentials: 'include' })
         if (!response.ok) return
@@ -477,13 +630,11 @@ export default function TemplateWorkbench({
       } catch (error) {
         console.error(error)
       }
-    }
-
-    void loadProjects()
+    })()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadProjects])
 
   const selectSection = (section: TemplateWorkbenchSection) => {
     setActiveSection(section)
@@ -534,6 +685,86 @@ export default function TemplateWorkbench({
       onOpenWorkbenchCanvas?.(project.sequence)
     } catch (error) {
       console.error(error)
+    }
+  }
+
+  const handleContextMenu = (event: React.MouseEvent, item: TemplateWorkbenchItem) => {
+    if (!item.sequence) return
+    const project = registeredProjects.find(p => p.sequence === item.sequence)
+    if (!project) return
+    event.preventDefault()
+    event.stopPropagation()
+    setContextMenu({ x: event.clientX, y: event.clientY, project })
+  }
+
+  const handleContextAction = async (action: ProjectContextAction) => {
+    if (!contextMenu) return
+    const project = contextMenu.project
+    setContextMenu(null)
+    if (action === 'delete') {
+      setDeleteTarget(project)
+      return
+    }
+    if (action === 'edit') {
+      setEditTarget(project)
+      return
+    }
+    if (action === 'auto' || action === 'folder' || action === 'card') {
+      try {
+        const res = await fetch(
+          `/api/template-workbench/projects/${encodeURIComponent(project.sequence)}/display-mode`,
+          {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: action }),
+          },
+        )
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '')
+          throw new Error(`切换失败 (${res.status}): ${txt}`)
+        }
+        const updated = await res.json() as WorkbenchProjectIndex
+        setRegisteredProjects(prev => prev.map(p => p.sequence === updated.sequence ? updated : p))
+      } catch (err) {
+        setActionError((err as Error).message ?? String(err))
+      }
+    }
+  }
+
+  const handleEditedProject = (updated: EditableProject) => {
+    setRegisteredProjects(prev => prev.map(p => p.sequence === updated.sequence
+      ? {
+          ...p,
+          mod_name: updated.mod_name,
+          description: updated.description,
+          cover: updated.cover,
+        }
+      : p,
+    ))
+    setEditTarget(null)
+  }
+
+  const handleDeleteProject = async () => {
+    if (!deleteTarget) return
+    const target = deleteTarget
+    setDeleteTarget(null)
+    try {
+      const res = await fetch(
+        `/api/template-workbench/projects/${encodeURIComponent(target.sequence)}`,
+        { method: 'DELETE', credentials: 'include' },
+      )
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '')
+        throw new Error(`删除失败 (${res.status}): ${txt}`)
+      }
+      const data = await res.json() as { disk_cleaned?: boolean; disk_error?: string | null }
+      if (!data.disk_cleaned) {
+        setActionError(`项目已从列表移除，但部分文件无法删除：${data.disk_error ?? '未知原因'}。请手动清理磁盘。`)
+      }
+      setRegisteredProjects(prev => prev.filter(p => p.sequence !== target.sequence))
+    } catch (err) {
+      setActionError((err as Error).message ?? String(err))
     }
   }
 
@@ -677,6 +908,7 @@ export default function TemplateWorkbench({
             left={cardPositions[index].left}
             top={cardPositions[index].top}
             onOpen={openItem}
+            onContextMenu={handleContextMenu}
           />
         ))}
 
@@ -692,6 +924,63 @@ export default function TemplateWorkbench({
         onClose={() => setCreateProjectDialogOpen(false)}
         onCreated={handleCreatedProject}
       />
+
+      {contextMenu && (
+        <ProjectContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          project={{
+            sequence: contextMenu.project.sequence,
+            mod_name: contextMenu.project.mod_name,
+            force_folder: contextMenu.project.force_folder ?? null,
+          }}
+          onClose={() => setContextMenu(null)}
+          onAction={handleContextAction}
+        />
+      )}
+
+      <EditProjectDialog
+        open={editTarget !== null}
+        project={
+          editTarget
+            ? {
+                sequence: editTarget.sequence,
+                mod_name: editTarget.mod_name,
+                mod_id: editTarget.mod_id ?? '',
+                description: editTarget.description ?? '',
+                author: editTarget.author ?? '',
+                path: editTarget.path,
+                cover: editTarget.cover ?? null,
+              }
+            : null
+        }
+        onClose={() => setEditTarget(null)}
+        onSaved={handleEditedProject}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteTarget !== null}
+        projectName={deleteTarget?.mod_name ?? ''}
+        projectPath={deleteTarget?.path ?? ''}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteProject}
+      />
+
+      {actionError && (
+        <div
+          className="absolute right-4 top-4 z-[40] max-w-sm rounded-lg border border-red-400/40 bg-red-500/15 px-4 py-2 text-sm text-red-100 shadow-lg"
+          role="alert"
+        >
+          {actionError}
+          <button
+            type="button"
+            className="ml-3 underline opacity-80 hover:opacity-100"
+            onClick={() => setActionError(null)}
+          >
+            关闭
+          </button>
+        </div>
+      )}
     </div>
   )
 }

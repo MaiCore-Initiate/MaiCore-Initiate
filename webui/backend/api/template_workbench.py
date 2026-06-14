@@ -38,6 +38,8 @@ class WorkbenchProject(BaseModel):
     author: str = ""
     cover: Optional[str] = None
     files: List[Dict[str, Any]] = []
+    force_folder: Optional[bool] = None
+    display_mode: str = "card"
 
 
 class CreateWorkbenchProjectPayload(BaseModel):
@@ -49,6 +51,17 @@ class CreateWorkbenchProjectPayload(BaseModel):
     cover_data_url: Optional[str] = None
     conflict_resolution: Optional[str] = None  # "rename" | "overwrite"
     sequence: Optional[str] = None
+
+
+class UpdateProjectPayload(BaseModel):
+    mod_name: Optional[str] = None
+    description: Optional[str] = None
+    cover_data_url: Optional[str] = None
+    cover_clear: Optional[bool] = None
+
+
+class SetDisplayModePayload(BaseModel):
+    mode: str  # "auto" | "folder" | "card"
 
 
 class CheckProjectPathPayload(BaseModel):
@@ -95,6 +108,14 @@ def generate_sequence(existing: Dict[str, Dict[str, Any]]) -> str:
 
 def to_project(sequence: str, data: Dict[str, Any]) -> WorkbenchProject:
     files = data.get("files", [])
+    cover = data.get("cover")
+    force_folder = data.get("force_folder")
+    if force_folder is True:
+        display_mode = "folder"
+    elif force_folder is False:
+        display_mode = "card"
+    else:
+        display_mode = "folder" if (len(files) > 0 or cover) else "card"
     return WorkbenchProject(
         sequence=sequence,
         mod_name=str(data.get("mod_name", "")),
@@ -102,8 +123,10 @@ def to_project(sequence: str, data: Dict[str, Any]) -> WorkbenchProject:
         mod_id=str(data.get("mod_id", "")),
         description=str(data.get("description", "")),
         author=str(data.get("author", "")),
-        cover=data.get("cover"),
+        cover=cover,
         files=files if isinstance(files, list) else [],
+        force_folder=force_folder,
+        display_mode=display_mode,
     )
 
 
@@ -375,3 +398,157 @@ def create_project(payload: CreateWorkbenchProjectPayload, request: Request):
     }
     save_mod_index(data)
     return to_project(sequence, data[sequence])
+
+
+# ---------------- Project Management Endpoints (cover, update, display-mode, delete) ----------------
+
+_COVER_MIME_BY_EXT = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def _resolve_project_path(sequence: str) -> Path:
+    """读 MOD.json 拿到 project 的绝对路径（不存在则抛 404）。"""
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
+    raw_path = str(data[sequence].get("path", "")).strip()
+    if not raw_path:
+        raise HTTPException(400, f"工作台项目 '{sequence}' 未配置 path。")
+    p = Path(raw_path)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / raw_path
+    return p
+
+
+def _delete_old_cover(project_dir: Path, cover_name: str) -> None:
+    if not cover_name:
+        return
+    try:
+        target = (project_dir / cover_name).resolve()
+        if str(target).startswith(str(project_dir.resolve())) and target.exists():
+            target.unlink()
+    except OSError:
+        pass
+
+
+@router.get("/projects/{sequence}/cover", summary="获取项目封面图片")
+def get_project_cover(sequence: str):
+    project = _ensure_project(sequence)
+    cover_name = (project.get("cover") or "").strip()
+    if not cover_name:
+        raise HTTPException(404, "项目无封面")
+    project_dir = _resolve_project_path(sequence)
+    target = (project_dir / cover_name).resolve()
+    if not str(target).startswith(str(project_dir.resolve())):
+        raise HTTPException(400, "封面路径非法")
+    if not target.exists():
+        raise HTTPException(404, f"封面文件 '{cover_name}' 不存在")
+    ext = target.suffix.lower()
+    media = _COVER_MIME_BY_EXT.get(ext, "application/octet-stream")
+    return FileResponse(str(target), media_type=media)
+
+
+@router.patch("/projects/{sequence}", summary="编辑项目信息", response_model=WorkbenchProject)
+def update_project(sequence: str, payload: UpdateProjectPayload):
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
+    item = data[sequence]
+    project_dir = _resolve_project_path(sequence)
+    old_cover = item.get("cover")
+    new_cover = old_cover
+
+    if payload.mod_name is not None:
+        name = payload.mod_name.strip()
+        if not name:
+            raise HTTPException(400, "项目名称不能为空")
+        if len(name) > 128:
+            raise HTTPException(400, "项目名称长度不能超过 128 字符")
+        item["mod_name"] = name
+
+    if payload.description is not None:
+        if len(payload.description) > 2000:
+            raise HTTPException(400, "项目简介长度不能超过 2000 字符")
+        item["description"] = payload.description
+
+    if payload.cover_clear is True:
+        _delete_old_cover(project_dir, old_cover)
+        new_cover = None
+    elif payload.cover_data_url is not None and payload.cover_data_url != "":
+        # 替换封面
+        ext, raw = _parse_cover_data_url(payload.cover_data_url)
+        _delete_old_cover(project_dir, old_cover)
+        new_cover = f"cover{ext}"
+        try:
+            (project_dir / new_cover).write_bytes(raw)
+        except OSError as exc:
+            raise HTTPException(500, f"写入封面失败：{exc}") from exc
+
+    item["cover"] = new_cover
+
+    # 同步 toml
+    mod_id = str(item.get("mod_id", ""))
+    if mod_id:
+        toml_path = project_dir / f"{mod_id}.toml"
+        try:
+            toml_path.write_text(
+                _render_mod_info_toml(
+                    mod_id,
+                    str(item.get("mod_name", "")),
+                    str(item.get("description", "")),
+                    str(item.get("author", "")),
+                    new_cover,
+                ),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            raise HTTPException(500, f"重写模板失败：{exc}") from exc
+
+    save_mod_index(data)
+    return to_project(sequence, data[sequence])
+
+
+@router.patch("/projects/{sequence}/display-mode", summary="切换文件夹/卡片显示", response_model=WorkbenchProject)
+def set_display_mode(sequence: str, payload: SetDisplayModePayload):
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
+    mode_map = {"auto": None, "folder": True, "card": False}
+    if payload.mode not in mode_map:
+        raise HTTPException(400, f"非法 mode: {payload.mode}")
+    data[sequence]["force_folder"] = mode_map[payload.mode]
+    save_mod_index(data)
+    return to_project(sequence, data[sequence])
+
+
+@router.delete("/projects/{sequence}", summary="删除项目")
+def delete_project(sequence: str):
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
+    project_path = str(data[sequence].get("path", "")).strip()
+    disk_cleaned = True
+    disk_error: Optional[str] = None
+    if project_path:
+        p = Path(project_path)
+        if not p.is_absolute():
+            p = PROJECT_ROOT / project_path
+        if p.exists():
+            try:
+                shutil.rmtree(p)
+            except OSError as exc:
+                disk_cleaned = False
+                disk_error = str(exc)
+    del data[sequence]
+    save_mod_index(data)
+    return {
+        "success": True,
+        "sequence": sequence,
+        "disk_cleaned": disk_cleaned,
+        "disk_error": disk_error,
+    }
