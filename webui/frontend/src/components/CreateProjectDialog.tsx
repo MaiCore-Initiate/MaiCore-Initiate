@@ -32,7 +32,7 @@ interface AccountUserSummary {
 interface AccountStateResponse {
   success?: boolean
   logged_in?: boolean
-  currentUser?: AccountUserSummary
+  current_user?: AccountUserSummary
   users?: AccountUserSummary[]
 }
 
@@ -103,7 +103,7 @@ export default function CreateProjectDialog({
       .then(res => res.json() as Promise<AccountStateResponse>)
       .then(data => {
         if (cancelled) return
-        const user = data?.currentUser
+        const user = data?.current_user
         if (!data?.logged_in || !user) {
           setGithubStatus({
             loaded: true,
