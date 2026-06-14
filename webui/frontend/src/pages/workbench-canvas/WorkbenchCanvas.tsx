@@ -1721,7 +1721,7 @@ export default function WorkbenchCanvas({
       const nextIndex = meta.files.length
       setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
       onBlockMetaPatch?.({
-        files: [...meta.files, newMeta],
+        files: [...meta.files.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
       })
     } catch (err) {
       setFileImportError(`上传异常: ${(err as Error).message ?? String(err)}`)
@@ -1827,13 +1827,10 @@ export default function WorkbenchCanvas({
       const nextIndex = meta.files.length
       setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
       onBlockMetaPatch?.({
-        files: [...meta.files, newMeta],
+        files: [...meta.files.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
       })
       onSelectedBlockChange?.(createFileBlockId(newMeta.id))
-      setNewFileDialogOpen(false)
-      setNewFileConflict(null)
-      setNewFileSubmitting(false)
-      setNewFileError(null)
+      closeNewFileDialog()
     } catch (err) {
       setNewFileError(`新建异常: ${(err as Error).message ?? String(err)}`)
       setNewFileSubmitting(false)

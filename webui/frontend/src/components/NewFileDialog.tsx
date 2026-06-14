@@ -132,10 +132,12 @@ export default function NewFileDialog({
 
   const dialog = (
     <div
+      data-workbench-ui
       className="fixed inset-0 z-[1000] flex items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="new-file-title"
+      onPointerDown={event => event.stopPropagation()}
     >
       <div
         className="absolute inset-0 bg-black/30 backdrop-blur-[6px]"
@@ -226,10 +228,12 @@ export default function NewFileDialog({
       {createPortal(dialog, document.body)}
       {conflictState && createPortal(
         <div
+          data-workbench-ui
           className="fixed inset-0 z-[1100] flex items-center justify-center"
           role="dialog"
           aria-modal="true"
           aria-labelledby="new-file-conflict-title"
+          onPointerDown={event => event.stopPropagation()}
         >
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-[6px]"
