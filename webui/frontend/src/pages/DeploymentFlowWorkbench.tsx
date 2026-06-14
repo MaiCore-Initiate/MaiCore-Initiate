@@ -1479,40 +1479,7 @@ export default function DeploymentFlowWorkbench({
     title: projectInfo?.mod_name || '未命名',
   }], [projectInfo?.mod_name])
   const effectiveOutline = useMemo(() => outline ?? createOutline(meta, visibleBlocks), [outline, meta, visibleBlocks])
-  const blockMeta = useMemo(() => ({
-    author: meta.author,
-    tags: meta.tags,
-    description: meta.description,
-    modId: meta.modId,
-    modName: meta.modName,
-    version: meta.version,
-    minVersion: meta.minVersion,
-    maxVersion: meta.maxVersion,
-    fileImport: meta.fileImport,
-    fileImportList: meta.fileImportList,
-    runtime: meta.runtime,
-    denoNet: meta.denoNet,
-    denoRead: meta.denoRead,
-    denoWrite: meta.denoWrite,
-    denoEnv: meta.denoEnv,
-    denoRun: meta.denoRun,
-    denoHrtime: meta.denoHrtime,
-    denoFfi: meta.denoFfi,
-    denoSys: meta.denoSys,
-    denoAll: meta.denoAll,
-    denoCustomPermissions: meta.denoCustomPermissions,
-    denoPermissionList: meta.denoPermissionList,
-    platforms: meta.platforms,
-    schemaVersion: meta.schemaVersion,
-    componentsEnvOutput: meta.componentsEnvOutput,
-    componentsEnvInput: meta.componentsEnvInput,
-    componentsList: meta.componentsList,
-    components: meta.components,
-    deployEnvOutput: meta.deployEnvOutput,
-    deployEnvInput: meta.deployEnvInput,
-    deployList: meta.deployList,
-    deployments: meta.deployments,
-  }), [meta])
+  const blockMeta = meta
 
   const cancelViewportAnimation = () => {
     if (viewportAnimationFrameRef.current === null) return
