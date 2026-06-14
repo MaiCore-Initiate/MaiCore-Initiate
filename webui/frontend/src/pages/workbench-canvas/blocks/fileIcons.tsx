@@ -313,6 +313,25 @@ function JavaIcon({ size = 48, className }: FileIconProps) {
   )
 }
 
+function JarIcon({ size = 48, className }: FileIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden
+    >
+      <path
+        fill="#EF4437"
+        fillRule="evenodd"
+        d="M20,15 h60 a8,8 0 0 1 8,8 v54 a8,8 0 0 1 -8,8 h-60 a8,8 0 0 1 -8,-8 v-54 a8,8 0 0 1 8,-8 Z M30,35 h35 v20 c0,15 -7,15 -17.5,15 S30,70 30,55 v-20 Z M65,40 h8 c5,0 5,3 5,5 v8 c0,2 0,5 -5,5 h-8 v-4 h8 v-10 h-8 v-4 Z"
+      />
+    </svg>
+  )
+}
+
 function GenericFileIcon({ size = 48, className }: FileIconProps) {
   return (
     <svg
@@ -355,6 +374,7 @@ const ICON_BY_EXT: Record<string, FileIconComponent> = {
   txt: TxtIcon,
   log: TxtIcon,
   java: JavaIcon,
+  jar: JarIcon,
 }
 
 export function getFileIconByExt(extension: string): FileIconComponent {
