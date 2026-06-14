@@ -6,13 +6,13 @@ import ComponentsBlock, { componentsBlockInputOffset, componentsBlockMinSize, re
 import ConfigBlock, { configBlockInputOffset, configBlockMinSize, resolveConfigBlockItemOutputOffset, resolveConfigBlockOutputOffset } from './blocks/ConfigBlock'
 import ConfigItemBlock, { configItemBlockInputOffset, configItemBlockMinSize, resolveConfigItemBlockOutputOffset } from './blocks/ConfigItemBlock'
 import DeployBlock, { deployBlockInputOffset, deployBlockMinSize, resolveDeployBlockConfigOutputOffset, resolveDeployBlockOutputOffset } from './blocks/DeployBlock'
-import FileBlock, { fileBlockMinSize } from './blocks/FileBlock'
+import FileBlock, { fileBlockMinSize, resolveFileBlockOutputOffset } from './blocks/FileBlock'
 import LaunchBlock, { launchBlockInputOffset, launchBlockMinSize, resolveLaunchBlockItemOutputOffset, resolveLaunchBlockOutputOffset } from './blocks/LaunchBlock'
 import LaunchItemBlock, { launchItemBlockInputOffset, launchItemBlockMinSize, resolveLaunchItemBlockOutputOffset } from './blocks/LaunchItemBlock'
 import UninstallBlock, { uninstallBlockInputOffset, uninstallBlockMinSize, resolveUninstallBlockItemOutputOffset } from './blocks/UninstallBlock'
 import UninstallItemBlock, { uninstallItemBlockInputOffset, uninstallItemBlockMinSize, resolveUninstallItemBlockOutputOffset } from './blocks/UninstallItemBlock'
 import DeploymentBlock, { deploymentBlockInputOffset, deploymentBlockMinSize, resolveDeploymentBlockOutputOffset } from './blocks/DeploymentBlock'
-import InitBlock from './blocks/InitBlock'
+import InitBlock, { resolveInitBlockFileInputOffset } from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
 import FileConflictDialog, { type FileConflictResolution } from '../../components/FileConflictDialog'
 import NewFileDialog from '../../components/NewFileDialog'
@@ -316,6 +316,25 @@ function remapIndexedBlockId(blockId: WorkbenchBlockId, prefix: 'component' | 'd
   if (index === null) return blockId
   if (index === removedIndex) return null
   return `${prefix}:${index > removedIndex ? index - 1 : index}` as WorkbenchBlockId
+}
+
+function areFilesEqual(left: WorkbenchFileMeta[], right: WorkbenchFileMeta[]) {
+  if (left.length !== right.length) return false
+  return left.every((item, index) => {
+    const other = right[index]
+    return other
+      && item.id === other.id
+      && item.name === other.name
+      && item.path === other.path
+      && item.size === other.size
+      && item.modifiedAt === other.modifiedAt
+      && item.binary === other.binary
+      && item.language === other.language
+  })
+}
+
+function isFileConnectionSource(blockId: WorkbenchBlockId) {
+  return parseFileBlockId(blockId) !== null
 }
 
 
@@ -671,6 +690,11 @@ export default function WorkbenchCanvas({
     x: initBlockPosition.x + initBlockInputOffset.x,
     y: initBlockPosition.y + initBlockInputOffset.y,
   }
+  const initBlockFileInputOffset = resolveInitBlockFileInputOffset(initBlockSize)
+  const initBlockFileInput = {
+    x: initBlockPosition.x + initBlockFileInputOffset.x,
+    y: initBlockPosition.y + initBlockFileInputOffset.y,
+  }
   const initBlockOutputOffset = resolveInitBlockOutputOffset(initBlockSize)
   const initBlockOutput = {
     x: initBlockPosition.x + initBlockOutputOffset.x,
@@ -741,6 +765,17 @@ export default function WorkbenchCanvas({
     x: uninstallBlockPosition.x + uninstallItemOutputOffset.x,
     y: uninstallBlockPosition.y + uninstallItemOutputOffset.y,
   }
+  const fileBlocks = meta.files.map((file, index) => {
+    const blockId = createFileBlockId(file.id)
+    const position = fileBlockPositions[file.id] ?? defaultFilePosition(index)
+    const size = fileBlockSizes[file.id] ?? fileBlockMinSize
+    const outputOffset = resolveFileBlockOutputOffset(size)
+    const output = {
+      x: position.x + outputOffset.x,
+      y: position.y + outputOffset.y,
+    }
+    return { file, index, blockId, position, size, output } as const
+  })
   const componentBlocks = Array.from({ length: blockVisibility.componentCount }, (_, index) => {
     const position = componentBlockPositions[index] ?? createDefaultComponentPosition(index)
     const size = componentBlockSizes[index] ?? componentBlockMinSize
@@ -813,7 +848,7 @@ export default function WorkbenchCanvas({
   })
 
   const isBlockVisible = (blockId: WorkbenchBlockId) => {
-    if (blockId === 'start' || blockId === 'init') return true
+    if (blockId === 'start' || blockId === 'init' || blockId === 'init-file') return true
     if (blockId === 'components') return blockVisibility.components
     if (blockId === 'deploy') return blockVisibility.deploy
     if (blockId === 'config') return blockVisibility.config
@@ -828,13 +863,16 @@ export default function WorkbenchCanvas({
     const launchItemIndex = parseLaunchItemBlockIndex(blockId)
     if (launchItemIndex !== null) return launchItemIndex < blockVisibility.launchItemCount
     const uninstallItemIndex = parseUninstallItemBlockIndex(blockId)
-    return uninstallItemIndex !== null && uninstallItemIndex < blockVisibility.uninstallItemCount
+    if (uninstallItemIndex !== null) return uninstallItemIndex < blockVisibility.uninstallItemCount
+    const fileId = parseFileBlockId(blockId)
+    return fileId !== null && meta.files.some(file => file.id === fileId)
   }
 
   const resolveBlockInputPoint = (blockId: WorkbenchBlockId) => {
     if (!isBlockVisible(blockId)) return null
     if (blockId === 'start') return startEndpointOutput
     if (blockId === 'init') return initBlockInput
+    if (blockId === 'init-file') return initBlockFileInput
     if (blockId === 'components') return componentsBlockInput
     if (blockId === 'deploy') return deployBlockInput
     if (blockId === 'config') return configBlockInput
@@ -871,6 +909,8 @@ export default function WorkbenchCanvas({
     if (launchItemIndex !== null) return launchItemBlocks[launchItemIndex]?.output ?? null
     const uninstallItemIndex = parseUninstallItemBlockIndex(blockId)
     if (uninstallItemIndex !== null) return uninstallItemBlocks[uninstallItemIndex]?.output ?? null
+    const fileId = parseFileBlockId(blockId)
+    if (fileId !== null) return fileBlocks.find(block => block.file.id === fileId)?.output ?? null
     return null
   }
 
@@ -891,10 +931,28 @@ export default function WorkbenchCanvas({
       case 'config-item-output':
       case 'launch-item-output':
       case 'uninstall-item-output':
+      case 'file-output':
         return resolveBlockOutputPoint(blockId)
       default:
         return resolveBlockOutputPoint(blockId)
     }
+  }
+
+  const addImportedFileName = (name: string) => {
+    const nextList = Array.from(new Set([...meta.fileImportList, name]))
+    onBlockMetaPatch?.({ fileImportList: nextList, fileImport: true })
+  }
+
+  const removeImportedFileName = (name: string) => {
+    onBlockMetaPatch?.({ fileImportList: meta.fileImportList.filter(item => item !== name) })
+  }
+
+  const normalizeDropTargetForSource = (sourceBlockId: WorkbenchBlockId, blockId: WorkbenchBlockId | null): WorkbenchBlockId | null => {
+    if (!blockId) return null
+    if (isFileConnectionSource(sourceBlockId)) {
+      return blockId === 'init' ? 'init-file' : null
+    }
+    return blockId
   }
 
   const connectKnownRelation = (from: WorkbenchBlockId, to: WorkbenchBlockId) => {
@@ -987,10 +1045,17 @@ export default function WorkbenchCanvas({
   }
 
   const addManualConnection = (from: WorkbenchBlockId, to: WorkbenchBlockId) => {
+    if (to === 'init-file' && !isFileConnectionSource(from)) return
+    if (isFileConnectionSource(from) && to !== 'init-file') return
     setManualConnections(current => {
       if (current.some(connection => connection.from === from && connection.to === to)) return current
       return [...current, { id: `${from}->${to}-${Date.now()}`, from, to }]
     })
+    if (to === 'init-file') {
+      const fileId = parseFileBlockId(from)
+      const file = fileId ? meta.files.find(item => item.id === fileId) : null
+      if (file) addImportedFileName(file.name)
+    }
   }
 
   const findIncomingConnection = (targetBlockId: WorkbenchBlockId): DraggingConnection | null => {
@@ -1103,6 +1168,11 @@ export default function WorkbenchCanvas({
     }
 
     setManualConnections(current => current.filter(connection => !(connection.from === sourceBlockId && connection.to === targetBlockId)))
+    if (targetBlockId === 'init-file') {
+      const fileId = parseFileBlockId(sourceBlockId)
+      const file = fileId ? meta.files.find(item => item.id === fileId) : null
+      if (file) removeImportedFileName(file.name)
+    }
   }
 
   const startDragConnector = (
@@ -1156,8 +1226,8 @@ export default function WorkbenchCanvas({
       }
       const next = detectDropTarget(e.clientX, e.clientY)
       if (next !== dropTarget) {
-        dropTarget = next
-        setHoveredDropBlockId(next)
+        dropTarget = normalizeDropTargetForSource(startBlockId, next)
+        setHoveredDropBlockId(dropTarget)
       }
     }
 
@@ -1235,7 +1305,7 @@ export default function WorkbenchCanvas({
       } else {
         setDragCursor({ x: e.clientX, y: e.clientY })
       }
-      const next = detectDropTarget(e.clientX, e.clientY)
+      const next = normalizeDropTargetForSource(sourceBlockId, detectDropTarget(e.clientX, e.clientY))
       if (next !== dropTarget) {
         dropTarget = next
         setHoveredDropBlockId(next)
@@ -1287,15 +1357,28 @@ export default function WorkbenchCanvas({
       return
     }
 
-    if (!connectKnownRelation(linkSourceBlockId, blockId) && !connectKnownRelation(blockId, linkSourceBlockId)) {
-      addManualConnection(linkSourceBlockId, blockId)
+    const normalizedTarget = normalizeDropTargetForSource(linkSourceBlockId, blockId)
+    if (
+      normalizedTarget
+      && !connectKnownRelation(linkSourceBlockId, normalizedTarget)
+      && !connectKnownRelation(normalizedTarget, linkSourceBlockId)
+    ) {
+      addManualConnection(linkSourceBlockId, normalizedTarget)
     }
     setLinkSourceBlockId(null)
   }
 
   const clearManualConnectionsFor = (blockId: WorkbenchBlockId) => {
+    const removedFileNames = manualConnections
+      .filter(connection => (connection.from === blockId || connection.to === blockId) && connection.to === 'init-file')
+      .flatMap(connection => {
+        const fileId = parseFileBlockId(connection.from)
+        const file = fileId ? meta.files.find(item => item.id === fileId) : null
+        return file ? [file.name] : []
+      })
     setManualConnections(current => current.filter(connection => connection.from !== blockId && connection.to !== blockId))
     setLinkSourceBlockId(current => (current === blockId ? null : current))
+    removedFileNames.forEach(removeImportedFileName)
   }
 
   const remapManualConnectionsAfterIndexedDelete = (prefix: 'component' | 'deployment' | 'config-item' | 'launch-item' | 'uninstall-item', removedIndex: number) => {
@@ -1637,8 +1720,6 @@ export default function WorkbenchCanvas({
       setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
       onBlockMetaPatch?.({
         files: [...meta.files, newMeta],
-        fileImportList: Array.from(new Set([...meta.fileImportList, newMeta.name])),
-        fileImport: true,
       })
     } catch (err) {
       setFileImportError(`上传异常: ${(err as Error).message ?? String(err)}`)
@@ -1677,6 +1758,7 @@ export default function WorkbenchCanvas({
       files: meta.files.filter(f => f.id !== file.id),
       fileImportList: meta.fileImportList.filter(n => n !== file.name),
     })
+    clearManualConnectionsFor(createFileBlockId(file.id))
     if (selectedBlockId === createFileBlockId(file.id)) onSelectedBlockChange?.(null)
   }
 
@@ -1735,8 +1817,6 @@ export default function WorkbenchCanvas({
       setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
       onBlockMetaPatch?.({
         files: [...meta.files, newMeta],
-        fileImportList: Array.from(new Set([...meta.fileImportList, newMeta.name])),
-        fileImport: true,
       })
       setNewFileDialogOpen(false)
       setNewFileConflict(null)
@@ -1765,6 +1845,59 @@ export default function WorkbenchCanvas({
     if (!draggingConnection) return false
     return draggingConnection.sourceBlockId === source && draggingConnection.targetBlockId === target
   }
+
+  useEffect(() => {
+    if (!projectSequence) return
+    let cancelled = false
+    let timer: number | null = null
+
+    const syncProjectFiles = async () => {
+      try {
+        const response = await fetch(`/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/sync`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+        if (!response.ok) return
+        const nextFiles = await response.json() as WorkbenchFileMeta[]
+        if (cancelled || areFilesEqual(meta.files, nextFiles)) return
+
+        const nextIds = new Set(nextFiles.map(file => file.id))
+        setFileBlockPositions(current => {
+          const next = { ...current }
+          nextFiles.forEach((file, index) => {
+            if (!next[file.id]) next[file.id] = defaultFilePosition(index)
+          })
+          Object.keys(next).forEach(fileId => {
+            if (!nextIds.has(fileId)) delete next[fileId]
+          })
+          return next
+        })
+        setFileBlockSizes(current => {
+          const next = { ...current }
+          Object.keys(next).forEach(fileId => {
+            if (!nextIds.has(fileId)) delete next[fileId]
+          })
+          return next
+        })
+        onBlockMetaPatch?.({
+          files: nextFiles,
+          fileImportList: meta.fileImportList.filter(name => nextFiles.some(file => file.name === name)),
+        })
+      } catch {
+        // 目录热检测失败时保持静默，等待下一次轮询重试
+      }
+    }
+
+    void syncProjectFiles()
+    timer = window.setInterval(() => {
+      void syncProjectFiles()
+    }, 2000)
+
+    return () => {
+      cancelled = true
+      if (timer !== null) window.clearInterval(timer)
+    }
+  }, [projectSequence, meta.files, meta.fileImportList, onBlockMetaPatch])
 
   return (
     <>
@@ -1888,6 +2021,10 @@ export default function WorkbenchCanvas({
             onSelect={() => onSelectedBlockChange?.('init')}
             onAddConnectorClick={() => openAddNodePopover(initBlockOutput, 'init-components')}
             onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, 'init', event)}
+            onInputDragStart={event => startInputDragDisconnect('init', event)}
+            onFileInputDragStart={event => startInputDragDisconnect('init-file', event)}
+            inputConnected={isInputConnected('init')}
+            fileInputConnected={isInputConnected('init-file')}
             meta={meta}
             linking={linkSourceBlockId === 'init'}
             dragHandlers={createDragHandlers('init', initBlockPosition)}
@@ -2087,22 +2224,21 @@ export default function WorkbenchCanvas({
               resizeHandlers={createResizeHandlers(block.blockId)}
             />
           ))}
-          {meta.files.map(file => {
-            const blockId = createFileBlockId(file.id)
-            const position = fileBlockPositions[file.id] ?? defaultFilePosition(meta.files.indexOf(file))
-            const size = fileBlockSizes[file.id] ?? fileBlockMinSize
+          {fileBlocks.map(block => {
+            const blockId = block.blockId
             return (
               <FileBlock
                 key={blockId}
                 blockId={blockId}
-                file={file}
-                position={position}
-                size={size}
+                file={block.file}
+                position={block.position}
+                size={block.size}
                 selected={selectedBlockId === blockId}
                 onSelect={() => onSelectedBlockChange?.(blockId)}
-                onBodyDoubleClick={() => openFileEditorForBlock(file)}
-                onDelete={() => void deleteFileBlock(file)}
-                dragHandlers={createDragHandlers(blockId, position)}
+                onBodyDoubleClick={() => openFileEditorForBlock(block.file)}
+                onDelete={() => void deleteFileBlock(block.file)}
+                onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, blockId, event)}
+                dragHandlers={createDragHandlers(blockId, block.position)}
               />
             )
           })}

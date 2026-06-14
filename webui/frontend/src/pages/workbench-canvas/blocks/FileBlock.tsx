@@ -1,8 +1,10 @@
 import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getFileIconByName } from './fileIcons'
 import {
   workbenchCanvasFont,
   type WorkbenchBlockDragHandlers,
+  type WorkbenchConnectionSource,
   type WorkbenchFileMeta,
   type WorkbenchPoint,
   type WorkbenchSize,
@@ -24,6 +26,10 @@ const nameY = 88
 // 右侧连接点 X（圆圈右侧外缘）
 const portX = circleCx + circleDiameter / 2 + 4
 const portY = circleCy
+
+export function resolveFileBlockOutputOffset(_size: WorkbenchSize): WorkbenchPoint {
+  return { x: portX, y: portY }
+}
 
 const LANGUAGE_LABEL: Record<string, string> = {
   python: 'Python',
@@ -48,6 +54,7 @@ export default function FileBlock({
   onSelect,
   onBodyDoubleClick,
   onDelete,
+  onConnectorDragStart,
   file,
   dragHandlers,
 }: {
@@ -59,6 +66,7 @@ export default function FileBlock({
   onSelect?: () => void
   onBodyDoubleClick?: (event: React.MouseEvent<SVGGElement>) => void
   onDelete?: () => void
+  onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: ReactPointerEvent<SVGGElement>) => void
   file: WorkbenchFileMeta
   dragHandlers?: WorkbenchBlockDragHandlers
 }) {
@@ -131,7 +139,14 @@ export default function FileBlock({
         </foreignObject>
 
         {/* 右侧连接点：透明 18px 圆（hit area）+ 8px 可见点 */}
-        <g style={{ pointerEvents: 'auto' }}>
+        <g
+          style={{ pointerEvents: 'auto' }}
+          className="cursor-crosshair"
+          onPointerDown={event => {
+            event.stopPropagation()
+            onConnectorDragStart?.('file-output', { x: position.x + portX, y: position.y + portY }, event)
+          }}
+        >
           <circle cx={portX} cy={portY} r="9" fill="transparent" />
           <circle
             cx={portX}

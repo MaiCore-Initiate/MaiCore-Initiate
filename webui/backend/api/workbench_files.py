@@ -27,12 +27,13 @@ router = APIRouter()
 
 # 允许的文件后缀
 ALLOWED_EXTENSIONS = {
-    ".py", ".cmd", ".bat", ".ps1", ".sh", ".js", ".ts",
+    ".py", ".cmd", ".bat", ".ps1", ".sh", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
     ".json", ".txt", ".jsonl", ".log", ".java", ".jar", ".toml", ".exe",
     ".yaml", ".xml",
 }
 # 视为二进制的后缀
 BINARY_EXTENSIONS = {".jar", ".exe"}
+CREATION_BLOCKED_EXTENSIONS = {".jar", ".exe"}
 # 文件名合法字符：字母/数字/下划线/连字符/点/空格，长度 1-128
 FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._\- ]{1,128}$")
 # 单文件最大 5 MB
@@ -88,8 +89,8 @@ def _language_for(name: str) -> str:
         ".py": "python",
         ".ps1": "powershell", ".cmd": "powershell", ".bat": "powershell",
         ".sh": "shell",
-        ".js": "javascript",
-        ".ts": "typescript",
+        ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript", ".jsx": "javascript",
+        ".ts": "typescript", ".tsx": "typescript",
         ".json": "json", ".jsonl": "json",
         ".java": "java",
         ".toml": "ini",
@@ -106,6 +107,13 @@ def _validate_name(name: str) -> None:
     ext = Path(name).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"不支持的文件类型: {ext}")
+
+
+def _validate_creatable_name(name: str) -> None:
+    _validate_name(name)
+    ext = Path(name).suffix.lower()
+    if ext in CREATION_BLOCKED_EXTENSIONS:
+        raise HTTPException(400, f"不允许新建 {ext} 文件，请改用导入现有文件")
 
 
 def _ensure_project(sequence: str) -> Dict[str, Any]:
@@ -169,6 +177,44 @@ def _build_meta(file_id: str, name: str, abs_path: Path, project_dir: Path) -> D
     }
 
 
+def _reserved_project_names(sequence: str) -> set[str]:
+    project = _ensure_project(sequence)
+    names: set[str] = set()
+    mod_id = str(project.get("mod_id", "")).strip()
+    if mod_id:
+        names.add(f"{mod_id}.toml")
+    cover_name = str(project.get("cover", "") or "").strip()
+    if cover_name:
+        names.add(cover_name)
+    return names
+
+
+def _sync_project_files(sequence: str) -> List[Dict[str, Any]]:
+    project_dir = _project_dir(sequence)
+    tracked = _read_project_files(sequence)
+    tracked_by_name = {str(item.get("name", "")): item for item in tracked if str(item.get("name", "")).strip()}
+    reserved_names = _reserved_project_names(sequence)
+    synced: List[Dict[str, Any]] = []
+
+    for entry in sorted(project_dir.iterdir(), key=lambda item: item.name.lower()):
+        if not entry.is_file():
+            continue
+        name = entry.name
+        if name in reserved_names:
+            continue
+        if not FILENAME_PATTERN.match(name):
+            continue
+        ext = entry.suffix.lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            continue
+        tracked_item = tracked_by_name.get(name)
+        file_id = str(tracked_item.get("id")) if tracked_item and tracked_item.get("id") else f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
+        synced.append(_build_meta(file_id, name, entry, project_dir))
+
+    _write_project_files(sequence, synced)
+    return synced
+
+
 def _suggest_name(project_dir: Path, name: str, exclude: Optional[str] = None) -> str:
     """按 `name (1).ext`、`name (2).ext` ...递增找空位。"""
     if name != exclude and not (project_dir / name).exists():
@@ -195,6 +241,16 @@ def _suggest_name(project_dir: Path, name: str, exclude: Optional[str] = None) -
 def list_files(sequence: str):
     _ensure_project(sequence)
     return _read_project_files(sequence)
+
+
+@router.post(
+    "/projects/{sequence}/files/sync",
+    summary="同步模板项目目录中的白名单文件",
+    response_model=List[FileMeta],
+)
+def sync_files(sequence: str):
+    _ensure_project(sequence)
+    return _sync_project_files(sequence)
 
 
 @router.post(
@@ -289,7 +345,7 @@ async def upload_file(
 )
 def create_file(sequence: str, payload: CreateFilePayload):
     _ensure_project(sequence)
-    _validate_name(payload.name)
+    _validate_creatable_name(payload.name)
     if payload.conflictResolution and payload.conflictResolution not in ("rename", "overwrite"):
         raise HTTPException(400, f"非法的 conflictResolution: {payload.conflictResolution}")
     if payload.content is not None and len(payload.content.encode("utf-8")) > MAX_FILE_SIZE:

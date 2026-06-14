@@ -62,6 +62,9 @@ function validateName(name: string): { ok: boolean; reason?: string } {
   if (!WORKBENCH_FILE_EXTENSIONS.includes(`.${ext}` as (typeof WORKBENCH_FILE_EXTENSIONS)[number])) {
     return { ok: false, reason: `不支持的后缀 .${ext}` }
   }
+  if (ext === 'exe' || ext === 'jar') {
+    return { ok: false, reason: `.${ext} 只能导入现有文件，不允许在工作台中直接新建` }
+  }
   return { ok: true }
 }
 
@@ -173,6 +176,9 @@ export default function NewFileDialog({
           )}
           <div className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">
             支持的后缀：{WORKBENCH_FILE_EXTENSIONS.map(e => e.replace('.', '')).join(' / ')}
+          </div>
+          <div className="mt-1 text-xs text-[var(--dfw-text)] opacity-50">
+            其中 exe / jar 仅支持导入，不支持直接新建。
           </div>
 
           <label className="mt-4 block text-sm font-medium text-[var(--dfw-text)]">

@@ -126,6 +126,7 @@ MCStart 引擎读取该模版后，会按照模版中声明的流程自动或半
 | `2.3` | 新增命令运行输出增强、命令检视模式，以及表数组级 `runtime` / `command_theme` 键 | [2.5 命令输出与命令检视模式](#25-命令输出与命令检视模式)、[4.2.1 表数组级运行时与命令显示键](#421-表数组级运行时与命令显示键) |
 | `2.4` | 新增 `deno` 运行时，以及 Deno 权限声明键与自定义权限参数列表 | [4.2 [MODINFO] — 模版元信息](#42-modinfo--模版元信息) |
 | `2.5` | 新增 `version_file` / `version_custom` / `link_file` / `link_custom` 来源数组，并为自定义 `.ts` / `.java` / `.jar` 提供逐项运行参数 | [4.3.4 获取方式模块](#434-获取方式模块)、[8.1 版本获取方式](#81-版本获取方式) |
+| `2.6` | 细化脚本扩展名运行映射，工作台新增模板目录热检测、文件导入口与文件新建限制 | [4.2 [MODINFO] — 模版元信息](#42-modinfo--模版元信息)、[8.1 版本获取方式](#81-版本获取方式) |
 
 ---
 
@@ -469,6 +470,13 @@ file_import_list = [
 - `{{file_path|version.json}}` → 该文件的实际绝对路径
 - `{{file_path|GetVersion.ps1}}` → 该文件的实际绝对路径
 
+工作台从 `2.6` 开始补充了以下约束：
+
+1. 模板项目目录会被热检测。所有进入项目目录、且后缀命中工作台白名单的外部文件，都会自动注册为当前模板的文件块。
+2. 文件进入项目目录，不等于自动进入 `file_import_list`。只有被连接到初始化块左下方的“文件导入口”后，才会加入 `file_import_list`。
+3. 文件块与初始化块断开连接后，会自动从 `file_import_list` 中移除对应文件名。
+4. 工作台禁止直接新建 `.exe` 与 `.jar` 文件，这两类文件只能通过导入现有文件进入模板项目目录。
+
 ---
 
 ### 4.3 [COMPONENTS] 与 [[Component]] — 组件管理
@@ -568,7 +576,7 @@ check_version_regex = ["^v(\\d+\\.\\d+\\.\\d+)$"]
 | `version_custom` | Array\[String\] | 条件必填 | — | 版本脚本来源列表。仅当 `get_version = "custom"` 时需要提供 |
 | `link_file` | Array\[String\] | 条件必填 | — | 链接文件来源列表。仅当 `get_link = "filelink"` 且未提供 `get_link_provide_list` 时需要提供 |
 | `link_custom` | Array\[String\] | 条件必填 | — | 链接脚本来源列表。仅当 `get_link = "custom"` 且未提供 `get_link_provide_list` 时需要提供 |
-| `deno_permissions` | Array\[String\] | 条件必填 | — | `.ts` 自定义来源的 Deno 权限参数，按 `.ts` 文件出现顺序一一对应；空字符串表示不插入权限 |
+| `deno_permissions` | Array\[String\] | 条件必填 | — | `.ts` / `.tsx` 自定义来源的 Deno 权限参数，按 Deno 文件出现顺序一一对应；空字符串表示不插入权限 |
 | `JVM` | Array\[String\] | 条件必填 | — | `.java` / `.jar` 自定义来源的 Java 虚拟机参数，按 Java 文件出现顺序一一对应；空字符串表示不插入参数 |
 
 ##### get_method 详解
@@ -589,7 +597,7 @@ check_version_regex = ["^v(\\d+\\.\\d+\\.\\d+)$"]
 
 `get_version = "filelink"` 时，`version_file` 是字符串数组，每个值填写一个远程或本地文件链接。来源可以是 `http://` / `https://` URL、`file:///` 本地文件 URL、绝对路径或相对路径；相对路径以模板目录为基准解析。
 
-`get_version = "custom"` 时，`version_custom` 是字符串数组，每个值填写一个代码文件地址或链接。支持 `.bat` / `.cmd` / `.ps1` / `.sh` / `.js` / `.ts` / `.py` / `.java` / `.jar` / `.exe`。运行时会按数组顺序在子进程中运行，并把每行非空输出作为版本候选。
+`get_version = "custom"` 时，`version_custom` 是字符串数组，每个值填写一个代码文件地址或链接。支持 `.bat` / `.cmd` / `.ps1` / `.sh` / `.js` / `.mjs` / `.cjs` / `.jsx` / `.ts` / `.tsx` / `.py` / `.java` / `.jar` / `.exe`。运行时会按数组顺序在子进程中运行，并把每行非空输出作为版本候选。
 
 ##### get_link 详解
 
@@ -605,7 +613,7 @@ check_version_regex = ["^v(\\d+\\.\\d+\\.\\d+)$"]
 
 如果已经提供非空的 `get_link_provide_list`，MCStart 会直接使用这个列表作为可选下载链接，不再读取 `filelink` 或 `custom` 的来源字段。
 
-当自定义来源中包含 `.ts` 文件时，可声明 `deno_permissions`。该字段是字符串数组，只对应 `.ts` 文件，而不是对应所有 `version_custom` / `link_custom` 项；多个 `.ts` 文件按从上到下的顺序与 `deno_permissions` 一一对应。每个字符串填写该 `.ts` 文件的 Deno 权限参数，例如 `"--allow-net --allow-read"`；填写 `""` 时不插入任何权限参数。
+当自定义来源中包含 `.ts` 或 `.tsx` 文件时，可声明 `deno_permissions`。该字段是字符串数组，只对应 Deno 文件，而不是对应所有 `version_custom` / `link_custom` 项；多个 `.ts` / `.tsx` 文件按从上到下的顺序与 `deno_permissions` 一一对应。每个字符串填写对应文件的 Deno 权限参数，例如 `"--allow-net --allow-read"`；填写 `""` 时不插入任何权限参数。
 
 当自定义来源中包含 `.java` 或 `.jar` 文件时，可声明 `JVM`。该字段是字符串数组，只对应 `.java` / `.jar` 文件，顺序规则与 `deno_permissions` 相同。运行 `.java` 时命令形态为 `java <JVM参数> 文件.java`；运行 `.jar` 时命令形态为 `java <JVM参数> -jar 文件.jar`。
 
@@ -1790,8 +1798,8 @@ MCStart 支持三种版本获取方式，适用于 `[[Component]]` 和 `[[Deploy
 │  │
 │  └─ get_version = "custom"
 │     → 按 version_custom 数组运行自定义脚本获取版本号
-│     → 支持 .bat/.cmd/.ps1/.sh/.js/.ts/.py/.java/.jar/.exe
-│     → .ts 使用 deno_permissions，.java/.jar 使用 JVM
+│     → 支持 .bat/.cmd/.ps1/.sh/.js/.mjs/.cjs/.jsx/.ts/.tsx/.py/.java/.jar/.exe
+│     → .js/.mjs/.cjs/.jsx 使用 Node；.ts/.tsx 使用 deno_permissions；.java/.jar 使用 JVM
 │
 └─ get_method = "get_link"
    ├─ get_link = "filelink"
@@ -1810,7 +1818,7 @@ MCStart 支持三种版本获取方式，适用于 `[[Component]]` 和 `[[Deploy
 
 `version_custom` 与 `link_custom` 都是字符串数组。运行时会从上到下逐个运行脚本，脚本输出按行解析为候选版本或候选链接，空行会被忽略。远程脚本链接会先下载到临时目录再执行。
 
-`deno_permissions` 只与自定义来源中的 `.ts` 文件对应；`JVM` 只与 `.java` / `.jar` 文件对应。它们都按对应文件出现顺序逐项匹配，空字符串表示该文件不插入额外参数。
+`deno_permissions` 只与自定义来源中的 `.ts` / `.tsx` 文件对应；`JVM` 只与 `.java` / `.jar` 文件对应。它们都按对应文件出现顺序逐项匹配，空字符串表示该文件不插入额外参数。
 
 ### 8.2 版本号格式化
 

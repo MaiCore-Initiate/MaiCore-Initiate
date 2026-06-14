@@ -1794,12 +1794,13 @@ export default function DeploymentFlowWorkbench({
         projectSequence={projectSequence ?? null}
         onClose={() => setOpenFileEditorFileId(null)}
         onRenamed={(newMeta: WorkbenchFileMeta) => {
+          const previousFile = meta.files.find(f => f.id === newMeta.id)
           setMeta(prev => ({
             ...prev,
             files: prev.files.map(f => (f.id === newMeta.id ? newMeta : f)),
-            fileImportList: Array.from(
-              new Set([...prev.fileImportList.filter(n => n !== prev.files.find(x => x.id === newMeta.id)?.name), newMeta.name]),
-            ),
+            fileImportList: previousFile && prev.fileImportList.includes(previousFile.name)
+              ? Array.from(new Set([...prev.fileImportList.filter(n => n !== previousFile.name), newMeta.name]))
+              : prev.fileImportList,
           }))
         }}
         onDeleted={() => {

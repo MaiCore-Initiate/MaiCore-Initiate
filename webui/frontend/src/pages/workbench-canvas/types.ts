@@ -204,7 +204,7 @@ export interface WorkbenchPoint {
   y: number
 }
 
-export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component' | 'deploy-deployment' | 'deploy-config' | 'config-item' | 'config-launch' | 'launch-item' | 'launch-uninstall' | 'uninstall-item' | 'component-output' | 'deployment-output' | 'config-item-output' | 'launch-item-output' | 'uninstall-item-output' | 'disconnect'
+export type WorkbenchConnectionSource = 'init-components' | 'components-deploy' | 'components-component' | 'deploy-deployment' | 'deploy-config' | 'config-item' | 'config-launch' | 'launch-item' | 'launch-uninstall' | 'uninstall-item' | 'component-output' | 'deployment-output' | 'config-item-output' | 'launch-item-output' | 'uninstall-item-output' | 'file-output' | 'disconnect'
 
 export interface WorkbenchAddNodeAnchor {
   id: number
@@ -236,7 +236,7 @@ export type WorkbenchConfigItemBlockId = `config-item:${number}`
 export type WorkbenchLaunchItemBlockId = `launch-item:${number}`
 export type WorkbenchUninstallItemBlockId = `uninstall-item:${number}`
 export type WorkbenchFileBlockId = `file:${string}`
-export type WorkbenchBlockId = 'start' | 'init' | 'components' | 'deploy' | 'config' | 'launch' | 'uninstall' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId | WorkbenchConfigItemBlockId | WorkbenchLaunchItemBlockId | WorkbenchUninstallItemBlockId | WorkbenchFileBlockId
+export type WorkbenchBlockId = 'start' | 'init' | 'init-file' | 'components' | 'deploy' | 'config' | 'launch' | 'uninstall' | WorkbenchComponentBlockId | WorkbenchDeploymentBlockId | WorkbenchConfigItemBlockId | WorkbenchLaunchItemBlockId | WorkbenchUninstallItemBlockId | WorkbenchFileBlockId
 
 export const WORKBENCH_FILE_EXTENSIONS = [
   '.py', '.cmd', '.bat', '.ps1', '.sh', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',

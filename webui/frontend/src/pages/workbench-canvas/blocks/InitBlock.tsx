@@ -4,6 +4,13 @@ import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlo
 
 const inputPortOffset: WorkbenchPoint = { x: 5, y: 115.5 }
 
+export function resolveInitBlockFileInputOffset(size: WorkbenchSize): WorkbenchPoint {
+  return {
+    x: 5,
+    y: 5 + Math.max(221, size.height) - 38,
+  }
+}
+
 function AddConnectorButton() {
   return (
     <g transform="translate(-12 0)">
@@ -13,10 +20,16 @@ function AddConnectorButton() {
     </g>
   )
 }
-function InputPort() {
+function InputPort({
+  offset,
+  connected = false,
+}: {
+  offset: WorkbenchPoint
+  connected?: boolean
+}) {
   return (
-    <g transform={`translate(${inputPortOffset.x - 2.5} ${inputPortOffset.y - 2.5})`}>
-      <circle cx="2.5" cy="2.5" r="2.5" fill="var(--dfw-bg)" stroke="currentColor" strokeWidth="2" />
+    <g transform={`translate(${offset.x - 2.5} ${offset.y - 2.5})`}>
+      <circle cx="2.5" cy="2.5" r="2.5" fill={connected ? 'currentColor' : 'var(--dfw-bg)'} stroke="currentColor" strokeWidth="2" />
       <circle cx="2.5" cy="2.5" r="3.5" fill="none" stroke="currentColor" strokeWidth="2" />
     </g>
   )
@@ -61,6 +74,10 @@ export default function InitBlock({
   onSelect,
   onAddConnectorClick,
   onConnectorDragStart,
+  onInputDragStart,
+  onFileInputDragStart,
+  inputConnected = false,
+  fileInputConnected = false,
   meta,
   dragHandlers,
   resizeHandlers,
@@ -72,6 +89,10 @@ export default function InitBlock({
   onSelect?: () => void
   onAddConnectorClick?: () => void
   onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: ReactPointerEvent<SVGGElement>) => void
+  onInputDragStart?: (event: ReactPointerEvent<SVGGElement>) => void
+  onFileInputDragStart?: (event: ReactPointerEvent<SVGGElement>) => void
+  inputConnected?: boolean
+  fileInputConnected?: boolean
   meta: WorkbenchBlockMeta
   dragHandlers?: WorkbenchBlockDragHandlers
   resizeHandlers?: WorkbenchBlockResizeHandlers
@@ -86,6 +107,7 @@ export default function InitBlock({
   const connectorX = bodyX + bodyWidth
   const connectorY = bodyY + bodyHeight / 2 - 12
   const contentClipId = 'dfw-init-block-content-clip'
+  const fileInputOffset = resolveInitBlockFileInputOffset(size)
   const rows = [
     { label: '模版作者：', value: formatTomlString(meta.author) },
     { label: '模版标签：', value: formatTomlArray(meta.tags) },
@@ -156,7 +178,29 @@ export default function InitBlock({
         }}
         onPointerDown={event => event.stopPropagation()}
       />
-      <InputPort />
+      <g
+        className={inputConnected ? 'cursor-grab active:cursor-grabbing' : undefined}
+        onPointerDown={event => {
+          if (!inputConnected) return
+          onInputDragStart?.(event)
+        }}
+      >
+        <InputPort offset={inputPortOffset} connected={inputConnected} />
+        <circle cx={inputPortOffset.x} cy={inputPortOffset.y} r="12" fill="transparent" />
+      </g>
+      <g
+        className={fileInputConnected ? 'cursor-grab active:cursor-grabbing' : undefined}
+        onPointerDown={event => {
+          if (!fileInputConnected) return
+          onFileInputDragStart?.(event)
+        }}
+      >
+        <InputPort offset={fileInputOffset} connected={fileInputConnected} />
+        <circle cx={fileInputOffset.x} cy={fileInputOffset.y} r="12" fill="transparent" />
+      </g>
+      <text x="20" y={fileInputOffset.y + 6} fontSize="14" fontFamily={workbenchCanvasFont} fontWeight="400" opacity="0.68">
+        文件导入口
+      </text>
       <g
         className="cursor-grab active:cursor-grabbing"
         onClick={event => {

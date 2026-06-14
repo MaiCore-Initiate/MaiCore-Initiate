@@ -1693,7 +1693,7 @@ class DeploymentModRuntime:
             extension = self._provider_source_extension(source)
             deno_args: List[str] = []
             jvm_args: List[str] = []
-            if extension == ".ts":
+            if extension in {".ts", ".tsx"}:
                 deno_args = self._split_provider_args(deno_permission_values[deno_index] if deno_index < len(deno_permission_values) else "")
                 deno_index += 1
             elif extension in {".java", ".jar"}:
@@ -1747,9 +1747,9 @@ class DeploymentModRuntime:
             return [sys.executable, script_path]
         if lower_name.endswith(".sh"):
             return ["bash", script_path]
-        if lower_name.endswith(".js"):
+        if lower_name.endswith((".js", ".mjs", ".cjs", ".jsx")):
             return ["node", script_path]
-        if lower_name.endswith(".ts"):
+        if lower_name.endswith((".ts", ".tsx")):
             return ["deno", "run", *deno_args, script_path]
         if lower_name.endswith(".java"):
             return ["java", *jvm_args, script_path]
@@ -2428,6 +2428,14 @@ class DeploymentModRuntime:
             self._notify(state, 0, 0, label, "running", f"执行 Python 脚本资源: {asset_path}", event="detail")
             subprocess.run([sys.executable, asset_path], cwd=target_dir, check=True)
             return
+        if extension in {".js", ".mjs", ".cjs", ".jsx"}:
+            self._notify(state, 0, 0, label, "running", f"执行 Node 脚本资源: {asset_path}", event="detail")
+            subprocess.run(["node", asset_path], cwd=target_dir, check=True)
+            return
+        if extension in {".ts", ".tsx"}:
+            self._notify(state, 0, 0, label, "running", f"执行 Deno 脚本资源: {asset_path}", event="detail")
+            subprocess.run(["deno", "run", asset_path], cwd=target_dir, check=True)
+            return
         if is_deployment:
             shutil.copy2(asset_path, os.path.join(target_dir, os.path.basename(asset_path)))
             self._notify(state, 0, 0, label, "completed", f"已复制资源到: {target_dir}", event="detail")
@@ -3012,7 +3020,7 @@ class DeploymentModRuntime:
     @staticmethod
     def _normalize_extension(path: str) -> str:
         lower_name = path.lower()
-        for extension in (".tar.gz", ".tar.xz", ".tgz", ".zip", ".tar", ".gz", ".xz", ".msi", ".exe", ".ps1", ".bat", ".cmd", ".sh", ".py", ".js", ".ts"):
+        for extension in (".tar.gz", ".tar.xz", ".tgz", ".zip", ".tar", ".gz", ".xz", ".msi", ".exe", ".ps1", ".bat", ".cmd", ".sh", ".py", ".mjs", ".cjs", ".jsx", ".js", ".tsx", ".ts"):
             if lower_name.endswith(extension):
                 return extension
         return Path(path).suffix.lower()
