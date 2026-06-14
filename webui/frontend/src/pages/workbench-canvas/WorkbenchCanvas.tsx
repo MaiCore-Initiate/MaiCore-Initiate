@@ -415,6 +415,7 @@ export default function WorkbenchCanvas({
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const metaRef = useRef(meta)
   const dragRef = useRef<{
     pointerId: number
     blockId: DraggableBlockId
@@ -437,6 +438,10 @@ export default function WorkbenchCanvas({
     if (!dragRef.current) return
     window.clearTimeout(dragRef.current.timer)
   }
+
+  useEffect(() => {
+    metaRef.current = meta
+  }, [meta])
 
 
   useEffect(() => {
@@ -941,12 +946,12 @@ export default function WorkbenchCanvas({
   }
 
   const addImportedFileName = (name: string) => {
-    const nextList = Array.from(new Set([...meta.fileImportList, name]))
+    const nextList = Array.from(new Set([...metaRef.current.fileImportList, name]))
     onBlockMetaPatch?.({ fileImportList: nextList, fileImport: true })
   }
 
   const removeImportedFileName = (name: string) => {
-    onBlockMetaPatch?.({ fileImportList: meta.fileImportList.filter(item => item !== name) })
+    onBlockMetaPatch?.({ fileImportList: metaRef.current.fileImportList.filter(item => item !== name) })
   }
 
   const normalizeDropTargetForSource = (sourceBlockId: WorkbenchBlockId, blockId: WorkbenchBlockId | null): WorkbenchBlockId | null => {
@@ -1648,6 +1653,8 @@ export default function WorkbenchCanvas({
       setFileImportError('当前未关联工作台项目，无法导入文件。')
       return
     }
+    setAddNodePopoverPosition(null)
+    setAddNodePopoverSource(null)
     fileInputRef.current?.click()
   }
 
@@ -1718,10 +1725,11 @@ export default function WorkbenchCanvas({
         return
       }
       const newMeta: WorkbenchFileMeta = await uploadRes.json()
-      const nextIndex = meta.files.length
+      const currentFiles = metaRef.current.files
+      const nextIndex = currentFiles.length
       setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
       onBlockMetaPatch?.({
-        files: [...meta.files.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
+        files: [...currentFiles.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
       })
     } catch (err) {
       setFileImportError(`上传异常: ${(err as Error).message ?? String(err)}`)
@@ -1796,10 +1804,11 @@ export default function WorkbenchCanvas({
         return
       }
       const newMeta: WorkbenchFileMeta = await res.json()
-      const nextIndex = meta.files.length
+      const currentFiles = metaRef.current.files
+      const nextIndex = currentFiles.length
       setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
       onBlockMetaPatch?.({
-        files: [...meta.files.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
+        files: [...currentFiles.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
       })
       onSelectedBlockChange?.(createFileBlockId(newMeta.id))
       closeNewFileDialog()
