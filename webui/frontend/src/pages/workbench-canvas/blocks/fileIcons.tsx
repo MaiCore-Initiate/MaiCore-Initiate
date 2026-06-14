@@ -67,6 +67,31 @@ function CmdIcon({ size = 48, className }: FileIconProps) {
   )
 }
 
+function BatIcon({ size = 48, className }: FileIconProps) {
+  // 与 CmdIcon 同形，但 #8f0000 暗红硬编码（不绑主题）
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 27.269 27.269"
+      width={size}
+      height={size}
+      className={className}
+      fill="#8f0000"
+      aria-hidden
+    >
+      <path d="M25.322,1.947H1.949C0.869,1.947,0,2.818,0,3.898v19.477c0,1.074,0.869,1.947,1.949,1.947h23.373
+        c1.07,0,1.947-0.873,1.947-1.947V3.898C27.27,2.818,26.393,1.947,25.322,1.947z M9.312,3.41c0.537,0,0.973,0.436,0.973,0.975
+        c0,0.537-0.436,0.973-0.973,0.973c-0.539,0-0.975-0.436-0.975-0.973C8.338,3.845,8.773,3.41,9.312,3.41z M6.33,3.41
+        c0.537,0,0.975,0.436,0.975,0.975c0,0.537-0.438,0.973-0.975,0.973c-0.539,0-0.975-0.436-0.975-0.973
+        C5.355,3.845,5.791,3.41,6.33,3.41z M3.406,3.41c0.541,0,0.975,0.436,0.975,0.975c0,0.537-0.434,0.973-0.975,0.973
+        c-0.535,0-0.971-0.436-0.971-0.973C2.436,3.845,2.871,3.41,3.406,3.41z M25.322,23.375H1.949V6.838h23.373
+        C25.322,6.838,25.322,23.375,25.322,23.375z" />
+      <path d="M14.797,15.566L5.844,20.16v-1.332l7.602-3.781v-0.039l-7.602-3.782V9.894l8.953,4.572V15.566z" />
+      <path d="M21.422,14.334v1.232h-4.764v-1.232H21.422z" />
+    </svg>
+  )
+}
+
 function GenericFileIcon({ size = 48, className }: FileIconProps) {
   return (
     <svg
@@ -95,7 +120,7 @@ type FileIconComponent = (props: FileIconProps) => JSX.Element
 const ICON_BY_EXT: Record<string, FileIconComponent> = {
   py: PythonIcon,
   cmd: CmdIcon,
-  bat: CmdIcon,
+  bat: BatIcon,
 }
 
 export function getFileIconByExt(extension: string): FileIconComponent {
