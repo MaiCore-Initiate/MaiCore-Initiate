@@ -1,5 +1,5 @@
-import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
 import type { PointerEvent as ReactPointerEvent } from 'react'
+import { DeleteBlockButton } from './BlockFrameControls'
 import { getFileIconByName } from './fileIcons'
 import {
   workbenchCanvasFont,
@@ -10,39 +10,34 @@ import {
   type WorkbenchSize,
 } from '../types'
 
-export const fileBlockMinSize: WorkbenchSize = { width: 100, height: 130 }
+export const fileBlockMinSize: WorkbenchSize = { width: 215, height: 208 }
 
-const accent = '#f59e0b'
-const blockWidth = fileBlockMinSize.width
+const iconAreaCenterX = 102
+const iconAreaCenterY = 84
+const iconSize = 152
+const selectionRadius = 101
+const connectorRadius = 12
+const connectorCenterY = 95
+const connectorInset = 13.5
+const textBaselineY = 182
 
-// 圆圈直径
-const circleDiameter = 60
-// 圆圈中心 X：稍偏左，给右侧连接点让出位置
-const circleCx = 38
-// 圆圈中心 Y
-const circleCy = 44
-// 文件名区域起始 Y
-const nameY = 88
-// 右侧连接点 X（圆圈右侧外缘）
-const portX = circleCx + circleDiameter / 2 + 4
-const portY = circleCy
-
-export function resolveFileBlockOutputOffset(_size: WorkbenchSize): WorkbenchPoint {
-  return { x: portX, y: portY }
+export function resolveFileBlockOutputOffset(size: WorkbenchSize): WorkbenchPoint {
+  const width = Math.max(fileBlockMinSize.width, size.width)
+  return {
+    x: width - connectorInset,
+    y: connectorCenterY,
+  }
 }
 
-const LANGUAGE_LABEL: Record<string, string> = {
-  python: 'Python',
-  powershell: 'PowerShell',
-  shell: 'Shell',
-  javascript: 'JavaScript',
-  typescript: 'TypeScript',
-  json: 'JSON',
-  plaintext: 'Plain Text',
-  java: 'Java',
-  ini: 'INI / TOML',
-  xml: 'XML',
-  yaml: 'YAML',
+function formatFileSize(size: number) {
+  if (size < 1024) return `${size}B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)}KB`
+  return `${(size / (1024 * 1024)).toFixed(1)}MB`
+}
+
+function truncateLabel(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength - 1)}…`
 }
 
 export default function FileBlock({
@@ -72,9 +67,8 @@ export default function FileBlock({
 }) {
   const bodyWidth = Math.max(fileBlockMinSize.width, size.width)
   const bodyHeight = Math.max(fileBlockMinSize.height, size.height)
-  const selectWidth = bodyWidth + 10
-  const selectHeight = bodyHeight + 10
-  const languageLabel = LANGUAGE_LABEL[file.language] ?? file.language
+  const connectorCenterX = bodyWidth - connectorInset
+  const label = truncateLabel(`${file.name}|${formatFileSize(file.size)}`, 20)
   const Icon = getFileIconByName(file.name)
 
   return (
@@ -82,21 +76,20 @@ export default function FileBlock({
       transform={`translate(${position.x} ${position.y})`}
       data-workbench-block-id={blockId}
     >
-      {selected && (
-        <rect
-          x="0"
-          y="0"
-          width={selectWidth}
-          height={selectHeight}
-          rx="14"
+      {(selected || linking) && (
+        <circle
+          cx={Math.min(iconAreaCenterX, bodyWidth - 58)}
+          cy={iconAreaCenterY}
+          r={selectionRadius}
           fill="none"
-          stroke="var(--dfw-blue)"
-          strokeWidth="2"
-        />
+          stroke={selected ? 'var(--dfw-blue)' : '#8fdca4'}
+          strokeWidth={selected ? '2' : '3'}
+          opacity={selected ? 1 : 0.9}
+        >
+          {linking && <animate attributeName="opacity" values="0.35;1;0.35" dur="1.2s" repeatCount="indefinite" />}
+        </circle>
       )}
-      {linking && <LinkPendingOutline width={selectWidth} height={selectHeight} />}
 
-      {/* 整个区域：圆圈 + 名字 + 连接点都包在拖拽 + 双击事件里 */}
       <g
         className="cursor-grab active:cursor-grabbing"
         onClick={event => {
@@ -112,91 +105,59 @@ export default function FileBlock({
         onPointerUp={dragHandlers?.onHeaderPointerUp}
         onPointerCancel={dragHandlers?.onHeaderPointerCancel}
       >
-        {/* 圆圈背景：accent 边 + 半透明填充 */}
-        <circle
-          cx={circleCx}
-          cy={circleCy}
-          r={circleDiameter / 2}
-          fill={accent}
-          fillOpacity="0.18"
-          stroke={accent}
-          strokeWidth="2"
+        <rect
+          x="0"
+          y="0"
+          width={bodyWidth}
+          height={bodyHeight}
+          fill="transparent"
         />
 
-        {/* 图标 */}
         <foreignObject
-          x={circleCx - 24}
-          y={circleCy - 24}
-          width="48"
-          height="48"
+          x={Math.min(iconAreaCenterX, bodyWidth - 58) - iconSize / 2}
+          y={iconAreaCenterY - iconSize / 2}
+          width={iconSize}
+          height={iconSize}
           style={{
             pointerEvents: 'none',
             overflow: 'visible',
             color: 'var(--dfw-text)',
           }}
         >
-          <Icon size={48} />
+          <Icon size={iconSize} />
         </foreignObject>
 
-        {/* 右侧连接点：透明 18px 圆（hit area）+ 8px 可见点 */}
-        <g
-          style={{ pointerEvents: 'auto' }}
-          className="cursor-crosshair"
-          onPointerDown={event => {
-            event.stopPropagation()
-            onConnectorDragStart?.('file-output', { x: position.x + portX, y: position.y + portY }, event)
-          }}
-        >
-          <circle cx={portX} cy={portY} r="9" fill="transparent" />
-          <circle
-            cx={portX}
-            cy={portY}
-            r="4"
-            fill="var(--dfw-bg)"
-            stroke={accent}
-            strokeWidth="2"
-          />
-        </g>
-
-        {/* 文件名 */}
         <text
-          x={blockWidth / 2}
-          y={nameY}
-          fontSize="13"
+          x={bodyWidth / 2}
+          y={textBaselineY}
+          fontSize="20"
           fontFamily={workbenchCanvasFont}
-          fontWeight="500"
+          fontWeight="400"
           fill="currentColor"
           textAnchor="middle"
+          lengthAdjust="spacingAndGlyphs"
+          textLength={Math.min(bodyWidth - 48, Math.max(120, label.length * 11))}
         >
-          {file.name.length > 14 ? file.name.slice(0, 13) + '…' : file.name}
-        </text>
-        <text
-          x={blockWidth / 2}
-          y={nameY + 16}
-          fontSize="10"
-          fontFamily={workbenchCanvasFont}
-          fontWeight="300"
-          fill="currentColor"
-          opacity="0.55"
-          textAnchor="middle"
-        >
-          {languageLabel} · {(file.size / 1024).toFixed(1)} KB
-        </text>
-        <text
-          x={blockWidth / 2}
-          y={nameY + 32}
-          fontSize="9"
-          fontFamily={workbenchCanvasFont}
-          fontWeight="300"
-          fill="currentColor"
-          opacity="0.4"
-          textAnchor="middle"
-        >
-          双击编辑
+          {label}
         </text>
       </g>
 
-      <DeleteBlockButton x={bodyWidth - 43} y={4} onDelete={onDelete} />
+      <g
+        transform={`translate(${connectorCenterX} ${connectorCenterY})`}
+        className="cursor-pointer"
+        onClick={event => event.stopPropagation()}
+        onPointerDown={event => {
+          event.stopPropagation()
+          onConnectorDragStart?.('file-output', { x: position.x + connectorCenterX, y: position.y + connectorCenterY }, event)
+        }}
+      >
+        <circle cx="0" cy="0" r="18" fill="transparent" />
+        <circle cx="0" cy="0" r={connectorRadius} fill="#fff" stroke="#000" strokeWidth="2" />
+        <path d="M-5 0H5" fill="none" stroke="#000" strokeLinecap="round" strokeWidth="2" />
+        <path d="M0 -5V5" fill="none" stroke="#000" strokeLinecap="round" strokeWidth="2" />
+      </g>
+
+      {selected ? <DeleteBlockButton x={bodyWidth - 36} y={4} onDelete={onDelete} /> : null}
     </g>
   )
 }
