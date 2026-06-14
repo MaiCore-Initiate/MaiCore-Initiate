@@ -1771,6 +1771,8 @@ export default function WorkbenchCanvas({
       setFileImportError('当前未关联工作台项目，无法新建文件。')
       return
     }
+    setAddNodePopoverPosition(null)
+    setAddNodePopoverSource(null)
     setNewFileDialogOpen(true)
   }
 
