@@ -1736,34 +1736,6 @@ export default function WorkbenchCanvas({
     void processFileUpload(file, resolution)
   }
 
-  const deleteFileBlock = async (file: WorkbenchFileMeta) => {
-    if (!projectSequence) return
-    try {
-      await fetch(
-        `/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/${encodeURIComponent(file.name)}`,
-        { method: 'DELETE', credentials: 'include' },
-      )
-    } catch (err) {
-      setFileImportError(`删除失败: ${(err as Error).message ?? String(err)}`)
-    }
-    setFileBlockPositions(current => {
-      const next = { ...current }
-      delete next[file.id]
-      return next
-    })
-    setFileBlockSizes(current => {
-      const next = { ...current }
-      delete next[file.id]
-      return next
-    })
-    onBlockMetaPatch?.({
-      files: meta.files.filter(f => f.id !== file.id),
-      fileImportList: meta.fileImportList.filter(n => n !== file.name),
-    })
-    clearManualConnectionsFor(createFileBlockId(file.id))
-    if (selectedBlockId === createFileBlockId(file.id)) onSelectedBlockChange?.(null)
-  }
-
   const openFileEditorForBlock = (file: WorkbenchFileMeta) => {
     onOpenFileEditor?.(file.id)
   }
@@ -2248,7 +2220,6 @@ export default function WorkbenchCanvas({
                 selected={selectedBlockId === blockId}
                 onSelect={() => onSelectedBlockChange?.(blockId)}
                 onBodyDoubleClick={() => openFileEditorForBlock(block.file)}
-                onDelete={() => void deleteFileBlock(block.file)}
                 onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, blockId, event)}
                 dragHandlers={createDragHandlers(blockId, block.position)}
               />

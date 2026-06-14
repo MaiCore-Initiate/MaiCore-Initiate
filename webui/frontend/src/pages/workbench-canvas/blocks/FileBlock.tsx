@@ -1,8 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { DeleteBlockButton } from './BlockFrameControls'
 import { getFileIconByName } from './fileIcons'
 import {
-  workbenchCanvasFont,
   type WorkbenchBlockDragHandlers,
   type WorkbenchConnectionSource,
   type WorkbenchFileMeta,
@@ -48,7 +46,6 @@ export default function FileBlock({
   linking = false,
   onSelect,
   onBodyDoubleClick,
-  onDelete,
   onConnectorDragStart,
   file,
   dragHandlers,
@@ -60,7 +57,6 @@ export default function FileBlock({
   linking?: boolean
   onSelect?: () => void
   onBodyDoubleClick?: (event: React.MouseEvent<SVGGElement>) => void
-  onDelete?: () => void
   onConnectorDragStart?: (source: WorkbenchConnectionSource, fromPoint: WorkbenchPoint, event: ReactPointerEvent<SVGGElement>) => void
   file: WorkbenchFileMeta
   dragHandlers?: WorkbenchBlockDragHandlers
@@ -131,7 +127,7 @@ export default function FileBlock({
           x={bodyWidth / 2}
           y={textBaselineY}
           fontSize="20"
-          fontFamily={workbenchCanvasFont}
+          fontFamily="'JetBrainsMono Nerd Font', 'JetBrainsMono NFM', 'JetBrains Mono', monospace"
           fontWeight="400"
           fill="currentColor"
           textAnchor="middle"
@@ -157,8 +153,6 @@ export default function FileBlock({
         <path d="M-5 0H5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
         <path d="M0 -5V5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
       </g>
-
-      {selected ? <DeleteBlockButton x={bodyWidth - 36} y={4} onDelete={onDelete} /> : null}
     </g>
   )
 }

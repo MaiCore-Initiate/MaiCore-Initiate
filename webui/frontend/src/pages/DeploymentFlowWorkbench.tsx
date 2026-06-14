@@ -1743,6 +1743,28 @@ export default function DeploymentFlowWorkbench({
         onOpenFileEditor={setOpenFileEditorFileId}
         meta={meta}
         onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
+        onDeleteFile={(fileId: string) => {
+          const removed = meta.files.find(file => file.id === fileId)
+          if (!removed) return
+          const ok = window.confirm(`确定删除文件 "${removed.name}" 吗？此操作不可撤销。`)
+          if (!ok) return
+          void (async () => {
+            try {
+              await fetch(
+                `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files/${encodeURIComponent(removed.name)}`,
+                { method: 'DELETE', credentials: 'include' },
+              )
+            } finally {
+              setMeta(prev => ({
+                ...prev,
+                files: prev.files.filter(file => file.id !== fileId),
+                fileImportList: prev.fileImportList.filter(name => name !== removed.name),
+              }))
+              if (openFileEditorFileId === fileId) setOpenFileEditorFileId(null)
+              if (selectedBlockId === `file:${fileId}`) setSelectedBlockId(null)
+            }
+          })()
+        }}
       />
       <WorkbenchBottomBar
         scale={viewport.scale}

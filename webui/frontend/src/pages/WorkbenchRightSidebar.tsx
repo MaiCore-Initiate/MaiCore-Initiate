@@ -298,6 +298,7 @@ export interface WorkbenchRightSidebarProps {
   meta?: WorkbenchModInfoMeta
   onMetaPatch?: (patch: Partial<WorkbenchModInfoMeta>) => void
   onOpenFileEditor?: (fileId: string) => void
+  onDeleteFile?: (fileId: string) => void
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -3657,6 +3658,7 @@ export default function WorkbenchRightSidebar({
   meta = emptyModInfoMeta,
   onMetaPatch,
   onOpenFileEditor,
+  onDeleteFile,
 }: WorkbenchRightSidebarProps) {
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
@@ -4455,6 +4457,13 @@ export default function WorkbenchRightSidebar({
               onClick={() => onOpenFileEditor?.(selectedFile.id)}
             >
               在编辑器中打开
+            </button>
+            <button
+              type="button"
+              className="w-full rounded-md border border-red-400/30 bg-transparent px-4 py-2 text-sm font-medium text-red-200 transition hover:bg-red-500/10"
+              onClick={() => onDeleteFile?.(selectedFile.id)}
+            >
+              删除文件
             </button>
             <p className="text-xs text-[var(--dfw-text)] opacity-60">
               双击画布上的文件块也可以打开编辑器。

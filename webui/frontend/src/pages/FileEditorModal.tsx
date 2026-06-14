@@ -42,6 +42,7 @@ export default function FileEditorModal({
     setError(null)
     setContent('')
     setOriginalContent('')
+    setRenamingName(null)
     if (file.binary) {
       setLoading(false)
       return
@@ -65,7 +66,7 @@ export default function FileEditorModal({
         }
       })
       .finally(() => setLoading(false))
-  }, [file, projectSequence, onDeleted])
+  }, [file?.id, file?.name, file?.binary, projectSequence, onDeleted])
 
   const handleClose = useCallback(() => {
     if (dirty) {
@@ -233,7 +234,11 @@ export default function FileEditorModal({
   if (!file) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-[1100] flex flex-col bg-[var(--dfw-bg)]">
+    <div
+      data-workbench-ui
+      className="fixed inset-0 z-[1100] flex flex-col bg-[var(--dfw-bg)]"
+      onPointerDown={event => event.stopPropagation()}
+    >
       <div
         className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
         onClick={handleClose}
