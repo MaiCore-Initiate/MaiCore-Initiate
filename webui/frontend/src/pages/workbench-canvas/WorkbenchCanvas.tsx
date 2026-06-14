@@ -1659,15 +1659,15 @@ export default function WorkbenchCanvas({
   }
 
   const handleFileInputChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
+    const files = event.target.files ? Array.from(event.target.files) : []
     event.target.value = ''
-    if (!files || files.length === 0) return
+    if (files.length === 0) return
     if (!projectSequence) {
       setFileImportError('未关联工作台项目，无法导入。')
       return
     }
     setFileImportError(null)
-    for (const file of Array.from(files)) {
+    for (const file of files) {
       await processFileUpload(file, null)
     }
   }
