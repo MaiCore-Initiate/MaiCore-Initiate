@@ -332,6 +332,24 @@ function JarIcon({ size = 48, className }: FileIconProps) {
   )
 }
 
+function TomlIcon({ size = 48, className }: FileIconProps) {
+  return (
+    <svg
+      fill="#9C4121"
+      role="img"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      className={className}
+      aria-hidden
+    >
+      <title>TOML</title>
+      <path d="M.014 0h5.34v2.652H2.888v18.681h2.468V24H.015V0Zm17.622 5.049v2.78h-4.274v12.935h-3.008V7.83H6.059V5.05h11.577ZM23.986 24h-5.34v-2.652h2.467V2.667h-2.468V0h5.34v24Z" />
+    </svg>
+  )
+}
+
 function GenericFileIcon({ size = 48, className }: FileIconProps) {
   return (
     <svg
@@ -375,6 +393,7 @@ const ICON_BY_EXT: Record<string, FileIconComponent> = {
   log: TxtIcon,
   java: JavaIcon,
   jar: JarIcon,
+  toml: TomlIcon,
 }
 
 export function getFileIconByExt(extension: string): FileIconComponent {
