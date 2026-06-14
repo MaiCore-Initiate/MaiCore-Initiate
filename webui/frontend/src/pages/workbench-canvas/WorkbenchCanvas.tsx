@@ -405,6 +405,8 @@ export default function WorkbenchCanvas({
   } | null>(null)
   const [fileImportError, setFileImportError] = useState<string | null>(null)
   const [newFileDialogOpen, setNewFileDialogOpen] = useState(false)
+  const [newFileSubmitting, setNewFileSubmitting] = useState(false)
+  const [newFileError, setNewFileError] = useState<string | null>(null)
   const [newFileConflict, setNewFileConflict] = useState<{
     name: string
     suggestedName: string
@@ -1637,8 +1639,8 @@ export default function WorkbenchCanvas({
   }
 
   const defaultFilePosition = (index: number): WorkbenchPoint => ({
-    x: 4860 + (index % 5) * 220,
-    y: 330 + Math.floor(index / 5) * 140,
+    x: initBlockPosition.x - 220 - (index % 3) * 140,
+    y: initBlockPosition.y + 24 + Math.floor(index / 3) * 140,
   })
 
   const triggerFileImport = () => {
@@ -1773,12 +1775,15 @@ export default function WorkbenchCanvas({
     }
     setAddNodePopoverPosition(null)
     setAddNodePopoverSource(null)
+    setNewFileError(null)
     setNewFileDialogOpen(true)
   }
 
   const closeNewFileDialog = () => {
     setNewFileDialogOpen(false)
     setNewFileConflict(null)
+    setNewFileSubmitting(false)
+    setNewFileError(null)
   }
 
   const processNewFile = async (
@@ -1786,6 +1791,8 @@ export default function WorkbenchCanvas({
     conflictResolution: FileConflictResolution | null,
   ) => {
     if (!projectSequence) return
+    setNewFileSubmitting(true)
+    setNewFileError(null)
     try {
       const res = await fetch(
         `/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/create`,
@@ -1807,11 +1814,13 @@ export default function WorkbenchCanvas({
           suggestedName: detail?.detail?.suggestion ?? '',
           payload,
         })
+        setNewFileSubmitting(false)
         return
       }
       if (!res.ok) {
         const text = await res.text().catch(() => '')
-        setFileImportError(`新建失败 (${res.status}): ${text || '未知错误'}`)
+        setNewFileError(`新建失败 (${res.status}): ${text || '未知错误'}`)
+        setNewFileSubmitting(false)
         return
       }
       const newMeta: WorkbenchFileMeta = await res.json()
@@ -1820,10 +1829,14 @@ export default function WorkbenchCanvas({
       onBlockMetaPatch?.({
         files: [...meta.files, newMeta],
       })
+      onSelectedBlockChange?.(createFileBlockId(newMeta.id))
       setNewFileDialogOpen(false)
       setNewFileConflict(null)
+      setNewFileSubmitting(false)
+      setNewFileError(null)
     } catch (err) {
-      setFileImportError(`新建异常: ${(err as Error).message ?? String(err)}`)
+      setNewFileError(`新建异常: ${(err as Error).message ?? String(err)}`)
+      setNewFileSubmitting(false)
     }
   }
 
@@ -2323,6 +2336,8 @@ export default function WorkbenchCanvas({
 
       <NewFileDialog
         open={newFileDialogOpen}
+        submitting={newFileSubmitting}
+        errorMessage={newFileError}
         conflictState={newFileConflict}
         onClose={closeNewFileDialog}
         onCreate={payload => void processNewFile(payload, null)}

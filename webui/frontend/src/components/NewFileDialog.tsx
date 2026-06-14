@@ -5,6 +5,8 @@ import { WORKBENCH_FILE_EXTENSIONS, type WorkbenchFileLanguage } from '../pages/
 export interface NewFileDialogProps {
   open: boolean
   defaultName?: string
+  submitting?: boolean
+  errorMessage?: string | null
   conflictState?: {
     name: string
     suggestedName: string
@@ -71,6 +73,8 @@ function validateName(name: string): { ok: boolean; reason?: string } {
 export default function NewFileDialog({
   open,
   defaultName = '',
+  submitting = false,
+  errorMessage = null,
   conflictState,
   onClose,
   onCreate,
@@ -119,7 +123,7 @@ export default function NewFileDialog({
   if (!open) return null
 
   const validation = validateName(name)
-  const canCreate = validation.ok
+  const canCreate = validation.ok && !submitting
 
   const handleCreate = () => {
     if (!canCreate) return
@@ -174,6 +178,9 @@ export default function NewFileDialog({
           {!validation.ok && name.length > 0 && (
             <div className="mt-2 text-xs text-amber-200">⚠ {validation.reason}</div>
           )}
+          {errorMessage && (
+            <div className="mt-2 text-xs text-red-300">⚠ {errorMessage}</div>
+          )}
           <div className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">
             支持的后缀：{WORKBENCH_FILE_EXTENSIONS.map(e => e.replace('.', '')).join(' / ')}
           </div>
@@ -207,7 +214,7 @@ export default function NewFileDialog({
             onClick={handleCreate}
             disabled={!canCreate}
           >
-            创建
+            {submitting ? '创建中…' : '创建'}
           </button>
         </footer>
       </div>
