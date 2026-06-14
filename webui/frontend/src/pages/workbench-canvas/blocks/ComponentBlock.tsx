@@ -1,5 +1,5 @@
 import { DeleteBlockButton, LinkPendingOutline } from './BlockFrameControls'
-import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchConnectionSource, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
+import { workbenchCanvasFont, type WorkbenchBlockDragHandlers, type WorkbenchBlockResizeHandlers, type WorkbenchComponentMeta, type WorkbenchConnectionSource, type WorkbenchCustomInstallRule, type WorkbenchEnvVariableEntry, type WorkbenchPoint, type WorkbenchSize, type WorkbenchVersionFormattingRule } from '../types'
 
 export const componentBlockMinSize: WorkbenchSize = { width: 520, height: 430 }
 export const componentBlockInputOffset: WorkbenchPoint = { x: 5, y: 92 }
@@ -85,6 +85,10 @@ function formatTomlVersionFormattingRule(value: WorkbenchVersionFormattingRule) 
 
 function formatTomlEnvVariableEntry(value: WorkbenchEnvVariableEntry) {
   return `{name = ${formatTomlString(value.name)}, value = ${formatTomlString(value.value)}}`
+}
+
+function formatTomlCustomInstallRule(value: WorkbenchCustomInstallRule) {
+  return `{extension = ${formatTomlString(value.extension)}, operate = ${formatTomlBoolean(value.operate)}}`
 }
 
 function formatTomlInlineTableArray<T>(values: T[], formatter: (value: T) => string) {
@@ -202,7 +206,7 @@ export default function ComponentBlock({
         ...(component.commandInstall !== true
           ? [
             { label: '安装操作：', value: formatTomlString(component.installOperate) },
-            ...(component.installOperate === 'custom' ? [{ label: '自定义安装规则：', value: formatTomlArray(component.installCustomList) }] : []),
+            ...(component.installOperate === 'custom' ? [{ label: '自定义安装规则：', value: formatTomlInlineTableArray(component.installCustomList, formatTomlCustomInstallRule) }] : []),
           ]
           : []),
         { label: '安装路径：', value: formatTomlString(component.installPath) },

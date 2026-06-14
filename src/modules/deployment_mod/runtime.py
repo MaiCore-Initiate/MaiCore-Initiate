@@ -1484,6 +1484,9 @@ class DeploymentModRuntime:
         return selected
 
     def _filter_candidates(self, definition: Any, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not getattr(definition, "user_choose", False):
+            return candidates
+
         choose_list = list(getattr(definition, "choose_list", []) or [])
         if not choose_list:
             return candidates
@@ -1502,7 +1505,11 @@ class DeploymentModRuntime:
 
         if integers:
             max_items = max(integers)
-            results.extend(candidates if max_items == 0 else candidates[:max_items])
+            prioritized_candidates = sorted(
+                candidates,
+                key=lambda item: 0 if str(item.get("type", "")).lower() == "branch" else 1,
+            )
+            results.extend(prioritized_candidates if max_items == 0 else prioritized_candidates[:max_items])
 
         if not results:
             return candidates

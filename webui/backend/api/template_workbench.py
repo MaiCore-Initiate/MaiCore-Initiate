@@ -76,6 +76,12 @@ class CheckProjectPathResponse(BaseModel):
     reason: Optional[str] = None
 
 
+class SaveWorkbenchStatePayload(BaseModel):
+    meta: Dict[str, Any]
+    visible_blocks: Dict[str, Any]
+    toml_content: str
+
+
 # ---------------- Helpers ----------------
 
 def load_mod_index() -> Dict[str, Dict[str, Any]]:
@@ -245,7 +251,59 @@ def get_project(sequence: str):
     data = load_mod_index()
     if sequence not in data:
         raise HTTPException(status_code=404, detail=f"工作台项目 '{sequence}' 未找到。")
-    return to_project(sequence, data[sequence])
+    project = to_project(sequence, data[sequence]).model_dump()
+    project["workbench_meta"] = data[sequence].get("workbench_meta")
+    project["visible_blocks"] = data[sequence].get("visible_blocks")
+    return project
+
+
+@router.put("/projects/{sequence}/workbench-state", summary="保存工作台模板状态")
+def save_workbench_state(sequence: str, payload: SaveWorkbenchStatePayload):
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(status_code=404, detail=f"工作台项目 '{sequence}' 未找到。")
+
+    item = data[sequence]
+    project_dir = _resolve_project_path(sequence)
+    meta = payload.meta if isinstance(payload.meta, dict) else {}
+    visible_blocks = payload.visible_blocks if isinstance(payload.visible_blocks, dict) else {}
+    next_mod_id = str(meta.get("modId") or item.get("mod_id") or "").strip()
+    next_mod_name = str(meta.get("modName") or item.get("mod_name") or "").strip()
+
+    if not next_mod_id:
+        raise HTTPException(400, "保存失败：mod_id 不能为空")
+    if not next_mod_name:
+        raise HTTPException(400, "保存失败：mod_name 不能为空")
+
+    _validate_mod_id(next_mod_id)
+
+    old_mod_id = str(item.get("mod_id") or "").strip()
+    toml_path = project_dir / f"{next_mod_id}.toml"
+    try:
+        toml_path.write_text(payload.toml_content, encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(500, f"保存模板失败：{exc}") from exc
+
+    if old_mod_id and old_mod_id != next_mod_id:
+        old_toml_path = project_dir / f"{old_mod_id}.toml"
+        if old_toml_path != toml_path and old_toml_path.exists():
+            try:
+                old_toml_path.unlink()
+            except OSError:
+                pass
+
+    item["mod_id"] = next_mod_id
+    item["mod_name"] = next_mod_name
+    item["description"] = str(meta.get("description") or "")
+    item["author"] = str(meta.get("author") or "")
+    item["workbench_meta"] = meta
+    item["visible_blocks"] = visible_blocks
+    save_mod_index(data)
+
+    project = to_project(sequence, item).model_dump()
+    project["workbench_meta"] = item.get("workbench_meta")
+    project["visible_blocks"] = item.get("visible_blocks")
+    return project
 
 
 @router.post("/projects/check-path", summary="检测项目子目录是否可用", response_model=CheckProjectPathResponse)

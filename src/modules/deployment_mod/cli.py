@@ -1657,6 +1657,9 @@ class DeploymentModCliRunner:
         candidates: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """应用模板的 choose_list 过滤规则到版本候选列表。"""
+        if not getattr(definition, "user_choose", False):
+            return candidates
+
         choose_list = list(getattr(definition, "choose_list", []) or [])
         if not choose_list:
             return candidates
@@ -1677,7 +1680,11 @@ class DeploymentModCliRunner:
 
         if integers:
             max_items = max(integers)
-            results.extend(candidates if max_items == 0 else candidates[:max_items])
+            prioritized_candidates = sorted(
+                candidates,
+                key=lambda item: 0 if str(item.get("type", "")).lower() == "branch" else 1,
+            )
+            results.extend(prioritized_candidates if max_items == 0 else prioritized_candidates[:max_items])
 
         if not results:
             return candidates

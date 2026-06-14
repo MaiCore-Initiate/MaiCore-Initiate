@@ -86,7 +86,7 @@ export interface WorkbenchComponentMeta {
   formatVersion: boolean
   versionFormattingFormula: WorkbenchVersionFormattingRule[]
   installOperate: string
-  installCustomList: string[]
+  installCustomList: WorkbenchCustomInstallRule[]
   installPath: string
   customPath: string
   splicingLink: string
@@ -142,6 +142,11 @@ export interface WorkbenchDeploymentMeta {
 export interface WorkbenchVersionFormattingRule {
   match: string
   replace: string
+}
+
+export interface WorkbenchCustomInstallRule {
+  extension: string
+  operate: boolean
 }
 
 export interface WorkbenchConfigItemMeta {

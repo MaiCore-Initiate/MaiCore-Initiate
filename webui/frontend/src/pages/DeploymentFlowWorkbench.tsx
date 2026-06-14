@@ -5,7 +5,7 @@ import WorkbenchRightSidebar, { rightSidebarCollapsedWidth, rightSidebarExpanded
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
 import FileEditorModal from './FileEditorModal'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchCustomInstallRule, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -15,7 +15,7 @@ const workbenchMinZoom = 0.08
 const workbenchMaxZoom = 8
 const leftSidebarDefaultWidth = 305
 const leftSidebarCollapsedWidth = 70
-const leftSidebarMinWidth = 180
+const leftSidebarMinWidth = 230
 const leftSidebarMaxWidth = 520
 const outlineRowHeight = 24
 const outlineIndent = 10
@@ -67,6 +67,9 @@ interface WorkbenchProjectInfo {
   description?: string
   author?: string
   cover?: string | null
+  files?: WorkbenchFileMeta[]
+  workbench_meta?: Partial<WorkbenchMetaState> | null
+  visible_blocks?: Partial<WorkbenchVisibleBlocks> | null
 }
 
 type WorkbenchMetaState = WorkbenchModInfoMeta
@@ -250,6 +253,50 @@ const defaultWorkbenchMeta: WorkbenchMetaState = {
   files: [],
 }
 
+function serializeTomlString(value: string) {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+function serializeTomlStringArray(values: string[]) {
+  return `[${values.map(serializeTomlString).join(', ')}]`
+}
+
+function serializeTomlVersionFormattingRule(value: WorkbenchVersionFormattingRule) {
+  return `{match = ${serializeTomlString(value.match)}, replace = ${serializeTomlString(value.replace)}}`
+}
+
+function serializeTomlEnvVariableEntry(value: WorkbenchEnvVariableEntry) {
+  return `{name = ${serializeTomlString(value.name)}, value = ${serializeTomlString(value.value)}}`
+}
+
+function serializeTomlInlineTableArray<T>(values: T[], formatter: (value: T) => string) {
+  return `[${values.map(formatter).join(', ')}]`
+}
+
+function appendTomlString(lines: string[], key: string, value: string) {
+  lines.push(`${key} = ${serializeTomlString(value)}`)
+}
+
+function appendTomlBoolean(lines: string[], key: string, value: boolean) {
+  lines.push(`${key} = ${formatTomlBoolean(value)}`)
+}
+
+function appendTomlStringArray(lines: string[], key: string, values: string[]) {
+  lines.push(`${key} = ${serializeTomlStringArray(values)}`)
+}
+
+function appendTomlEnvVariableArray(lines: string[], key: string, values: WorkbenchEnvVariableEntry[]) {
+  lines.push(`${key} = ${serializeTomlInlineTableArray(values, serializeTomlEnvVariableEntry)}`)
+}
+
+function appendTomlVersionFormattingArray(lines: string[], key: string, values: WorkbenchVersionFormattingRule[]) {
+  lines.push(`${key} = ${serializeTomlInlineTableArray(values, serializeTomlVersionFormattingRule)}`)
+}
+
+function appendTomlCustomInstallArray(lines: string[], key: string, values: WorkbenchCustomInstallRule[]) {
+  lines.push(`${key} = ${serializeTomlInlineTableArray(values, value => `{extension = ${serializeTomlString(value.extension)}, operate = ${formatTomlBoolean(value.operate)}}`)}`)
+}
+
 function formatTomlString(value: string) {
   return value ? `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : ''
 }
@@ -275,6 +322,10 @@ function formatTomlVersionFormattingRule(value: WorkbenchVersionFormattingRule) 
 
 function formatTomlEnvVariableEntry(value: WorkbenchEnvVariableEntry) {
   return `{name = ${formatTomlString(value.name)}, value = ${formatTomlString(value.value)}}`
+}
+
+function formatTomlCustomInstallRule(value: WorkbenchCustomInstallRule) {
+  return `{extension = ${formatTomlString(value.extension)}, operate = ${formatTomlBoolean(value.operate)}}`
 }
 
 function formatTomlInlineTableArray<T>(values: T[], formatter: (value: T) => string) {
@@ -355,6 +406,33 @@ function createEnvVariableOutlineNode(id: string, fieldName: string, values: Wor
           id: `${id}-${index}-value`,
           label: `value = ${formatTomlString(value.value)}`,
           icon: 'string' as const,
+        },
+      ],
+    })),
+  }
+}
+
+function createCustomInstallRuleOutlineNode(id: string, values: WorkbenchCustomInstallRule[]): OutlineNode {
+  return {
+    id,
+    label: `install_custom_list = ${values.length ? formatTomlInlineTableArray(values, formatTomlCustomInstallRule) : ''}`,
+    icon: 'object',
+    defaultExpanded: true,
+    children: values.map((value, index) => ({
+      id: `${id}-${index}`,
+      label: `${index}`,
+      icon: 'object' as const,
+      defaultExpanded: true,
+      children: [
+        {
+          id: `${id}-${index}-extension`,
+          label: `extension = ${formatTomlString(value.extension)}`,
+          icon: 'string' as const,
+        },
+        {
+          id: `${id}-${index}-operate`,
+          label: `operate = ${formatTomlBoolean(value.operate)}`,
+          icon: 'boolean' as const,
         },
       ],
     })),
@@ -560,7 +638,7 @@ function createComponentOutlineChildren(component: WorkbenchComponentMeta, index
       ? [
         { id: id('install-operate'), label: `install_operate = ${formatTomlString(component.installOperate)}`, icon: 'string' as const },
         ...(component.installOperate === 'custom'
-          ? [createStringArrayOutlineNode(id('install-custom-list'), 'install_custom_list', component.installCustomList)]
+          ? [createCustomInstallRuleOutlineNode(id('install-custom-list'), component.installCustomList)]
           : []),
       ]
       : []),
@@ -931,6 +1009,275 @@ function createOutline(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisible
   ]
 }
 
+function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisibleBlocks) {
+  const lines: string[] = []
+
+  lines.push('[MCStart]')
+  appendTomlBoolean(lines, 'MCStart', true)
+  lines.push('')
+
+  lines.push('[MODINFO]')
+  appendTomlString(lines, 'author', meta.author)
+  appendTomlStringArray(lines, 'tags', meta.tags)
+  appendTomlString(lines, 'description', meta.description)
+  appendTomlString(lines, 'mod_id', meta.modId)
+  appendTomlString(lines, 'mod_name', meta.modName)
+  appendTomlString(lines, 'version', meta.version)
+  appendTomlString(lines, 'min_version', meta.minVersion)
+  appendTomlString(lines, 'max_version', meta.maxVersion)
+  appendTomlBoolean(lines, 'file_import', meta.fileImport)
+  appendTomlStringArray(lines, 'file_import_list', meta.fileImport ? meta.fileImportList : [])
+  appendTomlString(lines, 'runtime', meta.runtime)
+  if (meta.runtime === 'deno') {
+    appendTomlBoolean(lines, 'deno_net', meta.denoNet)
+    appendTomlBoolean(lines, 'deno_read', meta.denoRead)
+    appendTomlBoolean(lines, 'deno_write', meta.denoWrite)
+    appendTomlBoolean(lines, 'deno_env', meta.denoEnv)
+    appendTomlBoolean(lines, 'deno_run', meta.denoRun)
+    appendTomlBoolean(lines, 'deno_hrtime', meta.denoHrtime)
+    appendTomlBoolean(lines, 'deno_ffi', meta.denoFfi)
+    appendTomlBoolean(lines, 'deno_sys', meta.denoSys)
+    appendTomlBoolean(lines, 'deno_all', meta.denoAll)
+    appendTomlBoolean(lines, 'deno_custom_permissions', meta.denoCustomPermissions)
+    if (meta.denoCustomPermissions) appendTomlStringArray(lines, 'deno_permission_list', meta.denoPermissionList)
+  }
+  appendTomlStringArray(lines, 'platforms', meta.platforms)
+  appendTomlString(lines, 'schema_version', meta.schemaVersion)
+
+  if (visibleBlocks.components || visibleBlocks.componentCount > 0) {
+    lines.push('')
+    lines.push('[COMPONENTS]')
+    appendTomlBoolean(lines, 'env_output', meta.componentsEnvOutput)
+    appendTomlBoolean(lines, 'env_input', meta.componentsEnvInput)
+    appendTomlStringArray(lines, 'list', meta.componentsList)
+  }
+
+  Array.from({ length: visibleBlocks.componentCount }, (_, index) => meta.components[index] ?? defaultComponentMeta).forEach(component => {
+    const versionFile = component.versionFile ?? []
+    const versionCustom = component.versionCustom ?? []
+    const linkFile = component.linkFile ?? []
+    const linkCustom = component.linkCustom ?? []
+    const getLinkProvideList = component.getLinkProvideList ?? []
+    const denoPermissions = component.denoPermissions ?? []
+    const jvm = component.jvm ?? []
+
+    lines.push('')
+    lines.push('[[Component]]')
+    appendTomlString(lines, 'name', component.name)
+    appendTomlString(lines, 'id', component.id)
+    if (component.install) appendTomlBoolean(lines, 'choose', component.choose)
+    appendTomlString(lines, 'runtime', component.runtime)
+    appendTomlString(lines, 'command_theme', component.commandTheme)
+    appendTomlBoolean(lines, 'install', component.install)
+    appendTomlBoolean(lines, 'check', component.check)
+    if (component.check) {
+      appendTomlStringArray(lines, 'check_command', component.checkCommand)
+      appendTomlStringArray(lines, 'check_version_contains', component.checkVersionContains)
+      appendTomlStringArray(lines, 'check_version_regex', component.checkVersionRegex)
+    }
+    if (component.install) appendTomlBoolean(lines, 'command_install', component.commandInstall)
+    if (component.commandInstall) appendTomlStringArray(lines, 'install_command_list', component.installCommandList)
+    appendTomlString(lines, 'get_method', component.getMethod)
+    if (component.getMethod === 'direct') appendTomlString(lines, 'direct_link', component.directLink)
+    if (component.getMethod === 'get_version') {
+      appendTomlString(lines, 'get_version', component.getVersion)
+      if (component.getVersion === 'github_repo') appendTomlString(lines, 'github_repo', component.githubRepo)
+      if (component.getVersion === 'filelink') appendTomlStringArray(lines, 'version_file', versionFile)
+      if (component.getVersion === 'custom') {
+        appendTomlStringArray(lines, 'version_custom', versionCustom)
+        if (hasDenoCustomSource(versionCustom)) appendTomlStringArray(lines, 'deno_permissions', denoPermissions)
+        if (hasJvmCustomSource(versionCustom)) appendTomlStringArray(lines, 'JVM', jvm)
+      }
+      appendTomlBoolean(lines, 'format_version', component.formatVersion)
+      if (component.formatVersion) appendTomlVersionFormattingArray(lines, 'version_formatting_formula', component.versionFormattingFormula)
+      appendTomlString(lines, 'splicing_link', component.splicingLink)
+    }
+    if (component.getMethod === 'get_link') {
+      appendTomlString(lines, 'get_link', component.getLink)
+      if (component.getLink === 'filelink' || component.getLink === 'custom') {
+        appendTomlStringArray(lines, 'get_link_provide_list', getLinkProvideList)
+      }
+      if (component.getLink === 'filelink' && getLinkProvideList.length === 0) appendTomlStringArray(lines, 'link_file', linkFile)
+      if (component.getLink === 'custom' && getLinkProvideList.length === 0) {
+        appendTomlStringArray(lines, 'link_custom', linkCustom)
+        if (hasDenoCustomSource(linkCustom)) appendTomlStringArray(lines, 'deno_permissions', denoPermissions)
+        if (hasJvmCustomSource(linkCustom)) appendTomlStringArray(lines, 'JVM', jvm)
+      }
+    }
+    appendTomlBoolean(lines, 'user_choose', component.userChoose)
+    if (component.userChoose) appendTomlStringArray(lines, 'choose_list', component.chooseList)
+    if (component.install && !component.commandInstall) {
+      appendTomlString(lines, 'install_operate', component.installOperate)
+      if (component.installOperate === 'custom') appendTomlCustomInstallArray(lines, 'install_custom_list', component.installCustomList)
+    }
+    if (component.install) {
+      appendTomlString(lines, 'install_path', component.installPath)
+      if (component.installPath === '$CustomPath') appendTomlString(lines, 'custom_path', component.customPath)
+    }
+    appendTomlBoolean(lines, 'before_command', component.beforeCommand)
+    if (component.beforeCommand) appendTomlStringArray(lines, 'before_command_list', component.beforeCommandList)
+    appendTomlBoolean(lines, 'after_command', component.afterCommand)
+    if (component.afterCommand) appendTomlStringArray(lines, 'after_command_list', component.afterCommandList)
+    appendTomlBoolean(lines, 'env_output', component.envOutput)
+    if (component.envOutput) appendTomlEnvVariableArray(lines, 'env_output_list', component.envOutputList)
+    appendTomlBoolean(lines, 'env_input', component.envInput)
+    if (component.envInput) appendTomlEnvVariableArray(lines, 'env_input_list', component.envInputList)
+  })
+
+  if (visibleBlocks.deploy || visibleBlocks.deploymentCount > 0) {
+    lines.push('')
+    lines.push('[DEPLOY]')
+    appendTomlBoolean(lines, 'env_output', meta.deployEnvOutput)
+    appendTomlBoolean(lines, 'env_input', meta.deployEnvInput)
+    appendTomlStringArray(lines, 'list', meta.deployList)
+  }
+
+  Array.from({ length: visibleBlocks.deploymentCount }, (_, index) => meta.deployments[index] ?? defaultDeploymentMeta).forEach(deployment => {
+    const versionFile = deployment.versionFile ?? []
+    const versionCustom = deployment.versionCustom ?? []
+    const linkFile = deployment.linkFile ?? []
+    const linkCustom = deployment.linkCustom ?? []
+    const getLinkProvideList = deployment.getLinkProvideList ?? []
+    const denoPermissions = deployment.denoPermissions ?? []
+    const jvm = deployment.jvm ?? []
+
+    lines.push('')
+    lines.push('[[Deployment]]')
+    appendTomlString(lines, 'name', deployment.name)
+    appendTomlString(lines, 'id', deployment.id)
+    appendTomlBoolean(lines, 'choose', deployment.choose)
+    appendTomlString(lines, 'runtime', deployment.runtime)
+    appendTomlString(lines, 'command_theme', deployment.commandTheme)
+    appendTomlBoolean(lines, 'deploy', deployment.deploy)
+    if (deployment.deploy) appendTomlBoolean(lines, 'command_deploy', deployment.commandDeploy)
+    if (deployment.deploy && deployment.commandDeploy) appendTomlStringArray(lines, 'deploy_command_list', deployment.deployCommandList)
+    if (deployment.deploy && !deployment.commandDeploy) {
+      appendTomlString(lines, 'deploy_method', deployment.deployMethod)
+      appendTomlString(lines, 'base_link', deployment.baseLink)
+      appendTomlString(lines, 'get_method', deployment.getMethod)
+      if (deployment.getMethod === 'get_version') {
+        appendTomlString(lines, 'get_version', deployment.getVersion)
+        if (deployment.getVersion === 'github_repo') appendTomlString(lines, 'github_repo', deployment.githubRepo)
+        if (deployment.getVersion === 'filelink') appendTomlStringArray(lines, 'version_file', versionFile)
+        if (deployment.getVersion === 'custom') {
+          appendTomlStringArray(lines, 'version_custom', versionCustom)
+          if (hasDenoCustomSource(versionCustom)) appendTomlStringArray(lines, 'deno_permissions', denoPermissions)
+          if (hasJvmCustomSource(versionCustom)) appendTomlStringArray(lines, 'JVM', jvm)
+        }
+        appendTomlBoolean(lines, 'format_version', deployment.formatVersion)
+        if (deployment.formatVersion) appendTomlVersionFormattingArray(lines, 'version_formatting_formula', deployment.versionFormattingFormula)
+        appendTomlString(lines, 'splicing_link', deployment.splicingLink)
+      }
+      if (deployment.getMethod === 'get_link') {
+        appendTomlString(lines, 'get_link', deployment.getLink)
+        if (deployment.getLink === 'filelink' || deployment.getLink === 'custom') {
+          appendTomlStringArray(lines, 'get_link_provide_list', getLinkProvideList)
+        }
+        if (deployment.getLink === 'filelink' && getLinkProvideList.length === 0) appendTomlStringArray(lines, 'link_file', linkFile)
+        if (deployment.getLink === 'custom' && getLinkProvideList.length === 0) {
+          appendTomlStringArray(lines, 'link_custom', linkCustom)
+          if (hasDenoCustomSource(linkCustom)) appendTomlStringArray(lines, 'deno_permissions', denoPermissions)
+          if (hasJvmCustomSource(linkCustom)) appendTomlStringArray(lines, 'JVM', jvm)
+        }
+      }
+      appendTomlString(lines, 'deploy_path', deployment.deployPath)
+      if (deployment.deployPath === '$CustomPath') appendTomlString(lines, 'custom_path', deployment.customPath)
+    }
+    appendTomlBoolean(lines, 'user_choose', deployment.userChoose)
+    if (deployment.userChoose) appendTomlStringArray(lines, 'choose_list', deployment.chooseList)
+    appendTomlBoolean(lines, 'before_command', deployment.beforeCommand)
+    if (deployment.beforeCommand) appendTomlStringArray(lines, 'before_command_list', deployment.beforeCommandList)
+    appendTomlBoolean(lines, 'after_command', deployment.afterCommand)
+    if (deployment.afterCommand) appendTomlStringArray(lines, 'after_command_list', deployment.afterCommandList)
+    appendTomlBoolean(lines, 'env_output', deployment.envOutput)
+    if (deployment.envOutput) appendTomlEnvVariableArray(lines, 'env_output_list', deployment.envOutputList)
+    appendTomlBoolean(lines, 'env_input', deployment.envInput)
+    if (deployment.envInput) appendTomlEnvVariableArray(lines, 'env_input_list', deployment.envInputList)
+  })
+
+  if (visibleBlocks.launch || visibleBlocks.launchItemCount > 0) {
+    lines.push('')
+    lines.push('[LAUNCH]')
+    appendTomlBoolean(lines, 'env_output', meta.launchEnvOutput)
+    appendTomlBoolean(lines, 'env_input', meta.launchEnvInput)
+    appendTomlStringArray(lines, 'list', meta.launchList)
+  }
+
+  Array.from({ length: visibleBlocks.launchItemCount }, (_, index) => meta.launchItems[index] ?? emptyLaunchItemMeta).forEach(launchItem => {
+    lines.push('')
+    lines.push('[[LaunchItem]]')
+    appendTomlString(lines, 'id', launchItem.id)
+    appendTomlString(lines, 'name', launchItem.name)
+    appendTomlBoolean(lines, 'choose', launchItem.choose)
+    appendTomlString(lines, 'runtime', launchItem.runtime)
+    appendTomlString(lines, 'command_theme', launchItem.commandTheme)
+    appendTomlBoolean(lines, 'launch', launchItem.launch)
+    if (launchItem.launch) appendTomlStringArray(lines, 'launch_command', launchItem.launchCommand)
+    appendTomlBoolean(lines, 'env_input', launchItem.envInput)
+    if (launchItem.envInput) appendTomlEnvVariableArray(lines, 'env_input_list', launchItem.envInputList)
+    appendTomlBoolean(lines, 'env_output', launchItem.envOutput)
+    if (launchItem.envOutput) appendTomlEnvVariableArray(lines, 'env_output_list', launchItem.envOutputList)
+  })
+
+  if (visibleBlocks.config || visibleBlocks.configItemCount > 0) {
+    lines.push('')
+    lines.push('[CONFIG]')
+    appendTomlBoolean(lines, 'env_output', meta.configEnvOutput)
+    appendTomlBoolean(lines, 'env_input', meta.configEnvInput)
+    appendTomlStringArray(lines, 'list', meta.configList)
+  }
+
+  Array.from({ length: visibleBlocks.configItemCount }, (_, index) => meta.configItems[index] ?? emptyConfigItemMeta).forEach(configItem => {
+    lines.push('')
+    lines.push('[[ConfigItem]]')
+    appendTomlString(lines, 'id', configItem.id)
+    appendTomlString(lines, 'name', configItem.name)
+    appendTomlString(lines, 'runtime', configItem.runtime)
+    appendTomlString(lines, 'command_theme', configItem.commandTheme)
+    appendTomlString(lines, 'file_path', configItem.filePath)
+    appendTomlBoolean(lines, 'choose', configItem.choose)
+    appendTomlBoolean(lines, 'env_input', configItem.envInput)
+    if (configItem.envInput) appendTomlEnvVariableArray(lines, 'env_input_list', configItem.envInputList)
+  })
+
+  if (visibleBlocks.uninstall || visibleBlocks.uninstallItemCount > 0) {
+    lines.push('')
+    lines.push('[UNINSTALL]')
+    appendTomlBoolean(lines, 'env_output', meta.uninstallEnvOutput)
+    appendTomlBoolean(lines, 'env_input', meta.uninstallEnvInput)
+    appendTomlStringArray(lines, 'list', meta.uninstallList)
+  }
+
+  Array.from({ length: visibleBlocks.uninstallItemCount }, (_, index) => meta.uninstallItems[index] ?? emptyUninstallItemMeta).forEach(uninstallItem => {
+    lines.push('')
+    lines.push('[[UninstallItem]]')
+    appendTomlString(lines, 'id', uninstallItem.id)
+    appendTomlString(lines, 'name', uninstallItem.name)
+    appendTomlBoolean(lines, 'choose', uninstallItem.choose)
+    appendTomlString(lines, 'runtime', uninstallItem.runtime)
+    appendTomlString(lines, 'command_theme', uninstallItem.commandTheme)
+    appendTomlBoolean(lines, 'uninstall', uninstallItem.uninstall)
+    appendTomlBoolean(lines, 'stop_before_uninstall', uninstallItem.stopBeforeUninstall)
+    if (uninstallItem.stopBeforeUninstall) appendTomlStringArray(lines, 'stop_command_list', uninstallItem.stopCommandList)
+    appendTomlBoolean(lines, 'remove_instance_config', uninstallItem.removeInstanceConfig)
+    appendTomlBoolean(lines, 'remove_runtime_files', uninstallItem.removeRuntimeFiles)
+    appendTomlBoolean(lines, 'remove_deploy_root', uninstallItem.removeDeployRoot)
+    appendTomlBoolean(lines, 'remove_component', uninstallItem.removeComponent)
+    appendTomlStringArray(lines, 'deployment_targets', uninstallItem.deploymentTargets)
+    appendTomlStringArray(lines, 'component_targets', uninstallItem.componentTargets)
+    appendTomlBoolean(lines, 'before_command', uninstallItem.beforeCommand)
+    if (uninstallItem.beforeCommand) appendTomlStringArray(lines, 'before_command_list', uninstallItem.beforeCommandList)
+    appendTomlBoolean(lines, 'after_command', uninstallItem.afterCommand)
+    if (uninstallItem.afterCommand) appendTomlStringArray(lines, 'after_command_list', uninstallItem.afterCommandList)
+    appendTomlBoolean(lines, 'env_output', uninstallItem.envOutput)
+    if (uninstallItem.envOutput) appendTomlEnvVariableArray(lines, 'env_output_list', uninstallItem.envOutputList)
+    appendTomlBoolean(lines, 'env_input', uninstallItem.envInput)
+    if (uninstallItem.envInput) appendTomlEnvVariableArray(lines, 'env_input_list', uninstallItem.envInputList)
+  })
+
+  return `${lines.join('\n')}\n`
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
@@ -1105,6 +1452,38 @@ function TextAlignLeftGlyph() {
       <path d="M9.5 18h16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
       <path d="M9.5 23h22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
       <path d="M9.5 28h16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
+  )
+}
+
+function SaveGlyph() {
+  return (
+    <svg width="30" height="30" viewBox="0 0 41 41" fill="none" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M9.5 0L31.5 0C36.7467 0 41 4.2533 41 9.5L41 31.5C41 36.7467 36.7467 41 31.5 41L9.5 41C4.2533 41 0 36.7467 0 31.5L0 9.5C0 4.2533 4.2533 0 9.5 0ZM9.5 1C4.80558 1 1 4.80558 1 9.5L1 31.5C1 36.1944 4.80558 40 9.5 40L31.5 40C36.1944 40 40 36.1944 40 31.5L40 9.5C40 4.80558 36.1944 1 31.5 1L9.5 1Z"
+      />
+      <path
+        d="M31.5 15.9125L31.5 30.5C31.5 31.0523 31.0523 31.5 30.5 31.5L10.5 31.5C9.94772 31.5 9.5 31.0523 9.5 30.5L9.5 10.5C9.5 9.94772 9.94772 9.50001 10.5 9.50001L25.0875 9.50001C25.2201 9.49953 25.3474 9.55193 25.4412 9.64566L31.3543 15.5588C31.4481 15.6526 31.5005 15.7799 31.5 15.9125Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <path
+        d="M14.5 31.5L14.5 23.5C14.5 22.9477 14.9477 22.5 15.5 22.5L25.5 22.5C26.0523 22.5 26.5 22.9477 26.5 23.5L26.5 31.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <path
+        d="M23.5 13.5L16.5 13.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
     </svg>
   )
 }
@@ -1327,6 +1706,8 @@ function WorkbenchLeftSidebar({
   width,
   onToggleCollapsed,
   onBackToLibrary,
+  onSave,
+  saveStatusLabel,
   onResize,
   outline,
   selectedBlockId,
@@ -1337,6 +1718,8 @@ function WorkbenchLeftSidebar({
   width: number
   onToggleCollapsed: () => void
   onBackToLibrary: () => void
+  onSave: () => void
+  saveStatusLabel: string
   onResize: (width: number) => void
   outline: OutlineNode[]
   selectedBlockId: WorkbenchBlockId | null
@@ -1416,10 +1799,13 @@ function WorkbenchLeftSidebar({
       <SidebarToolButton left={20} label="返回项目列表" onClick={onBackToLibrary}>
         <ArrowLeft size={30} strokeWidth={2} />
       </SidebarToolButton>
-      <SidebarToolButton left={70} label="收起左侧边栏" onClick={onToggleCollapsed}>
+      <SidebarToolButton left={70} label={saveStatusLabel} onClick={onSave}>
+        <SaveGlyph />
+      </SidebarToolButton>
+      <SidebarToolButton left={120} label="收起左侧边栏" onClick={onToggleCollapsed}>
         <TextAlignLeftGlyph />
       </SidebarToolButton>
-      <SidebarToolButton left={120} label="新建工作区">
+      <SidebarToolButton left={170} label="新建工作区">
         <Plus size={30} strokeWidth={2} />
       </SidebarToolButton>
       <div
@@ -1465,6 +1851,8 @@ export default function DeploymentFlowWorkbench({
   const [openFileEditorFileId, setOpenFileEditorFileId] = useState<string | null>(null)
   const [meta, setMeta] = useState<WorkbenchMetaState>(defaultWorkbenchMeta)
   const [visibleBlocks, setVisibleBlocks] = useState<WorkbenchVisibleBlocks>(defaultVisibleBlocks)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -1536,13 +1924,25 @@ export default function DeploymentFlowWorkbench({
         const project = await response.json() as WorkbenchProjectInfo
         if (!cancelled) {
           setProjectInfo(project)
-          setMeta(prev => ({
-            ...prev,
-            modName: project.mod_name || prev.modName,
-            modId: project.mod_id || (project.path ? project.path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') : '') || prev.modId,
-            description: project.description || prev.description,
-            author: project.author || prev.author,
-          }))
+          const fallbackMeta: WorkbenchMetaState = {
+            ...defaultWorkbenchMeta,
+            modName: project.mod_name || defaultWorkbenchMeta.modName,
+            modId: project.mod_id || (project.path ? project.path.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') : '') || defaultWorkbenchMeta.modId,
+            description: project.description || defaultWorkbenchMeta.description,
+            author: project.author || defaultWorkbenchMeta.author,
+            files: Array.isArray(project.files) ? project.files : defaultWorkbenchMeta.files,
+          }
+          setMeta({
+            ...fallbackMeta,
+            ...(project.workbench_meta ?? {}),
+            files: Array.isArray(project.workbench_meta?.files)
+              ? project.workbench_meta.files
+              : fallbackMeta.files,
+          })
+          setVisibleBlocks({
+            ...defaultVisibleBlocks,
+            ...(project.visible_blocks ?? {}),
+          })
         }
       } catch (error) {
         console.error(error)
@@ -1687,6 +2087,37 @@ export default function DeploymentFlowWorkbench({
     }))
   }
 
+  const handleSaveWorkbench = async () => {
+    if (!projectSequence || isSaving) return
+    setIsSaving(true)
+    setSaveMessage(null)
+    try {
+      const response = await fetch(`/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/workbench-state`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meta,
+          visible_blocks: visibleBlocks,
+          toml_content: buildWorkbenchToml(meta, visibleBlocks),
+        }),
+      })
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        throw new Error(text || `HTTP ${response.status}`)
+      }
+      const project = await response.json() as WorkbenchProjectInfo
+      setProjectInfo(project)
+      setSaveMessage('已保存')
+      window.setTimeout(() => setSaveMessage(current => (current === '已保存' ? null : current)), 2000)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setSaveMessage(`保存失败：${message}`)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <div
       ref={workbenchRef}
@@ -1719,6 +2150,8 @@ export default function DeploymentFlowWorkbench({
         collapsed={leftSidebarCollapsed}
         width={leftSidebarWidth}
         onToggleCollapsed={() => setLeftSidebarCollapsed(prev => !prev)}
+        onSave={() => void handleSaveWorkbench()}
+        saveStatusLabel={isSaving ? '正在保存…' : saveMessage ?? '保存模板'}
         onResize={setLeftSidebarWidth}
         onBackToLibrary={onBackToLibrary}
         outline={effectiveOutline}
