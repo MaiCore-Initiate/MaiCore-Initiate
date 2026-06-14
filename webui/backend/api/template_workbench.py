@@ -411,6 +411,13 @@ _COVER_MIME_BY_EXT = {
 }
 
 
+def _ensure_project(sequence: str) -> Dict[str, Any]:
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
+    return data[sequence]
+
+
 def _resolve_project_path(sequence: str) -> Path:
     """读 MOD.json 拿到 project 的绝对路径（不存在则抛 404）。同时自动迁移 legacy .toml 文件路径。"""
     data = load_mod_index()
