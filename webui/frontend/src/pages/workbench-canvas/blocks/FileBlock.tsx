@@ -121,7 +121,11 @@ export default function FileBlock({
           y={circleCy - 24}
           width="48"
           height="48"
-          style={{ pointerEvents: 'none', overflow: 'visible' }}
+          style={{
+            pointerEvents: 'none',
+            overflow: 'visible',
+            color: 'var(--dfw-text)',
+          }}
         >
           <Icon size={48} />
         </foreignObject>
