@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { WORKBENCH_FILE_EXTENSIONS, type WorkbenchFileLanguage } from '../pages/workbench-canvas/types'
 
@@ -16,7 +16,7 @@ export interface NewFileDialogProps {
 
 function inferLanguage(name: string): WorkbenchFileLanguage {
   const ext = name.toLowerCase().slice(name.lastIndexOf('.') + 1)
-  const table: Record<string, WorkbenchFileLanguage> = {
+  const table: Record<string, string> = {
     py: 'python',
     ps1: 'powershell', cmd: 'powershell', bat: 'powershell',
     sh: 'shell', bash: 'shell',
@@ -28,7 +28,7 @@ function inferLanguage(name: string): WorkbenchFileLanguage {
     xml: 'xml', xaml: 'xml',
     txt: 'plaintext', log: 'plaintext',
   }
-  return table[ext] ?? 'plaintext'
+  return (table[ext] ?? 'plaintext') as WorkbenchFileLanguage
 }
 
 function defaultContentFor(name: string): string {
@@ -53,6 +53,17 @@ function defaultContentFor(name: string): string {
   }
 }
 
+function validateName(name: string): { ok: boolean; reason?: string } {
+  if (!name || !name.trim()) return { ok: false, reason: '文件名不能为空' }
+  if (name.length > 128) return { ok: false, reason: '文件名不能超过 128 字符' }
+  const ext = name.toLowerCase().slice(name.lastIndexOf('.') + 1)
+  if (!ext) return { ok: false, reason: '文件必须有扩展名' }
+  if (!WORKBENCH_FILE_EXTENSIONS.includes(`.${ext}` as (typeof WORKBENCH_FILE_EXTENSIONS)[number])) {
+    return { ok: false, reason: `不支持的后缀 .${ext}` }
+  }
+  return { ok: true }
+}
+
 export default function NewFileDialog({
   open,
   defaultName = '',
@@ -63,48 +74,55 @@ export default function NewFileDialog({
 }: NewFileDialogProps) {
   const [name, setName] = useState(defaultName)
   const [content, setContent] = useState('')
-  const [initialized, setInitialized] = useState(false)
 
+  // 用 ref 持最新 onCreate/onClose/onConflictResolve，避免键盘 handler stale closure
+  const onCreateRef = useRef(onCreate)
+  const onCloseRef = useRef(onClose)
+  const onConflictResolveRef = useRef(onConflictResolve)
+  const nameRef = useRef(name)
+  const contentRef = useRef(content)
+  useEffect(() => { onCreateRef.current = onCreate }, [onCreate])
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+  useEffect(() => { onConflictResolveRef.current = onConflictResolve }, [onConflictResolve])
+  useEffect(() => { nameRef.current = name }, [name])
+  useEffect(() => { contentRef.current = content }, [content])
+
+  // open 切换：进入时重置，离开时不重置（让 animation 顺利退出）
   useEffect(() => {
-    if (open && !initialized) {
+    if (open) {
       setName(defaultName)
       setContent(defaultContentFor(defaultName))
-      setInitialized(true)
     }
-    if (!open) {
-      setInitialized(false)
-    }
-  }, [open, defaultName, initialized])
+  }, [open, defaultName])
 
+  // Esc 关闭 + Ctrl/Cmd+Enter 提交
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        onClose()
+        onCloseRef.current()
       } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
-        handleCreate()
+        const v = validateName(nameRef.current)
+        if (v.ok) handleCreate()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, name, content])
+  }, [open])
 
   if (!open) return null
 
-  const ext = name.toLowerCase().slice(name.lastIndexOf('.') + 1)
-  const extValid = WORKBENCH_FILE_EXTENSIONS.includes(`.${ext}` as (typeof WORKBENCH_FILE_EXTENSIONS)[number])
-  const nameValid = name.length > 0 && name.length <= 128
-  const canCreate = extValid && nameValid
+  const validation = validateName(name)
+  const canCreate = validation.ok
 
   const handleCreate = () => {
     if (!canCreate) return
-    onCreate({ name, content, conflictResolution: null })
+    onCreateRef.current({ name: nameRef.current, content: contentRef.current, conflictResolution: null })
   }
 
-  return createPortal(
+  const dialog = (
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center"
       role="dialog"
@@ -139,18 +157,22 @@ export default function NewFileDialog({
           <input
             autoFocus
             value={name}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => {
-              setName(event.target.value)
-              setInitialized(true)
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setName(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                handleCreate()
+              }
             }}
             placeholder="例如 test.py"
             className="mt-2 w-full rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
           />
-          {!extValid && name.length > 0 && (
-            <div className="mt-2 text-xs text-amber-200">
-              ⚠ 当前后缀 <code>.{ext}</code> 不在白名单中。允许：{WORKBENCH_FILE_EXTENSIONS.map(e => e.replace('.', '')).join(' / ')}
-            </div>
+          {!validation.ok && name.length > 0 && (
+            <div className="mt-2 text-xs text-amber-200">⚠ {validation.reason}</div>
           )}
+          <div className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">
+            支持的后缀：{WORKBENCH_FILE_EXTENSIONS.map(e => e.replace('.', '')).join(' / ')}
+          </div>
 
           <label className="mt-4 block text-sm font-medium text-[var(--dfw-text)]">
             初始内容（可选）
@@ -162,9 +184,6 @@ export default function NewFileDialog({
             rows={10}
             className="mt-2 w-full resize-y rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-xs text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
           />
-          <div className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">
-            Ctrl/Cmd + Enter 创建
-          </div>
         </div>
 
         <footer className="flex items-center justify-end gap-2 border-t border-white/10 px-6 py-4">
@@ -185,39 +204,57 @@ export default function NewFileDialog({
           </button>
         </footer>
       </div>
+    </div>
+  )
 
-      {conflictState && (
-        <div className="absolute left-1/2 top-[78%] z-[1010] w-[92%] max-w-md -translate-x-1/2 rounded-2xl border border-white/20 bg-[var(--dfw-bg)] p-5 shadow-2xl">
-          <h3 className="text-base font-semibold text-[var(--dfw-text)]">文件名冲突</h3>
-          <p className="mt-2 text-sm text-[var(--dfw-text)] opacity-80">
-            已存在同名文件 <span className="font-mono">{conflictState.name}</span>，请选择处理方式：
-          </p>
-          <div className="mt-4 flex flex-col gap-2">
-            <button
-              type="button"
-              className="w-full rounded-lg bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
-              onClick={() => onConflictResolve('rename')}
-            >
-              重命名为 <span className="font-mono">{conflictState.suggestedName}</span>
-            </button>
-            <button
-              type="button"
-              className="w-full rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] transition hover:bg-white/5"
-              onClick={() => onConflictResolve('overwrite')}
-            >
-              覆盖现有文件
-            </button>
-            <button
-              type="button"
-              className="w-full rounded-lg border border-transparent bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] opacity-70 transition hover:opacity-100"
-              onClick={() => onConflictResolve('cancel')}
-            >
-              取消
-            </button>
+  return (
+    <>
+      {createPortal(dialog, document.body)}
+      {conflictState && createPortal(
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-file-conflict-title"
+        >
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-[6px]"
+            onClick={() => onConflictResolveRef.current('cancel')}
+          />
+          <div className="relative w-[92%] max-w-md rounded-2xl border border-white/20 bg-[var(--dfw-bg)] p-6 shadow-2xl">
+            <h3 id="new-file-conflict-title" className="text-base font-semibold text-[var(--dfw-text)]">
+              文件名冲突
+            </h3>
+            <p className="mt-2 text-sm text-[var(--dfw-text)] opacity-80">
+              已存在同名文件 <span className="font-mono">{conflictState.name}</span>，请选择处理方式：
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                type="button"
+                className="w-full rounded-lg bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                onClick={() => onConflictResolveRef.current('rename')}
+              >
+                重命名为 <span className="font-mono">{conflictState.suggestedName}</span>
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] transition hover:bg-white/5"
+                onClick={() => onConflictResolveRef.current('overwrite')}
+              >
+                覆盖现有文件
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-lg border border-transparent bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] opacity-70 transition hover:opacity-100"
+                onClick={() => onConflictResolveRef.current('cancel')}
+              >
+                取消
+              </button>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>,
-    document.body,
+    </>
   )
 }
