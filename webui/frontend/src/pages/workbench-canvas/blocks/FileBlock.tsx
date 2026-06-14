@@ -145,6 +145,7 @@ export default function FileBlock({
       <g
         transform={`translate(${connectorCenterX} ${connectorCenterY})`}
         className="cursor-pointer"
+        style={{ color: 'var(--dfw-text)' }}
         onClick={event => event.stopPropagation()}
         onPointerDown={event => {
           event.stopPropagation()
@@ -152,9 +153,9 @@ export default function FileBlock({
         }}
       >
         <circle cx="0" cy="0" r="18" fill="transparent" />
-        <circle cx="0" cy="0" r={connectorRadius} fill="#fff" stroke="#000" strokeWidth="2" />
-        <path d="M-5 0H5" fill="none" stroke="#000" strokeLinecap="round" strokeWidth="2" />
-        <path d="M0 -5V5" fill="none" stroke="#000" strokeLinecap="round" strokeWidth="2" />
+        <circle cx="0" cy="0" r={connectorRadius} fill="var(--dfw-bg)" stroke="currentColor" strokeWidth="2" />
+        <path d="M-5 0H5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        <path d="M0 -5V5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
       </g>
 
       {selected ? <DeleteBlockButton x={bodyWidth - 36} y={4} onDelete={onDelete} /> : null}
