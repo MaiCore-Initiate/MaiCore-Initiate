@@ -412,7 +412,7 @@ _COVER_MIME_BY_EXT = {
 
 
 def _resolve_project_path(sequence: str) -> Path:
-    """读 MOD.json 拿到 project 的绝对路径（不存在则抛 404）。"""
+    """读 MOD.json 拿到 project 的绝对路径（不存在则抛 404）。同时自动迁移 legacy .toml 文件路径。"""
     data = load_mod_index()
     if sequence not in data:
         raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
@@ -422,7 +422,36 @@ def _resolve_project_path(sequence: str) -> Path:
     p = Path(raw_path)
     if not p.is_absolute():
         p = PROJECT_ROOT / raw_path
-    return p
+    return _migrate_legacy_project_path(data, sequence, p)
+
+
+def _migrate_legacy_project_path(data: Dict[str, Any], sequence: str, p: Path) -> Path:
+    """自动迁移 legacy 格式：path 指向一个 .toml 文件，迁到 base/<stem>/<stem>.toml 子目录结构。
+
+    旧代码会把 .toml 模板文件直接作为 project.path 存进 MOD.json。新流程要求 path 是项目根目录。
+    这里做懒迁移：每次访问项目时检查，文件存在且是 .toml 就迁到标准结构。
+    """
+    if not p.exists() or p.is_dir() or p.suffix.lower() != '.toml':
+        return p
+    base = p.parent
+    mod_id = p.stem
+    new_dir = base / mod_id
+    try:
+        new_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return p
+    new_toml = new_dir / f"{mod_id}.toml"
+    try:
+        if not new_toml.exists():
+            shutil.move(str(p), str(new_toml))
+    except OSError:
+        return p
+    item = data[sequence]
+    item["path"] = str(new_dir)
+    if not str(item.get("mod_id", "")).strip():
+        item["mod_id"] = mod_id
+    save_mod_index(data)
+    return new_dir
 
 
 def _delete_old_cover(project_dir: Path, cover_name: str) -> None:
