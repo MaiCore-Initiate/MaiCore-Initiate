@@ -12,8 +12,8 @@ export const fileBlockMinSize: WorkbenchSize = { width: 215, height: 208 }
 
 const iconAreaCenterX = 102
 const iconAreaCenterY = 84
-const iconSize = 152
 const selectionRadius = 101
+const iconSize = selectionRadius * 2 - 20
 const connectorRadius = 12
 const connectorCenterY = 95
 const connectorInset = 13.5

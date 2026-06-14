@@ -36,8 +36,10 @@ BINARY_EXTENSIONS = {".jar", ".exe"}
 CREATION_BLOCKED_EXTENSIONS = {".jar", ".exe"}
 # 文件名合法字符：字母/数字/下划线/连字符/点/空格，长度 1-128
 FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._\- ]{1,128}$")
-# 单文件最大 5 MB
-MAX_FILE_SIZE = 5 * 1024 * 1024
+# 文本文件最大 5 MB
+MAX_TEXT_FILE_SIZE = 5 * 1024 * 1024
+# 二进制导入文件最大 200 MB
+MAX_BINARY_FILE_SIZE = 200 * 1024 * 1024
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
@@ -114,6 +116,18 @@ def _validate_creatable_name(name: str) -> None:
     ext = Path(name).suffix.lower()
     if ext in CREATION_BLOCKED_EXTENSIONS:
         raise HTTPException(400, f"不允许新建 {ext} 文件，请改用导入现有文件")
+
+
+def _max_size_for_filename(name: str) -> int:
+    return MAX_BINARY_FILE_SIZE if Path(name).suffix.lower() in BINARY_EXTENSIONS else MAX_TEXT_FILE_SIZE
+
+
+def _max_size_label(size: int) -> str:
+    if size >= 1024 * 1024:
+        return f"{size // (1024 * 1024)}MB"
+    if size >= 1024:
+        return f"{size // 1024}KB"
+    return f"{size}B"
 
 
 def _ensure_project(sequence: str) -> Dict[str, Any]:
@@ -338,8 +352,9 @@ async def upload_file(
                 if not chunk:
                     break
                 written += len(chunk)
-                if written > MAX_FILE_SIZE:
-                    raise HTTPException(413, f"文件超过 5MB 上限")
+                max_size = _max_size_for_filename(target_name)
+                if written > max_size:
+                    raise HTTPException(413, f"文件超过 {_max_size_label(max_size)} 上限")
                 f.write(chunk)
     except HTTPException:
         if target_path.exists() and target_path.stat().st_size == 0:
@@ -376,8 +391,8 @@ def create_file(sequence: str, payload: CreateFilePayload):
     _validate_creatable_name(payload.name)
     if payload.conflictResolution and payload.conflictResolution not in ("rename", "overwrite"):
         raise HTTPException(400, f"非法的 conflictResolution: {payload.conflictResolution}")
-    if payload.content is not None and len(payload.content.encode("utf-8")) > MAX_FILE_SIZE:
-        raise HTTPException(413, f"内容超过 5MB 上限")
+    if payload.content is not None and len(payload.content.encode("utf-8")) > MAX_TEXT_FILE_SIZE:
+        raise HTTPException(413, f"内容超过 {_max_size_label(MAX_TEXT_FILE_SIZE)} 上限")
 
     project_dir = _project_dir(sequence)
     target_name = payload.name
@@ -426,8 +441,8 @@ def read_raw(sequence: str, filename: str):
     if Path(filename).suffix.lower() in BINARY_EXTENSIONS:
         raise HTTPException(415, f"二进制文件不支持文本读取")
     size = target.stat().st_size
-    if size > MAX_FILE_SIZE:
-        raise HTTPException(413, f"文件超过 5MB 上限")
+    if size > MAX_TEXT_FILE_SIZE:
+        raise HTTPException(413, f"文件超过 {_max_size_label(MAX_TEXT_FILE_SIZE)} 上限")
     try:
         return target.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
@@ -463,8 +478,8 @@ def write_file(sequence: str, filename: str, payload: WriteFilePayload):
     project_dir = _project_dir(sequence)
     target = _safe_join(project_dir, filename)
 
-    if len(payload.content.encode("utf-8")) > MAX_FILE_SIZE:
-        raise HTTPException(413, f"内容超过 5MB 上限")
+    if len(payload.content.encode("utf-8")) > MAX_TEXT_FILE_SIZE:
+        raise HTTPException(413, f"内容超过 {_max_size_label(MAX_TEXT_FILE_SIZE)} 上限")
 
     target.write_text(payload.content, encoding="utf-8")
     files = _read_project_files(sequence)
