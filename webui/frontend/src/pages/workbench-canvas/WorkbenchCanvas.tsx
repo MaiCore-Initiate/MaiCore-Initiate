@@ -337,6 +337,15 @@ function isFileConnectionSource(blockId: WorkbenchBlockId) {
   return parseFileBlockId(blockId) !== null
 }
 
+// 文件块默认位置：提升到模块顶层用 function 声明（hoist），避免组件函数体
+// 内 TDZ。initBlockPosition 通过参数传入，不依赖 useState 的初始化顺序。
+function defaultFilePosition(index: number, initPosition: WorkbenchPoint): WorkbenchPoint {
+  return {
+    x: initPosition.x - 220 - (index % 3) * 140,
+    y: initPosition.y + 24 + Math.floor(index / 3) * 140,
+  }
+}
+
 
 export default function WorkbenchCanvas({
   viewport,
@@ -774,7 +783,7 @@ export default function WorkbenchCanvas({
   }
   const fileBlocks = meta.files.map((file, index) => {
     const blockId = createFileBlockId(file.id)
-    const position = fileBlockPositions[file.id] ?? defaultFilePosition(index)
+    const position = fileBlockPositions[file.id] ?? defaultFilePosition(index, initBlockPosition)
     const size = fileBlockSizes[file.id] ?? fileBlockMinSize
     const outputOffset = resolveFileBlockOutputOffset(size)
     const output = {
@@ -1643,11 +1652,6 @@ export default function WorkbenchCanvas({
     setAddNodePopoverSource(null)
   }
 
-  const defaultFilePosition = (index: number): WorkbenchPoint => ({
-    x: initBlockPosition.x - 220 - (index % 3) * 140,
-    y: initBlockPosition.y + 24 + Math.floor(index / 3) * 140,
-  })
-
   const triggerFileImport = () => {
     if (!projectSequence) {
       setFileImportError('当前未关联工作台项目，无法导入文件。')
@@ -1727,7 +1731,7 @@ export default function WorkbenchCanvas({
       const newMeta: WorkbenchFileMeta = await uploadRes.json()
       const currentFiles = metaRef.current.files
       const nextIndex = currentFiles.length
-      setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
+      setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex, initBlockPosition) }))
       onBlockMetaPatch?.({
         files: [...currentFiles.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
       })
@@ -1806,7 +1810,7 @@ export default function WorkbenchCanvas({
       const newMeta: WorkbenchFileMeta = await res.json()
       const currentFiles = metaRef.current.files
       const nextIndex = currentFiles.length
-      setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex) }))
+      setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex, initBlockPosition) }))
       onBlockMetaPatch?.({
         files: [...currentFiles.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
       })
@@ -1858,7 +1862,7 @@ export default function WorkbenchCanvas({
         setFileBlockPositions(current => {
           const next = { ...current }
           nextFiles.forEach((file, index) => {
-            if (!next[file.id]) next[file.id] = defaultFilePosition(index)
+            if (!next[file.id]) next[file.id] = defaultFilePosition(index, initBlockPosition)
           })
           Object.keys(next).forEach(fileId => {
             if (!nextIds.has(fileId)) delete next[fileId]
