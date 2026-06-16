@@ -16,7 +16,7 @@ import InitBlock, { resolveInitBlockFileInputOffset } from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
 import FileConflictDialog, { type FileConflictResolution } from '../../components/FileConflictDialog'
 import NewFileDialog from '../../components/NewFileDialog'
-import { WORKBENCH_FILE_EXTENSIONS, createFileBlockId, parseFileBlockId, workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchCanvasState, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConfigItemBlockId, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchFileMeta, type WorkbenchLaunchItemBlockId, type WorkbenchLaunchItemMeta, type WorkbenchManualConnection, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchUninstallItemBlockId, type WorkbenchUninstallItemMeta, type WorkbenchViewportSafeArea, type WorkbenchVisibleBlocks } from './types'
+import { WORKBENCH_FILE_EXTENSIONS, createFileBlockId, parseFileBlockId, workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchCanvasState, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConfigItemBlockId, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchFileMeta, type WorkbenchLaunchItemBlockId, type WorkbenchLaunchItemMeta, type WorkbenchManualConnection, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchUninstallItemBlockId, type WorkbenchUninstallItemMeta, type WorkbenchVisibleBlocks } from './types'
 
 const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
@@ -204,10 +204,6 @@ const startEndpointOutputOffset: WorkbenchPoint = { x: 95.711, y: 70.711 }
 const longPressMs = 220
 const initBlockMinSize: WorkbenchSize = { width: 421, height: 431 }
 const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, config: false, launch: false, uninstall: false, componentCount: 0, deploymentCount: 0, configItemCount: 0, launchItemCount: 0, uninstallItemCount: 0 }
-const defaultViewportSafeArea: WorkbenchViewportSafeArea = { left: 0, top: 0, right: 0, bottom: 0 }
-const fitViewportPadding = 96
-const fitViewportMinScale = 0.08
-const fitViewportMaxScale = 1
 type DraggableBlockId = WorkbenchBlockId
 type ResizableBlockId = Exclude<WorkbenchBlockId, 'start'>
 type DraggingConnection = {
@@ -352,8 +348,6 @@ function defaultFilePosition(index: number, initPosition: WorkbenchPoint): Workb
 
 export default function WorkbenchCanvas({
   viewport,
-  viewportSafeArea = defaultViewportSafeArea,
-  viewportContainerRect = null,
   addNodeAnchor = null,
   selectedBlockId = null,
   onSelectedBlockChange,
@@ -363,10 +357,8 @@ export default function WorkbenchCanvas({
   onBlockMetaPatch,
   onOpenFileEditor,
   projectSequence = null,
-  projectReady = false,
   canvasState,
   onCanvasStatePatch,
-  onViewportChange,
 }: WorkbenchCanvasProps) {
   const meta = { ...defaultBlockMeta, ...blockMeta }
   const blockVisibility = { ...defaultVisibleBlocks, ...visibleBlocks }
@@ -432,7 +424,6 @@ export default function WorkbenchCanvas({
   } | null>(null)
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
-  const canvasSvgRef = useRef<SVGSVGElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const metaRef = useRef(meta)
   const dragRef = useRef<{
@@ -460,9 +451,6 @@ export default function WorkbenchCanvas({
   // 切项目时重置 lastAppliedCanvasStateRef 让下一次 effect 重新应用最新 canvasState。
   const lastHydratedSequenceRef = useRef<string | null | undefined>(undefined)
   const lastAppliedCanvasStateRef = useRef<Partial<WorkbenchCanvasState> | null | undefined>(undefined)
-  // 记录「上一次 fit-to-view 跑过的项目」，每个项目只 fit 一次
-  const lastFittedSequenceRef = useRef<string | null | undefined>(undefined)
-
   const flushCanvasStatePatch = () => {
     canvasStatePatchRafRef.current = null
     const pending = canvasStatePatchBufferRef.current
@@ -1053,86 +1041,6 @@ export default function WorkbenchCanvas({
     }
     return { index, blockId: createUninstallItemBlockId(index), position, size, input, output, connected: uninstallItemConnections[index] ?? false } as const
   })
-
-  useEffect(() => {
-    if (lastFittedSequenceRef.current !== projectSequence) {
-      lastFittedSequenceRef.current = undefined
-    }
-  }, [projectSequence])
-
-  useEffect(() => {
-    if (projectSequence == null) return
-    if (!projectReady) return
-    if (lastFittedSequenceRef.current === projectSequence) return
-
-    requestAnimationFrame(() => {
-      const rect = viewportContainerRect
-      const svg = canvasSvgRef.current
-      if (!rect) return
-      if (!svg) return
-
-      const visibleWidth = rect.width - viewportSafeArea.left - viewportSafeArea.right
-      const visibleHeight = rect.height - viewportSafeArea.top - viewportSafeArea.bottom
-      if (visibleWidth <= 0 || visibleHeight <= 0) return
-
-      const boxes = Array.from(
-        svg.querySelectorAll<SVGGElement>('[data-workbench-block-id]'),
-      ).map(node => node.getBBox())
-
-      if (boxes.length === 0) return
-
-      const minX = Math.min(...boxes.map(box => box.x))
-      const minY = Math.min(...boxes.map(box => box.y))
-      const maxX = Math.max(...boxes.map(box => box.x + box.width))
-      const maxY = Math.max(...boxes.map(box => box.y + box.height))
-      const worldWidth = Math.max(1, maxX - minX + fitViewportPadding * 2)
-      const worldHeight = Math.max(1, maxY - minY + fitViewportPadding * 2)
-      const scale = Math.max(
-        fitViewportMinScale,
-        Math.min(
-          fitViewportMaxScale,
-          Math.min(visibleWidth / worldWidth, visibleHeight / worldHeight),
-        ),
-      )
-
-      const visibleCenterX = viewportSafeArea.left + visibleWidth / 2
-      const visibleCenterY = viewportSafeArea.top + visibleHeight / 2
-      const worldCenterX = (minX + maxX) / 2
-      const worldCenterY = (minY + maxY) / 2
-
-      lastFittedSequenceRef.current = projectSequence
-      onViewportChange?.({
-        scale,
-        x: visibleCenterX - worldCenterX * scale,
-        y: visibleCenterY - worldCenterY * scale,
-      })
-    })
-  }, [
-    projectSequence,
-    projectReady,
-    viewportSafeArea,
-    viewportContainerRect,
-    onViewportChange,
-    startEndpointPosition,
-    initBlockPosition,
-    initBlockSize,
-    componentsBlockPosition,
-    componentsBlockSize,
-    deployBlockPosition,
-    deployBlockSize,
-    configBlockPosition,
-    configBlockSize,
-    launchBlockPosition,
-    launchBlockSize,
-    uninstallBlockPosition,
-    uninstallBlockSize,
-    blockVisibility.components,
-    blockVisibility.deploy,
-    blockVisibility.config,
-    blockVisibility.launch,
-    blockVisibility.uninstall,
-    meta.files,
-  ])
 
   const isBlockVisible = (blockId: WorkbenchBlockId) => {
     if (blockId === 'start' || blockId === 'init' || blockId === 'init-file') return true
@@ -2411,7 +2319,6 @@ export default function WorkbenchCanvas({
         }}
       >
         <svg
-          ref={canvasSvgRef}
           width="1920"
           height="1080"
           viewBox="0 0 1920 1080"

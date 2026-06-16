@@ -231,8 +231,6 @@ export interface WorkbenchSize {
 
 export interface WorkbenchCanvasProps {
   viewport: WorkbenchCanvasViewport
-  viewportSafeArea?: WorkbenchViewportSafeArea
-  viewportContainerRect?: DOMRectReadOnly | null
   addNodeAnchor?: WorkbenchAddNodeAnchor | null
   selectedBlockId?: WorkbenchBlockId | null
   onSelectedBlockChange?: (blockId: WorkbenchBlockId | null) => void
@@ -242,7 +240,6 @@ export interface WorkbenchCanvasProps {
   onBlockMetaPatch?: (patch: Partial<WorkbenchBlockMeta>) => void
   onOpenFileEditor?: (fileId: string) => void
   projectSequence?: string | null
-  projectReady?: boolean
   canvasState?: Partial<WorkbenchCanvasState>
   onCanvasStatePatch?: (patch: Partial<WorkbenchCanvasState>) => void
   onViewportChange?: (next: WorkbenchCanvasViewport) => void
@@ -258,6 +255,7 @@ export interface WorkbenchManualConnection {
 // WorkbenchCanvas 内部所有 useState 用这套类型的字段做初值；每次 setState
 // 之后会通过 onCanvasStatePatch 把变更冒泡给上层持久化。
 export interface WorkbenchCanvasState {
+  viewport: WorkbenchCanvasViewport
   startEndpointPosition: WorkbenchPoint
   initBlockPosition: WorkbenchPoint
   initBlockSize: WorkbenchSize

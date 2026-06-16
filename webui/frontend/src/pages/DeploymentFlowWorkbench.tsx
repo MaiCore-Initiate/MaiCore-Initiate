@@ -7,7 +7,7 @@ import type { WorkbenchModInfoMeta } from './workbench-right-sidebar/types'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
 import FileEditorModal from './FileEditorModal'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchCanvasState, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchCustomInstallRule, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchViewportSafeArea, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchCanvasState, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchCustomInstallRule, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -26,8 +26,6 @@ const outlineBaseIconLeft = 36
 const outlineBaseTextLeft = 25.84
 const outlineIconTextGap = 19.84
 const bottomBarZoomAnimationMs = 180
-const topTabsReservedHeight = 108
-const bottomBarReservedHeight = 124
 const baseBlockNames = {
   start: '起始端点',
   init: '初始化块',
@@ -1875,7 +1873,6 @@ export default function DeploymentFlowWorkbench({
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
-  const [workbenchRect, setWorkbenchRect] = useState<DOMRectReadOnly | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
   const viewportAnimationFrameRef = useRef<number | null>(null)
@@ -1945,6 +1942,20 @@ export default function DeploymentFlowWorkbench({
     })
   }
 
+  useEffect(() => {
+    setCanvasState(prev => {
+      const currentViewport = prev.viewport
+      if (
+        currentViewport?.scale === viewport.scale
+        && currentViewport?.x === viewport.x
+        && currentViewport?.y === viewport.y
+      ) {
+        return prev
+      }
+      return { ...prev, viewport }
+    })
+  }, [viewport])
+
   const animateViewportTo = (target: WorkbenchViewport) => {
     cancelViewportAnimation()
 
@@ -2005,7 +2016,16 @@ export default function DeploymentFlowWorkbench({
             ...defaultVisibleBlocks,
             ...(project.visible_blocks ?? {}),
           })
-          setCanvasState(project.workbench_canvas_state ?? {})
+          const nextCanvasState = project.workbench_canvas_state ?? {}
+          setCanvasState(nextCanvasState)
+          const nextSavedViewport = nextCanvasState.viewport
+          const savedViewport = {
+            scale: clamp(nextSavedViewport?.scale ?? 1, workbenchMinZoom, workbenchMaxZoom),
+            x: Number.isFinite(nextSavedViewport?.x) ? nextSavedViewport?.x ?? 0 : 0,
+            y: Number.isFinite(nextSavedViewport?.y) ? nextSavedViewport?.y ?? 0 : 0,
+          }
+          viewportRef.current = savedViewport
+          setViewport(savedViewport)
         }
       } catch (error) {
         console.error(error)
@@ -2022,14 +2042,6 @@ export default function DeploymentFlowWorkbench({
   useEffect(() => {
     const workbench = workbenchRef.current
     if (!workbench) return
-
-    const updateWorkbenchRect = () => {
-      setWorkbenchRect(workbench.getBoundingClientRect())
-    }
-    updateWorkbenchRect()
-
-    const resizeObserver = new ResizeObserver(() => updateWorkbenchRect())
-    resizeObserver.observe(workbench)
 
     const handleNativeWheel = (event: WheelEvent) => {
       if (event.target instanceof Element && event.target.closest('[data-workbench-ui]')) return
@@ -2054,10 +2066,7 @@ export default function DeploymentFlowWorkbench({
     }
 
     workbench.addEventListener('wheel', handleNativeWheel, { passive: false })
-    return () => {
-      resizeObserver.disconnect()
-      workbench.removeEventListener('wheel', handleNativeWheel)
-    }
+    return () => workbench.removeEventListener('wheel', handleNativeWheel)
   }, [])
 
   useEffect(() => {
@@ -2131,12 +2140,6 @@ export default function DeploymentFlowWorkbench({
 
   const leftSidebarRight = leftSidebarCollapsed ? leftSidebarCollapsedWidth : leftSidebarWidth
   const rightSidebarLeft = rightSidebarCollapsed ? rightSidebarCollapsedWidth : rightSidebarWidth
-  const viewportSafeArea: WorkbenchViewportSafeArea = {
-    left: leftSidebarRight,
-    top: topTabsReservedHeight,
-    right: rightSidebarLeft,
-    bottom: bottomBarReservedHeight,
-  }
   const openAddNodeFromBottomBar = () => {
     const workbench = workbenchRef.current
     if (!workbench) return
@@ -2226,11 +2229,8 @@ export default function DeploymentFlowWorkbench({
         onBlockMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
         onOpenFileEditor={setOpenFileEditorFileId}
         projectSequence={projectSequence}
-        projectReady={projectInfo !== null}
         canvasState={canvasState}
         onCanvasStatePatch={patch => setCanvasState(prev => ({ ...prev, ...patch }))}
-        viewportSafeArea={viewportSafeArea}
-        viewportContainerRect={workbenchRect}
         onViewportChange={next => updateViewport(next)}
       />
       <WorkbenchLeftSidebar
