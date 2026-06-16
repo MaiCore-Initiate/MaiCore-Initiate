@@ -201,7 +201,6 @@ const defaultBlockMeta: WorkbenchBlockMeta = {
 
 const initBlockInputOffset: WorkbenchPoint = { x: 5, y: 115.5 }
 const startEndpointOutputOffset: WorkbenchPoint = { x: 95.711, y: 70.711 }
-const startEndpointBounds = { width: 132, height: 132 }
 const longPressMs = 220
 const initBlockMinSize: WorkbenchSize = { width: 421, height: 431 }
 const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, config: false, launch: false, uninstall: false, componentCount: 0, deploymentCount: 0, configItemCount: 0, launchItemCount: 0, uninstallItemCount: 0 }
@@ -433,6 +432,7 @@ export default function WorkbenchCanvas({
   } | null>(null)
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
+  const canvasSvgRef = useRef<SVGSVGElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const metaRef = useRef(meta)
   const dragRef = useRef<{
@@ -1067,63 +1067,24 @@ export default function WorkbenchCanvas({
 
     requestAnimationFrame(() => {
       const rect = viewportContainerRect
+      const svg = canvasSvgRef.current
       if (!rect) return
+      if (!svg) return
 
       const visibleWidth = rect.width - viewportSafeArea.left - viewportSafeArea.right
       const visibleHeight = rect.height - viewportSafeArea.top - viewportSafeArea.bottom
       if (visibleWidth <= 0 || visibleHeight <= 0) return
 
-      const boxes: { x: number; y: number; w: number; h: number }[] = [
-        {
-          x: startEndpointPosition.x + 70.711 - startEndpointBounds.width / 2,
-          y: startEndpointPosition.y + 71.066 - startEndpointBounds.height / 2,
-          w: startEndpointBounds.width,
-          h: startEndpointBounds.height,
-        },
-        { x: initBlockPosition.x, y: initBlockPosition.y, w: initBlockSize.width, h: initBlockSize.height },
-      ]
-
-      if (blockVisibility.components) {
-        boxes.push({ x: componentsBlockPosition.x, y: componentsBlockPosition.y, w: componentsBlockSize.width, h: componentsBlockSize.height })
-      }
-      if (blockVisibility.deploy) {
-        boxes.push({ x: deployBlockPosition.x, y: deployBlockPosition.y, w: deployBlockSize.width, h: deployBlockSize.height })
-      }
-      if (blockVisibility.config) {
-        boxes.push({ x: configBlockPosition.x, y: configBlockPosition.y, w: configBlockSize.width, h: configBlockSize.height })
-      }
-      if (blockVisibility.launch) {
-        boxes.push({ x: launchBlockPosition.x, y: launchBlockPosition.y, w: launchBlockSize.width, h: launchBlockSize.height })
-      }
-      if (blockVisibility.uninstall) {
-        boxes.push({ x: uninstallBlockPosition.x, y: uninstallBlockPosition.y, w: uninstallBlockSize.width, h: uninstallBlockSize.height })
-      }
-
-      componentBlocks.forEach(block => {
-        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
-      })
-      deploymentBlocks.forEach(block => {
-        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
-      })
-      configItemBlocks.forEach(block => {
-        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
-      })
-      launchItemBlocks.forEach(block => {
-        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
-      })
-      uninstallItemBlocks.forEach(block => {
-        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
-      })
-      fileBlocks.forEach(block => {
-        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
-      })
+      const boxes = Array.from(
+        svg.querySelectorAll<SVGGElement>('[data-workbench-block-id]'),
+      ).map(node => node.getBBox())
 
       if (boxes.length === 0) return
 
       const minX = Math.min(...boxes.map(box => box.x))
       const minY = Math.min(...boxes.map(box => box.y))
-      const maxX = Math.max(...boxes.map(box => box.x + box.w))
-      const maxY = Math.max(...boxes.map(box => box.y + box.h))
+      const maxX = Math.max(...boxes.map(box => box.x + box.width))
+      const maxY = Math.max(...boxes.map(box => box.y + box.height))
       const worldWidth = Math.max(1, maxX - minX + fitViewportPadding * 2)
       const worldHeight = Math.max(1, maxY - minY + fitViewportPadding * 2)
       const scale = Math.max(
@@ -1170,12 +1131,7 @@ export default function WorkbenchCanvas({
     blockVisibility.config,
     blockVisibility.launch,
     blockVisibility.uninstall,
-    componentBlocks,
-    deploymentBlocks,
-    configItemBlocks,
-    launchItemBlocks,
-    uninstallItemBlocks,
-    fileBlocks,
+    meta.files,
   ])
 
   const isBlockVisible = (blockId: WorkbenchBlockId) => {
@@ -2455,6 +2411,7 @@ export default function WorkbenchCanvas({
         }}
       >
         <svg
+          ref={canvasSvgRef}
           width="1920"
           height="1080"
           viewBox="0 0 1920 1080"

@@ -23,7 +23,7 @@ export default function StartEndpointBlock({
   dragHandlers?: WorkbenchBlockDragHandlers
 }) {
   return (
-    <g transform={`translate(${position.x} ${position.y})`}>
+    <g transform={`translate(${position.x} ${position.y})`} data-workbench-block-id="start">
       {selected && (
         <circle cx="70.711" cy="71.066" r="66" fill="none" stroke="var(--dfw-blue)" strokeWidth="2" />
       )}
