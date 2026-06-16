@@ -565,9 +565,11 @@ function FileTypeGlyph({ kind }: { kind?: WorkbenchFileKind }) {
 function ProjectList({
   items,
   onOpen,
+  onContextMenu,
 }: {
   items: TemplateWorkbenchItem[]
   onOpen?: (item: TemplateWorkbenchItem) => void
+  onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
 }) {
   const rowStart = 61
   const rowGap = 80
@@ -584,6 +586,11 @@ function ProjectList({
             <button
               type="button"
               onClick={() => onOpen?.(item)}
+              onContextMenu={event => {
+                if (!onContextMenu) return
+                event.preventDefault()
+                onContextMenu(event, item)
+              }}
               className="absolute inset-0 z-0 rounded-[5px] transition-colors hover:bg-[var(--twb-hover)]"
               aria-label={`打开${item.name}`}
             />
@@ -1144,7 +1151,7 @@ export default function TemplateWorkbench({
         ))}
 
         {layoutMode === 'list' && (
-          <ProjectList items={contentItems} onOpen={openItem} />
+          <ProjectList items={contentItems} onOpen={openItem} onContextMenu={handleContextMenu} />
         )}
 
         {slots?.contentTrailing}
