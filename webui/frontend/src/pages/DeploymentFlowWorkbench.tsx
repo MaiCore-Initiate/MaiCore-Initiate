@@ -7,7 +7,7 @@ import type { WorkbenchModInfoMeta } from './workbench-right-sidebar/types'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
 import FileEditorModal from './FileEditorModal'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchCanvasState, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchCustomInstallRule, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchCanvasState, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchCustomInstallRule, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchViewportSafeArea, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -26,6 +26,8 @@ const outlineBaseIconLeft = 36
 const outlineBaseTextLeft = 25.84
 const outlineIconTextGap = 19.84
 const bottomBarZoomAnimationMs = 180
+const topTabsReservedHeight = 108
+const bottomBarReservedHeight = 124
 const baseBlockNames = {
   start: '起始端点',
   init: '初始化块',
@@ -2117,6 +2119,12 @@ export default function DeploymentFlowWorkbench({
 
   const leftSidebarRight = leftSidebarCollapsed ? leftSidebarCollapsedWidth : leftSidebarWidth
   const rightSidebarLeft = rightSidebarCollapsed ? rightSidebarCollapsedWidth : rightSidebarWidth
+  const viewportSafeArea: WorkbenchViewportSafeArea = {
+    left: leftSidebarRight,
+    top: topTabsReservedHeight,
+    right: rightSidebarLeft,
+    bottom: bottomBarReservedHeight,
+  }
   const openAddNodeFromBottomBar = () => {
     const workbench = workbenchRef.current
     if (!workbench) return
@@ -2208,7 +2216,8 @@ export default function DeploymentFlowWorkbench({
         projectSequence={projectSequence}
         canvasState={canvasState}
         onCanvasStatePatch={patch => setCanvasState(prev => ({ ...prev, ...patch }))}
-        onViewportChange={setViewport}
+        viewportSafeArea={viewportSafeArea}
+        onViewportChange={next => updateViewport(next)}
       />
       <WorkbenchLeftSidebar
         collapsed={leftSidebarCollapsed}

@@ -16,7 +16,7 @@ import InitBlock, { resolveInitBlockFileInputOffset } from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
 import FileConflictDialog, { type FileConflictResolution } from '../../components/FileConflictDialog'
 import NewFileDialog from '../../components/NewFileDialog'
-import { WORKBENCH_FILE_EXTENSIONS, createFileBlockId, parseFileBlockId, workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchCanvasState, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConfigItemBlockId, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchFileMeta, type WorkbenchLaunchItemBlockId, type WorkbenchLaunchItemMeta, type WorkbenchManualConnection, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchUninstallItemBlockId, type WorkbenchUninstallItemMeta, type WorkbenchVisibleBlocks } from './types'
+import { WORKBENCH_FILE_EXTENSIONS, createFileBlockId, parseFileBlockId, workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchCanvasState, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConfigItemBlockId, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchFileMeta, type WorkbenchLaunchItemBlockId, type WorkbenchLaunchItemMeta, type WorkbenchManualConnection, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchUninstallItemBlockId, type WorkbenchUninstallItemMeta, type WorkbenchViewportSafeArea, type WorkbenchVisibleBlocks } from './types'
 
 const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
@@ -201,9 +201,14 @@ const defaultBlockMeta: WorkbenchBlockMeta = {
 
 const initBlockInputOffset: WorkbenchPoint = { x: 5, y: 115.5 }
 const startEndpointOutputOffset: WorkbenchPoint = { x: 95.711, y: 70.711 }
+const startEndpointBounds = { width: 132, height: 132 }
 const longPressMs = 220
 const initBlockMinSize: WorkbenchSize = { width: 421, height: 431 }
 const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, config: false, launch: false, uninstall: false, componentCount: 0, deploymentCount: 0, configItemCount: 0, launchItemCount: 0, uninstallItemCount: 0 }
+const defaultViewportSafeArea: WorkbenchViewportSafeArea = { left: 0, top: 0, right: 0, bottom: 0 }
+const fitViewportPadding = 96
+const fitViewportMinScale = 0.08
+const fitViewportMaxScale = 1
 type DraggableBlockId = WorkbenchBlockId
 type ResizableBlockId = Exclude<WorkbenchBlockId, 'start'>
 type DraggingConnection = {
@@ -348,6 +353,7 @@ function defaultFilePosition(index: number, initPosition: WorkbenchPoint): Workb
 
 export default function WorkbenchCanvas({
   viewport,
+  viewportSafeArea = defaultViewportSafeArea,
   addNodeAnchor = null,
   selectedBlockId = null,
   onSelectedBlockChange,
@@ -531,74 +537,6 @@ export default function WorkbenchCanvas({
     if (typeof cs.uninstallConnected === 'boolean') setUninstallConnected(cs.uninstallConnected)
     if (cs.manualConnections) setManualConnections(cs.manualConnections)
   }, [projectSequence, canvasState])
-
-  // 切到新项目时 fit-to-view：算出所有块的 world 包围盒 → 求最小 scale 让
-  // 包围盒完整放进视口 → 平移使包围盒中心对齐到视口中心。
-  // 关键：从 canvasState prop 读位置而不是 useState。hydration effect 和本
-  // effect 在同一次 render 中跑（hydration 触发的 setXxx 是异步的），闭包里
-  // 的 useState 还是 default；canvasState 是同步的真值（来自父组件 prop），
-  // 用它算包围盒才正确。
-  useEffect(() => {
-    if (lastFittedSequenceRef.current === projectSequence) return
-    if (projectSequence == null) return
-    if (!canvasState || Object.keys(canvasState).length === 0) return
-    lastFittedSequenceRef.current = projectSequence
-    const cs = canvasState
-    requestAnimationFrame(() => {
-      const rect = canvasRef.current?.getBoundingClientRect()
-      if (!rect) return
-      const boxes: { x: number; y: number; w: number; h: number }[] = []
-      const pushBox = (pos: WorkbenchPoint | undefined, size: WorkbenchSize | undefined) => {
-        if (!pos) return
-        boxes.push({ x: pos.x, y: pos.y, w: size?.width ?? 0, h: size?.height ?? 0 })
-      }
-      pushBox(cs.initBlockPosition, cs.initBlockSize ?? initBlockMinSize)
-      if (blockVisibility.components) pushBox(cs.componentsBlockPosition, cs.componentsBlockSize ?? componentsBlockMinSize)
-      if (blockVisibility.deploy) pushBox(cs.deployBlockPosition, cs.deployBlockSize ?? deployBlockMinSize)
-      if (blockVisibility.config) pushBox(cs.configBlockPosition, cs.configBlockSize ?? configBlockMinSize)
-      if (blockVisibility.launch) pushBox(cs.launchBlockPosition, cs.launchBlockSize ?? launchBlockMinSize)
-      if (blockVisibility.uninstall) pushBox(cs.uninstallBlockPosition, cs.uninstallBlockSize ?? uninstallBlockMinSize)
-      const pushIndexed = (positions: WorkbenchPoint[] | undefined, sizes: WorkbenchSize[] | undefined, min: WorkbenchSize) => {
-        if (!positions) return
-        positions.forEach((pos, index) => {
-          const size = sizes?.[index] ?? min
-          boxes.push({ x: pos.x, y: pos.y, w: size.width, h: size.height })
-        })
-      }
-      pushIndexed(cs.componentBlockPositions, cs.componentBlockSizes, componentBlockMinSize)
-      pushIndexed(cs.deploymentBlockPositions, cs.deploymentBlockSizes, deploymentBlockMinSize)
-      pushIndexed(cs.configItemBlockPositions, cs.configItemBlockSizes, configItemBlockMinSize)
-      pushIndexed(cs.launchItemBlockPositions, cs.launchItemBlockSizes, launchItemBlockMinSize)
-      pushIndexed(cs.uninstallItemBlockPositions, cs.uninstallItemBlockSizes, uninstallItemBlockMinSize)
-      if (cs.fileBlockPositions) {
-        const filePositions = cs.fileBlockPositions
-        const fileSizes = cs.fileBlockSizes
-        meta.files.forEach(file => {
-          const pos = filePositions[file.id]
-          const size = fileSizes?.[file.id] ?? fileBlockMinSize
-          if (pos) boxes.push({ x: pos.x, y: pos.y, w: size.width, h: size.height })
-        })
-      }
-      if (boxes.length === 0) return
-      const minX = Math.min(...boxes.map(b => b.x))
-      const minY = Math.min(...boxes.map(b => b.y))
-      const maxX = Math.max(...boxes.map(b => b.x + b.w))
-      const maxY = Math.max(...boxes.map(b => b.y + b.h))
-      const padding = 80
-      const worldW = Math.max(1, maxX - minX + padding * 2)
-      const worldH = Math.max(1, maxY - minY + padding * 2)
-      // 缩放最多 100%：只有当世界坐标超出视口时才缩小，正常情况保持原比例。
-      const rawScale = Math.min(rect.width / worldW, rect.height / worldH)
-      const scale = Math.max(0.08, Math.min(1, rawScale))
-      const cx = (minX + maxX) / 2
-      const cy = (minY + maxY) / 2
-      onViewportChange?.({
-        scale,
-        x: rect.width / 2 - cx * scale,
-        y: rect.height / 2 - cy * scale,
-      })
-    })
-  }, [projectSequence, canvasState, blockVisibility.components, blockVisibility.deploy, blockVisibility.config, blockVisibility.launch, blockVisibility.uninstall, meta.files])
 
   useEffect(() => {
     const count = Math.max(0, blockVisibility.componentCount)
@@ -1113,6 +1051,121 @@ export default function WorkbenchCanvas({
     }
     return { index, blockId: createUninstallItemBlockId(index), position, size, input, output, connected: uninstallItemConnections[index] ?? false } as const
   })
+
+  useEffect(() => {
+    if (projectSequence == null) return
+    if (lastFittedSequenceRef.current === projectSequence) return
+
+    requestAnimationFrame(() => {
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const visibleWidth = rect.width - viewportSafeArea.left - viewportSafeArea.right
+      const visibleHeight = rect.height - viewportSafeArea.top - viewportSafeArea.bottom
+      if (visibleWidth <= 0 || visibleHeight <= 0) return
+
+      const boxes: { x: number; y: number; w: number; h: number }[] = [
+        {
+          x: startEndpointPosition.x + 70.711 - startEndpointBounds.width / 2,
+          y: startEndpointPosition.y + 71.066 - startEndpointBounds.height / 2,
+          w: startEndpointBounds.width,
+          h: startEndpointBounds.height,
+        },
+        { x: initBlockPosition.x, y: initBlockPosition.y, w: initBlockSize.width, h: initBlockSize.height },
+      ]
+
+      if (blockVisibility.components) {
+        boxes.push({ x: componentsBlockPosition.x, y: componentsBlockPosition.y, w: componentsBlockSize.width, h: componentsBlockSize.height })
+      }
+      if (blockVisibility.deploy) {
+        boxes.push({ x: deployBlockPosition.x, y: deployBlockPosition.y, w: deployBlockSize.width, h: deployBlockSize.height })
+      }
+      if (blockVisibility.config) {
+        boxes.push({ x: configBlockPosition.x, y: configBlockPosition.y, w: configBlockSize.width, h: configBlockSize.height })
+      }
+      if (blockVisibility.launch) {
+        boxes.push({ x: launchBlockPosition.x, y: launchBlockPosition.y, w: launchBlockSize.width, h: launchBlockSize.height })
+      }
+      if (blockVisibility.uninstall) {
+        boxes.push({ x: uninstallBlockPosition.x, y: uninstallBlockPosition.y, w: uninstallBlockSize.width, h: uninstallBlockSize.height })
+      }
+
+      componentBlocks.forEach(block => {
+        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
+      })
+      deploymentBlocks.forEach(block => {
+        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
+      })
+      configItemBlocks.forEach(block => {
+        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
+      })
+      launchItemBlocks.forEach(block => {
+        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
+      })
+      uninstallItemBlocks.forEach(block => {
+        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
+      })
+      fileBlocks.forEach(block => {
+        boxes.push({ x: block.position.x, y: block.position.y, w: block.size.width, h: block.size.height })
+      })
+
+      if (boxes.length === 0) return
+
+      const minX = Math.min(...boxes.map(box => box.x))
+      const minY = Math.min(...boxes.map(box => box.y))
+      const maxX = Math.max(...boxes.map(box => box.x + box.w))
+      const maxY = Math.max(...boxes.map(box => box.y + box.h))
+      const worldWidth = Math.max(1, maxX - minX + fitViewportPadding * 2)
+      const worldHeight = Math.max(1, maxY - minY + fitViewportPadding * 2)
+      const scale = Math.max(
+        fitViewportMinScale,
+        Math.min(
+          fitViewportMaxScale,
+          Math.min(visibleWidth / worldWidth, visibleHeight / worldHeight),
+        ),
+      )
+
+      const visibleCenterX = viewportSafeArea.left + visibleWidth / 2
+      const visibleCenterY = viewportSafeArea.top + visibleHeight / 2
+      const worldCenterX = (minX + maxX) / 2
+      const worldCenterY = (minY + maxY) / 2
+
+      lastFittedSequenceRef.current = projectSequence
+      onViewportChange?.({
+        scale,
+        x: visibleCenterX - worldCenterX * scale,
+        y: visibleCenterY - worldCenterY * scale,
+      })
+    })
+  }, [
+    projectSequence,
+    viewportSafeArea,
+    onViewportChange,
+    startEndpointPosition,
+    initBlockPosition,
+    initBlockSize,
+    componentsBlockPosition,
+    componentsBlockSize,
+    deployBlockPosition,
+    deployBlockSize,
+    configBlockPosition,
+    configBlockSize,
+    launchBlockPosition,
+    launchBlockSize,
+    uninstallBlockPosition,
+    uninstallBlockSize,
+    blockVisibility.components,
+    blockVisibility.deploy,
+    blockVisibility.config,
+    blockVisibility.launch,
+    blockVisibility.uninstall,
+    componentBlocks,
+    deploymentBlocks,
+    configItemBlocks,
+    launchItemBlocks,
+    uninstallItemBlocks,
+    fileBlocks,
+  ])
 
   const isBlockVisible = (blockId: WorkbenchBlockId) => {
     if (blockId === 'start' || blockId === 'init' || blockId === 'init-file') return true

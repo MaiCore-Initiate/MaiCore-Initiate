@@ -8,6 +8,13 @@ export interface WorkbenchCanvasViewport {
   y: number
 }
 
+export interface WorkbenchViewportSafeArea {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 export interface WorkbenchBlockMeta {
   author: string
   tags: string[]
@@ -224,6 +231,7 @@ export interface WorkbenchSize {
 
 export interface WorkbenchCanvasProps {
   viewport: WorkbenchCanvasViewport
+  viewportSafeArea?: WorkbenchViewportSafeArea
   addNodeAnchor?: WorkbenchAddNodeAnchor | null
   selectedBlockId?: WorkbenchBlockId | null
   onSelectedBlockChange?: (blockId: WorkbenchBlockId | null) => void
