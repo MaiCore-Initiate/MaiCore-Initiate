@@ -1435,25 +1435,56 @@ function SidebarToolButton({
   top = 20,
   label,
   onClick,
+  tone = 'default',
   children,
 }: {
   left: number
   top?: number
   label: string
   onClick?: () => void
+  tone?: 'default' | 'saving' | 'success' | 'error'
   children: ReactNode
 }) {
+  const isSaving = tone === 'saving'
+  const isSuccess = tone === 'success'
+  const isError = tone === 'error'
   return (
     <button
       type="button"
       onClick={onClick}
-      className="absolute flex h-[40px] w-[40px] items-center justify-center rounded-[9px] border transition-colors hover:bg-[var(--dfw-control-hover)]"
+      className="absolute flex h-[40px] w-[40px] items-center justify-center rounded-[9px] border transition-[transform,background-color,border-color,box-shadow] duration-200 hover:bg-[var(--dfw-control-hover)]"
       style={{
         left,
         top,
-        borderColor: 'var(--dfw-sidebar-border)',
-        background: 'var(--dfw-sidebar-bg)',
-        color: 'var(--dfw-text)',
+        borderColor: isSuccess
+          ? 'rgba(34, 197, 94, 0.85)'
+          : isError
+            ? 'rgba(248, 113, 113, 0.9)'
+            : isSaving
+              ? 'rgba(96, 165, 250, 0.9)'
+              : 'var(--dfw-sidebar-border)',
+        background: isSuccess
+          ? 'rgba(34, 197, 94, 0.14)'
+          : isError
+            ? 'rgba(248, 113, 113, 0.12)'
+            : isSaving
+              ? 'rgba(59, 130, 246, 0.16)'
+              : 'var(--dfw-sidebar-bg)',
+        color: isSuccess
+          ? '#86efac'
+          : isError
+            ? '#fca5a5'
+            : isSaving
+              ? '#93c5fd'
+              : 'var(--dfw-text)',
+        transform: isSaving ? 'scale(1.06)' : isSuccess ? 'scale(1.08)' : 'scale(1)',
+        boxShadow: isSaving
+          ? '0 0 0 5px rgba(59, 130, 246, 0.12)'
+          : isSuccess
+            ? '0 0 0 5px rgba(34, 197, 94, 0.12)'
+            : isError
+              ? '0 0 0 5px rgba(248, 113, 113, 0.10)'
+              : 'none',
       }}
       aria-label={label}
       title={label}
@@ -1726,6 +1757,7 @@ function WorkbenchLeftSidebar({
   onBackToLibrary,
   onSave,
   saveStatusLabel,
+  saveTone,
   onResize,
   outline,
   selectedBlockId,
@@ -1738,6 +1770,7 @@ function WorkbenchLeftSidebar({
   onBackToLibrary: () => void
   onSave: () => void
   saveStatusLabel: string
+  saveTone: 'default' | 'saving' | 'success' | 'error'
   onResize: (width: number) => void
   outline: OutlineNode[]
   selectedBlockId: WorkbenchBlockId | null
@@ -1817,7 +1850,7 @@ function WorkbenchLeftSidebar({
       <SidebarToolButton left={20} label="返回项目列表" onClick={onBackToLibrary}>
         <ArrowLeft size={30} strokeWidth={2} />
       </SidebarToolButton>
-      <SidebarToolButton left={70} label={saveStatusLabel} onClick={onSave}>
+      <SidebarToolButton left={70} label={saveStatusLabel} onClick={onSave} tone={saveTone}>
         <SaveGlyph />
       </SidebarToolButton>
       <SidebarToolButton left={120} label="收起左侧边栏" onClick={onToggleCollapsed}>
@@ -1872,6 +1905,7 @@ export default function DeploymentFlowWorkbench({
   const [canvasState, setCanvasState] = useState<Partial<WorkbenchCanvasState>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [saveTone, setSaveTone] = useState<'default' | 'saving' | 'success' | 'error'>('default')
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -2173,7 +2207,8 @@ export default function DeploymentFlowWorkbench({
   const handleSaveWorkbench = async () => {
     if (!projectSequence || isSaving) return
     setIsSaving(true)
-    setSaveMessage(null)
+    setSaveTone('saving')
+    setSaveMessage('正在保存工作台…')
     try {
       const response = await fetch(`/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/workbench-state`, {
         method: 'PUT',
@@ -2192,11 +2227,19 @@ export default function DeploymentFlowWorkbench({
       }
       const project = await response.json() as WorkbenchProjectInfo
       setProjectInfo(project)
-      setSaveMessage('已保存')
-      window.setTimeout(() => setSaveMessage(current => (current === '已保存' ? null : current)), 2000)
+      setSaveTone('success')
+      setSaveMessage('工作台已保存')
+      window.setTimeout(() => {
+        setSaveTone(current => (current === 'success' ? 'default' : current))
+        setSaveMessage(current => (current === '工作台已保存' ? null : current))
+      }, 2200)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      setSaveTone('error')
       setSaveMessage(`保存失败：${message}`)
+      window.setTimeout(() => {
+        setSaveTone(current => (current === 'error' ? 'default' : current))
+      }, 2600)
     } finally {
       setIsSaving(false)
     }
@@ -2218,6 +2261,36 @@ export default function DeploymentFlowWorkbench({
       }}
     >
       <div className="deployment-flow-workbench-grid absolute inset-0 pointer-events-none" style={gridStyle} aria-hidden />
+      {saveMessage && (
+        <div
+          data-workbench-ui
+          className="absolute top-[28px] z-40 rounded-[16px] border px-4 py-3 text-[15px] font-medium shadow-[0_14px_32px_rgba(0,0,0,0.28)] transition-all duration-200"
+          style={{
+            right: rightSidebarLeft + 24,
+            borderColor: saveTone === 'success'
+              ? 'rgba(34, 197, 94, 0.65)'
+              : saveTone === 'error'
+                ? 'rgba(248, 113, 113, 0.75)'
+                : 'rgba(96, 165, 250, 0.75)',
+            background: saveTone === 'success'
+              ? 'rgba(8, 34, 18, 0.92)'
+              : saveTone === 'error'
+                ? 'rgba(53, 16, 16, 0.94)'
+                : 'rgba(16, 30, 53, 0.94)',
+            color: saveTone === 'success'
+              ? '#bbf7d0'
+              : saveTone === 'error'
+                ? '#fecaca'
+                : '#dbeafe',
+            transform: 'translateY(0) scale(1)',
+            opacity: 1,
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          {saveMessage}
+        </div>
+      )}
       <WorkbenchCanvas
         viewport={viewport}
         addNodeAnchor={addNodeAnchor}
@@ -2239,6 +2312,7 @@ export default function DeploymentFlowWorkbench({
         onToggleCollapsed={() => setLeftSidebarCollapsed(prev => !prev)}
         onSave={() => void handleSaveWorkbench()}
         saveStatusLabel={isSaving ? '正在保存…' : saveMessage ?? '保存模板'}
+        saveTone={saveTone}
         onResize={setLeftSidebarWidth}
         onBackToLibrary={onBackToLibrary}
         outline={effectiveOutline}
