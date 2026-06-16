@@ -235,6 +235,7 @@ export interface WorkbenchCanvasProps {
   projectSequence?: string | null
   canvasState?: Partial<WorkbenchCanvasState>
   onCanvasStatePatch?: (patch: Partial<WorkbenchCanvasState>) => void
+  onViewportChange?: (next: WorkbenchCanvasViewport) => void
 }
 
 export interface WorkbenchManualConnection {

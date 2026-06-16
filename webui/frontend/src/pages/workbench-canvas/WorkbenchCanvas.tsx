@@ -359,6 +359,7 @@ export default function WorkbenchCanvas({
   projectSequence = null,
   canvasState,
   onCanvasStatePatch,
+  onViewportChange,
 }: WorkbenchCanvasProps) {
   const meta = { ...defaultBlockMeta, ...blockMeta }
   const blockVisibility = { ...defaultVisibleBlocks, ...visibleBlocks }
@@ -451,6 +452,8 @@ export default function WorkbenchCanvas({
   // 切项目时重置 lastAppliedCanvasStateRef 让下一次 effect 重新应用最新 canvasState。
   const lastHydratedSequenceRef = useRef<string | null | undefined>(undefined)
   const lastAppliedCanvasStateRef = useRef<Partial<WorkbenchCanvasState> | null | undefined>(undefined)
+  // 记录「上一次 fit-to-view 跑过的项目」，每个项目只 fit 一次
+  const lastFittedSequenceRef = useRef<string | null | undefined>(undefined)
 
   const flushCanvasStatePatch = () => {
     canvasStatePatchRafRef.current = null
@@ -529,6 +532,77 @@ export default function WorkbenchCanvas({
     if (cs.manualConnections) setManualConnections(cs.manualConnections)
   }, [projectSequence, canvasState])
 
+  // 收集所有可见块的世界坐标包围盒；按需把每个 box 推入 boxes 数组
+  // 用 useCallback 闭包：依赖所有 useState（位置/尺寸/可见性）。
+  const collectBlockBoxes = (): { x: number; y: number; w: number; h: number }[] => {
+    const boxes: { x: number; y: number; w: number; h: number }[] = []
+    boxes.push({ x: initBlockPosition.x, y: initBlockPosition.y, w: initBlockSize.width, h: initBlockSize.height })
+    if (blockVisibility.components) boxes.push({ x: componentsBlockPosition.x, y: componentsBlockPosition.y, w: componentsBlockSize.width, h: componentsBlockSize.height })
+    if (blockVisibility.deploy) boxes.push({ x: deployBlockPosition.x, y: deployBlockPosition.y, w: deployBlockSize.width, h: deployBlockSize.height })
+    if (blockVisibility.config) boxes.push({ x: configBlockPosition.x, y: configBlockPosition.y, w: configBlockSize.width, h: configBlockSize.height })
+    if (blockVisibility.launch) boxes.push({ x: launchBlockPosition.x, y: launchBlockPosition.y, w: launchBlockSize.width, h: launchBlockSize.height })
+    if (blockVisibility.uninstall) boxes.push({ x: uninstallBlockPosition.x, y: uninstallBlockPosition.y, w: uninstallBlockSize.width, h: uninstallBlockSize.height })
+    componentBlockPositions.forEach((pos, index) => {
+      const size = componentBlockSizes[index] ?? componentBlockMinSize
+      boxes.push({ x: pos.x, y: pos.y, w: size.width, h: size.height })
+    })
+    deploymentBlockPositions.forEach((pos, index) => {
+      const size = deploymentBlockSizes[index] ?? deploymentBlockMinSize
+      boxes.push({ x: pos.x, y: pos.y, w: size.width, h: size.height })
+    })
+    configItemBlockPositions.forEach((pos, index) => {
+      const size = configItemBlockSizes[index] ?? configItemBlockMinSize
+      boxes.push({ x: pos.x, y: pos.y, w: size.width, h: size.height })
+    })
+    launchItemBlockPositions.forEach((pos, index) => {
+      const size = launchItemBlockSizes[index] ?? launchItemBlockMinSize
+      boxes.push({ x: pos.x, y: pos.y, w: size.width, h: size.height })
+    })
+    uninstallItemBlockPositions.forEach((pos, index) => {
+      const size = uninstallItemBlockSizes[index] ?? uninstallItemBlockMinSize
+      boxes.push({ x: pos.x, y: pos.y, w: size.width, h: size.height })
+    })
+    meta.files.forEach(file => {
+      const pos = fileBlockPositions[file.id] ?? defaultFilePosition(0, initBlockPosition)
+      const size = fileBlockSizes[file.id] ?? fileBlockMinSize
+      boxes.push({ x: pos.x, y: pos.y, w: size.width, h: size.height })
+    })
+    return boxes
+  }
+
+  // 切到新项目时 fit-to-view：算出所有块的 world 包围盒 → 求最小 scale 让
+  // 包围盒完整放进视口 → 平移使包围盒中心对齐到视口中心。
+  // 依赖 projectSequence（切项目触发）和 canvasState（必须等后端真实数据
+  // hydrate 完成再 fit，否则会用 default 位置算错）。
+  useEffect(() => {
+    if (lastFittedSequenceRef.current === projectSequence) return
+    if (projectSequence == null) return
+    if (!canvasState || Object.keys(canvasState).length === 0) return
+    lastFittedSequenceRef.current = projectSequence
+    requestAnimationFrame(() => {
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const boxes = collectBlockBoxes()
+      if (boxes.length === 0) return
+      const minX = Math.min(...boxes.map(b => b.x))
+      const minY = Math.min(...boxes.map(b => b.y))
+      const maxX = Math.max(...boxes.map(b => b.x + b.w))
+      const maxY = Math.max(...boxes.map(b => b.y + b.h))
+      const padding = 80
+      const worldW = Math.max(1, maxX - minX + padding * 2)
+      const worldH = Math.max(1, maxY - minY + padding * 2)
+      const rawScale = Math.min(rect.width / worldW, rect.height / worldH)
+      // 缩放不暴露给 props，固定夹到 [0.08, 8]，避免极端情况
+      const scale = Math.max(0.08, Math.min(8, rawScale))
+      const cx = (minX + maxX) / 2
+      const cy = (minY + maxY) / 2
+      onViewportChange?.({
+        scale,
+        x: rect.width / 2 - cx * scale,
+        y: rect.height / 2 - cy * scale,
+      })
+    })
+  }, [projectSequence, canvasState, initBlockPosition, componentsBlockPosition, deployBlockPosition, configBlockPosition, launchBlockPosition, uninstallBlockPosition, initBlockSize, componentsBlockSize, deployBlockSize, configBlockSize, launchBlockSize, uninstallBlockSize, componentBlockPositions, componentBlockSizes, deploymentBlockPositions, deploymentBlockSizes, configItemBlockPositions, configItemBlockSizes, launchItemBlockPositions, launchItemBlockSizes, uninstallItemBlockPositions, uninstallItemBlockSizes, fileBlockPositions, fileBlockSizes, blockVisibility.components, blockVisibility.deploy, blockVisibility.config, blockVisibility.launch, blockVisibility.uninstall, meta.files])
 
   useEffect(() => {
     const count = Math.max(0, blockVisibility.componentCount)

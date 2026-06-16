@@ -2208,6 +2208,7 @@ export default function DeploymentFlowWorkbench({
         projectSequence={projectSequence}
         canvasState={canvasState}
         onCanvasStatePatch={patch => setCanvasState(prev => ({ ...prev, ...patch }))}
+        onViewportChange={setViewport}
       />
       <WorkbenchLeftSidebar
         collapsed={leftSidebarCollapsed}
