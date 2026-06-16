@@ -1875,6 +1875,7 @@ export default function DeploymentFlowWorkbench({
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
+  const [workbenchRect, setWorkbenchRect] = useState<DOMRectReadOnly | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
   const viewportAnimationFrameRef = useRef<number | null>(null)
@@ -2022,6 +2023,14 @@ export default function DeploymentFlowWorkbench({
     const workbench = workbenchRef.current
     if (!workbench) return
 
+    const updateWorkbenchRect = () => {
+      setWorkbenchRect(workbench.getBoundingClientRect())
+    }
+    updateWorkbenchRect()
+
+    const resizeObserver = new ResizeObserver(() => updateWorkbenchRect())
+    resizeObserver.observe(workbench)
+
     const handleNativeWheel = (event: WheelEvent) => {
       if (event.target instanceof Element && event.target.closest('[data-workbench-ui]')) return
 
@@ -2045,7 +2054,10 @@ export default function DeploymentFlowWorkbench({
     }
 
     workbench.addEventListener('wheel', handleNativeWheel, { passive: false })
-    return () => workbench.removeEventListener('wheel', handleNativeWheel)
+    return () => {
+      resizeObserver.disconnect()
+      workbench.removeEventListener('wheel', handleNativeWheel)
+    }
   }, [])
 
   useEffect(() => {
@@ -2214,9 +2226,11 @@ export default function DeploymentFlowWorkbench({
         onBlockMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
         onOpenFileEditor={setOpenFileEditorFileId}
         projectSequence={projectSequence}
+        projectReady={projectInfo !== null}
         canvasState={canvasState}
         onCanvasStatePatch={patch => setCanvasState(prev => ({ ...prev, ...patch }))}
         viewportSafeArea={viewportSafeArea}
+        viewportContainerRect={workbenchRect}
         onViewportChange={next => updateViewport(next)}
       />
       <WorkbenchLeftSidebar

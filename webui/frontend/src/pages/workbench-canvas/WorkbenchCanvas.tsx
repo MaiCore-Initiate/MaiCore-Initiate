@@ -354,6 +354,7 @@ function defaultFilePosition(index: number, initPosition: WorkbenchPoint): Workb
 export default function WorkbenchCanvas({
   viewport,
   viewportSafeArea = defaultViewportSafeArea,
+  viewportContainerRect = null,
   addNodeAnchor = null,
   selectedBlockId = null,
   onSelectedBlockChange,
@@ -363,6 +364,7 @@ export default function WorkbenchCanvas({
   onBlockMetaPatch,
   onOpenFileEditor,
   projectSequence = null,
+  projectReady = false,
   canvasState,
   onCanvasStatePatch,
   onViewportChange,
@@ -1053,11 +1055,18 @@ export default function WorkbenchCanvas({
   })
 
   useEffect(() => {
+    if (lastFittedSequenceRef.current !== projectSequence) {
+      lastFittedSequenceRef.current = undefined
+    }
+  }, [projectSequence])
+
+  useEffect(() => {
     if (projectSequence == null) return
+    if (!projectReady) return
     if (lastFittedSequenceRef.current === projectSequence) return
 
     requestAnimationFrame(() => {
-      const rect = canvasRef.current?.getBoundingClientRect()
+      const rect = viewportContainerRect
       if (!rect) return
 
       const visibleWidth = rect.width - viewportSafeArea.left - viewportSafeArea.right
@@ -1139,7 +1148,9 @@ export default function WorkbenchCanvas({
     })
   }, [
     projectSequence,
+    projectReady,
     viewportSafeArea,
+    viewportContainerRect,
     onViewportChange,
     startEndpointPosition,
     initBlockPosition,

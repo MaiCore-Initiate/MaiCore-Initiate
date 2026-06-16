@@ -232,6 +232,7 @@ export interface WorkbenchSize {
 export interface WorkbenchCanvasProps {
   viewport: WorkbenchCanvasViewport
   viewportSafeArea?: WorkbenchViewportSafeArea
+  viewportContainerRect?: DOMRectReadOnly | null
   addNodeAnchor?: WorkbenchAddNodeAnchor | null
   selectedBlockId?: WorkbenchBlockId | null
   onSelectedBlockChange?: (blockId: WorkbenchBlockId | null) => void
@@ -241,6 +242,7 @@ export interface WorkbenchCanvasProps {
   onBlockMetaPatch?: (patch: Partial<WorkbenchBlockMeta>) => void
   onOpenFileEditor?: (fileId: string) => void
   projectSequence?: string | null
+  projectReady?: boolean
   canvasState?: Partial<WorkbenchCanvasState>
   onCanvasStatePatch?: (patch: Partial<WorkbenchCanvasState>) => void
   onViewportChange?: (next: WorkbenchCanvasViewport) => void
