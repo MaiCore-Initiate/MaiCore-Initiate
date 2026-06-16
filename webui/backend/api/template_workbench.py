@@ -545,7 +545,9 @@ def get_project_cover(sequence: str):
         raise HTTPException(404, f"封面文件 '{cover_name}' 不存在")
     ext = target.suffix.lower()
     media = _COVER_MIME_BY_EXT.get(ext, "application/octet-stream")
-    return FileResponse(str(target), media_type=media)
+    # 兜底禁缓存：替换封面是同名文件覆盖，URL 路径不变，必须让浏览器每次都拿最新字节
+    headers = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+    return FileResponse(str(target), media_type=media, headers=headers)
 
 
 @router.patch("/projects/{sequence}", summary="编辑项目信息", response_model=WorkbenchProject)
