@@ -167,10 +167,11 @@ function templateNameForProject(project: WorkbenchProjectIndex) {
   return `${modId}.toml`
 }
 
-function projectCoverUrl(project: WorkbenchProjectIndex) {
-  return resolveProjectDeploymentFlowCover(project)
-    ? `/api/template-workbench/projects/${encodeURIComponent(project.sequence)}/cover`
-    : null
+function projectCoverUrl(project: WorkbenchProjectIndex, version = 0) {
+  if (!resolveProjectDeploymentFlowCover(project)) return null
+  const base = `/api/template-workbench/projects/${encodeURIComponent(project.sequence)}/cover`
+  // 用 version 做 cache buster：替换或保留 cover 时递增 version，强制 <img> 重新加载同名 cover 文件
+  return version > 0 ? `${base}?v=${version}` : base
 }
 
 // 取项目内最新的「部署流程」封面。当前一个项目对应一个 toml，
@@ -180,9 +181,9 @@ function resolveProjectDeploymentFlowCover(project: WorkbenchProjectIndex): stri
   return project.cover
 }
 
-function projectToItem(project: WorkbenchProjectIndex): TemplateWorkbenchItem {
+function projectToItem(project: WorkbenchProjectIndex, coverVersion = 0): TemplateWorkbenchItem {
   const fileCount = project.files?.length ?? 0
-  const coverUrl = projectCoverUrl(project)
+  const coverUrl = projectCoverUrl(project, coverVersion)
   const displayMode = project.display_mode ?? (fileCount > 0 || project.cover ? 'folder' : 'card')
   return {
     id: project.sequence,
@@ -200,7 +201,7 @@ function projectToItem(project: WorkbenchProjectIndex): TemplateWorkbenchItem {
   }
 }
 
-function createTemplateFileItem(project: WorkbenchProjectIndex): TemplateWorkbenchItem {
+function createTemplateFileItem(project: WorkbenchProjectIndex, coverVersion = 0): TemplateWorkbenchItem {
   const templateName = templateNameForProject(project)
   return {
     id: `${project.sequence}:template:${templateName}`,
@@ -211,7 +212,7 @@ function createTemplateFileItem(project: WorkbenchProjectIndex): TemplateWorkben
     fileName: templateName,
     updatedAt: '已保存',
     sequence: project.sequence,
-    cover: projectCoverUrl(project),
+    cover: projectCoverUrl(project, coverVersion),
     templatePath: project.path,
     sizeLabel: '模板文件',
   }
@@ -312,9 +313,16 @@ function ImportedFileCard({
       className="absolute overflow-hidden rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
       style={{ left, top, width: 272, height: 206.72, borderColor: 'var(--twb-card-border)', color: 'var(--twb-text)' }}
     >
-      <div className="absolute inset-x-[-1px] top-[-1px] flex items-center justify-center rounded-t-[10px]" style={{ height: 153, background: 'var(--twb-bg)' }}>
-        <Icon size={78} />
-      </div>
+      {item.cover ? (
+        <div
+          className="absolute inset-x-[-1px] top-[-1px] rounded-t-[10px] bg-cover bg-center"
+          style={{ height: 153, backgroundImage: `url("${item.cover}")` }}
+        />
+      ) : (
+        <div className="absolute inset-x-[-1px] top-[-1px] flex items-center justify-center rounded-t-[10px]" style={{ height: 153, background: 'var(--twb-bg)' }}>
+          <Icon size={78} />
+        </div>
+      )}
       <div
         className="absolute inset-x-[-1px] bottom-[-1px] rounded-b-[10px] border"
         style={{ height: 53.72, borderColor: 'var(--twb-card-border)', background: 'var(--twb-bg)' }}
@@ -401,27 +409,20 @@ function ProjectFolderCard({
       className="absolute text-left transition-transform hover:-translate-y-[1px]"
       style={{ left, top, width: 273, height: 207, color: 'var(--twb-text)' }}
     >
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 273 207" fill="none" aria-hidden>
+      <svg className="absolute inset-0 z-[1] h-full w-full" viewBox="0 0 273 207" fill="none" aria-hidden>
         <path
           d="M12 1H88C90.4 1 92.7 1.8 94.7 3.2L134 31.5C136 32.9 138.3 33.7 140.7 33.7H261C267.1 33.7 272 38.6 272 44.7V195C272 201.1 267.1 206 261 206H12C5.9 206 1 201.1 1 195V12C1 5.9 5.9 1 12 1Z"
-          fill="var(--twb-folder-fill)"
-          stroke="var(--twb-folder-border)"
-          strokeWidth="4"
+          stroke="#FFD500"
+          strokeWidth="3"
           strokeLinejoin="round"
         />
-        <path d="M2 154H271V195C271 200.5 266.5 205 261 205H12C6.5 205 2 200.5 2 195V154Z" fill="var(--twb-folder-band)" />
-        <path d="M2 154H271" stroke="var(--twb-card-border)" />
       </svg>
-      {/* 封面：嵌入到文件夹中部区域 */}
+      {/* 封面容器：z-0 放在外框描边之下；用被裁切掉信息栏部分的 folder 形状做 clipPath，超出裁切边框的部分被裁切掉（自然不覆盖信息栏） */}
       <div
-        className="absolute overflow-hidden rounded-md"
+        className="absolute inset-0 z-0"
         style={{
-          left: 20,
-          right: 20,
-          top: 48,
-          height: 96,
-          background: item.cover ? 'transparent' : 'var(--twb-bg)',
-          border: '1px solid var(--twb-card-border)',
+          clipPath:
+            "path('M12 1H88C90.4 1 92.7 1.8 94.7 3.2L134 31.5C136 32.9 138.3 33.7 140.7 33.7H261C267.1 33.7 272 38.6 272 44.7V154H1V12C1 5.9 5.9 1 12 1Z')",
         }}
       >
         {item.cover ? (
@@ -440,6 +441,19 @@ function ProjectFolderCard({
           </div>
         )}
       </div>
+      {/* band 衬底：50% 透明 #FFD500；左右下角 10px 圆角以免尖角戳出 folder 外框 */}
+      <div
+        className="absolute pointer-events-none"
+        style={{
+          top: 154,
+          left: 1.5,
+          right: 1.5,
+          bottom: 1.5,
+          background: 'rgba(255, 213, 0, 0.5)',
+          borderBottomLeftRadius: 10,
+          borderBottomRightRadius: 10,
+        }}
+      />
       <div className="absolute" style={{ left: 7, top: 162 }}>
         <div className="leading-none" style={{ fontFamily: font, fontSize: 18, fontWeight: 700 }}>{item.name}</div>
         <div className="mt-[7px] leading-none" style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 15, fontWeight: 300 }}>{item.updatedAt}</div>
@@ -573,10 +587,17 @@ function ProjectList({
               aria-label={`打开${item.name}`}
             />
             {isDeploymentFlow ? (
-              // 部署流程行：图标作为封面直接铺满整行左侧，不再有独立边框方框
-              <div className="pointer-events-none absolute left-0 top-0 z-10 flex h-[60px] w-[60px] items-center justify-center" style={{ color: 'var(--twb-text)' }}>
-                <DeploymentFlowTypeGlyph />
-              </div>
+              // 部署流程行：优先用 cover 作封面（缩小版），没有 cover 时降级为图标
+              item.cover ? (
+                <div
+                  className="pointer-events-none absolute left-0 top-0 z-10 h-[60px] w-[60px] rounded-[5px] bg-cover bg-center"
+                  style={{ backgroundImage: `url("${item.cover}")` }}
+                />
+              ) : (
+                <div className="pointer-events-none absolute left-0 top-0 z-10 flex h-[60px] w-[60px] items-center justify-center" style={{ color: 'var(--twb-text)' }}>
+                  <DeploymentFlowTypeGlyph />
+                </div>
+              )
             ) : (
               <div className="pointer-events-none absolute left-0 top-0 z-10 flex h-[60px] w-[60px] items-center justify-center rounded-[5px] border" style={{ borderColor: 'var(--twb-border)', background: 'var(--twb-bg)' }}>
                 {item.fileKind === 'folder' ? <FolderTypeGlyph /> : NameIcon ? <NameIcon size={36} /> : null}
@@ -772,6 +793,9 @@ export default function TemplateWorkbench({
   const [editTarget, setEditTarget] = useState<WorkbenchProjectIndex | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<WorkbenchProjectIndex | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  // cover cache buster：替换/重传封面时给对应 sequence 递增 version，projectCoverUrl 会拼到 ?v=<version>，
+  // 让 <img src> 变化从而绕过浏览器对同名 cover 的启发式缓存
+  const [coverVersion, setCoverVersion] = useState<Record<string, number>>({})
 
   const reloadProjects = useCallback(async () => {
     try {
@@ -788,8 +812,8 @@ export default function TemplateWorkbench({
     if (items) return items
     if (!registeredProjects.length) return defaultItems
 
-    return registeredProjects.map(projectToItem)
-  }, [items, registeredProjects])
+    return registeredProjects.map(project => projectToItem(project, coverVersion[project.sequence] ?? 0))
+  }, [items, registeredProjects, coverVersion])
 
   const selectedProject = useMemo(() => {
     if (route.type === 'home') return null
@@ -800,10 +824,10 @@ export default function TemplateWorkbench({
     if (route.type === 'home') return projectItems
     if (!selectedProject) return []
     return [
-      createTemplateFileItem(selectedProject),
+      createTemplateFileItem(selectedProject, coverVersion[selectedProject.sequence] ?? 0),
       ...(selectedProject.files ?? []).map(file => createImportedFileItem(selectedProject, file)),
     ]
-  }, [projectItems, route.type, selectedProject])
+  }, [projectItems, route.type, selectedProject, coverVersion])
 
   const contentTitle = route.type === 'home'
     ? '全部项目'
@@ -921,16 +945,15 @@ export default function TemplateWorkbench({
   }
 
   const handleEditedProject = (updated: EditableProject) => {
-    setRegisteredProjects(prev => prev.map(p => p.sequence === updated.sequence
-      ? {
-          ...p,
-          mod_name: updated.mod_name,
-          description: updated.description,
-          cover: updated.cover,
-        }
-      : p,
-    ))
     setEditTarget(null)
+    // 完全用后端最新数据重拉一次（GET /projects），避免 partial update 与后端隐式
+    // 状态（如 display_mode 自动重算）不同步。cover 字段一定会反映最新值。
+    // 同步给该 sequence 递增 cover version，强制同名 cover 文件被 <img> 重新请求（绕开浏览器缓存）
+    if (updated.cover) {
+      setCoverVersion(prev => ({ ...prev, [updated.sequence]: Date.now() }))
+    }
+    void reloadProjects()
+    void updated
   }
 
   const handleDeleteProject = async () => {
