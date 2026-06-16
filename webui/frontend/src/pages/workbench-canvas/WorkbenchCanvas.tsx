@@ -591,9 +591,9 @@ export default function WorkbenchCanvas({
       const padding = 80
       const worldW = Math.max(1, maxX - minX + padding * 2)
       const worldH = Math.max(1, maxY - minY + padding * 2)
+      // 缩放最多 100%：只有当世界坐标超出视口时才缩小，正常情况保持原比例。
       const rawScale = Math.min(rect.width / worldW, rect.height / worldH)
-      // 缩放不暴露给 props，固定夹到 [0.08, 8]，避免极端情况
-      const scale = Math.max(0.08, Math.min(8, rawScale))
+      const scale = Math.max(0.08, Math.min(1, rawScale))
       const cx = (minX + maxX) / 2
       const cy = (minY + maxY) / 2
       onViewportChange?.({
