@@ -831,10 +831,25 @@ function createUninstallItemOutlineChildren(uninstallItem: WorkbenchUninstallIte
     ...(uninstallItem.envOutput === true ? [createEnvVariableOutlineNode(id('env-output-list'), 'env_output_list', uninstallItem.envOutputList)] : []),
   ]
 }
-function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisibleBlocks): OutlineNode[] {
+interface ConnectedIndexSets {
+  stages: {
+    components: boolean
+    deploy: boolean
+    config: boolean
+    launch: boolean
+    uninstall: boolean
+  }
+  componentIndices: number[]
+  deploymentIndices: number[]
+  configItemIndices: number[]
+  launchItemIndices: number[]
+  uninstallItemIndices: number[]
+}
+
+function createComponentsOutlineNodes(meta: WorkbenchMetaState, connected: ConnectedIndexSets): OutlineNode[] {
   const nodes: OutlineNode[] = []
 
-  if (visibleBlocks.components) {
+  if (connected.stages.components) {
     nodes.push({
       id: 'components',
       label: '[COMPONENTS]',
@@ -847,13 +862,13 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.componentCount > 0) {
+  if (connected.componentIndices.length > 0) {
     nodes.push({
       id: 'component-array',
       label: '[[Component]]',
       defaultExpanded: true,
       selectable: false,
-      children: Array.from({ length: visibleBlocks.componentCount }, (_, index) => ({
+      children: connected.componentIndices.map(index => ({
         id: `component-${index}`,
         label: String(index),
         icon: 'object' as const,
@@ -864,7 +879,7 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.deploy) {
+  if (connected.stages.deploy) {
     nodes.push({
       id: 'deploy',
       label: '[DEPLOY]',
@@ -878,13 +893,13 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.deploymentCount > 0) {
+  if (connected.deploymentIndices.length > 0) {
     nodes.push({
       id: 'deployment-array',
       label: '[[Deployment]]',
       defaultExpanded: true,
       selectable: false,
-      children: Array.from({ length: visibleBlocks.deploymentCount }, (_, index) => ({
+      children: connected.deploymentIndices.map(index => ({
         id: `deployment-${index}`,
         label: String(index),
         icon: 'object' as const,
@@ -895,7 +910,7 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.config) {
+  if (connected.stages.config) {
     nodes.push({
       id: 'config',
       label: '[CONFIG]',
@@ -909,13 +924,13 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.configItemCount > 0) {
+  if (connected.configItemIndices.length > 0) {
     nodes.push({
       id: 'config-item-array',
       label: '[[ConfigItem]]',
       defaultExpanded: true,
       selectable: false,
-      children: Array.from({ length: visibleBlocks.configItemCount }, (_, index) => ({
+      children: connected.configItemIndices.map(index => ({
         id: `config-item-${index}`,
         label: String(index),
         icon: 'object' as const,
@@ -926,7 +941,7 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.launch) {
+  if (connected.stages.launch) {
     nodes.push({
       id: 'launch',
       label: '[LAUNCH]',
@@ -940,13 +955,13 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.launchItemCount > 0) {
+  if (connected.launchItemIndices.length > 0) {
     nodes.push({
       id: 'launch-item-array',
       label: '[[LaunchItem]]',
       defaultExpanded: true,
       selectable: false,
-      children: Array.from({ length: visibleBlocks.launchItemCount }, (_, index) => ({
+      children: connected.launchItemIndices.map(index => ({
         id: `launch-item-${index}`,
         label: String(index),
         icon: 'object' as const,
@@ -957,7 +972,7 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.uninstall) {
+  if (connected.stages.uninstall) {
     nodes.push({
       id: 'uninstall',
       label: '[UNINSTALL]',
@@ -971,13 +986,13 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
     })
   }
 
-  if (visibleBlocks.uninstallItemCount > 0) {
+  if (connected.uninstallItemIndices.length > 0) {
     nodes.push({
       id: 'uninstall-item-array',
       label: '[[UninstallItem]]',
       defaultExpanded: true,
       selectable: false,
-      children: Array.from({ length: visibleBlocks.uninstallItemCount }, (_, index) => ({
+      children: connected.uninstallItemIndices.map(index => ({
         id: `uninstall-item-${index}`,
         label: String(index),
         icon: 'object' as const,
@@ -991,7 +1006,7 @@ function createComponentsOutlineNodes(meta: WorkbenchMetaState, visibleBlocks: W
   return nodes
 }
 
-function createOutline(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisibleBlocks): OutlineNode[] {
+function createOutline(meta: WorkbenchMetaState, connected: ConnectedIndexSets): OutlineNode[] {
   return [
     {
       id: 'mcstart',
@@ -1008,11 +1023,11 @@ function createOutline(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisible
       defaultExpanded: true,
       children: createModInfoOutlineChildren(meta),
     },
-    ...createComponentsOutlineNodes(meta, visibleBlocks),
+    ...createComponentsOutlineNodes(meta, connected),
   ]
 }
 
-function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVisibleBlocks) {
+function buildWorkbenchToml(meta: WorkbenchMetaState, connected: ConnectedIndexSets) {
   const lines: string[] = []
 
   lines.push('[MCStart]')
@@ -1047,7 +1062,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
   appendTomlStringArray(lines, 'platforms', meta.platforms)
   appendTomlString(lines, 'schema_version', meta.schemaVersion)
 
-  if (visibleBlocks.components || visibleBlocks.componentCount > 0) {
+  if (connected.stages.components || connected.componentIndices.length > 0) {
     lines.push('')
     lines.push('[COMPONENTS]')
     appendTomlBoolean(lines, 'env_output', meta.componentsEnvOutput)
@@ -1055,7 +1070,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
     appendTomlStringArray(lines, 'list', meta.componentsList)
   }
 
-  Array.from({ length: visibleBlocks.componentCount }, (_, index) => meta.components[index] ?? defaultComponentMeta).forEach(component => {
+  Array.from(connected.componentIndices, index => meta.components[index] ?? defaultComponentMeta).forEach(component => {
     const versionFile = component.versionFile ?? []
     const versionCustom = component.versionCustom ?? []
     const linkFile = component.linkFile ?? []
@@ -1127,7 +1142,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
     if (component.envInput) appendTomlEnvVariableArray(lines, 'env_input_list', component.envInputList)
   })
 
-  if (visibleBlocks.deploy || visibleBlocks.deploymentCount > 0) {
+  if (connected.stages.deploy || connected.deploymentIndices.length > 0) {
     lines.push('')
     lines.push('[DEPLOY]')
     appendTomlBoolean(lines, 'env_output', meta.deployEnvOutput)
@@ -1135,7 +1150,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
     appendTomlStringArray(lines, 'list', meta.deployList)
   }
 
-  Array.from({ length: visibleBlocks.deploymentCount }, (_, index) => meta.deployments[index] ?? defaultDeploymentMeta).forEach(deployment => {
+  Array.from(connected.deploymentIndices, index => meta.deployments[index] ?? defaultDeploymentMeta).forEach(deployment => {
     const versionFile = deployment.versionFile ?? []
     const versionCustom = deployment.versionCustom ?? []
     const linkFile = deployment.linkFile ?? []
@@ -1198,7 +1213,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
     if (deployment.envInput) appendTomlEnvVariableArray(lines, 'env_input_list', deployment.envInputList)
   })
 
-  if (visibleBlocks.launch || visibleBlocks.launchItemCount > 0) {
+  if (connected.stages.launch || connected.launchItemIndices.length > 0) {
     lines.push('')
     lines.push('[LAUNCH]')
     appendTomlBoolean(lines, 'env_output', meta.launchEnvOutput)
@@ -1206,7 +1221,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
     appendTomlStringArray(lines, 'list', meta.launchList)
   }
 
-  Array.from({ length: visibleBlocks.launchItemCount }, (_, index) => meta.launchItems[index] ?? emptyLaunchItemMeta).forEach(launchItem => {
+  Array.from(connected.launchItemIndices, index => meta.launchItems[index] ?? emptyLaunchItemMeta).forEach(launchItem => {
     lines.push('')
     lines.push('[[LaunchItem]]')
     appendTomlString(lines, 'id', launchItem.id)
@@ -1222,7 +1237,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
     if (launchItem.envOutput) appendTomlEnvVariableArray(lines, 'env_output_list', launchItem.envOutputList)
   })
 
-  if (visibleBlocks.config || visibleBlocks.configItemCount > 0) {
+  if (connected.stages.config || connected.configItemIndices.length > 0) {
     lines.push('')
     lines.push('[CONFIG]')
     appendTomlBoolean(lines, 'env_output', meta.configEnvOutput)
@@ -1230,7 +1245,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
     appendTomlStringArray(lines, 'list', meta.configList)
   }
 
-  Array.from({ length: visibleBlocks.configItemCount }, (_, index) => meta.configItems[index] ?? emptyConfigItemMeta).forEach(configItem => {
+  Array.from(connected.configItemIndices, index => meta.configItems[index] ?? emptyConfigItemMeta).forEach(configItem => {
     lines.push('')
     lines.push('[[ConfigItem]]')
     appendTomlString(lines, 'id', configItem.id)
@@ -1243,7 +1258,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
     if (configItem.envInput) appendTomlEnvVariableArray(lines, 'env_input_list', configItem.envInputList)
   })
 
-  if (visibleBlocks.uninstall || visibleBlocks.uninstallItemCount > 0) {
+  if (connected.stages.uninstall || connected.uninstallItemIndices.length > 0) {
     lines.push('')
     lines.push('[UNINSTALL]')
     appendTomlBoolean(lines, 'env_output', meta.uninstallEnvOutput)
@@ -1251,7 +1266,7 @@ function buildWorkbenchToml(meta: WorkbenchMetaState, visibleBlocks: WorkbenchVi
     appendTomlStringArray(lines, 'list', meta.uninstallList)
   }
 
-  Array.from({ length: visibleBlocks.uninstallItemCount }, (_, index) => meta.uninstallItems[index] ?? emptyUninstallItemMeta).forEach(uninstallItem => {
+  Array.from(connected.uninstallItemIndices, index => meta.uninstallItems[index] ?? emptyUninstallItemMeta).forEach(uninstallItem => {
     lines.push('')
     lines.push('[[UninstallItem]]')
     appendTomlString(lines, 'id', uninstallItem.id)
@@ -1870,7 +1885,47 @@ export default function DeploymentFlowWorkbench({
     id: 'workspace-0',
     title: projectInfo?.mod_name || '未命名',
   }], [projectInfo?.mod_name])
-  const effectiveOutline = useMemo(() => outline ?? createOutline(meta, visibleBlocks), [outline, meta, visibleBlocks])
+
+  // 只把「已连」的 stage / 子块呈现到大纲和 toml。判定：
+  //  - stage 自身 = visibleBlocks.x && canvasState.xConnected
+  //  - 子块 = (canvasState.xConnections[i] === true) || manualConnections 中存在 conn.to === 'x:i'
+  // 未连的子块 / 孤立的 stage 不会写进 toml，但 meta 数组中所有数据保留，
+  // 重新连上后即恢复。
+  const connectedIndexSets = useMemo<ConnectedIndexSets>(() => {
+    const manualTargets = new Set(
+      (canvasState?.manualConnections ?? []).map(connection => connection.to),
+    )
+    const pickIndices = (
+      flags: boolean[] | undefined,
+      prefix: 'component' | 'deployment' | 'config-item' | 'launch-item' | 'uninstall-item',
+    ): number[] => {
+      if (!flags) return []
+      const out: number[] = []
+      flags.forEach((flag, index) => {
+        if (flag || manualTargets.has(`${prefix}:${index}`)) out.push(index)
+      })
+      return out
+    }
+    return {
+      stages: {
+        components: visibleBlocks.components && (canvasState?.componentsConnected ?? false),
+        deploy: visibleBlocks.deploy && (canvasState?.deployConnected ?? false),
+        config: visibleBlocks.config && (canvasState?.configConnected ?? false),
+        launch: visibleBlocks.launch && (canvasState?.launchConnected ?? false),
+        uninstall: visibleBlocks.uninstall && (canvasState?.uninstallConnected ?? false),
+      },
+      componentIndices: pickIndices(canvasState?.componentConnections, 'component'),
+      deploymentIndices: pickIndices(canvasState?.deploymentConnections, 'deployment'),
+      configItemIndices: pickIndices(canvasState?.configItemConnections, 'config-item'),
+      launchItemIndices: pickIndices(canvasState?.launchItemConnections, 'launch-item'),
+      uninstallItemIndices: pickIndices(canvasState?.uninstallItemConnections, 'uninstall-item'),
+    }
+  }, [visibleBlocks, canvasState])
+
+  const effectiveOutline = useMemo(
+    () => outline ?? createOutline(meta, connectedIndexSets),
+    [outline, meta, connectedIndexSets],
+  )
   const blockMeta = meta
 
   const cancelViewportAnimation = () => {
@@ -2105,7 +2160,7 @@ export default function DeploymentFlowWorkbench({
           meta,
           visible_blocks: visibleBlocks,
           canvas_state: canvasState,
-          toml_content: buildWorkbenchToml(meta, visibleBlocks),
+          toml_content: buildWorkbenchToml(meta, connectedIndexSets),
         }),
       })
       if (!response.ok) {
