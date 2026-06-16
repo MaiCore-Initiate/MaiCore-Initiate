@@ -447,13 +447,10 @@ export default function WorkbenchCanvas({
   // 调度用 rAF，闭包持有一个 pending patch 对象，每帧 flush 后清空。
   const canvasStatePatchBufferRef = useRef<Partial<WorkbenchCanvasState> | null>(null)
   const canvasStatePatchRafRef = useRef<number | null>(null)
+  // 记录「上一次已 hydrate 过的 canvasState 对象」和「上一次 hydrate 的项目」，
+  // 切项目时重置 lastAppliedCanvasStateRef 让下一次 effect 重新应用最新 canvasState。
   const lastHydratedSequenceRef = useRef<string | null | undefined>(undefined)
-  // 持有最新 canvasState 引用，让 hydrate effect 只依赖 projectSequence，
-  // 避免切项目时 effect 跑两次（projectSequence 变 + canvasState 引用变）。
-  const canvasStateRef = useRef(canvasState)
-  useEffect(() => {
-    canvasStateRef.current = canvasState
-  }, [canvasState])
+  const lastAppliedCanvasStateRef = useRef<Partial<WorkbenchCanvasState> | null | undefined>(undefined)
 
   const flushCanvasStatePatch = () => {
     canvasStatePatchRafRef.current = null
@@ -481,14 +478,19 @@ export default function WorkbenchCanvas({
     metaRef.current = meta
   }, [meta])
 
-  // 进入画布时一次性把 canvasState hydrate 进所有 useState。
-  // 只在 projectSequence 首次变化时跑一次；之后外部 patch 不会触发二次 hydrate。
-  // canvasState 通过 ref 拿最新值，避免 effect 依赖它导致切项目时 effect 跑两次。
+  // 进入画布时把 canvasState 应用到所有 useState。
+  // 两个时机都会重新应用：① 切到新项目（projectSequence 变） ② 后端 loadProject
+  // 异步把 canvasState 传上来（canvasState 引用变）。通过 lastAppliedCanvasStateRef
+  // 去重，避免拖动时 patch 引发的 canvasState 引用变更反复覆盖用户刚改的位置。
   useEffect(() => {
-    if (lastHydratedSequenceRef.current === projectSequence) return
-    lastHydratedSequenceRef.current = projectSequence
-    const cs = canvasStateRef.current
-    if (!cs) return
+    if (lastHydratedSequenceRef.current !== projectSequence) {
+      lastHydratedSequenceRef.current = projectSequence
+      lastAppliedCanvasStateRef.current = undefined
+    }
+    if (canvasState === lastAppliedCanvasStateRef.current) return
+    lastAppliedCanvasStateRef.current = canvasState
+    if (!canvasState) return
+    const cs = canvasState
     if (cs.startEndpointPosition) setStartEndpointPosition(cs.startEndpointPosition)
     if (cs.initBlockPosition) setInitBlockPosition(cs.initBlockPosition)
     if (cs.initBlockSize) setInitBlockSize(cs.initBlockSize)
@@ -525,7 +527,7 @@ export default function WorkbenchCanvas({
     if (typeof cs.launchConnected === 'boolean') setLaunchConnected(cs.launchConnected)
     if (typeof cs.uninstallConnected === 'boolean') setUninstallConnected(cs.uninstallConnected)
     if (cs.manualConnections) setManualConnections(cs.manualConnections)
-  }, [projectSequence])
+  }, [projectSequence, canvasState])
 
 
   useEffect(() => {
