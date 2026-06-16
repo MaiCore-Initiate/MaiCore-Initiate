@@ -99,12 +99,13 @@ const sidebarItems: Array<{ id: TemplateWorkbenchSection; label: string; icon: t
   { id: 'market', label: '资源集市', icon: Globe, top: 202 },
 ]
 
-const cardPositions = [
-  { left: 400, top: 306 },
-  { left: 693, top: 306 },
-  { left: 986, top: 306 },
-  { left: 1279, top: 306 },
-]
+// 卡片网格布局：5 列等距、行高 250px；top 起始 306 与原视觉一致。
+// 用 useMemo 在 contentItems 变化时按 index 算 left/top，避免硬编码固定 4 个位置。
+const CARD_COLUMNS = 5
+const CARD_LEFT_START = 400
+const CARD_LEFT_STEP = 293
+const CARD_TOP_START = 306
+const CARD_TOP_STEP = 250
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const layoutCookieName = 'template_workbench_layout'
@@ -829,6 +830,22 @@ export default function TemplateWorkbench({
     ]
   }, [projectItems, route.type, selectedProject, coverVersion])
 
+  const cardLayout = useMemo(
+    () => contentItems.map((_, index) => ({
+      left: CARD_LEFT_START + (index % CARD_COLUMNS) * CARD_LEFT_STEP,
+      top: CARD_TOP_START + Math.floor(index / CARD_COLUMNS) * CARD_TOP_STEP,
+    })),
+    [contentItems],
+  )
+
+  // main 高度按卡片排到的最底行自适应（最少保留原 1080px 设计稿高度）
+  const mainMinHeight = useMemo(() => {
+    const lastTop = cardLayout.length
+      ? cardLayout[cardLayout.length - 1].top
+      : CARD_TOP_START
+    return Math.max(1080, lastTop + 207 + 80)
+  }, [cardLayout])
+
   const contentTitle = route.type === 'home'
     ? '全部项目'
     : selectedProject?.mod_name || '项目内容'
@@ -1098,7 +1115,7 @@ export default function TemplateWorkbench({
         </button>
       </header>
 
-      <main className="absolute left-0 top-0 z-0 h-[1080px] w-[1920px]">
+      <main className="absolute left-0 top-0 z-0 w-[1920px] pb-[80px]" style={{ minHeight: mainMinHeight }}>
         <ContentHeader
           layoutMode={layoutMode}
           onToggleLayout={toggleLayoutMode}
@@ -1115,12 +1132,12 @@ export default function TemplateWorkbench({
 
         {slots?.contentLeading}
 
-        {layoutMode === 'card' && contentItems.slice(0, 4).map((item, index) => (
+        {layoutMode === 'card' && contentItems.map((item, index) => (
           <ProjectCard
             key={item.id}
             item={item}
-            left={cardPositions[index].left}
-            top={cardPositions[index].top}
+            left={cardLayout[index].left}
+            top={cardLayout[index].top}
             onOpen={openItem}
             onContextMenu={handleContextMenu}
           />
