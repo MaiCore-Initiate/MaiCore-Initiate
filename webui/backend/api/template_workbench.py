@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -80,6 +80,7 @@ class CheckProjectPathResponse(BaseModel):
 class SaveWorkbenchStatePayload(BaseModel):
     meta: Dict[str, Any]
     visible_blocks: Dict[str, Any]
+    canvas_state: Dict[str, Any] = Field(default_factory=dict)
     toml_content: str
 
 
@@ -255,6 +256,7 @@ def get_project(sequence: str):
     project = to_project(sequence, data[sequence]).model_dump()
     project["workbench_meta"] = data[sequence].get("workbench_meta")
     project["visible_blocks"] = data[sequence].get("visible_blocks")
+    project["workbench_canvas_state"] = data[sequence].get("workbench_canvas_state")
     return project
 
 
@@ -299,11 +301,13 @@ def save_workbench_state(sequence: str, payload: SaveWorkbenchStatePayload):
     item["author"] = str(meta.get("author") or "")
     item["workbench_meta"] = meta
     item["visible_blocks"] = visible_blocks
+    item["workbench_canvas_state"] = payload.canvas_state if isinstance(payload.canvas_state, dict) else {}
     save_mod_index(data)
 
     project = to_project(sequence, item).model_dump()
     project["workbench_meta"] = item.get("workbench_meta")
     project["visible_blocks"] = item.get("visible_blocks")
+    project["workbench_canvas_state"] = item.get("workbench_canvas_state")
     return project
 
 

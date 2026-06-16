@@ -233,6 +233,56 @@ export interface WorkbenchCanvasProps {
   onBlockMetaPatch?: (patch: Partial<WorkbenchBlockMeta>) => void
   onOpenFileEditor?: (fileId: string) => void
   projectSequence?: string | null
+  canvasState?: Partial<WorkbenchCanvasState>
+  onCanvasStatePatch?: (patch: Partial<WorkbenchCanvasState>) => void
+}
+
+export interface WorkbenchManualConnection {
+  id: string
+  from: WorkbenchBlockId
+  to: WorkbenchBlockId
+}
+
+// 画布布局/连线状态：和 MOD.json 中 workbench_canvas_state 字段一一对应。
+// WorkbenchCanvas 内部所有 useState 用这套类型的字段做初值；每次 setState
+// 之后会通过 onCanvasStatePatch 把变更冒泡给上层持久化。
+export interface WorkbenchCanvasState {
+  startEndpointPosition: WorkbenchPoint
+  initBlockPosition: WorkbenchPoint
+  initBlockSize: WorkbenchSize
+  componentsBlockPosition: WorkbenchPoint
+  componentsBlockSize: WorkbenchSize
+  deployBlockPosition: WorkbenchPoint
+  deployBlockSize: WorkbenchSize
+  configBlockPosition: WorkbenchPoint
+  configBlockSize: WorkbenchSize
+  launchBlockPosition: WorkbenchPoint
+  launchBlockSize: WorkbenchSize
+  uninstallBlockPosition: WorkbenchPoint
+  uninstallBlockSize: WorkbenchSize
+  componentBlockPositions: WorkbenchPoint[]
+  componentBlockSizes: WorkbenchSize[]
+  componentConnections: boolean[]
+  deploymentBlockPositions: WorkbenchPoint[]
+  deploymentBlockSizes: WorkbenchSize[]
+  deploymentConnections: boolean[]
+  configItemBlockPositions: WorkbenchPoint[]
+  configItemBlockSizes: WorkbenchSize[]
+  configItemConnections: boolean[]
+  launchItemBlockPositions: WorkbenchPoint[]
+  launchItemBlockSizes: WorkbenchSize[]
+  launchItemConnections: boolean[]
+  uninstallItemBlockPositions: WorkbenchPoint[]
+  uninstallItemBlockSizes: WorkbenchSize[]
+  uninstallItemConnections: boolean[]
+  fileBlockPositions: Record<string, WorkbenchPoint>
+  fileBlockSizes: Record<string, WorkbenchSize>
+  componentsConnected: boolean
+  deployConnected: boolean
+  configConnected: boolean
+  launchConnected: boolean
+  uninstallConnected: boolean
+  manualConnections: WorkbenchManualConnection[]
 }
 
 export type WorkbenchComponentBlockId = `component:${number}`

@@ -16,7 +16,7 @@ import InitBlock, { resolveInitBlockFileInputOffset } from './blocks/InitBlock'
 import StartEndpointBlock from './blocks/StartEndpointBlock'
 import FileConflictDialog, { type FileConflictResolution } from '../../components/FileConflictDialog'
 import NewFileDialog from '../../components/NewFileDialog'
-import { WORKBENCH_FILE_EXTENSIONS, createFileBlockId, parseFileBlockId, workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConfigItemBlockId, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchFileMeta, type WorkbenchLaunchItemBlockId, type WorkbenchLaunchItemMeta, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchUninstallItemBlockId, type WorkbenchUninstallItemMeta, type WorkbenchVisibleBlocks } from './types'
+import { WORKBENCH_FILE_EXTENSIONS, createFileBlockId, parseFileBlockId, workbenchCanvasFont, type WorkbenchBlockId, type WorkbenchBlockMeta, type WorkbenchCanvasProps, type WorkbenchCanvasState, type WorkbenchComponentBlockId, type WorkbenchComponentMeta, type WorkbenchConfigItemBlockId, type WorkbenchConfigItemMeta, type WorkbenchConnectionSource, type WorkbenchDeploymentBlockId, type WorkbenchDeploymentMeta, type WorkbenchFileMeta, type WorkbenchLaunchItemBlockId, type WorkbenchLaunchItemMeta, type WorkbenchManualConnection, type WorkbenchPoint, type WorkbenchResizeDirection, type WorkbenchSize, type WorkbenchUninstallItemBlockId, type WorkbenchUninstallItemMeta, type WorkbenchVisibleBlocks } from './types'
 
 const defaultComponentMeta: WorkbenchComponentMeta = {
   name: '',
@@ -206,7 +206,6 @@ const initBlockMinSize: WorkbenchSize = { width: 421, height: 431 }
 const defaultVisibleBlocks: WorkbenchVisibleBlocks = { components: false, deploy: false, config: false, launch: false, uninstall: false, componentCount: 0, deploymentCount: 0, configItemCount: 0, launchItemCount: 0, uninstallItemCount: 0 }
 type DraggableBlockId = WorkbenchBlockId
 type ResizableBlockId = Exclude<WorkbenchBlockId, 'start'>
-type ManualConnection = { id: string; from: WorkbenchBlockId; to: WorkbenchBlockId }
 type DraggingConnection = {
   sourceBlockId: WorkbenchBlockId
   sourcePoint: WorkbenchPoint
@@ -358,48 +357,50 @@ export default function WorkbenchCanvas({
   onBlockMetaPatch,
   onOpenFileEditor,
   projectSequence = null,
+  canvasState,
+  onCanvasStatePatch,
 }: WorkbenchCanvasProps) {
   const meta = { ...defaultBlockMeta, ...blockMeta }
   const blockVisibility = { ...defaultVisibleBlocks, ...visibleBlocks }
-  const [startEndpointPosition, setStartEndpointPosition] = useState<WorkbenchPoint>({ x: 605.289, y: 469.289 })
-  const [initBlockPosition, setInitBlockPosition] = useState<WorkbenchPoint>({ x: 829, y: 359 })
-  const [initBlockSize, setInitBlockSize] = useState<WorkbenchSize>(initBlockMinSize)
-  const [componentsBlockPosition, setComponentsBlockPosition] = useState<WorkbenchPoint>({ x: 1332, y: 342 })
-  const [componentsBlockSize, setComponentsBlockSize] = useState<WorkbenchSize>(componentsBlockMinSize)
-  const [deployBlockPosition, setDeployBlockPosition] = useState<WorkbenchPoint>({ x: 1900, y: 342 })
-  const [deployBlockSize, setDeployBlockSize] = useState<WorkbenchSize>(deployBlockMinSize)
-  const [configBlockPosition, setConfigBlockPosition] = useState<WorkbenchPoint>({ x: 2468, y: 342 })
-  const [configBlockSize, setConfigBlockSize] = useState<WorkbenchSize>(configBlockMinSize)
-  const [launchBlockPosition, setLaunchBlockPosition] = useState<WorkbenchPoint>({ x: 3036, y: 342 })
-  const [launchBlockSize, setLaunchBlockSize] = useState<WorkbenchSize>(launchBlockMinSize)
-  const [uninstallBlockPosition, setUninstallBlockPosition] = useState<WorkbenchPoint>({ x: 3604, y: 342 })
-  const [uninstallBlockSize, setUninstallBlockSize] = useState<WorkbenchSize>(uninstallBlockMinSize)
-  const [componentBlockPositions, setComponentBlockPositions] = useState<WorkbenchPoint[]>([])
-  const [componentBlockSizes, setComponentBlockSizes] = useState<WorkbenchSize[]>([])
-  const [componentConnections, setComponentConnections] = useState<boolean[]>([])
-  const [deploymentBlockPositions, setDeploymentBlockPositions] = useState<WorkbenchPoint[]>([])
-  const [deploymentBlockSizes, setDeploymentBlockSizes] = useState<WorkbenchSize[]>([])
-  const [deploymentConnections, setDeploymentConnections] = useState<boolean[]>([])
-  const [configItemBlockPositions, setConfigItemBlockPositions] = useState<WorkbenchPoint[]>([])
-  const [configItemBlockSizes, setConfigItemBlockSizes] = useState<WorkbenchSize[]>([])
-  const [configItemConnections, setConfigItemConnections] = useState<boolean[]>([])
-  const [launchItemBlockPositions, setLaunchItemBlockPositions] = useState<WorkbenchPoint[]>([])
-  const [launchItemBlockSizes, setLaunchItemBlockSizes] = useState<WorkbenchSize[]>([])
-  const [launchItemConnections, setLaunchItemConnections] = useState<boolean[]>([])
-  const [uninstallItemBlockPositions, setUninstallItemBlockPositions] = useState<WorkbenchPoint[]>([])
-  const [uninstallItemBlockSizes, setUninstallItemBlockSizes] = useState<WorkbenchSize[]>([])
-  const [uninstallItemConnections, setUninstallItemConnections] = useState<boolean[]>([])
-  const [fileBlockPositions, setFileBlockPositions] = useState<Record<string, WorkbenchPoint>>({})
-  const [fileBlockSizes, setFileBlockSizes] = useState<Record<string, WorkbenchSize>>({})
-  const [componentsConnected, setComponentsConnected] = useState(false)
-  const [deployConnected, setDeployConnected] = useState(false)
-  const [configConnected, setConfigConnected] = useState(false)
-  const [launchConnected, setLaunchConnected] = useState(false)
-  const [uninstallConnected, setUninstallConnected] = useState(false)
+  const [startEndpointPosition, setStartEndpointPosition] = useState<WorkbenchPoint>(canvasState?.startEndpointPosition ?? { x: 605.289, y: 469.289 })
+  const [initBlockPosition, setInitBlockPosition] = useState<WorkbenchPoint>(canvasState?.initBlockPosition ?? { x: 829, y: 359 })
+  const [initBlockSize, setInitBlockSize] = useState<WorkbenchSize>(canvasState?.initBlockSize ?? initBlockMinSize)
+  const [componentsBlockPosition, setComponentsBlockPosition] = useState<WorkbenchPoint>(canvasState?.componentsBlockPosition ?? { x: 1332, y: 342 })
+  const [componentsBlockSize, setComponentsBlockSize] = useState<WorkbenchSize>(canvasState?.componentsBlockSize ?? componentsBlockMinSize)
+  const [deployBlockPosition, setDeployBlockPosition] = useState<WorkbenchPoint>(canvasState?.deployBlockPosition ?? { x: 1900, y: 342 })
+  const [deployBlockSize, setDeployBlockSize] = useState<WorkbenchSize>(canvasState?.deployBlockSize ?? deployBlockMinSize)
+  const [configBlockPosition, setConfigBlockPosition] = useState<WorkbenchPoint>(canvasState?.configBlockPosition ?? { x: 2468, y: 342 })
+  const [configBlockSize, setConfigBlockSize] = useState<WorkbenchSize>(canvasState?.configBlockSize ?? configBlockMinSize)
+  const [launchBlockPosition, setLaunchBlockPosition] = useState<WorkbenchPoint>(canvasState?.launchBlockPosition ?? { x: 3036, y: 342 })
+  const [launchBlockSize, setLaunchBlockSize] = useState<WorkbenchSize>(canvasState?.launchBlockSize ?? launchBlockMinSize)
+  const [uninstallBlockPosition, setUninstallBlockPosition] = useState<WorkbenchPoint>(canvasState?.uninstallBlockPosition ?? { x: 3604, y: 342 })
+  const [uninstallBlockSize, setUninstallBlockSize] = useState<WorkbenchSize>(canvasState?.uninstallBlockSize ?? uninstallBlockMinSize)
+  const [componentBlockPositions, setComponentBlockPositions] = useState<WorkbenchPoint[]>(canvasState?.componentBlockPositions ?? [])
+  const [componentBlockSizes, setComponentBlockSizes] = useState<WorkbenchSize[]>(canvasState?.componentBlockSizes ?? [])
+  const [componentConnections, setComponentConnections] = useState<boolean[]>(canvasState?.componentConnections ?? [])
+  const [deploymentBlockPositions, setDeploymentBlockPositions] = useState<WorkbenchPoint[]>(canvasState?.deploymentBlockPositions ?? [])
+  const [deploymentBlockSizes, setDeploymentBlockSizes] = useState<WorkbenchSize[]>(canvasState?.deploymentBlockSizes ?? [])
+  const [deploymentConnections, setDeploymentConnections] = useState<boolean[]>(canvasState?.deploymentConnections ?? [])
+  const [configItemBlockPositions, setConfigItemBlockPositions] = useState<WorkbenchPoint[]>(canvasState?.configItemBlockPositions ?? [])
+  const [configItemBlockSizes, setConfigItemBlockSizes] = useState<WorkbenchSize[]>(canvasState?.configItemBlockSizes ?? [])
+  const [configItemConnections, setConfigItemConnections] = useState<boolean[]>(canvasState?.configItemConnections ?? [])
+  const [launchItemBlockPositions, setLaunchItemBlockPositions] = useState<WorkbenchPoint[]>(canvasState?.launchItemBlockPositions ?? [])
+  const [launchItemBlockSizes, setLaunchItemBlockSizes] = useState<WorkbenchSize[]>(canvasState?.launchItemBlockSizes ?? [])
+  const [launchItemConnections, setLaunchItemConnections] = useState<boolean[]>(canvasState?.launchItemConnections ?? [])
+  const [uninstallItemBlockPositions, setUninstallItemBlockPositions] = useState<WorkbenchPoint[]>(canvasState?.uninstallItemBlockPositions ?? [])
+  const [uninstallItemBlockSizes, setUninstallItemBlockSizes] = useState<WorkbenchSize[]>(canvasState?.uninstallItemBlockSizes ?? [])
+  const [uninstallItemConnections, setUninstallItemConnections] = useState<boolean[]>(canvasState?.uninstallItemConnections ?? [])
+  const [fileBlockPositions, setFileBlockPositions] = useState<Record<string, WorkbenchPoint>>(canvasState?.fileBlockPositions ?? {})
+  const [fileBlockSizes, setFileBlockSizes] = useState<Record<string, WorkbenchSize>>(canvasState?.fileBlockSizes ?? {})
+  const [componentsConnected, setComponentsConnected] = useState<boolean>(canvasState?.componentsConnected ?? false)
+  const [deployConnected, setDeployConnected] = useState<boolean>(canvasState?.deployConnected ?? false)
+  const [configConnected, setConfigConnected] = useState<boolean>(canvasState?.configConnected ?? false)
+  const [launchConnected, setLaunchConnected] = useState<boolean>(canvasState?.launchConnected ?? false)
+  const [uninstallConnected, setUninstallConnected] = useState<boolean>(canvasState?.uninstallConnected ?? false)
   const [addNodePopoverPosition, setAddNodePopoverPosition] = useState<WorkbenchPoint | null>(null)
   const [addNodePopoverSource, setAddNodePopoverSource] = useState<WorkbenchConnectionSource | null>(null)
   const [linkSourceBlockId, setLinkSourceBlockId] = useState<WorkbenchBlockId | null>(null)
-  const [manualConnections, setManualConnections] = useState<ManualConnection[]>([])
+  const [manualConnections, setManualConnections] = useState<WorkbenchManualConnection[]>(canvasState?.manualConnections ?? [])
   const [dragConnector, setDragConnector] = useState<{
     source: WorkbenchConnectionSource
     from: WorkbenchPoint
@@ -442,6 +443,34 @@ export default function WorkbenchCanvas({
     startClientY: number
     startSize: WorkbenchSize
   } | null>(null)
+  // 画布状态冒泡缓冲：拖动块每像素一次 patch，同一帧内合并成一次 onCanvasStatePatch。
+  // 调度用 rAF，闭包持有一个 pending patch 对象，每帧 flush 后清空。
+  const canvasStatePatchBufferRef = useRef<Partial<WorkbenchCanvasState> | null>(null)
+  const canvasStatePatchRafRef = useRef<number | null>(null)
+  const lastHydratedSequenceRef = useRef<string | null | undefined>(undefined)
+  // 持有最新 canvasState 引用，让 hydrate effect 只依赖 projectSequence，
+  // 避免切项目时 effect 跑两次（projectSequence 变 + canvasState 引用变）。
+  const canvasStateRef = useRef(canvasState)
+  useEffect(() => {
+    canvasStateRef.current = canvasState
+  }, [canvasState])
+
+  const flushCanvasStatePatch = () => {
+    canvasStatePatchRafRef.current = null
+    const pending = canvasStatePatchBufferRef.current
+    if (!pending) return
+    canvasStatePatchBufferRef.current = null
+    onCanvasStatePatch?.(pending)
+  }
+
+  const patchCanvasState = (patch: Partial<WorkbenchCanvasState>) => {
+    if (!onCanvasStatePatch) return
+    const buffered = canvasStatePatchBufferRef.current ?? {}
+    canvasStatePatchBufferRef.current = { ...buffered, ...patch }
+    if (canvasStatePatchRafRef.current === null) {
+      canvasStatePatchRafRef.current = requestAnimationFrame(flushCanvasStatePatch)
+    }
+  }
 
   const clearDragTimer = () => {
     if (!dragRef.current) return
@@ -452,40 +481,146 @@ export default function WorkbenchCanvas({
     metaRef.current = meta
   }, [meta])
 
+  // 进入画布时一次性把 canvasState hydrate 进所有 useState。
+  // 只在 projectSequence 首次变化时跑一次；之后外部 patch 不会触发二次 hydrate。
+  // canvasState 通过 ref 拿最新值，避免 effect 依赖它导致切项目时 effect 跑两次。
+  useEffect(() => {
+    if (lastHydratedSequenceRef.current === projectSequence) return
+    lastHydratedSequenceRef.current = projectSequence
+    const cs = canvasStateRef.current
+    if (!cs) return
+    if (cs.startEndpointPosition) setStartEndpointPosition(cs.startEndpointPosition)
+    if (cs.initBlockPosition) setInitBlockPosition(cs.initBlockPosition)
+    if (cs.initBlockSize) setInitBlockSize(cs.initBlockSize)
+    if (cs.componentsBlockPosition) setComponentsBlockPosition(cs.componentsBlockPosition)
+    if (cs.componentsBlockSize) setComponentsBlockSize(cs.componentsBlockSize)
+    if (cs.deployBlockPosition) setDeployBlockPosition(cs.deployBlockPosition)
+    if (cs.deployBlockSize) setDeployBlockSize(cs.deployBlockSize)
+    if (cs.configBlockPosition) setConfigBlockPosition(cs.configBlockPosition)
+    if (cs.configBlockSize) setConfigBlockSize(cs.configBlockSize)
+    if (cs.launchBlockPosition) setLaunchBlockPosition(cs.launchBlockPosition)
+    if (cs.launchBlockSize) setLaunchBlockSize(cs.launchBlockSize)
+    if (cs.uninstallBlockPosition) setUninstallBlockPosition(cs.uninstallBlockPosition)
+    if (cs.uninstallBlockSize) setUninstallBlockSize(cs.uninstallBlockSize)
+    if (cs.componentBlockPositions) setComponentBlockPositions(cs.componentBlockPositions)
+    if (cs.componentBlockSizes) setComponentBlockSizes(cs.componentBlockSizes)
+    if (cs.componentConnections) setComponentConnections(cs.componentConnections)
+    if (cs.deploymentBlockPositions) setDeploymentBlockPositions(cs.deploymentBlockPositions)
+    if (cs.deploymentBlockSizes) setDeploymentBlockSizes(cs.deploymentBlockSizes)
+    if (cs.deploymentConnections) setDeploymentConnections(cs.deploymentConnections)
+    if (cs.configItemBlockPositions) setConfigItemBlockPositions(cs.configItemBlockPositions)
+    if (cs.configItemBlockSizes) setConfigItemBlockSizes(cs.configItemBlockSizes)
+    if (cs.configItemConnections) setConfigItemConnections(cs.configItemConnections)
+    if (cs.launchItemBlockPositions) setLaunchItemBlockPositions(cs.launchItemBlockPositions)
+    if (cs.launchItemBlockSizes) setLaunchItemBlockSizes(cs.launchItemBlockSizes)
+    if (cs.launchItemConnections) setLaunchItemConnections(cs.launchItemConnections)
+    if (cs.uninstallItemBlockPositions) setUninstallItemBlockPositions(cs.uninstallItemBlockPositions)
+    if (cs.uninstallItemBlockSizes) setUninstallItemBlockSizes(cs.uninstallItemBlockSizes)
+    if (cs.uninstallItemConnections) setUninstallItemConnections(cs.uninstallItemConnections)
+    if (cs.fileBlockPositions) setFileBlockPositions(cs.fileBlockPositions)
+    if (cs.fileBlockSizes) setFileBlockSizes(cs.fileBlockSizes)
+    if (typeof cs.componentsConnected === 'boolean') setComponentsConnected(cs.componentsConnected)
+    if (typeof cs.deployConnected === 'boolean') setDeployConnected(cs.deployConnected)
+    if (typeof cs.configConnected === 'boolean') setConfigConnected(cs.configConnected)
+    if (typeof cs.launchConnected === 'boolean') setLaunchConnected(cs.launchConnected)
+    if (typeof cs.uninstallConnected === 'boolean') setUninstallConnected(cs.uninstallConnected)
+    if (cs.manualConnections) setManualConnections(cs.manualConnections)
+  }, [projectSequence])
+
 
   useEffect(() => {
     const count = Math.max(0, blockVisibility.componentCount)
-    setComponentBlockPositions(current => resizeArray(current, count, createDefaultComponentPosition))
-    setComponentBlockSizes(current => resizeArray(current, count, () => componentBlockMinSize))
-    setComponentConnections(current => resizeArray(current, count, () => false))
+    setComponentBlockPositions(current => {
+      const next = resizeArray(current, count, createDefaultComponentPosition)
+      patchCanvasState({ componentBlockPositions: next })
+      return next
+    })
+    setComponentBlockSizes(current => {
+      const next = resizeArray(current, count, () => componentBlockMinSize)
+      patchCanvasState({ componentBlockSizes: next })
+      return next
+    })
+    setComponentConnections(current => {
+      const next = resizeArray(current, count, () => false)
+      patchCanvasState({ componentConnections: next })
+      return next
+    })
   }, [blockVisibility.componentCount])
 
   useEffect(() => {
     const count = Math.max(0, blockVisibility.deploymentCount)
-    setDeploymentBlockPositions(current => resizeArray(current, count, createDefaultDeploymentPosition))
-    setDeploymentBlockSizes(current => resizeArray(current, count, () => deploymentBlockMinSize))
-    setDeploymentConnections(current => resizeArray(current, count, () => false))
+    setDeploymentBlockPositions(current => {
+      const next = resizeArray(current, count, createDefaultDeploymentPosition)
+      patchCanvasState({ deploymentBlockPositions: next })
+      return next
+    })
+    setDeploymentBlockSizes(current => {
+      const next = resizeArray(current, count, () => deploymentBlockMinSize)
+      patchCanvasState({ deploymentBlockSizes: next })
+      return next
+    })
+    setDeploymentConnections(current => {
+      const next = resizeArray(current, count, () => false)
+      patchCanvasState({ deploymentConnections: next })
+      return next
+    })
   }, [blockVisibility.deploymentCount])
 
   useEffect(() => {
     const count = Math.max(0, blockVisibility.configItemCount)
-    setConfigItemBlockPositions(current => resizeArray(current, count, createDefaultConfigItemPosition))
-    setConfigItemBlockSizes(current => resizeArray(current, count, () => configItemBlockMinSize))
-    setConfigItemConnections(current => resizeArray(current, count, () => false))
+    setConfigItemBlockPositions(current => {
+      const next = resizeArray(current, count, createDefaultConfigItemPosition)
+      patchCanvasState({ configItemBlockPositions: next })
+      return next
+    })
+    setConfigItemBlockSizes(current => {
+      const next = resizeArray(current, count, () => configItemBlockMinSize)
+      patchCanvasState({ configItemBlockSizes: next })
+      return next
+    })
+    setConfigItemConnections(current => {
+      const next = resizeArray(current, count, () => false)
+      patchCanvasState({ configItemConnections: next })
+      return next
+    })
   }, [blockVisibility.configItemCount])
 
   useEffect(() => {
     const count = Math.max(0, blockVisibility.launchItemCount)
-    setLaunchItemBlockPositions(current => resizeArray(current, count, createDefaultLaunchItemPosition))
-    setLaunchItemBlockSizes(current => resizeArray(current, count, () => launchItemBlockMinSize))
-    setLaunchItemConnections(current => resizeArray(current, count, () => false))
+    setLaunchItemBlockPositions(current => {
+      const next = resizeArray(current, count, createDefaultLaunchItemPosition)
+      patchCanvasState({ launchItemBlockPositions: next })
+      return next
+    })
+    setLaunchItemBlockSizes(current => {
+      const next = resizeArray(current, count, () => launchItemBlockMinSize)
+      patchCanvasState({ launchItemBlockSizes: next })
+      return next
+    })
+    setLaunchItemConnections(current => {
+      const next = resizeArray(current, count, () => false)
+      patchCanvasState({ launchItemConnections: next })
+      return next
+    })
   }, [blockVisibility.launchItemCount])
 
   useEffect(() => {
     const count = Math.max(0, blockVisibility.uninstallItemCount)
-    setUninstallItemBlockPositions(current => resizeArray(current, count, createDefaultUninstallItemPosition))
-    setUninstallItemBlockSizes(current => resizeArray(current, count, () => uninstallItemBlockMinSize))
-    setUninstallItemConnections(current => resizeArray(current, count, () => false))
+    setUninstallItemBlockPositions(current => {
+      const next = resizeArray(current, count, createDefaultUninstallItemPosition)
+      patchCanvasState({ uninstallItemBlockPositions: next })
+      return next
+    })
+    setUninstallItemBlockSizes(current => {
+      const next = resizeArray(current, count, () => uninstallItemBlockMinSize)
+      patchCanvasState({ uninstallItemBlockSizes: next })
+      return next
+    })
+    setUninstallItemConnections(current => {
+      const next = resizeArray(current, count, () => false)
+      patchCanvasState({ uninstallItemConnections: next })
+      return next
+    })
   }, [blockVisibility.uninstallItemCount])
 
 
@@ -496,26 +631,50 @@ export default function WorkbenchCanvas({
     const launchItemIndex = parseLaunchItemBlockIndex(blockId)
     const uninstallItemIndex = parseUninstallItemBlockIndex(blockId)
     const fileId = parseFileBlockId(blockId)
-    if (blockId === 'init') setInitBlockPosition(position)
-    else if (blockId === 'components') setComponentsBlockPosition(position)
-    else if (blockId === 'deploy') setDeployBlockPosition(position)
-    else if (blockId === 'config') setConfigBlockPosition(position)
-    else if (blockId === 'launch') setLaunchBlockPosition(position)
-    else if (blockId === 'uninstall') setUninstallBlockPosition(position)
+    if (blockId === 'init') { setInitBlockPosition(position); patchCanvasState({ initBlockPosition: position }) }
+    else if (blockId === 'components') { setComponentsBlockPosition(position); patchCanvasState({ componentsBlockPosition: position }) }
+    else if (blockId === 'deploy') { setDeployBlockPosition(position); patchCanvasState({ deployBlockPosition: position }) }
+    else if (blockId === 'config') { setConfigBlockPosition(position); patchCanvasState({ configBlockPosition: position }) }
+    else if (blockId === 'launch') { setLaunchBlockPosition(position); patchCanvasState({ launchBlockPosition: position }) }
+    else if (blockId === 'uninstall') { setUninstallBlockPosition(position); patchCanvasState({ uninstallBlockPosition: position }) }
     else if (componentIndex !== null) {
-      setComponentBlockPositions(current => current.map((item, index) => (index === componentIndex ? position : item)))
+      setComponentBlockPositions(current => {
+        const next = current.map((item, index) => (index === componentIndex ? position : item))
+        patchCanvasState({ componentBlockPositions: next })
+        return next
+      })
     } else if (deploymentIndex !== null) {
-      setDeploymentBlockPositions(current => current.map((item, index) => (index === deploymentIndex ? position : item)))
+      setDeploymentBlockPositions(current => {
+        const next = current.map((item, index) => (index === deploymentIndex ? position : item))
+        patchCanvasState({ deploymentBlockPositions: next })
+        return next
+      })
     } else if (configItemIndex !== null) {
-      setConfigItemBlockPositions(current => current.map((item, index) => (index === configItemIndex ? position : item)))
+      setConfigItemBlockPositions(current => {
+        const next = current.map((item, index) => (index === configItemIndex ? position : item))
+        patchCanvasState({ configItemBlockPositions: next })
+        return next
+      })
     } else if (launchItemIndex !== null) {
-      setLaunchItemBlockPositions(current => current.map((item, index) => (index === launchItemIndex ? position : item)))
+      setLaunchItemBlockPositions(current => {
+        const next = current.map((item, index) => (index === launchItemIndex ? position : item))
+        patchCanvasState({ launchItemBlockPositions: next })
+        return next
+      })
     } else if (uninstallItemIndex !== null) {
-      setUninstallItemBlockPositions(current => current.map((item, index) => (index === uninstallItemIndex ? position : item)))
+      setUninstallItemBlockPositions(current => {
+        const next = current.map((item, index) => (index === uninstallItemIndex ? position : item))
+        patchCanvasState({ uninstallItemBlockPositions: next })
+        return next
+      })
     } else if (fileId !== null) {
-      setFileBlockPositions(current => ({ ...current, [fileId]: position }))
+      setFileBlockPositions(current => {
+        const next = { ...current, [fileId]: position }
+        patchCanvasState({ fileBlockPositions: next })
+        return next
+      })
     }
-    else setStartEndpointPosition(position)
+    else { setStartEndpointPosition(position); patchCanvasState({ startEndpointPosition: position }) }
   }
 
   const startBlockDrag = (blockId: DraggableBlockId, position: WorkbenchPoint, event: PointerEvent<SVGGElement>) => {
@@ -603,22 +762,42 @@ export default function WorkbenchCanvas({
     const configItemIndex = parseConfigItemBlockIndex(blockId)
     const launchItemIndex = parseLaunchItemBlockIndex(blockId)
     const uninstallItemIndex = parseUninstallItemBlockIndex(blockId)
-    if (blockId === 'init') setInitBlockSize(size)
-    else if (blockId === 'components') setComponentsBlockSize(size)
-    else if (blockId === 'deploy') setDeployBlockSize(size)
-    else if (blockId === 'config') setConfigBlockSize(size)
-    else if (blockId === 'launch') setLaunchBlockSize(size)
-    else if (blockId === 'uninstall') setUninstallBlockSize(size)
+    if (blockId === 'init') { setInitBlockSize(size); patchCanvasState({ initBlockSize: size }) }
+    else if (blockId === 'components') { setComponentsBlockSize(size); patchCanvasState({ componentsBlockSize: size }) }
+    else if (blockId === 'deploy') { setDeployBlockSize(size); patchCanvasState({ deployBlockSize: size }) }
+    else if (blockId === 'config') { setConfigBlockSize(size); patchCanvasState({ configBlockSize: size }) }
+    else if (blockId === 'launch') { setLaunchBlockSize(size); patchCanvasState({ launchBlockSize: size }) }
+    else if (blockId === 'uninstall') { setUninstallBlockSize(size); patchCanvasState({ uninstallBlockSize: size }) }
     else if (componentIndex !== null) {
-      setComponentBlockSizes(current => current.map((item, index) => (index === componentIndex ? size : item)))
+      setComponentBlockSizes(current => {
+        const next = current.map((item, index) => (index === componentIndex ? size : item))
+        patchCanvasState({ componentBlockSizes: next })
+        return next
+      })
     } else if (deploymentIndex !== null) {
-      setDeploymentBlockSizes(current => current.map((item, index) => (index === deploymentIndex ? size : item)))
+      setDeploymentBlockSizes(current => {
+        const next = current.map((item, index) => (index === deploymentIndex ? size : item))
+        patchCanvasState({ deploymentBlockSizes: next })
+        return next
+      })
     } else if (configItemIndex !== null) {
-      setConfigItemBlockSizes(current => current.map((item, index) => (index === configItemIndex ? size : item)))
+      setConfigItemBlockSizes(current => {
+        const next = current.map((item, index) => (index === configItemIndex ? size : item))
+        patchCanvasState({ configItemBlockSizes: next })
+        return next
+      })
     } else if (launchItemIndex !== null) {
-      setLaunchItemBlockSizes(current => current.map((item, index) => (index === launchItemIndex ? size : item)))
+      setLaunchItemBlockSizes(current => {
+        const next = current.map((item, index) => (index === launchItemIndex ? size : item))
+        patchCanvasState({ launchItemBlockSizes: next })
+        return next
+      })
     } else if (uninstallItemIndex !== null) {
-      setUninstallItemBlockSizes(current => current.map((item, index) => (index === uninstallItemIndex ? size : item)))
+      setUninstallItemBlockSizes(current => {
+        const next = current.map((item, index) => (index === uninstallItemIndex ? size : item))
+        patchCanvasState({ uninstallItemBlockSizes: next })
+        return next
+      })
     }
   }
 
@@ -974,37 +1153,44 @@ export default function WorkbenchCanvas({
   const connectKnownRelation = (from: WorkbenchBlockId, to: WorkbenchBlockId) => {
     if (from === 'init' && to === 'components' && blockVisibility.components) {
       setComponentsConnected(true)
+      patchCanvasState({ componentsConnected: true })
       return true
     }
 
     if (from === 'components' && to === 'deploy' && blockVisibility.components && blockVisibility.deploy) {
       setDeployConnected(true)
+      patchCanvasState({ deployConnected: true })
       return true
     }
 
     if (from === 'deploy' && to === 'config' && blockVisibility.deploy && blockVisibility.config) {
       setConfigConnected(true)
+      patchCanvasState({ configConnected: true })
       return true
     }
 
     if (from === 'config' && to === 'launch' && blockVisibility.config && blockVisibility.launch) {
       setLaunchConnected(true)
+      patchCanvasState({ launchConnected: true })
       return true
     }
 
     if (from === 'launch' && to === 'uninstall' && blockVisibility.launch && blockVisibility.uninstall) {
       setUninstallConnected(true)
+      patchCanvasState({ uninstallConnected: true })
       return true
     }
 
     if (from === 'components') {
       const componentIndex = parseComponentBlockIndex(to)
       if (componentIndex !== null && componentIndex < blockVisibility.componentCount) {
-        setComponentConnections(current => (
-          resizeArray(current, blockVisibility.componentCount, () => false).map((item, index) => (
+        setComponentConnections(current => {
+          const next = resizeArray(current, blockVisibility.componentCount, () => false).map((item, index) => (
             index === componentIndex ? true : item
           ))
-        ))
+          patchCanvasState({ componentConnections: next })
+          return next
+        })
         return true
       }
     }
@@ -1012,11 +1198,13 @@ export default function WorkbenchCanvas({
     if (from === 'deploy') {
       const deploymentIndex = parseDeploymentBlockIndex(to)
       if (deploymentIndex !== null && deploymentIndex < blockVisibility.deploymentCount) {
-        setDeploymentConnections(current => (
-          resizeArray(current, blockVisibility.deploymentCount, () => false).map((item, index) => (
+        setDeploymentConnections(current => {
+          const next = resizeArray(current, blockVisibility.deploymentCount, () => false).map((item, index) => (
             index === deploymentIndex ? true : item
           ))
-        ))
+          patchCanvasState({ deploymentConnections: next })
+          return next
+        })
         return true
       }
     }
@@ -1024,11 +1212,13 @@ export default function WorkbenchCanvas({
     if (from === 'config') {
       const configItemIndex = parseConfigItemBlockIndex(to)
       if (configItemIndex !== null && configItemIndex < blockVisibility.configItemCount) {
-        setConfigItemConnections(current => (
-          resizeArray(current, blockVisibility.configItemCount, () => false).map((item, index) => (
+        setConfigItemConnections(current => {
+          const next = resizeArray(current, blockVisibility.configItemCount, () => false).map((item, index) => (
             index === configItemIndex ? true : item
           ))
-        ))
+          patchCanvasState({ configItemConnections: next })
+          return next
+        })
         return true
       }
     }
@@ -1036,11 +1226,13 @@ export default function WorkbenchCanvas({
     if (from === 'launch') {
       const launchItemIndex = parseLaunchItemBlockIndex(to)
       if (launchItemIndex !== null && launchItemIndex < blockVisibility.launchItemCount) {
-        setLaunchItemConnections(current => (
-          resizeArray(current, blockVisibility.launchItemCount, () => false).map((item, index) => (
+        setLaunchItemConnections(current => {
+          const next = resizeArray(current, blockVisibility.launchItemCount, () => false).map((item, index) => (
             index === launchItemIndex ? true : item
           ))
-        ))
+          patchCanvasState({ launchItemConnections: next })
+          return next
+        })
         return true
       }
     }
@@ -1048,11 +1240,13 @@ export default function WorkbenchCanvas({
     if (from === 'uninstall') {
       const uninstallItemIndex = parseUninstallItemBlockIndex(to)
       if (uninstallItemIndex !== null && uninstallItemIndex < blockVisibility.uninstallItemCount) {
-        setUninstallItemConnections(current => (
-          resizeArray(current, blockVisibility.uninstallItemCount, () => false).map((item, index) => (
+        setUninstallItemConnections(current => {
+          const next = resizeArray(current, blockVisibility.uninstallItemCount, () => false).map((item, index) => (
             index === uninstallItemIndex ? true : item
           ))
-        ))
+          patchCanvasState({ uninstallItemConnections: next })
+          return next
+        })
         return true
       }
     }
@@ -1065,7 +1259,9 @@ export default function WorkbenchCanvas({
     if (isFileConnectionSource(from) && to !== 'init-file') return
     setManualConnections(current => {
       if (current.some(connection => connection.from === from && connection.to === to)) return current
-      return [...current, { id: `${from}->${to}-${Date.now()}`, from, to }]
+      const next = [...current, { id: `${from}->${to}-${Date.now()}`, from, to }]
+      patchCanvasState({ manualConnections: next })
+      return next
     })
     if (to === 'init-file') {
       const fileId = parseFileBlockId(from)
@@ -1128,62 +1324,91 @@ export default function WorkbenchCanvas({
   const removeConnection = (sourceBlockId: WorkbenchBlockId, targetBlockId: WorkbenchBlockId) => {
     if (sourceBlockId === 'init' && targetBlockId === 'components') {
       setComponentsConnected(false)
+      patchCanvasState({ componentsConnected: false })
       return
     }
     if (sourceBlockId === 'components' && targetBlockId === 'deploy') {
       setDeployConnected(false)
+      patchCanvasState({ deployConnected: false })
       return
     }
     if (sourceBlockId === 'deploy' && targetBlockId === 'config') {
       setConfigConnected(false)
+      patchCanvasState({ configConnected: false })
       return
     }
     if (sourceBlockId === 'config' && targetBlockId === 'launch') {
       setLaunchConnected(false)
+      patchCanvasState({ launchConnected: false })
       return
     }
     if (sourceBlockId === 'launch' && targetBlockId === 'uninstall') {
       setUninstallConnected(false)
+      patchCanvasState({ uninstallConnected: false })
       return
     }
 
     if (sourceBlockId === 'components') {
       const componentIndex = parseComponentBlockIndex(targetBlockId)
       if (componentIndex !== null) {
-        setComponentConnections(current => current.map((item, index) => (index === componentIndex ? false : item)))
+        setComponentConnections(current => {
+          const next = current.map((item, index) => (index === componentIndex ? false : item))
+          patchCanvasState({ componentConnections: next })
+          return next
+        })
         return
       }
     }
     if (sourceBlockId === 'deploy') {
       const deploymentIndex = parseDeploymentBlockIndex(targetBlockId)
       if (deploymentIndex !== null) {
-        setDeploymentConnections(current => current.map((item, index) => (index === deploymentIndex ? false : item)))
+        setDeploymentConnections(current => {
+          const next = current.map((item, index) => (index === deploymentIndex ? false : item))
+          patchCanvasState({ deploymentConnections: next })
+          return next
+        })
         return
       }
     }
     if (sourceBlockId === 'config') {
       const configItemIndex = parseConfigItemBlockIndex(targetBlockId)
       if (configItemIndex !== null) {
-        setConfigItemConnections(current => current.map((item, index) => (index === configItemIndex ? false : item)))
+        setConfigItemConnections(current => {
+          const next = current.map((item, index) => (index === configItemIndex ? false : item))
+          patchCanvasState({ configItemConnections: next })
+          return next
+        })
         return
       }
     }
     if (sourceBlockId === 'launch') {
       const launchItemIndex = parseLaunchItemBlockIndex(targetBlockId)
       if (launchItemIndex !== null) {
-        setLaunchItemConnections(current => current.map((item, index) => (index === launchItemIndex ? false : item)))
+        setLaunchItemConnections(current => {
+          const next = current.map((item, index) => (index === launchItemIndex ? false : item))
+          patchCanvasState({ launchItemConnections: next })
+          return next
+        })
         return
       }
     }
     if (sourceBlockId === 'uninstall') {
       const uninstallItemIndex = parseUninstallItemBlockIndex(targetBlockId)
       if (uninstallItemIndex !== null) {
-        setUninstallItemConnections(current => current.map((item, index) => (index === uninstallItemIndex ? false : item)))
+        setUninstallItemConnections(current => {
+          const next = current.map((item, index) => (index === uninstallItemIndex ? false : item))
+          patchCanvasState({ uninstallItemConnections: next })
+          return next
+        })
         return
       }
     }
 
-    setManualConnections(current => current.filter(connection => !(connection.from === sourceBlockId && connection.to === targetBlockId)))
+    setManualConnections(current => {
+      const next = current.filter(connection => !(connection.from === sourceBlockId && connection.to === targetBlockId))
+      patchCanvasState({ manualConnections: next })
+      return next
+    })
     if (targetBlockId === 'init-file') {
       const fileId = parseFileBlockId(sourceBlockId)
       const file = fileId ? meta.files.find(item => item.id === fileId) : null
@@ -1392,17 +1617,25 @@ export default function WorkbenchCanvas({
         const file = fileId ? meta.files.find(item => item.id === fileId) : null
         return file ? [file.name] : []
       })
-    setManualConnections(current => current.filter(connection => connection.from !== blockId && connection.to !== blockId))
+    setManualConnections(current => {
+      const next = current.filter(connection => connection.from !== blockId && connection.to !== blockId)
+      patchCanvasState({ manualConnections: next })
+      return next
+    })
     setLinkSourceBlockId(current => (current === blockId ? null : current))
     removedFileNames.forEach(removeImportedFileName)
   }
 
   const remapManualConnectionsAfterIndexedDelete = (prefix: 'component' | 'deployment' | 'config-item' | 'launch-item' | 'uninstall-item', removedIndex: number) => {
-    setManualConnections(current => current.flatMap(connection => {
-      const from = remapIndexedBlockId(connection.from, prefix, removedIndex)
-      const to = remapIndexedBlockId(connection.to, prefix, removedIndex)
-      return from && to ? [{ ...connection, from, to }] : []
-    }))
+    setManualConnections(current => {
+      const next = current.flatMap(connection => {
+        const from = remapIndexedBlockId(connection.from, prefix, removedIndex)
+        const to = remapIndexedBlockId(connection.to, prefix, removedIndex)
+        return from && to ? [{ ...connection, from, to }] : []
+      })
+      patchCanvasState({ manualConnections: next })
+      return next
+    })
     setLinkSourceBlockId(current => (current ? remapIndexedBlockId(current, prefix, removedIndex) : null))
   }
 
@@ -1414,8 +1647,14 @@ export default function WorkbenchCanvas({
   const deleteComponentsBlock = () => {
     onVisibleBlocksChange?.({ components: false })
     setComponentsConnected(false)
+    patchCanvasState({ componentsConnected: false })
     setDeployConnected(false)
-    setComponentConnections(current => current.map(() => false))
+    patchCanvasState({ deployConnected: false })
+    setComponentConnections(current => {
+      const next = current.map(() => false)
+      patchCanvasState({ componentConnections: next })
+      return next
+    })
     clearManualConnectionsFor('components')
     if (selectedBlockId === 'components') onSelectedBlockChange?.(null)
   }
@@ -1423,7 +1662,12 @@ export default function WorkbenchCanvas({
   const deleteDeployBlock = () => {
     onVisibleBlocksChange?.({ deploy: false })
     setDeployConnected(false)
-    setDeploymentConnections(current => current.map(() => false))
+    patchCanvasState({ deployConnected: false })
+    setDeploymentConnections(current => {
+      const next = current.map(() => false)
+      patchCanvasState({ deploymentConnections: next })
+      return next
+    })
     clearManualConnectionsFor('deploy')
     if (selectedBlockId === 'deploy') onSelectedBlockChange?.(null)
   }
@@ -1431,8 +1675,14 @@ export default function WorkbenchCanvas({
   const deleteConfigBlock = () => {
     onVisibleBlocksChange?.({ config: false })
     setConfigConnected(false)
+    patchCanvasState({ configConnected: false })
     setLaunchConnected(false)
-    setConfigItemConnections(current => current.map(() => false))
+    patchCanvasState({ launchConnected: false })
+    setConfigItemConnections(current => {
+      const next = current.map(() => false)
+      patchCanvasState({ configItemConnections: next })
+      return next
+    })
     clearManualConnectionsFor('config')
     if (selectedBlockId === 'config') onSelectedBlockChange?.(null)
   }
@@ -1440,8 +1690,14 @@ export default function WorkbenchCanvas({
   const deleteLaunchBlock = () => {
     onVisibleBlocksChange?.({ launch: false })
     setLaunchConnected(false)
+    patchCanvasState({ launchConnected: false })
     setUninstallConnected(false)
-    setLaunchItemConnections(current => current.map(() => false))
+    patchCanvasState({ uninstallConnected: false })
+    setLaunchItemConnections(current => {
+      const next = current.map(() => false)
+      patchCanvasState({ launchItemConnections: next })
+      return next
+    })
     clearManualConnectionsFor('launch')
     if (selectedBlockId === 'launch') onSelectedBlockChange?.(null)
   }
@@ -1449,7 +1705,12 @@ export default function WorkbenchCanvas({
   const deleteUninstallBlock = () => {
     onVisibleBlocksChange?.({ uninstall: false })
     setUninstallConnected(false)
-    setUninstallItemConnections(current => current.map(() => false))
+    patchCanvasState({ uninstallConnected: false })
+    setUninstallItemConnections(current => {
+      const next = current.map(() => false)
+      patchCanvasState({ uninstallItemConnections: next })
+      return next
+    })
     clearManualConnectionsFor('uninstall')
     if (selectedBlockId === 'uninstall') onSelectedBlockChange?.(null)
   }
@@ -1460,9 +1721,21 @@ export default function WorkbenchCanvas({
     const nextComponentsList = componentToRemove?.id
       ? meta.componentsList.filter(id => id !== componentToRemove.id)
       : meta.componentsList
-    setComponentBlockPositions(current => removeArrayItem(current, indexToRemove))
-    setComponentBlockSizes(current => removeArrayItem(current, indexToRemove))
-    setComponentConnections(current => removeArrayItem(current, indexToRemove))
+    setComponentBlockPositions(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ componentBlockPositions: next })
+      return next
+    })
+    setComponentBlockSizes(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ componentBlockSizes: next })
+      return next
+    })
+    setComponentConnections(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ componentConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ componentCount: Math.max(0, blockVisibility.componentCount - 1) })
     onBlockMetaPatch?.({ components: nextComponents, componentsList: nextComponentsList })
     remapManualConnectionsAfterIndexedDelete('component', indexToRemove)
@@ -1475,9 +1748,21 @@ export default function WorkbenchCanvas({
     const nextDeployList = deploymentToRemove?.id
       ? meta.deployList.filter(id => id !== deploymentToRemove.id)
       : meta.deployList
-    setDeploymentBlockPositions(current => removeArrayItem(current, indexToRemove))
-    setDeploymentBlockSizes(current => removeArrayItem(current, indexToRemove))
-    setDeploymentConnections(current => removeArrayItem(current, indexToRemove))
+    setDeploymentBlockPositions(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ deploymentBlockPositions: next })
+      return next
+    })
+    setDeploymentBlockSizes(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ deploymentBlockSizes: next })
+      return next
+    })
+    setDeploymentConnections(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ deploymentConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ deploymentCount: Math.max(0, blockVisibility.deploymentCount - 1) })
     onBlockMetaPatch?.({ deployments: nextDeployments, deployList: nextDeployList })
     remapManualConnectionsAfterIndexedDelete('deployment', indexToRemove)
@@ -1490,9 +1775,21 @@ export default function WorkbenchCanvas({
     const nextConfigList = configItemToRemove?.id
       ? meta.configList.filter(id => id !== configItemToRemove.id)
       : meta.configList
-    setConfigItemBlockPositions(current => removeArrayItem(current, indexToRemove))
-    setConfigItemBlockSizes(current => removeArrayItem(current, indexToRemove))
-    setConfigItemConnections(current => removeArrayItem(current, indexToRemove))
+    setConfigItemBlockPositions(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ configItemBlockPositions: next })
+      return next
+    })
+    setConfigItemBlockSizes(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ configItemBlockSizes: next })
+      return next
+    })
+    setConfigItemConnections(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ configItemConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ configItemCount: Math.max(0, blockVisibility.configItemCount - 1) })
     onBlockMetaPatch?.({ configItems: nextConfigItems, configList: nextConfigList })
     remapManualConnectionsAfterIndexedDelete('config-item', indexToRemove)
@@ -1505,9 +1802,21 @@ export default function WorkbenchCanvas({
     const nextLaunchList = launchItemToRemove?.id
       ? meta.launchList.filter(id => id !== launchItemToRemove.id)
       : meta.launchList
-    setLaunchItemBlockPositions(current => removeArrayItem(current, indexToRemove))
-    setLaunchItemBlockSizes(current => removeArrayItem(current, indexToRemove))
-    setLaunchItemConnections(current => removeArrayItem(current, indexToRemove))
+    setLaunchItemBlockPositions(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ launchItemBlockPositions: next })
+      return next
+    })
+    setLaunchItemBlockSizes(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ launchItemBlockSizes: next })
+      return next
+    })
+    setLaunchItemConnections(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ launchItemConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ launchItemCount: Math.max(0, blockVisibility.launchItemCount - 1) })
     onBlockMetaPatch?.({ launchItems: nextLaunchItems, launchList: nextLaunchList })
     remapManualConnectionsAfterIndexedDelete('launch-item', indexToRemove)
@@ -1520,9 +1829,21 @@ export default function WorkbenchCanvas({
     const nextUninstallList = uninstallItemToRemove?.id
       ? meta.uninstallList.filter(id => id !== uninstallItemToRemove.id)
       : meta.uninstallList
-    setUninstallItemBlockPositions(current => removeArrayItem(current, indexToRemove))
-    setUninstallItemBlockSizes(current => removeArrayItem(current, indexToRemove))
-    setUninstallItemConnections(current => removeArrayItem(current, indexToRemove))
+    setUninstallItemBlockPositions(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ uninstallItemBlockPositions: next })
+      return next
+    })
+    setUninstallItemBlockSizes(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ uninstallItemBlockSizes: next })
+      return next
+    })
+    setUninstallItemConnections(current => {
+      const next = removeArrayItem(current, indexToRemove)
+      patchCanvasState({ uninstallItemConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ uninstallItemCount: Math.max(0, blockVisibility.uninstallItemCount - 1) })
     onBlockMetaPatch?.({ uninstallItems: nextUninstallItems, uninstallList: nextUninstallList })
     remapManualConnectionsAfterIndexedDelete('uninstall-item', indexToRemove)
@@ -1544,7 +1865,10 @@ export default function WorkbenchCanvas({
 
   const addComponentsBlock = () => {
     onVisibleBlocksChange?.({ components: true })
-    if (addNodePopoverSource === 'init-components') setComponentsConnected(true)
+    if (addNodePopoverSource === 'init-components') {
+      setComponentsConnected(true)
+      patchCanvasState({ componentsConnected: true })
+    }
     onSelectedBlockChange?.('components')
     setAddNodePopoverPosition(null)
     setAddNodePopoverSource(null)
@@ -1552,7 +1876,10 @@ export default function WorkbenchCanvas({
 
   const addDeployBlock = () => {
     onVisibleBlocksChange?.({ deploy: true })
-    if (addNodePopoverSource === 'components-deploy') setDeployConnected(true)
+    if (addNodePopoverSource === 'components-deploy') {
+      setDeployConnected(true)
+      patchCanvasState({ deployConnected: true })
+    }
     onSelectedBlockChange?.('deploy')
     setAddNodePopoverPosition(null)
     setAddNodePopoverSource(null)
@@ -1560,7 +1887,10 @@ export default function WorkbenchCanvas({
 
   const addConfigBlock = () => {
     onVisibleBlocksChange?.({ config: true })
-    if (addNodePopoverSource === 'deploy-config') setConfigConnected(true)
+    if (addNodePopoverSource === 'deploy-config') {
+      setConfigConnected(true)
+      patchCanvasState({ configConnected: true })
+    }
     onSelectedBlockChange?.('config')
     setAddNodePopoverPosition(null)
     setAddNodePopoverSource(null)
@@ -1568,7 +1898,10 @@ export default function WorkbenchCanvas({
 
   const addLaunchBlock = () => {
     onVisibleBlocksChange?.({ launch: true })
-    if (addNodePopoverSource === 'config-launch') setLaunchConnected(true)
+    if (addNodePopoverSource === 'config-launch') {
+      setLaunchConnected(true)
+      patchCanvasState({ launchConnected: true })
+    }
     onSelectedBlockChange?.('launch')
     setAddNodePopoverPosition(null)
     setAddNodePopoverSource(null)
@@ -1576,7 +1909,10 @@ export default function WorkbenchCanvas({
 
   const addUninstallBlock = () => {
     onVisibleBlocksChange?.({ uninstall: true })
-    if (addNodePopoverSource === 'launch-uninstall') setUninstallConnected(true)
+    if (addNodePopoverSource === 'launch-uninstall') {
+      setUninstallConnected(true)
+      patchCanvasState({ uninstallConnected: true })
+    }
     onSelectedBlockChange?.('uninstall')
     setAddNodePopoverPosition(null)
     setAddNodePopoverSource(null)
@@ -1587,9 +1923,21 @@ export default function WorkbenchCanvas({
     const position = addNodePopoverSource === 'components-component'
       ? { x: componentsComponentOutput.x - componentBlockInputOffset.x - 160, y: componentsComponentOutput.y + 110 }
       : createDefaultComponentPosition(nextIndex)
-    setComponentBlockPositions(current => [...current, position])
-    setComponentBlockSizes(current => [...current, componentBlockMinSize])
-    setComponentConnections(current => [...current, addNodePopoverSource === 'components-component'])
+    setComponentBlockPositions(current => {
+      const next = [...current, position]
+      patchCanvasState({ componentBlockPositions: next })
+      return next
+    })
+    setComponentBlockSizes(current => {
+      const next = [...current, componentBlockMinSize]
+      patchCanvasState({ componentBlockSizes: next })
+      return next
+    })
+    setComponentConnections(current => {
+      const next = [...current, addNodePopoverSource === 'components-component']
+      patchCanvasState({ componentConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ componentCount: nextIndex + 1 })
     onSelectedBlockChange?.(createComponentBlockId(nextIndex))
     setAddNodePopoverPosition(null)
@@ -1601,9 +1949,21 @@ export default function WorkbenchCanvas({
     const position = addNodePopoverSource === 'deploy-deployment'
       ? { x: deployBlockOutput.x - deploymentBlockInputOffset.x - 160, y: deployBlockOutput.y + 110 }
       : createDefaultDeploymentPosition(nextIndex)
-    setDeploymentBlockPositions(current => [...current, position])
-    setDeploymentBlockSizes(current => [...current, deploymentBlockMinSize])
-    setDeploymentConnections(current => [...current, addNodePopoverSource === 'deploy-deployment'])
+    setDeploymentBlockPositions(current => {
+      const next = [...current, position]
+      patchCanvasState({ deploymentBlockPositions: next })
+      return next
+    })
+    setDeploymentBlockSizes(current => {
+      const next = [...current, deploymentBlockMinSize]
+      patchCanvasState({ deploymentBlockSizes: next })
+      return next
+    })
+    setDeploymentConnections(current => {
+      const next = [...current, addNodePopoverSource === 'deploy-deployment']
+      patchCanvasState({ deploymentConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ deploymentCount: nextIndex + 1 })
     onSelectedBlockChange?.(createDeploymentBlockId(nextIndex))
     setAddNodePopoverPosition(null)
@@ -1615,9 +1975,21 @@ export default function WorkbenchCanvas({
     const position = addNodePopoverSource === 'config-item'
       ? { x: configItemBlockOutput.x - configItemBlockInputOffset.x - 160, y: configItemBlockOutput.y + 110 }
       : createDefaultConfigItemPosition(nextIndex)
-    setConfigItemBlockPositions(current => [...current, position])
-    setConfigItemBlockSizes(current => [...current, configItemBlockMinSize])
-    setConfigItemConnections(current => [...current, addNodePopoverSource === 'config-item'])
+    setConfigItemBlockPositions(current => {
+      const next = [...current, position]
+      patchCanvasState({ configItemBlockPositions: next })
+      return next
+    })
+    setConfigItemBlockSizes(current => {
+      const next = [...current, configItemBlockMinSize]
+      patchCanvasState({ configItemBlockSizes: next })
+      return next
+    })
+    setConfigItemConnections(current => {
+      const next = [...current, addNodePopoverSource === 'config-item']
+      patchCanvasState({ configItemConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ configItemCount: nextIndex + 1 })
     onSelectedBlockChange?.(createConfigItemBlockId(nextIndex))
     setAddNodePopoverPosition(null)
@@ -1629,9 +2001,21 @@ export default function WorkbenchCanvas({
     const position = addNodePopoverSource === 'launch-item'
       ? { x: launchItemBlockOutput.x - launchItemBlockInputOffset.x - 160, y: launchItemBlockOutput.y + 110 }
       : createDefaultLaunchItemPosition(nextIndex)
-    setLaunchItemBlockPositions(current => [...current, position])
-    setLaunchItemBlockSizes(current => [...current, launchItemBlockMinSize])
-    setLaunchItemConnections(current => [...current, addNodePopoverSource === 'launch-item'])
+    setLaunchItemBlockPositions(current => {
+      const next = [...current, position]
+      patchCanvasState({ launchItemBlockPositions: next })
+      return next
+    })
+    setLaunchItemBlockSizes(current => {
+      const next = [...current, launchItemBlockMinSize]
+      patchCanvasState({ launchItemBlockSizes: next })
+      return next
+    })
+    setLaunchItemConnections(current => {
+      const next = [...current, addNodePopoverSource === 'launch-item']
+      patchCanvasState({ launchItemConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ launchItemCount: nextIndex + 1 })
     onSelectedBlockChange?.(createLaunchItemBlockId(nextIndex))
     setAddNodePopoverPosition(null)
@@ -1643,9 +2027,21 @@ export default function WorkbenchCanvas({
     const position = addNodePopoverSource === 'uninstall-item'
       ? { x: uninstallItemBlockOutput.x - uninstallItemBlockInputOffset.x - 160, y: uninstallItemBlockOutput.y + 110 }
       : createDefaultUninstallItemPosition(nextIndex)
-    setUninstallItemBlockPositions(current => [...current, position])
-    setUninstallItemBlockSizes(current => [...current, uninstallItemBlockMinSize])
-    setUninstallItemConnections(current => [...current, addNodePopoverSource === 'uninstall-item'])
+    setUninstallItemBlockPositions(current => {
+      const next = [...current, position]
+      patchCanvasState({ uninstallItemBlockPositions: next })
+      return next
+    })
+    setUninstallItemBlockSizes(current => {
+      const next = [...current, uninstallItemBlockMinSize]
+      patchCanvasState({ uninstallItemBlockSizes: next })
+      return next
+    })
+    setUninstallItemConnections(current => {
+      const next = [...current, addNodePopoverSource === 'uninstall-item']
+      patchCanvasState({ uninstallItemConnections: next })
+      return next
+    })
     onVisibleBlocksChange?.({ uninstallItemCount: nextIndex + 1 })
     onSelectedBlockChange?.(createUninstallItemBlockId(nextIndex))
     setAddNodePopoverPosition(null)
@@ -1731,7 +2127,11 @@ export default function WorkbenchCanvas({
       const newMeta: WorkbenchFileMeta = await uploadRes.json()
       const currentFiles = metaRef.current.files
       const nextIndex = currentFiles.length
-      setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex, initBlockPosition) }))
+      setFileBlockPositions(current => {
+        const next = { ...current, [newMeta.id]: defaultFilePosition(nextIndex, initBlockPosition) }
+        patchCanvasState({ fileBlockPositions: next })
+        return next
+      })
       onBlockMetaPatch?.({
         files: [...currentFiles.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
       })
@@ -1810,7 +2210,11 @@ export default function WorkbenchCanvas({
       const newMeta: WorkbenchFileMeta = await res.json()
       const currentFiles = metaRef.current.files
       const nextIndex = currentFiles.length
-      setFileBlockPositions(current => ({ ...current, [newMeta.id]: defaultFilePosition(nextIndex, initBlockPosition) }))
+      setFileBlockPositions(current => {
+        const next = { ...current, [newMeta.id]: defaultFilePosition(nextIndex, initBlockPosition) }
+        patchCanvasState({ fileBlockPositions: next })
+        return next
+      })
       onBlockMetaPatch?.({
         files: [...currentFiles.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
       })
@@ -1867,6 +2271,7 @@ export default function WorkbenchCanvas({
           Object.keys(next).forEach(fileId => {
             if (!nextIds.has(fileId)) delete next[fileId]
           })
+          patchCanvasState({ fileBlockPositions: next })
           return next
         })
         setFileBlockSizes(current => {
@@ -1874,6 +2279,7 @@ export default function WorkbenchCanvas({
           Object.keys(next).forEach(fileId => {
             if (!nextIds.has(fileId)) delete next[fileId]
           })
+          patchCanvasState({ fileBlockSizes: next })
           return next
         })
         onBlockMetaPatch?.({

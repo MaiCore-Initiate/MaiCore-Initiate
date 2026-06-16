@@ -7,7 +7,7 @@ import type { WorkbenchModInfoMeta } from './workbench-right-sidebar/types'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
 import FileEditorModal from './FileEditorModal'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchCustomInstallRule, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchCanvasState, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchCustomInstallRule, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -72,6 +72,7 @@ interface WorkbenchProjectInfo {
   files?: WorkbenchFileMeta[]
   workbench_meta?: Partial<WorkbenchMetaState> | null
   visible_blocks?: Partial<WorkbenchVisibleBlocks> | null
+  workbench_canvas_state?: Partial<WorkbenchCanvasState> | null
 }
 
 type WorkbenchMetaState = WorkbenchModInfoMeta
@@ -1853,6 +1854,7 @@ export default function DeploymentFlowWorkbench({
   const [openFileEditorFileId, setOpenFileEditorFileId] = useState<string | null>(null)
   const [meta, setMeta] = useState<WorkbenchMetaState>(defaultWorkbenchMeta)
   const [visibleBlocks, setVisibleBlocks] = useState<WorkbenchVisibleBlocks>(defaultVisibleBlocks)
+  const [canvasState, setCanvasState] = useState<Partial<WorkbenchCanvasState>>({})
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
@@ -1945,6 +1947,7 @@ export default function DeploymentFlowWorkbench({
             ...defaultVisibleBlocks,
             ...(project.visible_blocks ?? {}),
           })
+          setCanvasState(project.workbench_canvas_state ?? {})
         }
       } catch (error) {
         console.error(error)
@@ -2101,6 +2104,7 @@ export default function DeploymentFlowWorkbench({
         body: JSON.stringify({
           meta,
           visible_blocks: visibleBlocks,
+          canvas_state: canvasState,
           toml_content: buildWorkbenchToml(meta, visibleBlocks),
         }),
       })
@@ -2147,6 +2151,8 @@ export default function DeploymentFlowWorkbench({
         onBlockMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
         onOpenFileEditor={setOpenFileEditorFileId}
         projectSequence={projectSequence}
+        canvasState={canvasState}
+        onCanvasStatePatch={patch => setCanvasState(prev => ({ ...prev, ...patch }))}
       />
       <WorkbenchLeftSidebar
         collapsed={leftSidebarCollapsed}
