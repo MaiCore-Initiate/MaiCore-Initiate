@@ -1,4 +1,4 @@
-import { useEffect, useRef, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, type PointerEvent } from 'react'
 import type {
   WorkbenchComponentMeta,
   WorkbenchConfigItemMeta,
@@ -42,6 +42,11 @@ import {
   normalizeEnvVariableEntries,
   uniquePresetOptions,
 } from './envVariables'
+import {
+  WorkbenchPlaceholderProvider,
+  buildWorkbenchPlaceholderContext,
+  collectBuiltinEnvNames,
+} from './placeholders'
 import { arraysEqual, clamp } from './selection'
 import { TextAlignRightGlyph } from './icons'
 import type { WorkbenchModInfoMeta, WorkbenchRightSidebarProps } from './types'
@@ -126,7 +131,7 @@ const WorkbenchRightSidebar = ({
   const componentEnvOutputList = normalizeEnvVariableEntries(component.envOutputList)
   const componentEnvInputList = normalizeEnvVariableEntries(component.envInputList)
   const componentEnvNameBase = createEnvVariableName(component.id || component.name || `component-${(selectedComponentIndex ?? 0) + 1}`)
-  const builtinEnvNames = ['nickname', 'serial_number']
+  const builtinEnvNames = collectBuiltinEnvNames(meta)
   const previousEnvNames = selectedComponentIndex === null
     ? []
     : meta.components.slice(0, selectedComponentIndex).flatMap(item => (
@@ -421,6 +426,10 @@ const WorkbenchRightSidebar = ({
   const launchItemEnvOutputList = normalizeEnvVariableEntries(launchItem.envOutputList)
   const uninstallItemEnvInputList = normalizeEnvVariableEntries(uninstallItem.envInputList)
   const uninstallItemEnvOutputList = normalizeEnvVariableEntries(uninstallItem.envOutputList)
+  const placeholderContextValue = useMemo(
+    () => buildWorkbenchPlaceholderContext(meta, selectedBlockId),
+    [meta, selectedBlockId],
+  )
 
   useEffect(() => {
     if (!focusTarget || collapsed) return
@@ -526,8 +535,9 @@ const WorkbenchRightSidebar = ({
         <TextAlignRightGlyph />
       </button>
 
-      <div ref={scrollContainerRef} className="absolute left-[19.5px] right-[20.5px] top-[102px] bottom-[24px] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {shouldShowInitMeta ? (
+      <WorkbenchPlaceholderProvider value={placeholderContextValue}>
+        <div ref={scrollContainerRef} className="absolute left-[19.5px] right-[20.5px] top-[102px] bottom-[24px] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {shouldShowInitMeta ? (
         <div className="flex min-h-[1660px] min-w-[160px] flex-col gap-[18px]" style={{ width: Math.max(0, width - 40) }}>
           <section data-outline-target="modinfo-author">
             <FieldLabel>模版作者</FieldLabel>
@@ -1413,15 +1423,16 @@ const WorkbenchRightSidebar = ({
               </section>
             </ConditionalField>
           </div>
-        ) : (
-          <div
-            className="min-w-[160px] pt-[2px] text-[20px] font-light leading-[34px]"
-            style={{ width: Math.max(0, width - 40), fontFamily: font }}
-          >
-            {selectedBlockId ? `${selectedName}暂无可编辑配置` : '未选中积木'}
-          </div>
-        )}
-      </div>
+          ) : (
+            <div
+              className="min-w-[160px] pt-[2px] text-[20px] font-light leading-[34px]"
+              style={{ width: Math.max(0, width - 40), fontFamily: font }}
+            >
+              {selectedBlockId ? `${selectedName}暂无可编辑配置` : '未选中积木'}
+            </div>
+          )}
+        </div>
+      </WorkbenchPlaceholderProvider>
       <div
         className="absolute bottom-[30px] left-[-5px] top-[30px] w-[10px] cursor-ew-resize"
         onPointerDown={startResize}

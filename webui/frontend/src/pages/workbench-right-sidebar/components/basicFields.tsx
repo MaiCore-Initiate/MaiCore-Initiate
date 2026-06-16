@@ -9,7 +9,42 @@ import {
   platformOptions,
   runtimeOptions,
 } from '../constants'
+import {
+  resolveWorkbenchPlaceholderTokens,
+  useWorkbenchPlaceholderContext,
+  type WorkbenchPlaceholderToken,
+} from '../placeholders'
 import { resolveFieldMetrics } from '../textMeasurement'
+
+const placeholderHighlightColor = '#8b5cf6'
+
+function renderHighlightedText(value: string, tokens: WorkbenchPlaceholderToken[], placeholder?: string) {
+  if (!value) {
+    return placeholder
+      ? <span style={{ color: 'var(--dfw-outline-muted)', opacity: 0.72 }}>{placeholder}</span>
+      : '\u200b'
+  }
+
+  const nodes: ReactNode[] = []
+  let cursor = 0
+
+  tokens.forEach((token, index) => {
+    if (token.start > cursor) nodes.push(value.slice(cursor, token.start))
+    nodes.push(
+      <span
+        key={`${token.start}-${token.end}-${index}`}
+        style={{ color: token.valid ? placeholderHighlightColor : 'inherit' }}
+      >
+        {token.raw}
+      </span>,
+    )
+    cursor = token.end
+  })
+
+  if (cursor < value.length) nodes.push(value.slice(cursor))
+  if (value.endsWith('\n')) nodes.push('\n\u200b')
+  return nodes
+}
 
 export function FieldLabel({ children }: { children: string }) {
   return (
@@ -41,7 +76,12 @@ export function AutoGrowTextField({
 }) {
   const [focused, setFocused] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const placeholderContext = useWorkbenchPlaceholderContext()
   const metrics = useMemo(() => resolveFieldMetrics(value, maxWidth), [maxWidth, value])
+  const placeholderTokens = useMemo(
+    () => resolveWorkbenchPlaceholderTokens(value, placeholderContext),
+    [placeholderContext, value],
+  )
   const naturalLines = metrics.lines
   const visibleLines = expanded ? naturalLines : Math.min(naturalLines, fieldMaxCollapsedLines)
   const fieldHeight = fieldVerticalPadding * 2 + visibleLines * fieldLineHeight
@@ -67,6 +107,19 @@ export function AutoGrowTextField({
           background: active ? 'var(--dfw-outline-selected-bg)' : 'var(--dfw-sidebar-bg)',
         }}
       >
+        <div
+          className="pointer-events-none absolute inset-x-[10px] top-[7px] text-[20px] font-light leading-[30px]"
+          style={{
+            height: visibleLines * fieldLineHeight,
+            color: 'var(--dfw-text)',
+            fontFamily: font,
+            whiteSpace: 'pre-wrap',
+            overflowWrap: 'anywhere',
+          }}
+          aria-hidden
+        >
+          {renderHighlightedText(value, placeholderTokens)}
+        </div>
         <textarea
           value={value}
           onChange={event => onChange(event.target.value)}
@@ -80,8 +133,11 @@ export function AutoGrowTextField({
           className="absolute inset-x-[10px] top-[7px] resize-none overflow-hidden bg-transparent text-[20px] font-light leading-[30px] outline-none"
           style={{
             height: visibleLines * fieldLineHeight,
+            color: 'transparent',
             fontFamily: font,
+            caretColor: 'var(--dfw-text)',
             whiteSpace: 'pre-wrap',
+            WebkitTextFillColor: 'transparent',
           }}
           aria-label={ariaLabel}
         />
@@ -477,12 +533,20 @@ export function ArrayListInput({
   placeholder?: string
 }) {
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
+  const [height, setHeight] = useState(40)
+  const placeholderContext = useWorkbenchPlaceholderContext()
+  const placeholderTokens = useMemo(
+    () => resolveWorkbenchPlaceholderTokens(value, placeholderContext),
+    [placeholderContext, value],
+  )
 
   useLayoutEffect(() => {
     const textArea = textAreaRef.current
     if (!textArea) return
     textArea.style.height = 'auto'
-    textArea.style.height = `${Math.max(40, textArea.scrollHeight)}px`
+    const nextHeight = Math.max(40, textArea.scrollHeight)
+    textArea.style.height = `${nextHeight}px`
+    setHeight(current => (current === nextHeight ? current : nextHeight))
   })
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -493,24 +557,39 @@ export function ArrayListInput({
   }
 
   return (
-    <textarea
-      ref={textAreaRef}
-      value={value}
-      onChange={event => onChange(event.target.value.replace(/\r?\n/g, ''))}
-      onFocus={onFocus}
-      onBlur={onBlur}
-      onKeyDown={handleKeyDown}
-      rows={1}
-      placeholder={placeholder}
-      className="min-h-[40px] min-w-0 flex-1 resize-none overflow-hidden bg-transparent py-[8px] pr-[8px] text-[18px] font-light leading-[24px] outline-none"
-      style={{
-        color: 'var(--dfw-text)',
-        fontFamily: font,
-        whiteSpace: 'pre-wrap',
-        overflowWrap: 'anywhere',
-      }}
-      aria-label={ariaLabel}
-    />
+    <div className="relative min-h-[40px] min-w-0 flex-1" style={{ height }}>
+      <div
+        className="pointer-events-none absolute inset-0 overflow-hidden py-[8px] pr-[8px] text-[18px] font-light leading-[24px]"
+        style={{
+          color: 'var(--dfw-text)',
+          fontFamily: font,
+          whiteSpace: 'pre-wrap',
+          overflowWrap: 'anywhere',
+        }}
+        aria-hidden
+      >
+        {renderHighlightedText(value, placeholderTokens, placeholder)}
+      </div>
+      <textarea
+        ref={textAreaRef}
+        value={value}
+        onChange={event => onChange(event.target.value.replace(/\r?\n/g, ''))}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onKeyDown={handleKeyDown}
+        rows={1}
+        className="absolute inset-0 min-h-[40px] min-w-0 resize-none overflow-hidden bg-transparent py-[8px] pr-[8px] text-[18px] font-light leading-[24px] outline-none"
+        style={{
+          color: 'transparent',
+          fontFamily: font,
+          caretColor: 'var(--dfw-text)',
+          whiteSpace: 'pre-wrap',
+          overflowWrap: 'anywhere',
+          WebkitTextFillColor: 'transparent',
+        }}
+        aria-label={ariaLabel}
+      />
+    </div>
   )
 }
 
