@@ -85,6 +85,138 @@ function validateName(name: string): { ok: boolean; reason?: string } {
   return { ok: true }
 }
 
+function TargetLocationDropdown({
+  options,
+  selectedKey,
+  disabled,
+  onChange,
+}: {
+  options: NewFileTargetOption[]
+  selectedKey: string
+  disabled: boolean
+  onChange?: (key: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement | null>(null)
+  const selected = options.find(option => option.key === selectedKey)
+  const placeholder = options.length > 0 ? '请选择新建位置' : '暂无可用项目'
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && dropdownRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('pointerdown', handlePointerDown, true)
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true)
+      window.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
+  return (
+    <div ref={dropdownRef} className="relative mt-2">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex min-h-[42px] w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+        style={{
+          borderColor: open ? 'var(--dfw-blue)' : 'rgba(127,127,127,0.32)',
+          background: 'color-mix(in srgb, var(--dfw-bg) 94%, var(--dfw-text) 6%)',
+          color: 'var(--dfw-text)',
+        }}
+        onClick={() => {
+          if (!disabled) setOpen(value => !value)
+        }}
+      >
+        <span className="min-w-0">
+          <span className={`block truncate ${selected ? '' : 'opacity-50'}`}>
+            {selected?.label ?? placeholder}
+          </span>
+          {selected?.description && (
+            <span className="mt-1 block truncate text-xs opacity-50">
+              {selected.description}
+            </span>
+          )}
+        </span>
+        <svg
+          className={`ml-3 h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden
+        >
+          <path d="M6 9L12 15L18 9" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 max-h-64 overflow-y-auto rounded-lg border p-1 shadow-2xl"
+          style={{
+            borderColor: 'rgba(127,127,127,0.32)',
+            background: 'var(--dfw-bg)',
+            color: 'var(--dfw-text)',
+            boxShadow: '0 18px 48px rgba(0,0,0,0.28)',
+          }}
+        >
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-sm opacity-55">暂无可用项目</div>
+          ) : (
+            options.map(option => {
+              const active = option.key === selectedKey
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--twb-hover)]"
+                  style={{
+                    background: active ? 'color-mix(in srgb, var(--dfw-blue) 16%, transparent)' : 'transparent',
+                    color: 'var(--dfw-text)',
+                  }}
+                  onClick={() => {
+                    onChange?.(option.key)
+                    setOpen(false)
+                  }}
+                >
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    {active && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden>
+                        <path d="M5 12.5L9.5 17L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{option.label}</span>
+                    {option.description && (
+                      <span className="mt-0.5 block truncate text-xs opacity-50">{option.description}</span>
+                    )}
+                  </span>
+                </button>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function NewFileDialog({
   open,
   defaultName = '',
@@ -152,7 +284,6 @@ export default function NewFileDialog({
 
   const validation = validateName(name)
   const targetReady = !requireTarget || Boolean(selectedTargetKey)
-  const selectedTarget = targetOptions.find(option => option.key === selectedTargetKey)
   const canCreate = validation.ok && targetReady && !submitting
 
   const handleCreate = () => {
@@ -196,24 +327,12 @@ export default function NewFileDialog({
               <label className="block text-sm font-medium text-[var(--dfw-text)]">
                 新建位置
               </label>
-              <select
-                value={selectedTargetKey}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) => onTargetChange?.(event.target.value)}
+              <TargetLocationDropdown
+                options={targetOptions}
+                selectedKey={selectedTargetKey}
                 disabled={submitting || targetOptions.length === 0}
-                className="mt-2 w-full rounded-lg border border-white/20 bg-[var(--dfw-bg)] px-3 py-2 text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)] disabled:opacity-50"
-              >
-                <option value="" disabled>{targetOptions.length > 0 ? '请选择新建位置' : '暂无可用项目'}</option>
-                {targetOptions.map(option => (
-                  <option key={option.key} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              {selectedTarget?.description && (
-                <div className="mt-1 truncate text-xs text-[var(--dfw-text)] opacity-50">
-                  {selectedTarget.description}
-                </div>
-              )}
+                onChange={onTargetChange}
+              />
               {!targetReady && (
                 <div className="mt-2 text-xs text-amber-200">⚠ 请选择文件要新建到哪个项目或文件夹</div>
               )}
