@@ -2509,11 +2509,13 @@ export default function WorkbenchCanvas({
   )
 
   const resolveCanvasPointFromClient = (clientX: number, clientY: number): WorkbenchPoint | null => {
-    const hostRect = resolveCanvasHostRect()
-    if (!hostRect) return null
+    const canvasRect = canvasRef.current?.getBoundingClientRect()
+    if (!canvasRect) return null
+    const canvasScale = canvasRect.width / 1920
+    if (!Number.isFinite(canvasScale) || canvasScale <= 0) return null
     return {
-      x: (clientX - hostRect.left - viewport.x) / viewport.scale,
-      y: (clientY - hostRect.top - viewport.y) / viewport.scale,
+      x: (clientX - canvasRect.left) / canvasScale,
+      y: (clientY - canvasRect.top) / canvasScale,
     }
   }
 
