@@ -133,7 +133,9 @@ function TargetLocationDropdown({
         className="flex min-h-[42px] w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         style={{
           borderColor: open ? 'var(--dfw-blue)' : 'rgba(127,127,127,0.32)',
-          background: 'color-mix(in srgb, var(--dfw-bg) 94%, var(--dfw-text) 6%)',
+          background: 'color-mix(in srgb, var(--dfw-bg) 50%, transparent)',
+          backdropFilter: 'blur(50px)',
+          WebkitBackdropFilter: 'blur(50px)',
           color: 'var(--dfw-text)',
         }}
         onClick={() => {
@@ -168,7 +170,9 @@ function TargetLocationDropdown({
           className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 max-h-64 overflow-y-auto rounded-lg border p-1 shadow-2xl"
           style={{
             borderColor: 'rgba(127,127,127,0.32)',
-            background: 'var(--dfw-bg)',
+            background: 'color-mix(in srgb, var(--dfw-bg) 50%, transparent)',
+            backdropFilter: 'blur(50px)',
+            WebkitBackdropFilter: 'blur(50px)',
             color: 'var(--dfw-text)',
             boxShadow: '0 18px 48px rgba(0,0,0,0.28)',
           }}
