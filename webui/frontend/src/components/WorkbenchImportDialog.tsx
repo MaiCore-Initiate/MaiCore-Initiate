@@ -63,7 +63,17 @@ function getExtension(name: string) {
 
 function detectItemKind(file: File): WorkbenchImportItemKind | null {
   const ext = getExtension(file.name)
-  if (ext === '.zip' || ext === '.iso' || ext === '.mcsmod') return 'archive'
+  const lowerName = file.name.toLowerCase()
+  if (
+    ext === '.zip' || ext === '.iso' || ext === '.mcsmod' || ext === '.7z' || ext === '.rar'
+    || ext === '.tgz' || ext === '.gz' || ext === '.gzip' || ext === '.bz2' || ext === '.xz'
+    || ext === '.tar'
+    || lowerName.endsWith('.tar.gz')
+    || lowerName.endsWith('.tar.bz2')
+    || lowerName.endsWith('.tbz2')
+    || lowerName.endsWith('.tar.xz')
+    || lowerName.endsWith('.txz')
+  ) return 'archive'
   if (ext === '.toml') return 'template-toml'
   if (PLAIN_ALLOWED_EXTENSIONS.has(ext)) return 'plain-file'
   return null
@@ -162,11 +172,11 @@ export default function WorkbenchImportDialog({
     }
 
     if (!context.inProjectFolder && archives.length + templateTomls.length > 1) {
-      throw new Error('首页导入时，压缩包、镜像包或模板文件一次只能导入一个。')
+      throw new Error('首页导入时，归档文件或模板文件一次只能导入一个。')
     }
 
     if (!context.inProjectFolder && archives.length > 0 && plainFiles.length > 0) {
-      throw new Error('首页导入压缩包或镜像包时，不能和普通文件混合导入。')
+      throw new Error('首页导入归档文件时，不能和普通文件混合导入。')
     }
 
     if (!context.inProjectFolder && templateTomls.length > 0 && plainFiles.length > 0) {
@@ -360,7 +370,7 @@ export default function WorkbenchImportDialog({
           >
             <div className="text-base font-medium text-[var(--dfw-text)]">拖拽文件到这里</div>
             <div className="mt-2 text-sm text-[var(--dfw-text)] opacity-65">
-              支持白名单文件、多文件、`.zip`、`.iso`、`.mcsmod`、模板 `.toml`
+              支持白名单文件、多文件、`.zip`、`.iso`、`.mcsmod`、`.tar`、`.tar.gz`、`.gzip`、`.rar`、`.7z`、模板 `.toml`
             </div>
             <input ref={fileInputRef} type="file" hidden multiple onChange={event => void onInputChange(event)} />
             <button
@@ -403,7 +413,7 @@ export default function WorkbenchImportDialog({
           <div className="relative w-[92%] max-w-md rounded-2xl border border-white/20 bg-[var(--dfw-bg)] p-6 shadow-2xl">
             <h3 className="text-lg font-semibold text-[var(--dfw-text)]">请输入解压密码</h3>
             <p className="mt-2 text-sm text-[var(--dfw-text)] opacity-70">
-              该压缩包或镜像包需要密码后才能导入。
+              该归档文件需要密码后才能导入。
             </p>
             <input
               type="password"

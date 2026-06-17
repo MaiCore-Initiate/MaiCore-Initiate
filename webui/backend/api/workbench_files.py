@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import shutil
+import subprocess
 import tempfile
 import zipfile
 from datetime import datetime
@@ -406,6 +408,8 @@ def _join_base_dir(base_dir: str, relpath: str) -> str:
 
 def normalize_archive_project_name(filename: str) -> str:
     stem = Path(filename).stem.strip()
+    if stem.lower().endswith(".tar"):
+        stem = Path(stem).stem
     sanitized = re.sub(r"[^A-Za-z0-9._\- ]+", "_", stem).strip(" .")
     return sanitized or "imported-project"
 
@@ -441,50 +445,42 @@ def _safe_extract_zip_bytes(raw: bytes, extract_dir: Path, *, password: Optional
         raise HTTPException(400, f"非法 zip 文件: {exc}") from exc
 
 
-def _extract_iso_bytes(raw: bytes, extract_dir: Path, *, password: Optional[str] = None) -> None:
+def _resolve_7z_executable() -> str:
+    for name in ("7z", "7za", "7zr"):
+        resolved = shutil.which(name)
+        if resolved:
+            return resolved
+    raise HTTPException(400, "未检测到 7z，无法导入该压缩包或镜像包")
+
+
+def _extract_with_7z(temp_path: Path, extract_dir: Path, *, password: Optional[str] = None) -> None:
+    seven_zip = _resolve_7z_executable()
+    command = [seven_zip, "x", str(temp_path), f"-o{extract_dir}", "-y"]
     if password:
+        command.append(f"-p{password}")
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode == 0:
+        return
+    combined = f"{result.stdout}\n{result.stderr}".lower()
+    if any(keyword in combined for keyword in ("wrong password", "can not open encrypted archive", "headers error", "password")):
         raise HTTPException(409, detail={
-            "code": "password_invalid",
-            "message": "ISO / MCSMOD 当前不支持密码解密",
+            "code": "password_required",
+            "message": "该归档需要正确密码才能解压",
         })
-    temp_iso: Optional[Path] = None
+    raise HTTPException(400, f"解压失败: {(result.stderr or result.stdout or '').strip() or '未知错误'}")
+
+
+def _extract_archive_bytes(raw: bytes, suffix: str, extract_dir: Path, *, password: Optional[str] = None) -> None:
+    temp_archive: Optional[Path] = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".iso") as temp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
             temp_file.write(raw)
-            temp_iso = Path(temp_file.name)
-        iso = pycdlib.PyCdlib()
-        iso.open(str(temp_iso))
-        try:
-            zip_joliet_path = None
-            try:
-                meta_buf = io.BytesIO()
-                iso.get_file_from_iso_fp(meta_buf, joliet_path="/meta.json")
-                meta_info = json.loads(meta_buf.getvalue().decode("utf-8"))
-                zip_fname = meta_info.get("meta", meta_info).get("zip_file", "")
-                if zip_fname:
-                    zip_joliet_path = f"/{zip_fname}"
-            except Exception:
-                zip_joliet_path = None
-            if not zip_joliet_path:
-                for child in iso.list_children(joliet_path="/"):
-                    if child.is_dot() or child.is_dotdot():
-                        continue
-                    raw_name = child.file_identifier
-                    name = (raw_name.decode("utf-16-be") if isinstance(raw_name, bytes) else str(raw_name)).strip("\x00").split(";")[0]
-                    if name.lower().endswith(".zip"):
-                        zip_joliet_path = f"/{name}"
-                        break
-            if not zip_joliet_path:
-                raise HTTPException(400, "镜像内未找到可导入的 zip 内容")
-            zip_buf = io.BytesIO()
-            iso.get_file_from_iso_fp(zip_buf, joliet_path=zip_joliet_path)
-        finally:
-            iso.close()
-        _safe_extract_zip_bytes(zip_buf.getvalue(), extract_dir)
+            temp_archive = Path(temp_file.name)
+        _extract_with_7z(temp_archive, extract_dir, password=password)
     finally:
-        if temp_iso and temp_iso.exists():
+        if temp_archive and temp_archive.exists():
             try:
-                temp_iso.unlink()
+                temp_archive.unlink()
             except OSError:
                 pass
 
@@ -1016,14 +1012,19 @@ async def import_archive(
     filename = file.filename or ""
     lower = filename.lower()
     raw = await file.read()
+    archive_suffixes = (
+        ".zip", ".iso", ".mcsmod", ".7z", ".rar", ".tar", ".tgz", ".gz", ".gzip",
+        ".tar.gz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".bz2", ".xz",
+    )
     temp_dir = Path(tempfile.mkdtemp(prefix="workbench-import-"))
     try:
-        if lower.endswith(".zip"):
-            _safe_extract_zip_bytes(raw, temp_dir, password=password)
-        elif lower.endswith(".iso") or lower.endswith(".mcsmod"):
-            _extract_iso_bytes(raw, temp_dir, password=password)
-        else:
+        matched_suffix = next((suffix for suffix in archive_suffixes if lower.endswith(suffix)), None)
+        if not matched_suffix:
             raise HTTPException(400, f"不支持的归档类型: {filename}")
+        if matched_suffix == ".zip":
+            _safe_extract_zip_bytes(raw, temp_dir, password=password)
+        else:
+            _extract_archive_bytes(raw, matched_suffix, temp_dir, password=password)
         content_root = _flatten_single_top_dir(temp_dir)
         entries = _collect_importable_files(content_root)
         if not entries:
