@@ -2337,6 +2337,8 @@ export default function DeploymentFlowWorkbench({
         onOpenFileEditor={setOpenFileEditorFileId}
         meta={meta}
         onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
+        hiddenFileBlockIds={canvasState.hiddenFileBlockIds ?? []}
+        onHiddenFileBlockIdsChange={hiddenFileBlockIds => setCanvasState(prev => ({ ...prev, hiddenFileBlockIds }))}
         onDeleteFile={(fileId: string) => {
           const removed = meta.files.find(file => file.id === fileId)
           if (!removed) return
@@ -2354,6 +2356,10 @@ export default function DeploymentFlowWorkbench({
                 ...prev,
                 files: prev.files.filter(file => file.id !== fileId),
                 fileImportList: prev.fileImportList.filter(name => name !== refPath),
+              }))
+              setCanvasState(prev => ({
+                ...prev,
+                hiddenFileBlockIds: (prev.hiddenFileBlockIds ?? []).filter(id => id !== fileId),
               }))
               if (openFileEditorFileId === fileId) setOpenFileEditorFileId(null)
               if (selectedBlockId === `file:${fileId}`) setSelectedBlockId(null)
@@ -2396,6 +2402,10 @@ export default function DeploymentFlowWorkbench({
               fileImportList: removed
                 ? prev.fileImportList.filter(n => n !== removed.name)
                 : prev.fileImportList,
+            }))
+            setCanvasState(prev => ({
+              ...prev,
+              hiddenFileBlockIds: (prev.hiddenFileBlockIds ?? []).filter(id => id !== openFileEditorFileId),
             }))
             setOpenFileEditorFileId(null)
           }

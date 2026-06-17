@@ -286,6 +286,7 @@ export interface WorkbenchCanvasState {
   uninstallItemConnections: boolean[]
   fileBlockPositions: Record<string, WorkbenchPoint>
   fileBlockSizes: Record<string, WorkbenchSize>
+  hiddenFileBlockIds: string[]
   componentsConnected: boolean
   deployConnected: boolean
   configConnected: boolean

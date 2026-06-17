@@ -71,6 +71,8 @@ export interface WorkbenchRightSidebarProps {
   onMetaPatch?: (patch: Partial<WorkbenchModInfoMeta>) => void
   onOpenFileEditor?: (fileId: string) => void
   onDeleteFile?: (fileId: string) => void
+  hiddenFileBlockIds?: string[]
+  onHiddenFileBlockIdsChange?: (next: string[]) => void
 }
 
 export interface ArrayListPresetOption {

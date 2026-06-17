@@ -48,7 +48,6 @@ import {
   collectBuiltinEnvNames,
 } from './placeholders'
 import { arraysEqual, clamp } from './selection'
-import { TextAlignRightGlyph } from './icons'
 import type { WorkbenchModInfoMeta, WorkbenchRightSidebarProps } from './types'
 import {
   ArrayListField,
@@ -75,7 +74,7 @@ import {
   UninstallItemMetaEditor,
   UninstallMetaEditor,
 } from './components/metaEditors'
-
+import { HiddenGlyph, TextAlignRightGlyph, VisibleGlyph } from './icons'
 // 主组件：用 const 箭头函数声明，避免 function hoisting 在 ESM 循环依赖时
 // 触发 TDZ；所有子模块、工具、组件从平级模块按需 import。
 const WorkbenchRightSidebar = ({
@@ -90,14 +89,30 @@ const WorkbenchRightSidebar = ({
   onMetaPatch,
   onOpenFileEditor,
   onDeleteFile,
+  hiddenFileBlockIds = [],
+  onHiddenFileBlockIdsChange,
 }: WorkbenchRightSidebarProps) => {
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const focusAnimationRef = useRef<Animation | null>(null)
   const fieldAvailableWidth = Math.max(fieldMinWidth, Math.min(fieldMaxWidth, width - 40))
+  const hiddenFileBlockIdSet = new Set(hiddenFileBlockIds)
 
   const updateMeta = (patch: Partial<WorkbenchModInfoMeta>) => {
     onMetaPatch?.(patch)
+  }
+
+  const resolveFileRefKey = (file: WorkbenchFileMeta) => (file.path?.trim() || file.name).replace(/\\/g, '/')
+  const resolveFileByImportValue = (value: string) => {
+    const normalizedValue = value.trim().replace(/\\/g, '/')
+    if (!normalizedValue) return null
+    return meta.files.find(file => resolveFileRefKey(file) === normalizedValue) ?? null
+  }
+  const toggleFileBlockVisibility = (fileId: string) => {
+    const next = hiddenFileBlockIdSet.has(fileId)
+      ? hiddenFileBlockIds.filter(id => id !== fileId)
+      : [...hiddenFileBlockIds, fileId]
+    onHiddenFileBlockIdsChange?.(next)
   }
 
   const selectedComponentIndex = parseComponentBlockIndex(selectedBlockId)
@@ -637,6 +652,48 @@ const WorkbenchRightSidebar = ({
                 onChange={fileImportList => updateMeta({ fileImportList })}
                 maxWidth={fieldAvailableWidth}
                 itemAriaLabel="文件导入项"
+                renderItemPrefix={({ value }) => {
+                  const file = resolveFileByImportValue(value)
+                  if (!file) {
+                    return (
+                      <button
+                        type="button"
+                        disabled
+                        className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] border"
+                        style={{
+                          borderColor: 'var(--dfw-sidebar-border)',
+                          background: 'var(--dfw-sidebar-bg)',
+                          color: 'var(--dfw-outline-muted)',
+                          opacity: 0.45,
+                        }}
+                        aria-label="未找到对应文件"
+                        title="未找到对应文件"
+                      >
+                        <VisibleGlyph />
+                      </button>
+                    )
+                  }
+                  const hidden = hiddenFileBlockIdSet.has(file.id)
+                  return (
+                    <button
+                      type="button"
+                      className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] border transition-colors hover:bg-[var(--dfw-control-hover)]"
+                      style={{
+                        borderColor: hidden ? 'rgba(239, 68, 68, 0.35)' : 'rgba(34, 197, 94, 0.35)',
+                        background: hidden ? 'rgba(127, 29, 29, 0.08)' : 'rgba(20, 83, 45, 0.08)',
+                        color: hidden ? '#ef4444' : '#22c55e',
+                      }}
+                      onClick={event => {
+                        event.stopPropagation()
+                        toggleFileBlockVisibility(file.id)
+                      }}
+                      aria-label={hidden ? `显示文件块：${value}` : `隐藏文件块：${value}`}
+                      title={hidden ? '显示画布文件块' : '隐藏画布文件块'}
+                    >
+                      {hidden ? <HiddenGlyph /> : <VisibleGlyph />}
+                    </button>
+                  )
+                }}
               />
             </section>
           </ConditionalField>

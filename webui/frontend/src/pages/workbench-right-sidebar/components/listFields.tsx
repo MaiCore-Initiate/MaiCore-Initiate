@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import type {
   WorkbenchCustomInstallRule,
   WorkbenchEnvVariableEntry,
@@ -43,6 +43,7 @@ export function ArrayListField({
   itemAriaLabel,
   presetOptions = [],
   outlineTargetId,
+  renderItemPrefix,
 }: {
   label: string
   values: string[]
@@ -51,6 +52,7 @@ export function ArrayListField({
   itemAriaLabel?: string
   presetOptions?: ArrayListPresetOption[]
   outlineTargetId?: string
+  renderItemPrefix?: (args: { index: number; value: string }) => ReactNode
 }) {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
@@ -427,6 +429,14 @@ export function ArrayListField({
               >
                 ⠿
               </button>
+              {renderItemPrefix ? (
+                <div
+                  className="flex min-h-[40px] w-[34px] shrink-0 items-center justify-center"
+                  onPointerDown={event => event.stopPropagation()}
+                >
+                  {renderItemPrefix({ index, value: item.value })}
+                </div>
+              ) : null}
               <ArrayListInput
                 value={item.value}
                 onChange={nextValue => updateItem(index, nextValue)}

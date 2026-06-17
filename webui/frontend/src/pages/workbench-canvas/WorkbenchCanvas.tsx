@@ -399,6 +399,7 @@ export default function WorkbenchCanvas({
   const [uninstallItemConnections, setUninstallItemConnections] = useState<boolean[]>(canvasState?.uninstallItemConnections ?? [])
   const [fileBlockPositions, setFileBlockPositions] = useState<Record<string, WorkbenchPoint>>(canvasState?.fileBlockPositions ?? {})
   const [fileBlockSizes, setFileBlockSizes] = useState<Record<string, WorkbenchSize>>(canvasState?.fileBlockSizes ?? {})
+  const [hiddenFileBlockIds, setHiddenFileBlockIds] = useState<string[]>(canvasState?.hiddenFileBlockIds ?? [])
   const [componentsConnected, setComponentsConnected] = useState<boolean>(canvasState?.componentsConnected ?? false)
   const [deployConnected, setDeployConnected] = useState<boolean>(canvasState?.deployConnected ?? false)
   const [configConnected, setConfigConnected] = useState<boolean>(canvasState?.configConnected ?? false)
@@ -574,6 +575,23 @@ export default function WorkbenchCanvas({
     applyBlockSelection([blockId], blockId)
   }
 
+  useEffect(() => {
+    if (hiddenFileBlockIds.length === 0) return
+    const hiddenSet = new Set(hiddenFileBlockIds)
+    const isHiddenFileBlock = (blockId: WorkbenchBlockId | null) => {
+      const fileId = parseFileBlockId(blockId)
+      return fileId ? hiddenSet.has(fileId) : false
+    }
+    const nextSelected = selectedBlockIdsRef.current.filter(blockId => !isHiddenFileBlock(blockId))
+    if (nextSelected.length !== selectedBlockIdsRef.current.length) {
+      const nextPrimary = selectedPrimaryRef.current && !isHiddenFileBlock(selectedPrimaryRef.current)
+        ? selectedPrimaryRef.current
+        : nextSelected[nextSelected.length - 1] ?? null
+      applyBlockSelection(nextSelected, nextPrimary)
+    }
+    setLinkSourceBlockId(current => (isHiddenFileBlock(current) ? null : current))
+  }, [hiddenFileBlockIds])
+
   // 进入画布时把 canvasState 应用到所有 useState。
   // 两个时机都会重新应用：① 切到新项目（projectSequence 变） ② 后端 loadProject
   // 异步把 canvasState 传上来（canvasState 引用变）。通过 lastAppliedCanvasStateRef
@@ -617,6 +635,7 @@ export default function WorkbenchCanvas({
     if (cs.uninstallItemConnections) setUninstallItemConnections(cs.uninstallItemConnections)
     if (cs.fileBlockPositions) setFileBlockPositions(cs.fileBlockPositions)
     if (cs.fileBlockSizes) setFileBlockSizes(cs.fileBlockSizes)
+    setHiddenFileBlockIds(cs.hiddenFileBlockIds ?? [])
     if (typeof cs.componentsConnected === 'boolean') setComponentsConnected(cs.componentsConnected)
     if (typeof cs.deployConnected === 'boolean') setDeployConnected(cs.deployConnected)
     if (typeof cs.configConnected === 'boolean') setConfigConnected(cs.configConnected)
@@ -1121,6 +1140,8 @@ export default function WorkbenchCanvas({
     }
     return { file, index, blockId, position, size, output } as const
   })
+  const hiddenFileBlockIdSet = new Set(hiddenFileBlockIds)
+  const visibleFileBlocks = fileBlocks.filter(block => !hiddenFileBlockIdSet.has(block.file.id))
   const componentBlocks = Array.from({ length: blockVisibility.componentCount }, (_, index) => {
     const position = componentBlockPositions[index] ?? createDefaultComponentPosition(index)
     const size = componentBlockSizes[index] ?? componentBlockMinSize
@@ -1210,7 +1231,7 @@ export default function WorkbenchCanvas({
     const uninstallItemIndex = parseUninstallItemBlockIndex(blockId)
     if (uninstallItemIndex !== null) return uninstallItemIndex < blockVisibility.uninstallItemCount
     const fileId = parseFileBlockId(blockId)
-    return fileId !== null && meta.files.some(file => file.id === fileId)
+    return fileId !== null && meta.files.some(file => file.id === fileId) && !hiddenFileBlockIdSet.has(fileId)
   }
 
   const resolveBlockInputPoint = (blockId: WorkbenchBlockId) => {
@@ -1255,7 +1276,7 @@ export default function WorkbenchCanvas({
     const uninstallItemIndex = parseUninstallItemBlockIndex(blockId)
     if (uninstallItemIndex !== null) return uninstallItemBlocks[uninstallItemIndex]?.output ?? null
     const fileId = parseFileBlockId(blockId)
-    if (fileId !== null) return fileBlocks.find(block => block.file.id === fileId)?.output ?? null
+    if (fileId !== null) return visibleFileBlocks.find(block => block.file.id === fileId)?.output ?? null
     return null
   }
 
@@ -2455,6 +2476,12 @@ export default function WorkbenchCanvas({
           patchCanvasState({ fileBlockSizes: next })
           return next
         })
+        setHiddenFileBlockIds(current => {
+          const next = current.filter(fileId => nextIds.has(fileId))
+          if (next.length === current.length) return current
+          patchCanvasState({ hiddenFileBlockIds: next })
+          return next
+        })
         onBlockMetaPatch?.({
           files: nextFiles,
           fileImportList: meta.fileImportList.filter(name => nextFiles.some(file => fileRefKey(file) === name)),
@@ -2632,7 +2659,7 @@ export default function WorkbenchCanvas({
     ...configItemBlocks.map(block => block.blockId),
     ...launchItemBlocks.map(block => block.blockId),
     ...uninstallItemBlocks.map(block => block.blockId),
-    ...fileBlocks.map(block => block.blockId),
+    ...visibleFileBlocks.map(block => block.blockId),
   ]
 
   const isDeletableBlockId = (blockId: WorkbenchBlockId) => blockId !== 'start' && blockId !== 'init' && blockId !== 'init-file'
@@ -2839,12 +2866,15 @@ export default function WorkbenchCanvas({
 
     const nextFileBlockPositions = Object.fromEntries(Object.entries(fileBlockPositions).filter(([fileId]) => !deletedFileIds.has(fileId)))
     const nextFileBlockSizes = Object.fromEntries(Object.entries(fileBlockSizes).filter(([fileId]) => !deletedFileIds.has(fileId)))
+    const nextHiddenFileBlockIds = hiddenFileBlockIds.filter(fileId => !deletedFileIds.has(fileId))
     if (deletedFileIds.size > 0) {
       setFileBlockPositions(nextFileBlockPositions)
       setFileBlockSizes(nextFileBlockSizes)
+      setHiddenFileBlockIds(nextHiddenFileBlockIds)
       patchCanvasState({
         fileBlockPositions: nextFileBlockPositions,
         fileBlockSizes: nextFileBlockSizes,
+        hiddenFileBlockIds: nextHiddenFileBlockIds,
       })
     }
 
@@ -3348,7 +3378,7 @@ export default function WorkbenchCanvas({
               resizeHandlers={createResizeHandlers(block.blockId)}
             />
           ))}
-          {fileBlocks.map(block => {
+          {visibleFileBlocks.map(block => {
             const blockId = block.blockId
             return (
               <FileBlock
