@@ -5,9 +5,9 @@ import re
 import secrets
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -28,6 +28,18 @@ TOML_STRING_ESCAPE_REPL = {
     "\r": "\\r",
     "\t": "\\t",
 }
+
+# 新建项目时附加文件路径相关限制（与 workbench_files.py 保持一致）
+EXTRA_FILE_ALLOWED_EXTENSIONS = {
+    ".py", ".cmd", ".bat", ".ps1", ".sh", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
+    ".json", ".txt", ".jsonl", ".log", ".java", ".jar", ".toml", ".exe",
+    ".yaml", ".xml",
+}
+EXTRA_FILE_BINARY_EXTENSIONS = {".jar", ".exe"}
+EXTRA_FILE_MAX_TEXT_BYTES = 5 * 1024 * 1024
+EXTRA_FILE_MAX_BINARY_BYTES = 200 * 1024 * 1024
+EXTRA_FILE_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_\- ](?:\.[A-Za-z0-9_\- ])*$|^[A-Za-z0-9_\- ]{1,128}$")
+EXTRA_FILE_MAX_DIR_DEPTH = 5
 
 
 class WorkbenchProject(BaseModel):
@@ -196,6 +208,80 @@ def _render_mod_info_toml(mod_id: str, mod_name: str, description: str, author: 
     if cover:
         lines.append(f"cover = {_toml_basic_string(cover)}")
     return "\n".join(lines) + "\n"
+
+
+def _normalize_extra_relpath(value: str) -> str:
+    """归一化附加文件相对路径。"""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s:
+        return ""
+    s = s.replace("\\", "/").strip("/")
+    if not s:
+        return ""
+    parts = s.split("/")
+    for part in parts:
+        if not part or part == "." or part == "..":
+            raise HTTPException(400, f"非法的附加文件路径: {value!r}")
+    return "/".join(parts)
+
+
+def _validate_extra_relpath(value: str) -> str:
+    """校验附加文件相对路径（最多 5 层目录、最后一段必须带允许的后缀）。"""
+    if not value or not value.strip():
+        raise HTTPException(400, "附加文件路径不能为空")
+    if len(value) > 256:
+        raise HTTPException(400, f"附加文件路径过长（>256）: {value!r}")
+    normalized = _normalize_extra_relpath(value)
+    parts = normalized.split("/")
+    if len(parts) > EXTRA_FILE_MAX_DIR_DEPTH + 1:
+        raise HTTPException(
+            400,
+            f"附加文件路径嵌套层数超过 {EXTRA_FILE_MAX_DIR_DEPTH}：{value!r}",
+        )
+    for part in parts:
+        if not EXTRA_FILE_SEGMENT_PATTERN.match(part):
+            raise HTTPException(400, f"附加文件路径段包含非法字符: {part!r}")
+    ext = Path(parts[-1]).suffix.lower()
+    if not ext or ext not in EXTRA_FILE_ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"不支持的附加文件类型: {ext or '<无后缀>'}")
+    return normalized
+
+
+def _safe_join_inside(parent: Path, relpath: str) -> Path:
+    """在 parent 下解析 relpath，拦截路径穿越。"""
+    target = (parent / relpath).resolve()
+    if not str(target).startswith(str(parent.resolve())):
+        raise HTTPException(400, f"非法附加文件路径: {relpath!r}")
+    return target
+
+
+async def _save_extra_file(target: Path, upload: UploadFile) -> int:
+    """把 UploadFile 流式写入 target，按扩展名检查大小上限。返回写入字节数。"""
+    ext = target.suffix.lower()
+    is_binary = ext in EXTRA_FILE_BINARY_EXTENSIONS
+    max_size = EXTRA_FILE_MAX_BINARY_BYTES if is_binary else EXTRA_FILE_MAX_TEXT_BYTES
+    written = 0
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(target, "wb") as f:
+            while True:
+                chunk = await upload.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_size:
+                    raise HTTPException(413, f"附加文件 {target.name!r} 超过大小上限")
+                f.write(chunk)
+    except HTTPException:
+        if target.exists() and target.stat().st_size == 0:
+            try:
+                target.unlink()
+            except OSError:
+                pass
+        raise
+    return written
 
 
 def _parse_cover_data_url(data_url: str) -> tuple[str, bytes]:
@@ -461,6 +547,220 @@ def create_project(payload: CreateWorkbenchProjectPayload, request: Request):
     }
     save_mod_index(data)
     return to_project(sequence, data[sequence])
+
+
+@router.post(
+    "/projects/with-files",
+    summary="创建工作台项目并附带初始文件/目录（multipart 提交）",
+    response_model=WorkbenchProject,
+)
+async def create_project_with_files(
+    request: Request,
+    base_path: str = Form(...),
+    mod_name: str = Form(...),
+    mod_id: str = Form(...),
+    description: str = Form(""),
+    author: str = Form(...),
+    cover_data_url: Optional[str] = Form(None),
+    conflict_resolution: Optional[str] = Form(None),
+    sequence: Optional[str] = Form(None),
+    extra_files: List[UploadFile] = File(default=[]),
+    extra_relpaths: List[str] = Form(default=[]),
+):
+    """创建项目并把用户上传的附加文件按相对路径直接落到项目根目录。
+
+    `extra_files` 与 `extra_relpaths` 一一对应；`extra_relpaths[i]` 是 `extra_files[i]`
+    相对项目根的正斜杠路径（如 `version/JSON/version.json`）。最多 5 层目录嵌套。
+    """
+    base = _validate_base_path(base_path)
+    _validate_mod_id(mod_id)
+    if not mod_name.strip():
+        raise HTTPException(400, "项目名称不能为空")
+    if len(mod_name) > 128:
+        raise HTTPException(400, "项目名称长度不能超过 128 字符")
+    if len(description) > 2000:
+        raise HTTPException(400, "项目简介长度不能超过 2000 字符")
+
+    current_login = _ensure_github_login(request)
+    requested_author = author.strip()
+    if requested_author != current_login:
+        raise HTTPException(
+            403,
+            detail={
+                "code": "author_mismatch",
+                "message": f"作者必须与当前 GitHub 账户一致（{current_login}）",
+            },
+        )
+
+    if len(extra_files) != len(extra_relpaths):
+        raise HTTPException(400, "extra_files 与 extra_relpaths 数量不匹配")
+
+    target_dir = base / mod_id
+    actual_mod_id = mod_id
+    created_by_us = False
+    extra_trash: List[Path] = []  # 落盘失败时用于回滚
+
+    if target_dir.exists():
+        if conflict_resolution == "rename":
+            actual_mod_id = _suggest_mod_id(base, mod_id)
+            target_dir = base / actual_mod_id
+        elif conflict_resolution == "overwrite":
+            for fname in list(target_dir.iterdir()):
+                if fname.name in {f"{mod_id}.toml", "cover.png", "cover.jpg", "cover.jpeg", "cover.gif", "cover.webp"}:
+                    try:
+                        fname.unlink()
+                    except OSError:
+                        pass
+        else:
+            suggestion = _suggest_mod_id(base, mod_id)
+            raise HTTPException(
+                409,
+                detail={
+                    "code": "dir_conflict",
+                    "message": f"目录 '{target_dir}' 已存在",
+                    "suggestion": f"{mod_id} (1)",
+                },
+            )
+
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        created_by_us = True
+    except OSError as exc:
+        raise HTTPException(500, f"创建目录失败：{exc}") from exc
+
+    cover_filename: Optional[str] = None
+    if cover_data_url:
+        try:
+            ext, raw = _parse_cover_data_url(cover_data_url)
+        except HTTPException:
+            if created_by_us and not any(target_dir.iterdir()):
+                try:
+                    target_dir.rmdir()
+                except OSError:
+                    pass
+            raise
+        cover_filename = f"cover{ext}"
+        cover_path = target_dir / cover_filename
+        try:
+            cover_path.write_bytes(raw)
+        except OSError as exc:
+            if created_by_us and not any(target_dir.iterdir()):
+                try:
+                    target_dir.rmdir()
+                except OSError:
+                    pass
+            raise HTTPException(500, f"写入封面失败：{exc}") from exc
+
+    # 写附加文件：先校验所有路径，再流式落盘
+    validated_relpaths: List[str] = []
+    targets: List[Path] = []
+    for rel in extra_relpaths:
+        normalized = _validate_extra_relpath(rel)
+        # 禁止覆盖主 TOML / cover / 与主 mod_id 同名的 .toml
+        if normalized == f"{actual_mod_id}.toml" or normalized == cover_filename:
+            raise HTTPException(400, f"附加文件路径与保留文件冲突: {normalized!r}")
+        # 文件名要落在项目根下
+        target = _safe_join_inside(target_dir, normalized)
+        validated_relpaths.append(normalized)
+        targets.append(target)
+
+    try:
+        for upload, target in zip(extra_files, targets):
+            await _save_extra_file(target, upload)
+            extra_trash.append(target)
+    except HTTPException:
+        # 回滚：删除已落盘的附加文件
+        for path in extra_trash:
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+            except OSError:
+                pass
+        if cover_filename:
+            try:
+                (target_dir / cover_filename).unlink()
+            except OSError:
+                pass
+        if created_by_us and not any(target_dir.iterdir()):
+            try:
+                target_dir.rmdir()
+            except OSError:
+                pass
+        raise
+
+    # 写 TOML
+    toml_path = target_dir / f"{actual_mod_id}.toml"
+    try:
+        toml_path.write_text(
+            _render_mod_info_toml(
+                actual_mod_id,
+                mod_name,
+                description,
+                current_login,
+                cover_filename,
+            ),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        for path in extra_trash:
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+            except OSError:
+                pass
+        if cover_filename:
+            try:
+                (target_dir / cover_filename).unlink()
+            except OSError:
+                pass
+        if created_by_us and not any(target_dir.iterdir()):
+            try:
+                target_dir.rmdir()
+            except OSError:
+                pass
+        raise HTTPException(500, f"写入模板失败：{exc}") from exc
+
+    data = load_mod_index()
+    actual_sequence = sequence or generate_sequence(data)
+    if actual_sequence in data:
+        for path in extra_trash:
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+            except OSError:
+                pass
+        try:
+            toml_path.unlink()
+        except OSError:
+            pass
+        if cover_filename:
+            try:
+                (target_dir / cover_filename).unlink()
+            except OSError:
+                pass
+        if created_by_us and not any(target_dir.iterdir()):
+            try:
+                target_dir.rmdir()
+            except OSError:
+                pass
+        raise HTTPException(400, f"工作台项目序列号 '{actual_sequence}' 已存在。")
+    data[actual_sequence] = {
+        "mod_name": mod_name,
+        "path": str(target_dir),
+        "mod_id": actual_mod_id,
+        "description": description,
+        "author": current_login,
+        "cover": cover_filename,
+        "files": [],
+    }
+    save_mod_index(data)
+    return to_project(actual_sequence, data[actual_sequence])
 
 
 # ---------------- Project Management Endpoints (cover, update, display-mode, delete) ----------------
