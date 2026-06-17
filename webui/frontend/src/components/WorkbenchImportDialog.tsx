@@ -142,6 +142,18 @@ export default function WorkbenchImportDialog({
   const targetDir = useMemo(() => normalizePath(targetDirInput), [targetDirInput])
   const selectionSummary = useMemo(() => summarizeSelection(selectedFiles), [selectedFiles])
 
+  const resolveErrorMessage = async (response: Response, fallbackPrefix: string) => {
+    const detail = await response.json().catch(() => null) as { detail?: { message?: string } | string } | null
+    if (typeof detail?.detail === 'string' && detail.detail.trim()) {
+      return `${fallbackPrefix} (${response.status}): ${detail.detail}`
+    }
+    if (typeof detail?.detail === 'object' && detail.detail?.message?.trim()) {
+      return `${fallbackPrefix} (${response.status}): ${detail.detail.message}`
+    }
+    const text = await response.text().catch(() => '')
+    return `${fallbackPrefix} (${response.status}): ${text || '未知错误'}`
+  }
+
   const validateSelection = async (files: File[]) => {
     if (files.length === 0) {
       throw new Error('请先选择要导入的文件。')
@@ -212,8 +224,7 @@ export default function WorkbenchImportDialog({
           { method: 'POST', credentials: 'include', body: form },
         )
         if (!response.ok) {
-          const text = await response.text().catch(() => '')
-          throw new Error(`导入失败 (${response.status}): ${text || '未知错误'}`)
+          throw new Error(await resolveErrorMessage(response, '导入失败'))
         }
         const result = await response.json() as WorkbenchImportResult
         importedFiles.push(...(result.files ?? []))
@@ -232,8 +243,7 @@ export default function WorkbenchImportDialog({
             body: form,
           })
           if (!response.ok) {
-            const text = await response.text().catch(() => '')
-            throw new Error(`导入失败 (${response.status}): ${text || '未知错误'}`)
+            throw new Error(await resolveErrorMessage(response, '导入失败'))
           }
           const result = await response.json() as WorkbenchImportResult
           if (result.mode === 'project-created') {
@@ -267,8 +277,7 @@ export default function WorkbenchImportDialog({
           }
         }
         if (!response.ok) {
-          const text = await response.text().catch(() => '')
-          throw new Error(`导入失败 (${response.status}): ${text || '未知错误'}`)
+          throw new Error(await resolveErrorMessage(response, '导入失败'))
         }
         const result = await response.json() as WorkbenchImportResult
         if (result.mode === 'project-created') {

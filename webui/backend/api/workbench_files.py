@@ -450,7 +450,16 @@ def _resolve_7z_executable() -> str:
         resolved = shutil.which(name)
         if resolved:
             return resolved
-    raise HTTPException(400, "未检测到 7z，无法导入该压缩包或镜像包")
+    if os.name == "nt":
+        message = "未检测到 7z。请安装 7-Zip，或安装带命令行工具的 WinRAR / 7z 并确保 `7z`、`7za` 或 `7zr` 可在命令行中使用。"
+    elif os.name == "posix":
+        message = "未检测到 7z。请安装 p7zip/7zip 命令行工具后再导入该归档。"
+    else:
+        message = "未检测到 7z 命令行工具，无法导入该归档。"
+    raise HTTPException(400, detail={
+        "code": "extractor_missing",
+        "message": message,
+    })
 
 
 def _extract_with_7z(temp_path: Path, extract_dir: Path, *, password: Optional[str] = None) -> None:
@@ -467,7 +476,10 @@ def _extract_with_7z(temp_path: Path, extract_dir: Path, *, password: Optional[s
             "code": "password_required",
             "message": "该归档需要正确密码才能解压",
         })
-    raise HTTPException(400, f"解压失败: {(result.stderr or result.stdout or '').strip() or '未知错误'}")
+    raise HTTPException(400, detail={
+        "code": "archive_extract_failed",
+        "message": f"解压失败: {(result.stderr or result.stdout or '').strip() or '未知错误'}",
+    })
 
 
 def _extract_archive_bytes(raw: bytes, suffix: str, extract_dir: Path, *, password: Optional[str] = None) -> None:
