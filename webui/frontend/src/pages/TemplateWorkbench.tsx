@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import CreateProjectDialog, { type CreatedProjectInfo } from '../components/CreateProjectDialog'
 import CreateWorkbenchFolderDialog from '../components/CreateWorkbenchFolderDialog'
+import NewFileDialog from '../components/NewFileDialog'
 import EditProjectDialog, { type EditableProject } from '../components/EditProjectDialog'
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog'
 import ProjectContextMenu, { type ProjectContextAction } from '../components/ProjectContextMenu'
@@ -28,6 +30,7 @@ type TemplateWorkbenchRoute =
 type WorkbenchItemRole = 'project' | 'template-file' | 'imported-file' | 'imported-folder'
 type WorkbenchFileKind = 'folder' | 'code' | 'binary' | 'text' | 'log' | 'template'
 type ContentHeaderMode = 'home' | 'breadcrumb'
+type FileConflictResolution = 'rename' | 'overwrite' | 'cancel'
 
 interface ContentHeaderBreadcrumb {
   label: string
@@ -115,6 +118,10 @@ const CARD_TOP_STEP = 250
 
 const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const layoutCookieName = 'template_workbench_layout'
+const starredFlowsCookieName = 'template_workbench_starred_flows'
+const starredColor = '#FFD500'
+const starPath =
+  'M12.4125 17.8781L17.1375 20.8781C17.7469 21.2625 18.4969 20.6906 18.3188 19.9875L16.95 14.6062C16.9453 14.5877 16.9414 14.569 16.9382 14.5503C16.9348 14.5314 16.9322 14.5125 16.9303 14.4935C16.9284 14.4745 16.927 14.4555 16.9265 14.4365C16.9258 14.4173 16.9258 14.3982 16.9266 14.3792C16.9273 14.36 16.9286 14.341 16.9307 14.3221C16.9328 14.303 16.9355 14.2842 16.9389 14.2655C16.9422 14.2466 16.9463 14.228 16.951 14.2095C16.9556 14.1909 16.961 14.1726 16.967 14.1545C16.973 14.1364 16.9795 14.1185 16.9868 14.1008C16.994 14.0831 17.0019 14.0657 17.0103 14.0486C17.0187 14.0315 17.0278 14.0147 17.0375 13.9983C17.0471 13.9818 17.0573 13.9656 17.0681 13.9499C17.0787 13.9341 17.0901 13.9188 17.102 13.9038C17.1138 13.8888 17.1261 13.8742 17.139 13.8602C17.1519 13.846 17.1652 13.8323 17.179 13.8192C17.1929 13.8061 17.2072 13.7934 17.2219 13.7812L21.4594 10.2468C22.0125 9.78747 21.7313 8.85934 21.0094 8.81247L15.4781 8.45622C15.4594 8.45512 15.4406 8.45336 15.4221 8.45092C15.4034 8.44847 15.385 8.44536 15.3666 8.44158C15.3482 8.43781 15.3299 8.43336 15.3119 8.42826C15.2938 8.42316 15.2759 8.41741 15.2583 8.41102C15.2407 8.40463 15.2232 8.3976 15.2062 8.38995C15.1889 8.3823 15.1721 8.37404 15.1556 8.36516C15.139 8.35629 15.1228 8.34683 15.107 8.33679C15.0911 8.32675 15.0757 8.31614 15.0606 8.30498C15.0455 8.29381 15.0309 8.28211 15.0166 8.26989C15.0024 8.25766 14.9885 8.24494 14.9752 8.23171C14.9619 8.21849 14.949 8.2048 14.9367 8.19065C14.9244 8.17649 14.9125 8.16192 14.9013 8.14691C14.89 8.1319 14.8793 8.1165 14.8691 8.10073C14.8589 8.08494 14.8494 8.0688 14.8404 8.05233C14.8314 8.03586 14.8229 8.01908 14.8152 8.00199C14.8074 7.98491 14.8002 7.96756 14.7938 7.94997L12.7313 2.75622C12.7245 2.73759 12.717 2.71925 12.7089 2.7012C12.7006 2.68315 12.6918 2.66543 12.6822 2.64806C12.6727 2.63068 12.6625 2.61369 12.6518 2.59709C12.6409 2.58049 12.6295 2.56433 12.6175 2.54861C12.6054 2.53288 12.5927 2.51764 12.5795 2.50288C12.5662 2.48812 12.5524 2.47389 12.5381 2.46018C12.5238 2.44648 12.509 2.43334 12.4937 2.42076C12.4783 2.40819 12.4626 2.39621 12.4464 2.38485C12.4301 2.37348 12.4135 2.36275 12.3965 2.35265C12.3794 2.34255 12.362 2.33312 12.3443 2.32436C12.3265 2.31559 12.3084 2.30751 12.29 2.30012C12.2716 2.29274 12.253 2.28607 12.234 2.28011C12.2151 2.27415 12.196 2.26891 12.1767 2.26441C12.1574 2.25991 12.1379 2.25616 12.1184 2.25315C12.0987 2.25013 12.079 2.24786 12.0594 2.24635C12.0396 2.24484 12.0198 2.24408 12 2.24408C11.9801 2.24408 11.9604 2.24484 11.9407 2.24635C11.9209 2.24786 11.9012 2.25013 11.8816 2.25315C11.862 2.25616 11.8426 2.25991 11.8233 2.26441C11.804 2.26891 11.7849 2.27415 11.766 2.28011C11.7471 2.28607 11.7284 2.29274 11.71 2.30012C11.6917 2.30751 11.6736 2.31559 11.6558 2.32436C11.638 2.33312 11.6206 2.34255 11.6035 2.35265C11.5865 2.36275 11.5698 2.37348 11.5537 2.38485C11.5374 2.39621 11.5216 2.40819 11.5063 2.42076C11.491 2.43334 11.4762 2.44648 11.4619 2.46018C11.4476 2.47389 11.4338 2.48812 11.4205 2.50288C11.4073 2.51764 11.3946 2.53288 11.3826 2.54861C11.3705 2.56433 11.3591 2.58049 11.3482 2.5971C11.3374 2.61369 11.3272 2.63068 11.3177 2.64806C11.3082 2.66543 11.2993 2.68315 11.2912 2.7012C11.283 2.71925 11.2755 2.73759 11.2687 2.75622L9.20625 7.94997C9.19971 7.96756 9.19256 7.98491 9.18478 8.00199C9.177 8.01908 9.16861 8.03586 9.15961 8.05233C9.15061 8.0688 9.14103 8.08494 9.13087 8.10073C9.1207 8.1165 9.10998 8.1319 9.0987 8.14691C9.08741 8.16192 9.07561 8.17649 9.06328 8.19065C9.05094 8.2048 9.03811 8.21849 9.02479 8.23171C9.01146 8.24494 8.99767 8.25766 8.98343 8.26989C8.96918 8.28211 8.95452 8.2938 8.93943 8.30497C8.92433 8.31614 8.90886 8.32675 8.89299 8.33679C8.87713 8.34683 8.86093 8.35629 8.84439 8.36516C8.82784 8.37404 8.811 8.3823 8.79386 8.38995C8.77671 8.3976 8.75931 8.40463 8.74167 8.41102C8.72401 8.4174 8.70615 8.42315 8.68809 8.42826C8.67002 8.43336 8.65179 8.43781 8.63341 8.44158C8.61501 8.44536 8.59652 8.44847 8.57791 8.45092C8.55929 8.45336 8.54061 8.45512 8.52187 8.45622L2.99062 8.81247C2.26875 8.85934 1.9875 9.78747 2.54062 10.2468L6.77812 13.7812C6.79283 13.7934 6.8071 13.8061 6.82093 13.8192C6.83475 13.8323 6.8481 13.846 6.86097 13.8602C6.87383 13.8742 6.88618 13.8888 6.89803 13.9038C6.90988 13.9188 6.92119 13.9341 6.93195 13.9499C6.94271 13.9656 6.95291 13.9818 6.96255 13.9983C6.97219 14.0148 6.98122 14.0315 6.98968 14.0486C6.99814 14.0657 7.00597 14.0831 7.01321 14.1008C7.02044 14.1185 7.02705 14.1364 7.03303 14.1545C7.039 14.1726 7.04434 14.1909 7.04902 14.2095C7.05371 14.228 7.05774 14.2466 7.06113 14.2655C7.0645 14.2842 7.06721 14.303 7.06927 14.3221C7.07132 14.341 7.07271 14.36 7.07343 14.3792C7.07414 14.3982 7.07419 14.4173 7.07357 14.4365C7.07295 14.4555 7.07166 14.4745 7.0697 14.4935C7.06774 14.5125 7.06511 14.5314 7.06183 14.5503C7.05854 14.569 7.05459 14.5877 7.05 14.6062L5.78437 19.5937C5.56875 20.4375 6.46875 21.1219 7.19062 20.6625L11.5875 17.8781C11.6028 17.8684 11.6185 17.8592 11.6345 17.8505C11.6504 17.8419 11.6666 17.8339 11.6832 17.8264C11.6997 17.8189 11.7165 17.812 11.7336 17.8057C11.7505 17.7994 11.7678 17.7937 11.7852 17.7887C11.8027 17.7836 11.8202 17.7791 11.8379 17.7754C11.8556 17.7715 11.8735 17.7683 11.8915 17.7658C11.9095 17.7632 11.9275 17.7613 11.9456 17.76C11.9637 17.7587 11.9818 17.7581 12 17.7581C12.0181 17.7581 12.0362 17.7587 12.0544 17.76C12.0725 17.7613 12.0905 17.7632 12.1085 17.7658C12.1265 17.7683 12.1443 17.7715 12.1621 17.7754C12.1797 17.7791 12.1974 17.7836 12.2148 17.7887C12.2322 17.7937 12.2494 17.7994 12.2665 17.8057C12.2835 17.812 12.3003 17.8189 12.3168 17.8264C12.3333 17.8339 12.3496 17.8419 12.3655 17.8505C12.3815 17.8592 12.3971 17.8684 12.4125 17.8781Z'
 
 function readLayoutCookie(): TemplateWorkbenchLayout {
   if (typeof document === 'undefined') return 'card'
@@ -126,6 +133,24 @@ function readLayoutCookie(): TemplateWorkbenchLayout {
 function writeLayoutCookie(value: TemplateWorkbenchLayout) {
   if (typeof document === 'undefined') return
   document.cookie = `${layoutCookieName}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`
+}
+
+function readStarredFlowsCookie() {
+  if (typeof document === 'undefined') return []
+  const part = document.cookie.split('; ').find(item => item.startsWith(`${starredFlowsCookieName}=`))
+  if (!part) return []
+  try {
+    const value = JSON.parse(decodeURIComponent(part.split('=').slice(1).join('=')))
+    return Array.isArray(value) ? value.filter(item => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function writeStarredFlowsCookie(values: string[]) {
+  if (typeof document === 'undefined') return
+  const uniqueValues = Array.from(new Set(values.filter(Boolean)))
+  document.cookie = `${starredFlowsCookieName}=${encodeURIComponent(JSON.stringify(uniqueValues))}; path=/; max-age=31536000; SameSite=Lax`
 }
 
 function formatFileSize(size?: number) {
@@ -352,29 +377,95 @@ function createGlobalWorkbenchSearchItems(project: WorkbenchProjectIndex, coverV
   ]
 }
 
+function isDeploymentFlowItem(item: TemplateWorkbenchItem) {
+  return item.role === 'project' || item.role === 'template-file' || item.fileKind === 'template'
+}
+
+function StarGlyph({ filled, size = 24 }: { filled: boolean; size?: number }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d={starPath}
+        fill={filled ? starredColor : 'none'}
+        stroke={filled ? starredColor : 'currentColor'}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function StarToggleButton({
+  item,
+  starred,
+  onToggle,
+  className = '',
+  style,
+}: {
+  item: TemplateWorkbenchItem
+  starred: boolean
+  onToggle?: (sequence: string) => void
+  className?: string
+  style?: CSSProperties
+}) {
+  if (!item.sequence || !isDeploymentFlowItem(item)) return null
+  return (
+    <button
+      type="button"
+      onClick={event => {
+        event.preventDefault()
+        event.stopPropagation()
+        onToggle?.(item.sequence!)
+      }}
+      onContextMenu={event => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      className={`flex items-center justify-center transition-colors hover:bg-[var(--twb-hover)] ${className}`}
+      style={{ color: starred ? starredColor : 'var(--twb-text)', ...style }}
+      aria-label={starred ? `取消星标 ${item.name}` : `星标 ${item.name}`}
+      aria-pressed={starred}
+      title={starred ? '取消星标' : '设为星标'}
+    >
+      <StarGlyph filled={starred} />
+    </button>
+  )
+}
+
 function FileCard({
   item,
   left,
   top,
   onOpen,
   onContextMenu,
+  starred = false,
+  onToggleStar,
 }: {
   item: TemplateWorkbenchItem
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
+  starred?: boolean
+  onToggleStar?: (sequence: string) => void
 }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen?.(item)}
+      onKeyDown={event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        onOpen?.(item)
+      }}
       onContextMenu={event => {
         if (!onContextMenu) return
         event.preventDefault()
         onContextMenu(event, item)
       }}
-      className="absolute overflow-hidden rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
+      className="absolute cursor-pointer overflow-hidden rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
       style={{ left, top, width: 272, height: 206.72, borderColor: 'var(--twb-card-border)', color: 'var(--twb-text)' }}
     >
       {item.cover ? (
@@ -400,8 +491,8 @@ function FileCard({
         <div className="leading-none" style={{ fontFamily: font, fontSize: 18, fontWeight: 700 }}>{item.name}</div>
         <div className="mt-[7px] leading-none" style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 15, fontWeight: 300 }}>{item.updatedAt}</div>
       </div>
-      <Star size={25} strokeWidth={1.5} className="absolute" style={{ right: 7, bottom: 18 }} />
-    </button>
+      <StarToggleButton item={item} starred={starred} onToggle={onToggleStar} className="absolute rounded-[4px]" style={{ right: 7, bottom: 14, width: 32, height: 32 }} />
+    </div>
   )
 }
 
@@ -411,24 +502,34 @@ function ImportedFileCard({
   top,
   onOpen,
   onContextMenu,
+  starred = false,
+  onToggleStar,
 }: {
   item: TemplateWorkbenchItem
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
+  starred?: boolean
+  onToggleStar?: (sequence: string) => void
 }) {
   const Icon = getFileIconByName(item.fileName ?? item.name)
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen?.(item)}
+      onKeyDown={event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        onOpen?.(item)
+      }}
       onContextMenu={event => {
         if (!onContextMenu) return
         event.preventDefault()
         onContextMenu(event, item)
       }}
-      className="absolute overflow-hidden rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
+      className="absolute cursor-pointer overflow-hidden rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
       style={{ left, top, width: 272, height: 206.72, borderColor: 'var(--twb-card-border)', color: 'var(--twb-text)' }}
     >
       {item.cover ? (
@@ -449,7 +550,8 @@ function ImportedFileCard({
         <div className="truncate leading-none" style={{ fontFamily: font, fontSize: 18, fontWeight: 700 }}>{item.name}</div>
         <div className="mt-[7px] leading-none" style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 15, fontWeight: 300 }}>{item.sizeLabel ?? item.updatedAt}</div>
       </div>
-    </button>
+      <StarToggleButton item={item} starred={starred} onToggle={onToggleStar} className="absolute rounded-[4px]" style={{ right: 7, bottom: 14, width: 32, height: 32 }} />
+    </div>
   )
 }
 
@@ -467,15 +569,21 @@ function FolderCard({
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
 }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen?.(item)}
+      onKeyDown={event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        onOpen?.(item)
+      }}
       onContextMenu={event => {
         if (!onContextMenu) return
         event.preventDefault()
         onContextMenu(event, item)
       }}
-      className="absolute text-left transition-transform hover:-translate-y-[1px]"
+      className="absolute cursor-pointer text-left transition-transform hover:-translate-y-[1px]"
       style={{ left, top, width: 273, height: 207, color: 'var(--twb-text)' }}
     >
       <svg className="absolute inset-0 h-full w-full" viewBox="0 0 273 207" fill="none" aria-hidden>
@@ -498,7 +606,7 @@ function FolderCard({
           +{item.childCount}
         </div>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -508,23 +616,33 @@ function ProjectFolderCard({
   top,
   onOpen,
   onContextMenu,
+  starred = false,
+  onToggleStar,
 }: {
   item: TemplateWorkbenchItem
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
+  starred?: boolean
+  onToggleStar?: (sequence: string) => void
 }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => onOpen?.(item)}
+      onKeyDown={event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        onOpen?.(item)
+      }}
       onContextMenu={event => {
         if (!onContextMenu) return
         event.preventDefault()
         onContextMenu(event, item)
       }}
-      className="absolute text-left transition-transform hover:-translate-y-[1px]"
+      className="absolute cursor-pointer text-left transition-transform hover:-translate-y-[1px]"
       style={{ left, top, width: 273, height: 207, color: 'var(--twb-text)' }}
     >
       <svg className="absolute inset-0 z-[1] h-full w-full" viewBox="0 0 273 207" fill="none" aria-hidden>
@@ -581,7 +699,8 @@ function ProjectFolderCard({
           +{item.fileCount}
         </div>
       )}
-    </button>
+      <StarToggleButton item={item} starred={starred} onToggle={onToggleStar} className="absolute z-[2] rounded-[4px]" style={{ right: 7, bottom: 14, width: 32, height: 32 }} />
+    </div>
   )
 }
 
@@ -591,17 +710,21 @@ function ProjectCard({
   top,
   onOpen,
   onContextMenu,
+  starred = false,
+  onToggleStar,
 }: {
   item: TemplateWorkbenchItem
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
+  starred?: boolean
+  onToggleStar?: (sequence: string) => void
 }) {
   if (item.type === 'folder' || item.role === 'imported-folder') return <FolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
-  if (item.role === 'imported-file' || item.role === 'template-file') return <ImportedFileCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
-  if (item.displayMode === 'folder') return <ProjectFolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
-  return <FileCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
+  if (item.role === 'imported-file' || item.role === 'template-file') return <ImportedFileCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
+  if (item.displayMode === 'folder') return <ProjectFolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
+  return <FileCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
 }
 
 function FolderTypeGlyph() {
@@ -683,10 +806,14 @@ function ProjectList({
   items,
   onOpen,
   onContextMenu,
+  isStarred,
+  onToggleStar,
 }: {
   items: TemplateWorkbenchItem[]
   onOpen?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
+  isStarred?: (sequence?: string) => boolean
+  onToggleStar?: (sequence: string) => void
 }) {
   const rowStart = 61
   const rowGap = 80
@@ -728,9 +855,18 @@ function ProjectList({
                 {item.fileKind === 'folder' ? <FolderTypeGlyph /> : NameIcon ? <NameIcon size={36} /> : null}
               </div>
             )}
+            {isDeploymentFlow && (
+              <StarToggleButton
+                item={item}
+                starred={isStarred?.(item.sequence) ?? false}
+                onToggle={onToggleStar}
+                className="absolute left-[72px] top-[14px] z-20 rounded-[4px]"
+                style={{ width: 32, height: 32 }}
+              />
+            )}
             <div
               className="pointer-events-none absolute truncate leading-none"
-              style={{ left: 70, top: 18, width: 420, color: 'var(--twb-text)', fontFamily: font, fontSize: 25, fontWeight: 300 }}
+              style={{ left: isDeploymentFlow ? 112 : 70, top: 18, width: isDeploymentFlow ? 378 : 420, color: 'var(--twb-text)', fontFamily: font, fontSize: 25, fontWeight: 300 }}
             >
               {item.name}
             </div>
@@ -753,6 +889,168 @@ function ProjectList({
         <path d="M0 31H1470" stroke="var(--twb-muted)" strokeWidth="1" />
       </svg>
     </div>
+  )
+}
+
+function CreateMenu({
+  open,
+  onCreateFile,
+  onCreateTemplate,
+  onCreateFolder,
+  onClose,
+}: {
+  open: boolean
+  onCreateFile: () => void
+  onCreateTemplate: () => void
+  onCreateFolder: () => void
+  onClose: () => void
+}) {
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) onClose()
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    return () => window.removeEventListener('pointerdown', handlePointerDown)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  const actions = [
+    { label: '新建文件', onClick: onCreateFile },
+    { label: '新建模板', onClick: onCreateTemplate },
+    { label: '新建文件夹', onClick: onCreateFolder },
+  ]
+
+  return (
+    <div
+      ref={menuRef}
+      className="absolute z-30 rounded-[8px] border py-[6px] shadow-lg"
+      style={{ left: 18, top: 58, width: 156, borderColor: 'var(--twb-border)', background: 'var(--twb-bg)', color: 'var(--twb-text)' }}
+    >
+      {actions.map(action => (
+        <button
+          key={action.label}
+          type="button"
+          onClick={() => {
+            action.onClick()
+            onClose()
+          }}
+          className="block h-[38px] w-full px-[14px] text-left transition-colors hover:bg-[var(--twb-hover)]"
+          style={{ fontFamily: font, fontSize: 18, fontWeight: 400 }}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function StarredFlowDialog({
+  open,
+  projects,
+  starredSequences,
+  onToggle,
+  onClose,
+}: {
+  open: boolean
+  projects: WorkbenchProjectIndex[]
+  starredSequences: Set<string>
+  onToggle: (sequence: string) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState('')
+
+  useEffect(() => {
+    if (open) setQuery('')
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const filteredProjects = projects.filter(project => {
+    if (!normalizedQuery) return true
+    return (project.mod_name || '未命名').toLowerCase().includes(normalizedQuery)
+  })
+
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="starred-flow-dialog-title">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[6px]" onClick={onClose} />
+      <div className="relative flex max-h-[82vh] w-[92%] max-w-xl flex-col rounded-2xl border border-white/20 bg-[var(--dfw-bg)] shadow-2xl">
+        <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <h2 id="starred-flow-dialog-title" className="text-lg font-semibold text-[var(--dfw-text)]">
+            管理星标部署流程
+          </h2>
+          <button type="button" className="rounded-md p-1 text-[var(--dfw-text)] opacity-70 transition hover:bg-white/10" onClick={onClose} aria-label="关闭">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 6L18 18M6 18L18 6" strokeLinecap="round" />
+            </svg>
+          </button>
+        </header>
+        <div className="border-b border-white/10 px-6 py-4">
+          <label className="flex h-[40px] items-center rounded-lg border border-white/20 px-3 text-[var(--dfw-text)]">
+            <Search size={18} className="mr-2 opacity-70" />
+            <input
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--dfw-text)]/40"
+              placeholder="搜索部署流程"
+              autoFocus
+            />
+          </label>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {filteredProjects.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-white/20 py-10 text-center text-sm text-[var(--dfw-text)] opacity-60">
+              没有匹配的部署流程
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredProjects.map(project => {
+                const starred = starredSequences.has(project.sequence)
+                return (
+                  <button
+                    key={project.sequence}
+                    type="button"
+                    onClick={() => onToggle(project.sequence)}
+                    className="flex h-[44px] w-full items-center rounded-lg border px-3 text-left transition hover:bg-white/5"
+                    style={{ borderColor: starred ? starredColor : 'rgba(255,255,255,0.14)', color: 'var(--dfw-text)' }}
+                  >
+                    <span className="mr-3 flex h-[24px] w-[24px] shrink-0 items-center justify-center" style={{ color: starred ? starredColor : 'currentColor' }}>
+                      <StarGlyph filled={starred} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate" style={{ fontFamily: font, fontSize: 15, fontWeight: 500 }}>
+                      {project.mod_name || '未命名'}
+                    </span>
+                    <span className="ml-3 text-xs opacity-60">{starred ? '已星标' : '未星标'}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+        <footer className="flex items-center justify-end border-t border-white/10 px-6 py-4">
+          <button type="button" className="rounded-lg bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" onClick={onClose}>
+            完成
+          </button>
+        </footer>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -956,9 +1254,19 @@ export default function TemplateWorkbench({
   const [route, setRoute] = useState<TemplateWorkbenchRoute>({ type: 'home' })
   const [registeredProjects, setRegisteredProjects] = useState<WorkbenchProjectIndex[]>([])
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
+  const [createMenuOpen, setCreateMenuOpen] = useState(false)
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false)
   const [createFolderSubmitting, setCreateFolderSubmitting] = useState(false)
   const [createFolderError, setCreateFolderError] = useState<string | null>(null)
+  const [newFileDialogOpen, setNewFileDialogOpen] = useState(false)
+  const [newFileSubmitting, setNewFileSubmitting] = useState(false)
+  const [newFileError, setNewFileError] = useState<string | null>(null)
+  const [newFileConflict, setNewFileConflict] = useState<{
+    name: string
+    suggestedName: string
+    payload: { name: string; content: string }
+  } | null>(null)
+  const [starredDialogOpen, setStarredDialogOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<
     | { x: number; y: number; project: WorkbenchProjectIndex }
@@ -972,6 +1280,27 @@ export default function TemplateWorkbench({
   const [coverVersion, setCoverVersion] = useState<Record<string, number>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [exactSearchEnabled, setExactSearchEnabled] = useState(false)
+  const [starredSequences, setStarredSequences] = useState<string[]>(() => readStarredFlowsCookie())
+
+  const starredSequenceSet = useMemo(() => new Set(starredSequences), [starredSequences])
+
+  const persistStarredSequences = useCallback((values: string[]) => {
+    const uniqueValues = Array.from(new Set(values.filter(Boolean)))
+    setStarredSequences(uniqueValues)
+    writeStarredFlowsCookie(uniqueValues)
+  }, [])
+
+  const toggleStarredSequence = useCallback((sequence: string) => {
+    persistStarredSequences(
+      starredSequenceSet.has(sequence)
+        ? starredSequences.filter(item => item !== sequence)
+        : [...starredSequences, sequence],
+    )
+  }, [persistStarredSequences, starredSequenceSet, starredSequences])
+
+  const isStarredSequence = useCallback((sequence?: string) => (
+    Boolean(sequence && starredSequenceSet.has(sequence))
+  ), [starredSequenceSet])
 
   const reloadProjects = useCallback(async () => {
     try {
@@ -991,6 +1320,16 @@ export default function TemplateWorkbench({
     return registeredProjects.map(project => projectToItem(project, coverVersion[project.sequence] ?? 0))
   }, [items, registeredProjects, coverVersion])
 
+  const deploymentFlowItems = useMemo(() => {
+    if (items) return projectItems.filter(isDeploymentFlowItem)
+    return registeredProjects.map(project => projectToItem(project, coverVersion[project.sequence] ?? 0))
+  }, [items, projectItems, registeredProjects, coverVersion])
+
+  const starredFlowItems = useMemo(
+    () => deploymentFlowItems.filter(item => item.sequence && starredSequenceSet.has(item.sequence)),
+    [deploymentFlowItems, starredSequenceSet],
+  )
+
   const selectedProject = useMemo(() => {
     if (route.type === 'home') return null
     return registeredProjects.find(project => project.sequence === route.sequence) ?? null
@@ -1009,6 +1348,7 @@ export default function TemplateWorkbench({
   }, [route, selectedProject, currentProjectDir])
 
   const contentItems = useMemo(() => {
+    if (activeSection === 'starred') return starredFlowItems
     if (route.type === 'home') return projectItems
     if (!selectedProject) return []
     const currentDir = normalizeWorkbenchPath(route.dir)
@@ -1058,7 +1398,7 @@ export default function TemplateWorkbench({
       ...folderItems,
       ...directFileItems,
     ]
-  }, [projectItems, route, selectedProject, coverVersion])
+  }, [activeSection, projectItems, route, selectedProject, coverVersion, starredFlowItems])
 
   const globalSearchItems = useMemo(() => {
     if (items) return items
@@ -1133,6 +1473,13 @@ export default function TemplateWorkbench({
     }
   }, [reloadProjects])
 
+  useEffect(() => {
+    if (!registeredProjects.length || !starredSequences.length) return
+    const validSequences = new Set(registeredProjects.map(project => project.sequence))
+    const next = starredSequences.filter(sequence => validSequences.has(sequence))
+    if (next.length !== starredSequences.length) persistStarredSequences(next)
+  }, [persistStarredSequences, registeredProjects, starredSequences])
+
   const selectSection = (section: TemplateWorkbenchSection) => {
     setActiveSection(section)
     setRoute({ type: 'home' })
@@ -1140,6 +1487,7 @@ export default function TemplateWorkbench({
   }
 
   const createDeploymentProject = () => {
+    setActionError(null)
     setCreateProjectDialogOpen(true)
   }
 
@@ -1193,8 +1541,94 @@ export default function TemplateWorkbench({
   }
 
   const openCreateFolderDialog = () => {
+    if (route.type !== 'project') {
+      setActionError('请先进入一个项目目录后再创建文件夹。')
+      return
+    }
     setCreateFolderError(null)
     setCreateFolderDialogOpen(true)
+  }
+
+  const openNewFileDialog = () => {
+    if (route.type !== 'project') {
+      setActionError('请先进入一个项目目录后再创建文件。')
+      return
+    }
+    setNewFileError(null)
+    setNewFileConflict(null)
+    setNewFileDialogOpen(true)
+  }
+
+  const closeNewFileDialog = () => {
+    setNewFileDialogOpen(false)
+    setNewFileSubmitting(false)
+    setNewFileError(null)
+    setNewFileConflict(null)
+  }
+
+  const processNewFile = async (
+    payload: { name: string; content: string },
+    conflictResolution: Exclude<FileConflictResolution, 'cancel'> | null,
+  ) => {
+    if (route.type !== 'project') return
+    setNewFileSubmitting(true)
+    setNewFileError(null)
+    const relativeName = currentProjectDir ? `${currentProjectDir}/${normalizeWorkbenchPath(payload.name)}` : normalizeWorkbenchPath(payload.name)
+    try {
+      const response = await fetch(
+        `/api/template-workbench/projects/${encodeURIComponent(route.sequence)}/files/create`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: relativeName,
+            content: payload.content,
+            conflictResolution,
+          }),
+        },
+      )
+      if (response.status === 409) {
+        const detail = await response.json().catch(() => null)
+        setNewFileConflict({
+          name: payload.name,
+          suggestedName: basename(detail?.detail?.suggestion ?? payload.name),
+          payload,
+        })
+        setNewFileSubmitting(false)
+        return
+      }
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        setNewFileError(`新建失败 (${response.status}): ${text || '未知错误'}`)
+        setNewFileSubmitting(false)
+        return
+      }
+      const newFile = await response.json() as NonNullable<WorkbenchProjectIndex['files']>[number]
+      setRegisteredProjects(prev => prev.map(project => {
+        if (project.sequence !== route.sequence) return project
+        const newKey = normalizeWorkbenchPath(newFile.path || newFile.name)
+        const existing = new Map((project.files ?? []).map(file => [normalizeWorkbenchPath(file.path || file.name), file]))
+        existing.set(newKey, newFile)
+        return {
+          ...project,
+          directories: mergeDirectoryLists(project.directories, directoryChainForFile(newKey)),
+          files: Array.from(existing.values()).sort((a, b) => normalizeWorkbenchPath(a.path || a.name).localeCompare(normalizeWorkbenchPath(b.path || b.name))),
+        }
+      }))
+      closeNewFileDialog()
+    } catch (err) {
+      setNewFileError(`新建异常: ${(err as Error).message ?? String(err)}`)
+      setNewFileSubmitting(false)
+    }
+  }
+
+  const handleNewFileConflictResolve = (resolution: FileConflictResolution) => {
+    if (!newFileConflict) return
+    const { payload } = newFileConflict
+    setNewFileConflict(null)
+    if (resolution === 'cancel') return
+    void processNewFile(payload, resolution)
   }
 
   const openImportDialog = () => {
@@ -1398,16 +1832,46 @@ export default function TemplateWorkbench({
         ))}
 
         <div className="absolute left-[25px] top-[278px] h-px w-[300px]" style={{ background: 'var(--twb-border)' }} />
-        <button
-          type="button"
-          onClick={() => selectSection('starred')}
-          className="absolute flex items-center text-left transition-colors hover:bg-[var(--twb-hover)]"
-          style={{ left: 17, top: 296, width: 316, height: 40, color: 'var(--twb-text)' }}
-        >
-          <Star size={32} />
-          <span className="ml-[17px] leading-none" style={{ fontFamily: font, fontSize: 25, fontWeight: 500 }}>星标工作台</span>
-          <CirclePlus size={28} className="ml-auto" />
-        </button>
+        <div className="absolute flex items-center" style={{ left: 17, top: 296, width: 316, height: 40, color: 'var(--twb-text)' }}>
+          <button
+            type="button"
+            onClick={() => selectSection('starred')}
+            className="flex h-[40px] flex-1 items-center text-left transition-colors hover:bg-[var(--twb-hover)]"
+            style={{
+              background: activeSection === 'starred' ? 'var(--twb-selected)' : 'transparent',
+              border: activeSection === 'starred' ? '1px solid var(--twb-blue)' : '1px solid transparent',
+              color: 'var(--twb-text)',
+            }}
+          >
+            <Star size={32} />
+            <span className="ml-[17px] leading-none" style={{ fontFamily: font, fontSize: 25, fontWeight: 500 }}>星标工作台</span>
+          </button>
+          <button
+            type="button"
+            className="ml-[4px] flex h-[32px] w-[32px] items-center justify-center rounded-[4px] transition-colors hover:bg-[var(--twb-hover)]"
+            onClick={() => setStarredDialogOpen(true)}
+            aria-label="管理星标部署流程"
+          >
+            <CirclePlus size={28} />
+          </button>
+        </div>
+
+        {starredFlowItems.length > 0 && (
+          <div className="absolute left-[54px] top-[348px] flex max-h-[240px] w-[260px] flex-col gap-[6px] overflow-y-auto">
+            {starredFlowItems.map(item => (
+              <button
+                key={item.sequence ?? item.id}
+                type="button"
+                onClick={() => openItem(item)}
+                className="truncate rounded-[4px] px-[8px] py-[4px] text-left transition-colors hover:bg-[var(--twb-hover)]"
+                style={{ color: 'var(--twb-text)', fontFamily: font, fontSize: 16, fontWeight: 400 }}
+                title={item.name}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {slots?.sidebarFooter && <div className="absolute left-[25px] bottom-[25px] right-[25px]">{slots.sidebarFooter}</div>}
       </aside>
@@ -1415,12 +1879,21 @@ export default function TemplateWorkbench({
       <header className="absolute left-[350px] top-0 z-10 h-[71px] w-[1570px] border-b" style={{ borderColor: 'var(--twb-border)' }}>
         <button
           type="button"
-          onClick={createDeploymentProject}
+          onClick={() => setCreateMenuOpen(prev => !prev)}
           className="absolute flex items-center justify-center transition-colors hover:bg-[var(--twb-hover)]"
           style={{ left: 18, top: 19, width: 33, height: 33, color: 'var(--twb-text)' }}
+          aria-label="打开新建菜单"
+          aria-expanded={createMenuOpen}
         >
           <Plus size={32} />
         </button>
+        <CreateMenu
+          open={createMenuOpen}
+          onCreateFile={openNewFileDialog}
+          onCreateTemplate={createDeploymentProject}
+          onCreateFolder={openCreateFolderDialog}
+          onClose={() => setCreateMenuOpen(false)}
+        />
         <div className="absolute left-[69px] top-[16px] h-[40px] w-px" style={{ background: 'var(--twb-border)' }} />
         <div className="absolute flex items-center rounded-[6px] border" style={{ left: 95, top: 15, width: 482, height: 41, borderColor: 'var(--twb-border)', color: 'var(--twb-muted)' }}>
           <label className="flex min-w-0 flex-1 items-center">
@@ -1534,11 +2007,19 @@ export default function TemplateWorkbench({
             top={cardLayout[index].top}
             onOpen={openItem}
             onContextMenu={handleContextMenu}
+            starred={isStarredSequence(item.sequence)}
+            onToggleStar={toggleStarredSequence}
           />
         ))}
 
         {layoutMode === 'list' && (
-          <ProjectList items={visibleContentItems} onOpen={openItem} onContextMenu={handleContextMenu} />
+          <ProjectList
+            items={visibleContentItems}
+            onOpen={openItem}
+            onContextMenu={handleContextMenu}
+            isStarred={isStarredSequence}
+            onToggleStar={toggleStarredSequence}
+          />
         )}
 
         {slots?.contentTrailing}
@@ -1558,6 +2039,24 @@ export default function TemplateWorkbench({
         errorMessage={createFolderError}
         onClose={() => setCreateFolderDialogOpen(false)}
         onCreate={handleCreateFolder}
+      />
+
+      <NewFileDialog
+        open={newFileDialogOpen}
+        submitting={newFileSubmitting}
+        errorMessage={newFileError}
+        conflictState={newFileConflict ? { name: newFileConflict.name, suggestedName: newFileConflict.suggestedName } : null}
+        onClose={closeNewFileDialog}
+        onCreate={payload => void processNewFile(payload, payload.conflictResolution)}
+        onConflictResolve={handleNewFileConflictResolve}
+      />
+
+      <StarredFlowDialog
+        open={starredDialogOpen}
+        projects={registeredProjects}
+        starredSequences={starredSequenceSet}
+        onToggle={toggleStarredSequence}
+        onClose={() => setStarredDialogOpen(false)}
       />
 
       <WorkbenchImportDialog
