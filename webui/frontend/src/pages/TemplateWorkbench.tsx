@@ -27,6 +27,13 @@ type TemplateWorkbenchRoute =
   | { type: 'project'; sequence: string; dir: string }
 type WorkbenchItemRole = 'project' | 'template-file' | 'imported-file' | 'imported-folder'
 type WorkbenchFileKind = 'folder' | 'code' | 'binary' | 'text' | 'log' | 'template'
+type ContentHeaderMode = 'home' | 'breadcrumb'
+
+interface ContentHeaderBreadcrumb {
+  label: string
+  dir: string
+  active: boolean
+}
 
 export interface TemplateWorkbenchItem {
   id: string
@@ -672,44 +679,93 @@ function ProjectList({
 function ContentHeader({
   layoutMode,
   onToggleLayout,
+  mode = 'home',
   title = '全部项目',
   secondaryLabel = '回收站',
   onSecondaryClick,
+  breadcrumbs = [],
+  onBreadcrumbClick,
 }: {
   layoutMode: TemplateWorkbenchLayout
   onToggleLayout: () => void
+  mode?: ContentHeaderMode
   title?: string
   secondaryLabel?: string
   onSecondaryClick?: () => void
+  breadcrumbs?: ContentHeaderBreadcrumb[]
+  onBreadcrumbClick?: (dir: string) => void
 }) {
   const LayoutIcon = layoutMode === 'card' ? CardSquaresIcon : ListDashesIcon
   return (
     <div className="absolute" style={{ left: 400, top: 98, width: 1470, height: 48, color: 'var(--twb-text)' }}>
-      <svg className="absolute inset-0 pointer-events-none" xmlns="http://www.w3.org/2000/svg" width="1470" height="48" viewBox="0 0 1470 48" aria-hidden>
-        <g transform="translate(-400 -98)">
-          <path d="M0,.5H1470" transform="translate(400 144.5)" fill="none" stroke="currentColor" strokeWidth="1" />
-          <g transform="translate(400 96.63)">
-            <path d="M0,47H120" transform="translate(0 -0.63)" fill="none" stroke="var(--twb-blue)" strokeWidth="5" />
-            <text transform="translate(0 33.37)" fill="currentColor" fontSize="30" fontFamily="HarmonyOS Sans SC, HYWenHei, sans-serif" fontWeight="500">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-current opacity-100" aria-hidden />
+      {mode === 'breadcrumb' ? (
+        <div className="absolute left-0 top-0 flex h-[48px] max-w-[1180px] items-stretch overflow-hidden">
+          {breadcrumbs.map((crumb, index) => {
+            const isActive = crumb.active
+            return (
+              <div key={`${crumb.dir || 'root'}:${index}`} className="flex min-w-0 items-stretch">
+                <button
+                  type="button"
+                  onClick={() => !isActive && onBreadcrumbClick?.(crumb.dir)}
+                  disabled={isActive}
+                  className="relative inline-flex min-w-0 items-center whitespace-nowrap transition-colors disabled:cursor-default"
+                  style={{
+                    color: isActive ? 'var(--twb-text)' : 'var(--twb-muted)',
+                    fontFamily: font,
+                    fontSize: 30,
+                    fontWeight: isActive ? 500 : 300,
+                    lineHeight: '48px',
+                  }}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-label={isActive ? `当前位置 ${crumb.label}` : `跳转到 ${crumb.label}`}
+                >
+                  <span className="block max-w-[240px] truncate">{crumb.label}</span>
+                  {isActive ? (
+                    <span className="pointer-events-none absolute bottom-0 left-0 h-[5px] w-full bg-[var(--twb-blue)]" aria-hidden />
+                  ) : null}
+                </button>
+                {index < breadcrumbs.length - 1 ? (
+                  <span
+                    className="pointer-events-none px-[16px]"
+                    aria-hidden
+                    style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 24, fontWeight: 300, lineHeight: '48px' }}
+                  >
+                    /
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="absolute left-0 top-0 flex h-[48px] items-stretch gap-[10px]">
+          <button type="button" className="relative inline-flex items-center" aria-label={title}>
+            <span style={{ color: 'currentColor', fontFamily: font, fontSize: 30, fontWeight: 500, lineHeight: '48px' }}>
               {title}
-            </text>
-          </g>
-          <text transform="translate(530 130)" fill="currentColor" fontSize="30" fontFamily="HarmonyOS Sans SC, HYWenHei, sans-serif" fontWeight="300">
+            </span>
+            <span className="pointer-events-none absolute bottom-0 left-0 h-[5px] w-full bg-[var(--twb-blue)]" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={onSecondaryClick}
+            className="inline-flex items-center"
+            aria-label={secondaryLabel}
+            style={{ color: 'currentColor', fontFamily: font, fontSize: 30, fontWeight: 300, lineHeight: '48px' }}
+          >
             {secondaryLabel}
-          </text>
-          <g transform="translate(1685.75 114.95)">
-            <text transform="translate(0.25 23.05)" fill="currentColor" fontSize="25" fontFamily="HarmonyOS Sans SC, HYWenHei, sans-serif" fontWeight="300">
-              更新时间
-            </text>
-            <g transform="translate(3 -2)">
-              <path d="M121.125,11.75,113,19.875l-8.125-8.125" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-              <rect width="32" height="32" transform="translate(97.25 0.05)" fill="none" />
-            </g>
-          </g>
+          </button>
+        </div>
+      )}
+      <svg className="pointer-events-none absolute right-[44px] top-[14px]" xmlns="http://www.w3.org/2000/svg" width="140" height="25" viewBox="0 0 140 25" aria-hidden>
+        <text x="0.25" y="23.05" fill="currentColor" fontSize="25" fontFamily="HarmonyOS Sans SC, HYWenHei, sans-serif" fontWeight="300">
+          更新时间
+        </text>
+        <g transform="translate(100 -2)">
+          <path d="M21.875,11.75,13.75,19.875,5.625,11.75" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+          <rect width="32" height="32" fill="none" />
         </g>
       </svg>
-      <button type="button" className="absolute left-0 top-0 h-[48px] w-[120px]" aria-label={title} />
-      <button type="button" onClick={onSecondaryClick} className="absolute left-[130px] top-0 h-[48px] w-[120px]" aria-label={secondaryLabel} />
       <button type="button" className="absolute left-[1285px] top-0 h-[48px] w-[140px]" aria-label="排序方式" />
       <button
         type="button"
@@ -922,10 +978,23 @@ export default function TemplateWorkbench({
     return Math.max(1080, lastTop + 207 + 80)
   }, [cardLayout])
 
-  const contentTitle = route.type === 'home'
-    ? '全部项目'
-    : (route.dir ? basename(route.dir) : selectedProject?.mod_name) || '项目内容'
-  const contentSecondaryLabel = route.type === 'home' ? '回收站' : '返回上级'
+  const contentHeaderMode: ContentHeaderMode = route.type === 'project' ? 'breadcrumb' : 'home'
+  const contentBreadcrumbs = useMemo<ContentHeaderBreadcrumb[]>(() => {
+    if (route.type !== 'project') return []
+    const projectLabel = selectedProject?.mod_name || '项目内容'
+    const dirParts = normalizeWorkbenchPath(route.dir).split('/').filter(Boolean)
+    const crumbs: ContentHeaderBreadcrumb[] = [{ label: projectLabel, dir: '', active: dirParts.length === 0 }]
+    let currentDir = ''
+    dirParts.forEach((part, index) => {
+      currentDir = currentDir ? `${currentDir}/${part}` : part
+      crumbs.push({
+        label: part,
+        dir: currentDir,
+        active: index === dirParts.length - 1,
+      })
+    })
+    return crumbs
+  }, [route, selectedProject])
 
   useEffect(() => {
     let cancelled = false
@@ -1055,6 +1124,11 @@ export default function TemplateWorkbench({
       }
       setRoute({ type: 'home' })
     }
+  }
+
+  const navigateToBreadcrumb = (dir: string) => {
+    if (route.type !== 'project') return
+    setRoute({ type: 'project', sequence: route.sequence, dir: normalizeWorkbenchPath(dir) })
   }
 
   const toggleLayoutMode = () => {
@@ -1267,8 +1341,11 @@ export default function TemplateWorkbench({
         <ContentHeader
           layoutMode={layoutMode}
           onToggleLayout={toggleLayoutMode}
-          title={contentTitle}
-          secondaryLabel={contentSecondaryLabel}
+          mode={contentHeaderMode}
+          breadcrumbs={contentBreadcrumbs}
+          onBreadcrumbClick={navigateToBreadcrumb}
+          title="全部项目"
+          secondaryLabel="回收站"
           onSecondaryClick={navigateBackInWorkbench}
         />
 
