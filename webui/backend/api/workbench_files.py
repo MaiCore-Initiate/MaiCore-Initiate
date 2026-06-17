@@ -26,7 +26,9 @@ from pydantic import BaseModel
 import pycdlib
 
 from .template_workbench import (
+    _create_trash_entry,
     _render_mod_info_toml,
+    _remove_file_import_refs,
     _suggest_mod_id,
     _validate_base_path,
     generate_sequence,
@@ -1028,13 +1030,30 @@ def delete_file(sequence: str, path: str = Query(...)):
     target = _safe_join(project_dir, relpath)
     if target.exists():
         try:
-            target.unlink()
+            file_meta = next((f for f in _read_project_files(sequence) if (f.get("path") or f.get("name")) == relpath), None)
+            _create_trash_entry(
+                "file",
+                Path(relpath).name,
+                target,
+                {
+                    "sequence": sequence,
+                    "projectName": str(_ensure_project(sequence).get("mod_name") or ""),
+                    "path": relpath,
+                    "file": file_meta or _build_meta(f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}", relpath, target, project_dir),
+                },
+            )
         except OSError as exc:
             raise HTTPException(500, f"删除失败: {exc}") from exc
     files = [f for f in _read_project_files(sequence) if (f.get("path") or f.get("name")) != relpath]
-    _upsert_project_index(sequence, files=files)
     directories = _prune_project_directories(sequence)
-    _upsert_project_index(sequence, files=files, directories=directories)
+    data = load_mod_index()
+    if sequence in data:
+        _remove_file_import_refs(data[sequence], [file_meta] if file_meta else [])
+        data[sequence]["files"] = files
+        data[sequence]["directories"] = directories
+        save_mod_index(data)
+    else:
+        _upsert_project_index(sequence, files=files, directories=directories)
     return {"success": True, "path": relpath}
 
 
@@ -1074,7 +1093,7 @@ def create_folder(sequence: str, payload: CreateFolderPayload):
 
 @router.post(
     "/projects/{sequence}/folders/remove",
-    summary="删除子目录（仅当空目录或不存在文件块时成功）",
+    summary="删除子目录（整目录移入回收站）",
 )
 def remove_folder(sequence: str, payload: CreateFolderPayload):
     _ensure_project(sequence)
@@ -1087,19 +1106,44 @@ def remove_folder(sequence: str, payload: CreateFolderPayload):
         return {"success": True, "path": relpath, "existed": False}
     if not target.is_dir():
         raise HTTPException(400, f"'{relpath}' 不是目录")
-    try:
-        # 仅在目录为空时删除
-        has_children = any(target.iterdir())
-    except OSError as exc:
-        raise HTTPException(500, f"读取目录失败: {exc}") from exc
-    if has_children:
-        raise HTTPException(409, f"目录 '{relpath}' 非空，请先删除其中文件")
-    try:
-        target.rmdir()
-    except OSError as exc:
-        raise HTTPException(500, f"删除目录失败: {exc}") from exc
+    prefix = f"{relpath}/"
+    current_files = _read_project_files(sequence)
+    removed_files = [
+        f for f in current_files
+        if str(f.get("path") or f.get("name") or "").replace("\\", "/").strip("/") == relpath
+        or str(f.get("path") or f.get("name") or "").replace("\\", "/").strip("/").startswith(prefix)
+    ]
+    removed_dirs = [
+        d for d in _read_project_directories(sequence)
+        if d == relpath or d.startswith(prefix)
+    ]
+    _create_trash_entry(
+        "folder",
+        Path(relpath).name,
+        target,
+        {
+            "sequence": sequence,
+            "projectName": str(_ensure_project(sequence).get("mod_name") or ""),
+            "path": relpath,
+            "files": removed_files,
+            "directories": removed_dirs,
+        },
+    )
+    files = [
+        f for f in current_files
+        if str(f.get("path") or f.get("name") or "").replace("\\", "/").strip("/") != relpath
+        and not str(f.get("path") or f.get("name") or "").replace("\\", "/").strip("/").startswith(prefix)
+    ]
     directories = _prune_project_directories(sequence)
-    return {"success": True, "path": relpath, "directories": directories}
+    data = load_mod_index()
+    if sequence in data:
+        _remove_file_import_refs(data[sequence], removed_files)
+        data[sequence]["files"] = files
+        data[sequence]["directories"] = directories
+        save_mod_index(data)
+    else:
+        _upsert_project_index(sequence, files=files, directories=directories)
+    return {"success": True, "path": relpath, "directories": directories, "files": files}
 
 
 @router.post(

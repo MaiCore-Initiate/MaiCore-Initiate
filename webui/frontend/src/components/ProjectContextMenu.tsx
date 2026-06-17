@@ -2,11 +2,14 @@ import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 export type ProjectContextAction = 'delete' | 'edit' | 'auto' | 'folder' | 'card'
+export type ProjectContextTargetKind = 'project' | 'file' | 'folder'
 
 export interface ContextMenuProject {
   sequence: string
   mod_name: string
   force_folder?: boolean | null
+  targetKind?: ProjectContextTargetKind
+  targetName?: string
 }
 
 export default function ProjectContextMenu({
@@ -39,21 +42,25 @@ export default function ProjectContextMenu({
     }
   }, [onClose])
 
+  const targetKind = project.targetKind ?? 'project'
+  const deleteLabel = targetKind === 'file' ? '删除文件' : targetKind === 'folder' ? '删除文件夹' : '删除项目'
   const items: { key: ProjectContextAction; label: string; danger?: boolean }[] = [
-    { key: 'delete', label: '删除项目', danger: true },
-    { key: 'edit', label: '编辑信息' },
+    { key: 'delete', label: deleteLabel, danger: true },
   ]
+  if (targetKind === 'project') {
+    items.push({ key: 'edit', label: '编辑信息' })
 
-  // 文件夹开关项
-  if (project.force_folder === true) {
-    items.push({ key: 'auto', label: '取消文件夹（自动）' })
-  } else {
-    items.push({ key: 'folder', label: '设为文件夹' })
-  }
+    // 文件夹开关项
+    if (project.force_folder === true) {
+      items.push({ key: 'auto', label: '取消文件夹（自动）' })
+    } else {
+      items.push({ key: 'folder', label: '设为文件夹' })
+    }
 
-  // 卡片快捷（仅当当前不是强制卡片时显示）
-  if (project.force_folder !== false) {
-    items.push({ key: 'card', label: '设为卡片' })
+    // 卡片快捷（仅当当前不是强制卡片时显示）
+    if (project.force_folder !== false) {
+      items.push({ key: 'card', label: '设为卡片' })
+    }
   }
 
   return createPortal(

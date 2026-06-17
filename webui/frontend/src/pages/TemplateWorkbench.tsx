@@ -33,10 +33,36 @@ type WorkbenchItemRole = 'project' | 'template-file' | 'imported-file' | 'import
 type WorkbenchFileKind = 'folder' | 'code' | 'binary' | 'text' | 'log' | 'template'
 type ContentHeaderMode = 'home' | 'breadcrumb'
 type FileConflictResolution = 'rename' | 'overwrite' | 'cancel'
+type WorkbenchDeleteTargetKind = 'project' | 'file' | 'folder'
 
 interface NewFileTarget {
   projectSequence: string
   currentDir: string
+}
+
+interface WorkbenchDeleteTarget {
+  kind: WorkbenchDeleteTargetKind
+  project: WorkbenchProjectIndex
+  item: TemplateWorkbenchItem
+  name: string
+  path: string
+}
+
+interface WorkbenchTrashEntry {
+  id: string
+  kind: WorkbenchDeleteTargetKind
+  name: string
+  deletedAt: string
+  expiresAt: string
+  metadata?: {
+    sequence?: string
+    projectName?: string
+    path?: string
+    project?: {
+      mod_name?: string
+      path?: string
+    }
+  }
 }
 
 interface ContentHeaderBreadcrumb {
@@ -392,6 +418,29 @@ function isDeploymentFlowItem(item: TemplateWorkbenchItem) {
 
 function isEditableWorkbenchFile(item: TemplateWorkbenchItem) {
   return item.role === 'imported-file' && item.fileKind !== 'binary' && item.fileKind !== 'template' && Boolean(item.sequence && item.fileMeta)
+}
+
+function deleteKindForItem(item: TemplateWorkbenchItem): WorkbenchDeleteTargetKind {
+  if (item.role === 'imported-file') return 'file'
+  if (item.role === 'imported-folder') return 'folder'
+  return 'project'
+}
+
+function pathForDeleteItem(item: TemplateWorkbenchItem, project: WorkbenchProjectIndex) {
+  if (item.role === 'imported-file') return normalizeWorkbenchPath(item.sourcePath || item.fileMeta?.path || item.fileName || item.name)
+  if (item.role === 'imported-folder') return normalizeWorkbenchPath(item.sourcePath || item.name)
+  return project.path
+}
+
+function deleteTitleForKind(kind: WorkbenchDeleteTargetKind) {
+  if (kind === 'file') return '删除文件'
+  if (kind === 'folder') return '删除文件夹'
+  return '删除项目'
+}
+
+function deleteDescriptionForKind(kind: WorkbenchDeleteTargetKind) {
+  if (kind === 'folder') return '将把该文件夹及其中所有内容移入回收站，30 天内可以恢复。'
+  return '将移入回收站，30 天内可以恢复。'
 }
 
 function openWorkbenchItemOnClick(
@@ -1091,6 +1140,177 @@ function StarredFlowDialog({
   )
 }
 
+function TrashDialog({
+  open,
+  onClose,
+  onChanged,
+}: {
+  open: boolean
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [items, setItems] = useState<WorkbenchTrashEntry[]>([])
+  const [query, setQuery] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [workingId, setWorkingId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadItems = useCallback(async () => {
+    if (!open) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/template-workbench/trash', { credentials: 'include' })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`读取回收站失败 (${res.status}): ${text || '未知错误'}`)
+      }
+      setItems(await res.json() as WorkbenchTrashEntry[])
+    } catch (err) {
+      setError((err as Error).message ?? String(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [open])
+
+  useEffect(() => {
+    void loadItems()
+  }, [loadItems])
+
+  const filteredItems = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return items
+    return items.filter(item => {
+      const projectName = item.metadata?.projectName ?? item.metadata?.project?.mod_name ?? ''
+      const path = item.metadata?.path ?? item.metadata?.project?.path ?? ''
+      return `${item.name} ${projectName} ${path}`.toLowerCase().includes(normalized)
+    })
+  }, [items, query])
+
+  const restoreItem = async (item: WorkbenchTrashEntry) => {
+    setWorkingId(item.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/template-workbench/trash/${encodeURIComponent(item.id)}/restore`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`恢复失败 (${res.status}): ${text || '未知错误'}`)
+      }
+      await loadItems()
+      onChanged()
+    } catch (err) {
+      setError((err as Error).message ?? String(err))
+    } finally {
+      setWorkingId(null)
+    }
+  }
+
+  const deleteForever = async (item: WorkbenchTrashEntry) => {
+    const ok = window.confirm(`确定永久删除 "${item.name}" 吗？此操作不可恢复。`)
+    if (!ok) return
+    setWorkingId(item.id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/template-workbench/trash/${encodeURIComponent(item.id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`永久删除失败 (${res.status}): ${text || '未知错误'}`)
+      }
+      await loadItems()
+    } catch (err) {
+      setError((err as Error).message ?? String(err))
+    } finally {
+      setWorkingId(null)
+    }
+  }
+
+  if (!open) return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[1050] flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="trash-dialog-title">
+      <div className="absolute inset-0 bg-black/35 backdrop-blur-[8px]" onClick={onClose} />
+      <div className="relative flex h-[72vh] w-[min(920px,92vw)] flex-col overflow-hidden rounded-2xl border border-white/20 bg-[var(--dfw-bg)] shadow-2xl">
+        <header className="flex items-center gap-4 border-b border-white/10 px-6 py-4">
+          <div className="min-w-0 flex-1">
+            <h2 id="trash-dialog-title" className="text-lg font-semibold text-[var(--dfw-text)]">回收站</h2>
+            <p className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">删除的项目、文件和文件夹默认保留 30 天。</p>
+          </div>
+          <button type="button" className="rounded-md px-2 py-1 text-sm text-[var(--dfw-text)] opacity-70 transition hover:bg-white/10" onClick={onClose}>
+            关闭
+          </button>
+        </header>
+        <div className="border-b border-white/10 px-6 py-4">
+          <label className="flex h-[40px] items-center rounded-lg border border-white/15 bg-white/5 px-3">
+            <Search size={18} className="mr-2 opacity-60" />
+            <input
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              placeholder="搜索回收站"
+              className="min-w-0 flex-1 bg-transparent text-sm text-[var(--dfw-text)] outline-none placeholder:text-[var(--dfw-text)]/45"
+            />
+          </label>
+          {error && <div className="mt-3 rounded-lg border border-red-400/30 bg-red-500/15 px-3 py-2 text-sm text-red-100">{error}</div>}
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {loading ? (
+            <div className="py-12 text-center text-sm text-[var(--dfw-text)] opacity-60">正在加载…</div>
+          ) : filteredItems.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-white/20 py-12 text-center text-sm text-[var(--dfw-text)] opacity-60">
+              回收站为空
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredItems.map(item => {
+                const projectName = item.metadata?.projectName ?? item.metadata?.project?.mod_name ?? '未知项目'
+                const path = item.metadata?.path ?? item.metadata?.project?.path ?? ''
+                const kindLabel = item.kind === 'project' ? '项目' : item.kind === 'folder' ? '文件夹' : '文件'
+                const daysLeft = Math.max(0, Math.ceil((new Date(item.expiresAt).getTime() - Date.now()) / 86400000))
+                const busy = workingId === item.id
+                return (
+                  <div key={item.id} className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md border border-white/10 px-2 py-0.5 text-xs text-[var(--dfw-text)] opacity-70">{kindLabel}</span>
+                        <span className="truncate text-sm font-medium text-[var(--dfw-text)]">{item.name}</span>
+                      </div>
+                      <div className="mt-1 truncate text-xs text-[var(--dfw-text)] opacity-55">
+                        {projectName}{path ? ` · ${path}` : ''} · 剩余 {daysLeft} 天
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-[var(--dfw-blue)]/40 px-3 py-1.5 text-sm text-[var(--dfw-text)] transition hover:bg-white/10 disabled:opacity-40"
+                      disabled={busy}
+                      onClick={() => void restoreItem(item)}
+                    >
+                      恢复
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-red-400/35 px-3 py-1.5 text-sm text-red-200 transition hover:bg-red-500/10 disabled:opacity-40"
+                      disabled={busy}
+                      onClick={() => void deleteForever(item)}
+                    >
+                      永久删除
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 function ContentHeader({
   layoutMode,
   onToggleLayout,
@@ -1341,12 +1561,13 @@ export default function TemplateWorkbench({
   } | null>(null)
   const [starredDialogOpen, setStarredDialogOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [trashDialogOpen, setTrashDialogOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<
-    | { x: number; y: number; project: WorkbenchProjectIndex }
+    | { x: number; y: number; project: WorkbenchProjectIndex; item: TemplateWorkbenchItem; targetKind: WorkbenchDeleteTargetKind }
     | null
   >(null)
   const [editTarget, setEditTarget] = useState<WorkbenchProjectIndex | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<WorkbenchProjectIndex | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<WorkbenchDeleteTarget | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   // cover cache buster：替换/重传封面时给对应 sequence 递增 version，projectCoverUrl 会拼到 ?v=<version>，
   // 让 <img src> 变化从而绕过浏览器对同名 cover 的启发式缓存
@@ -1838,16 +2059,6 @@ export default function TemplateWorkbench({
     void reloadProjects()
   }
 
-  const navigateBackInWorkbench = () => {
-    if (route.type === 'project') {
-      if (route.dir) {
-        setRoute({ type: 'project', sequence: route.sequence, dir: parentWorkbenchPath(route.dir) })
-        return
-      }
-      setRoute({ type: 'home' })
-    }
-  }
-
   const navigateToBreadcrumb = (target: TemplateWorkbenchRoute) => {
     if (target.type === 'home') {
       setRoute({ type: 'home' })
@@ -1870,22 +2081,32 @@ export default function TemplateWorkbench({
     if (!project) return
     event.preventDefault()
     event.stopPropagation()
-    setContextMenu({ x: event.clientX, y: event.clientY, project })
+    setContextMenu({ x: event.clientX, y: event.clientY, project, item, targetKind: deleteKindForItem(item) })
   }
 
   const handleContextAction = async (action: ProjectContextAction) => {
     if (!contextMenu) return
     const project = contextMenu.project
+    const item = contextMenu.item
+    const targetKind = contextMenu.targetKind
     setContextMenu(null)
     if (action === 'delete') {
-      setDeleteTarget(project)
+      setDeleteTarget({
+        kind: targetKind,
+        project,
+        item,
+        name: item.name,
+        path: pathForDeleteItem(item, project),
+      })
       return
     }
     if (action === 'edit') {
+      if (targetKind !== 'project') return
       setEditTarget(project)
       return
     }
     if (action === 'auto' || action === 'folder' || action === 'card') {
+      if (targetKind !== 'project') return
       try {
         const res = await fetch(
           `/api/template-workbench/projects/${encodeURIComponent(project.sequence)}/display-mode`,
@@ -1920,24 +2141,68 @@ export default function TemplateWorkbench({
     void updated
   }
 
-  const handleDeleteProject = async () => {
+  const replaceRegisteredProject = (projectSequence: string, patch: Partial<Pick<WorkbenchProjectIndex, 'files' | 'directories'>>) => {
+    setRegisteredProjects(prev => prev.map(project => (
+      project.sequence === projectSequence ? { ...project, ...patch } : project
+    )))
+  }
+
+  const handleDeleteTarget = async () => {
     if (!deleteTarget) return
     const target = deleteTarget
     setDeleteTarget(null)
     try {
-      const res = await fetch(
-        `/api/template-workbench/projects/${encodeURIComponent(target.sequence)}`,
-        { method: 'DELETE', credentials: 'include' },
-      )
+      let res: Response
+      if (target.kind === 'file') {
+        res = await fetch(
+          `/api/template-workbench/projects/${encodeURIComponent(target.project.sequence)}/files?path=${encodeURIComponent(target.path)}`,
+          { method: 'DELETE', credentials: 'include' },
+        )
+      } else if (target.kind === 'folder') {
+        res = await fetch(
+          `/api/template-workbench/projects/${encodeURIComponent(target.project.sequence)}/folders/remove`,
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: target.path }),
+          },
+        )
+      } else {
+        res = await fetch(
+          `/api/template-workbench/projects/${encodeURIComponent(target.project.sequence)}`,
+          { method: 'DELETE', credentials: 'include' },
+        )
+      }
       if (!res.ok) {
         const txt = await res.text().catch(() => '')
         throw new Error(`删除失败 (${res.status}): ${txt}`)
       }
-      const data = await res.json() as { disk_cleaned?: boolean; disk_error?: string | null }
-      if (!data.disk_cleaned) {
-        setActionError(`项目已从列表移除，但部分文件无法删除：${data.disk_error ?? '未知原因'}。请手动清理磁盘。`)
+      const data = await res.json() as { disk_cleaned?: boolean; disk_error?: string | null; files?: WorkbenchProjectIndex['files']; directories?: string[] }
+      if (target.kind === 'project') {
+        if (!data.disk_cleaned) {
+          setActionError(`项目已从列表移除，但部分文件无法删除：${data.disk_error ?? '未知原因'}。请手动清理磁盘。`)
+        }
+        setRegisteredProjects(prev => prev.filter(p => p.sequence !== target.project.sequence))
+        if (route.type === 'project' && route.sequence === target.project.sequence) setRoute({ type: 'home' })
+      } else if (target.kind === 'file') {
+        const nextFiles = (target.project.files ?? []).filter(file => normalizeWorkbenchPath(file.path || file.name) !== target.path)
+        replaceRegisteredProject(target.project.sequence, {
+          files: nextFiles,
+          directories: mergeDirectoryLists(target.project.directories),
+        })
+        if (editorFile?.file && normalizeWorkbenchPath(editorFile.file.path || editorFile.file.name) === target.path) setEditorFile(null)
+        void reloadProjects()
+      } else {
+        replaceRegisteredProject(target.project.sequence, {
+          files: data.files ?? target.project.files,
+          directories: data.directories ?? target.project.directories,
+        })
+        if (route.type === 'project' && route.sequence === target.project.sequence && (route.dir === target.path || route.dir.startsWith(`${target.path}/`))) {
+          setRoute({ type: 'project', sequence: target.project.sequence, dir: parentWorkbenchPath(target.path) })
+        }
+        void reloadProjects()
       }
-      setRegisteredProjects(prev => prev.filter(p => p.sequence !== target.sequence))
     } catch (err) {
       setActionError((err as Error).message ?? String(err))
     }
@@ -2145,7 +2410,7 @@ export default function TemplateWorkbench({
           onBreadcrumbClick={navigateToBreadcrumb}
           title="全部项目"
           secondaryLabel="回收站"
-          onSecondaryClick={navigateBackInWorkbench}
+          onSecondaryClick={() => setTrashDialogOpen(true)}
         />
 
         <QuickActions
@@ -2223,6 +2488,14 @@ export default function TemplateWorkbench({
         onClose={() => setStarredDialogOpen(false)}
       />
 
+      <TrashDialog
+        open={trashDialogOpen}
+        onClose={() => setTrashDialogOpen(false)}
+        onChanged={() => {
+          void reloadProjects()
+        }}
+      />
+
       <FileEditorModal
         file={editorFile?.file ?? null}
         projectSequence={editorFile?.projectSequence ?? null}
@@ -2257,6 +2530,8 @@ export default function TemplateWorkbench({
             sequence: contextMenu.project.sequence,
             mod_name: contextMenu.project.mod_name,
             force_folder: contextMenu.project.force_folder ?? null,
+            targetKind: contextMenu.targetKind,
+            targetName: contextMenu.item.name,
           }}
           onClose={() => setContextMenu(null)}
           onAction={handleContextAction}
@@ -2284,10 +2559,13 @@ export default function TemplateWorkbench({
 
       <DeleteConfirmDialog
         open={deleteTarget !== null}
-        projectName={deleteTarget?.mod_name ?? ''}
+        projectName={deleteTarget?.project.mod_name ?? ''}
         projectPath={deleteTarget?.path ?? ''}
+        title={deleteTarget ? deleteTitleForKind(deleteTarget.kind) : undefined}
+        targetLabel={deleteTarget?.name ?? ''}
+        description={deleteTarget ? deleteDescriptionForKind(deleteTarget.kind) : undefined}
         onCancel={() => setDeleteTarget(null)}
-        onConfirm={handleDeleteProject}
+        onConfirm={handleDeleteTarget}
       />
 
       {actionError && (

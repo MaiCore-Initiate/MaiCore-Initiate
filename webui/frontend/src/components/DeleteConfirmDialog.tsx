@@ -5,12 +5,20 @@ export default function DeleteConfirmDialog({
   open,
   projectName,
   projectPath,
+  title = '删除项目',
+  description,
+  targetLabel,
+  confirmLabel = '移入回收站',
   onConfirm,
   onCancel,
 }: {
   open: boolean
   projectName: string
   projectPath: string
+  title?: string
+  description?: string
+  targetLabel?: string
+  confirmLabel?: string
   onConfirm: () => void | Promise<void>
   onCancel: () => void
 }) {
@@ -60,11 +68,11 @@ export default function DeleteConfirmDialog({
           id="delete-project-title"
           className="text-lg font-semibold text-red-300"
         >
-          ⚠ 删除项目
+          ⚠ {title}
         </h2>
         <p className="mt-3 text-sm text-[var(--dfw-text)] opacity-90">
-          确定要删除 <span className="font-semibold">{projectName || '该项目'}</span> 吗？<br />
-          <span className="text-red-300">将同时从磁盘删除整个项目目录及全部内容（含 .toml、cover、导入的文件），此操作不可撤销。</span>
+          确定要删除 <span className="font-semibold">{targetLabel || projectName || '该项目'}</span> 吗？<br />
+          <span className="text-red-300">{description || '将移入回收站，30 天内可以恢复。'}</span>
         </p>
         {projectPath && (
           <div className="mt-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs text-[var(--dfw-text)] opacity-70 break-all">
@@ -86,7 +94,7 @@ export default function DeleteConfirmDialog({
             onClick={() => void handleConfirm()}
             disabled={deleting}
           >
-            {deleting ? '删除中…' : '确认删除'}
+            {deleting ? '删除中…' : confirmLabel}
           </button>
         </div>
       </div>
