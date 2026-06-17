@@ -317,6 +317,41 @@ function createImportedFolderItem(project: WorkbenchProjectIndex, dirRelpath: st
   }
 }
 
+function createImportedFolderItemsForPaths(
+  project: WorkbenchProjectIndex,
+  folderPaths: string[],
+  allDirectories: string[],
+  files: NonNullable<WorkbenchProjectIndex['files']>,
+) {
+  return [...folderPaths]
+    .sort((a, b) => a.localeCompare(b))
+    .map(folder => {
+      const prefix = `${folder}/`
+      const nestedDirectoryCount = allDirectories.filter(dir => dir.startsWith(prefix)).length
+      const nestedFileCount = files.filter(file => normalizeWorkbenchPath(file.path?.trim() || file.name).startsWith(prefix)).length
+      return createImportedFolderItem(project, folder, nestedDirectoryCount + nestedFileCount)
+    })
+}
+
+function createGlobalWorkbenchSearchItems(project: WorkbenchProjectIndex, coverVersion = 0) {
+  const files: NonNullable<WorkbenchProjectIndex['files']> = project.files ?? []
+  const directories = mergeDirectoryLists(
+    project.directories,
+    files.flatMap(file => directoryChainForFile(file.path || file.name)),
+  )
+  const folderItems = createImportedFolderItemsForPaths(project, directories, directories, files)
+  const fileItems = [...files]
+    .sort((a, b) => normalizeWorkbenchPath(a.path || a.name).localeCompare(normalizeWorkbenchPath(b.path || b.name)))
+    .map(file => createImportedFileItem(project, file))
+
+  return [
+    projectToItem(project, coverVersion),
+    createTemplateFileItem(project, coverVersion),
+    ...folderItems,
+    ...fileItems,
+  ]
+}
+
 function FileCard({
   item,
   left,
@@ -981,7 +1016,6 @@ export default function TemplateWorkbench({
     const directories = normalizeDirectoryList(selectedProject.directories)
     const directFiles: typeof files = []
     const childFolders = new Set<string>()
-    const folderCounts = new Map<string, number>()
 
     for (const dir of directories) {
       const remaining = currentDir
@@ -1010,15 +1044,12 @@ export default function TemplateWorkbench({
         childFolders.add(folder)
       }
     }
-    for (const folder of childFolders) {
-      const prefix = `${folder}/`
-      const nestedDirectoryCount = directories.filter(dir => dir.startsWith(prefix)).length
-      const nestedFileCount = files.filter(file => normalizeWorkbenchPath(file.path?.trim() || file.name).startsWith(prefix)).length
-      folderCounts.set(folder, nestedDirectoryCount + nestedFileCount)
-    }
-    const folderItems = Array.from(folderCounts.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([folder, count]) => createImportedFolderItem(selectedProject, folder, count))
+    const folderItems = createImportedFolderItemsForPaths(
+      selectedProject,
+      Array.from(childFolders),
+      directories,
+      files,
+    )
     const directFileItems = [...directFiles]
       .sort((a, b) => normalizeWorkbenchPath(a.path || a.name).localeCompare(normalizeWorkbenchPath(b.path || b.name)))
       .map(file => createImportedFileItem(selectedProject, file))
@@ -1029,14 +1060,23 @@ export default function TemplateWorkbench({
     ]
   }, [projectItems, route, selectedProject, coverVersion])
 
+  const globalSearchItems = useMemo(() => {
+    if (items) return items
+    if (!registeredProjects.length) return defaultItems
+
+    return registeredProjects.flatMap(project => (
+      createGlobalWorkbenchSearchItems(project, coverVersion[project.sequence] ?? 0)
+    ))
+  }, [items, registeredProjects, coverVersion])
+
   const visibleContentItems = useMemo(() => {
     const trimmedQuery = searchQuery.trim()
     if (!trimmedQuery) return contentItems
-    if (exactSearchEnabled) return contentItems.filter(item => item.name === searchQuery)
+    if (exactSearchEnabled) return globalSearchItems.filter(item => item.name === searchQuery)
 
     const fuzzyQuery = trimmedQuery.toLowerCase()
-    return contentItems.filter(item => item.name.toLowerCase().includes(fuzzyQuery))
-  }, [contentItems, searchQuery, exactSearchEnabled])
+    return globalSearchItems.filter(item => item.name.toLowerCase().includes(fuzzyQuery))
+  }, [contentItems, globalSearchItems, searchQuery, exactSearchEnabled])
 
   const cardLayout = useMemo(
     () => visibleContentItems.map((_, index) => ({
