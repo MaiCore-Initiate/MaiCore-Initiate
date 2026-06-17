@@ -126,7 +126,7 @@ MCStart 引擎读取该模版后，会按照模版中声明的流程自动或半
 | `2.3` | 新增命令运行输出增强、命令检视模式，以及表数组级 `runtime` / `command_theme` 键 | [2.5 命令输出与命令检视模式](#25-命令输出与命令检视模式)、[4.2.1 表数组级运行时与命令显示键](#421-表数组级运行时与命令显示键) |
 | `2.4` | 新增 `deno` 运行时，以及 Deno 权限声明键与自定义权限参数列表 | [4.2 [MODINFO] — 模版元信息](#42-modinfo--模版元信息) |
 | `2.5` | 新增 `version_file` / `version_custom` / `link_file` / `link_custom` 来源数组，并为自定义 `.ts` / `.java` / `.jar` 提供逐项运行参数 | [4.3.4 获取方式模块](#434-获取方式模块)、[8.1 版本获取方式](#81-版本获取方式) |
-| `2.6` | 细化脚本扩展名运行映射，工作台新增模板目录热检测、文件导入口与文件新建限制 | [4.2 [MODINFO] — 模版元信息](#42-modinfo--模版元信息)、[8.1 版本获取方式](#81-版本获取方式) |
+| `2.6` | 细化脚本扩展名运行映射，工作台新增模板目录热检测、文件导入口与文件新建限制；`file_import_list` 改用多级正斜杠路径，最多 5 层目录嵌套 | [4.2 [MODINFO] — 模版元信息](#42-modinfo--模版元信息)、[8.1 版本获取方式](#81-版本获取方式) |
 
 ---
 
@@ -159,14 +159,20 @@ schema_version = "2.5"
 ### 2.2 文件组织结构
 
 ```
-my-mod/
-├── DeploymentMOD.toml              # 模版主文件
-├── example.txt              # （可选）需要导入的附属文件
-├── version.json             # （可选）需要导入的附属文件
-└── GetVersion.ps1           # （可选）需要导入的附属文件
+my-mod/                                 # 项目根目录（与模版主文件同层）
+├── DeploymentMOD.toml                  # 模版主文件
+├── example.txt                         # （可选）顶层文件
+├── version.json                        # （可选）顶层文件
+├── Get/
+│   ├── GetVersion.ps1                  # 1 层子目录
+│   └── Tools/
+│       └── Fetch.exe                   # 2 层子目录
+└── version/
+    └── JSON/
+        └── version.json                # 2 层子目录
 ```
 
-当 `file_import = true` 时，`file_import_list` 中声明的文件必须与模版文件位于同一目录下。
+当 `file_import = true` 时，`file_import_list` 中声明的相对路径必须指向项目根下的真实文件，**最多 5 层目录嵌套**（例如 `Get/Tools/Sub/Inner/Deep/Build.py` 表示 5 层目录加 1 个文件）。后缀需在工作台白名单内（`.py`、`.json`、`.ps1`、`.cmd`、`.bat`、`.sh`、`.js`/`.mjs`/`.cjs`/`.jsx`、`.ts`/`.tsx`、`.java`、`.jar`、`.toml`、`.exe`、`.txt`、`.jsonl`、`.log`、`.yaml`、`.xml` 等）。
 
 ### 2.3 使用 `mcsb` 快捷执行模板
 
@@ -453,29 +459,35 @@ install_command_list = [
 
 #### 文件导入功能
 
-当 `file_import = true` 时，MCStart 会将 `file_import_list` 中声明的文件导入，并将每个文件的实际路径以 `{{file_path|文件名}}` 的格式作为占位符供模版中的命令使用。
+当 `file_import = true` 时，MCStart 会将 `file_import_list` 中声明的文件导入，并将每个文件的实际路径以 `{{file_path|路径}}` 的格式作为占位符供模版中的命令使用。
 
 ```toml
 [MODINFO]
 file_import = true
 file_import_list = [
-    "example.txt",
-    "version.json",
-    "GetVersion.ps1"
+    "example.txt",                       # 顶层文件
+    "version/JSON/version.json",         # 2 层目录下的文件
+    "Get/GetVersion.ps1",                # 1 层目录下的文件
+    "Get/Tools/Fetch.exe"                # 2 层目录下的文件
 ]
 ```
 
-导入后可用的占位符：
+`file_import_list` 中的每条记录是**相对项目根目录的多级路径**，使用正斜杠 `/` 作为分隔符（跨平台一致）。文件路径与项目根下的实际目录结构一一对应，最多 5 层目录嵌套（即 `a/b/c/d/e/file.ext` 这种形式）。同名但在不同子目录下的文件必须用完整路径区分（如 `a/data.json` 与 `b/data.json` 是两个不同的导入项）。
+
+导入后可用的占位符（按上面的 `file_import_list` 示例）：
 - `{{file_path|example.txt}}` → 该文件的实际绝对路径
-- `{{file_path|version.json}}` → 该文件的实际绝对路径
-- `{{file_path|GetVersion.ps1}}` → 该文件的实际绝对路径
+- `{{file_path|version/JSON/version.json}}` → 该文件的实际绝对路径
+- `{{file_path|Get/GetVersion.ps1}}` → 该文件的实际绝对路径
+- `{{file_path|Get/Tools/Fetch.exe}}` → 该文件的实际绝对路径
 
 工作台从 `2.6` 开始补充了以下约束：
 
-1. 模板项目目录会被热检测。所有进入项目目录、且后缀命中工作台白名单的外部文件，都会自动注册为当前模板的文件块。
-2. 文件进入项目目录，不等于自动进入 `file_import_list`。只有被连接到初始化块左下方的“文件导入口”后，才会加入 `file_import_list`。
-3. 文件块与初始化块断开连接后，会自动从 `file_import_list` 中移除对应文件名。
+1. 模板项目目录会被热检测，**递归扫描最多 5 层**。所有进入项目目录、且后缀命中工作台白名单的外部文件（包括子目录中的文件），都会自动注册为当前模板的文件块。
+2. 文件进入项目目录，不等于自动进入 `file_import_list`。只有被连接到初始化块左下方的“文件导入口”后，才会以完整多级路径加入 `file_import_list`。
+3. 文件块与初始化块断开连接后，会自动从 `file_import_list` 中移除对应路径。
 4. 工作台禁止直接新建 `.exe` 与 `.jar` 文件，这两类文件只能通过导入现有文件进入模板项目目录。
+5. 创建项目时可通过「附加文件/目录」批量导入本地目录的内容，按原始目录结构落到项目根（最多 5 层）。
+6. 文件占位符 `{{file_path|...}}` 接受**多级路径**作为名称（与 `file_import_list` 写法一致），例如 `{{file_path|Get/GetVersion.ps1}}` 直接读取嵌套子目录中的文件。
 
 ---
 
@@ -1489,7 +1501,7 @@ MCStart 模版中存在两套占位符机制，分别用于不同的场景。
 | `{{install_path\|组件ID}}` | 组件的实际安装路径 | 当前 `[[Component]]` 块内 | 运行时解析后的绝对路径 |
 | `{{deploy_path\|部署ID}}` | 部署项的实际部署路径 | 当前 `[[Deployment]]` 块内 | 运行时解析后的绝对路径 |
 | `{{version\|ID}}` | 获取到的实际版本号 | 当前 `[[Component]]` 或 `[[Deployment]]` 块内 | 经过格式化处理后的版本号字符串 |
-| `{{file_path\|文件名}}` | 导入文件的实际路径 | 全局（需 `file_import = true`） | 文件在本地的绝对路径 |
+| `{{file_path\|文件路径}}` | 导入文件的实际路径（多级路径） | 全局（需 `file_import = true`） | 文件在本地的绝对路径；2.6 起支持多级路径写法 |
 | `{{env\|变量名}}` | 环境变量池中的变量值 | 需在当前块中声明导入后使用 | 对应变量被导出时写入的实际运行时值 |
 
 **使用示例**：
@@ -1503,6 +1515,12 @@ install_command_list = [
 # 在 Deployment 中使用 deploy_path
 after_command_list = [
     "cd \"{{deploy_path|MaiBot}}\""
+]
+
+# 使用多级路径的导入文件
+install_command_list = [
+    "powershell -File {{file_path|Get/GetVersion.ps1}}",
+    "python {{file_path|version/JSON/fetch.py}} --config {{file_path|Config/App/settings.json}}"
 ]
 
 # 在 LaunchItem 中使用导入的环境变量
