@@ -378,7 +378,7 @@ function createGlobalWorkbenchSearchItems(project: WorkbenchProjectIndex, coverV
 }
 
 function isDeploymentFlowItem(item: TemplateWorkbenchItem) {
-  return item.role === 'project' || item.role === 'template-file' || item.fileKind === 'template'
+  return item.role === 'template-file' || (item.role === 'project' && item.fileKind === 'template')
 }
 
 function StarGlyph({ filled, size = 24 }: { filled: boolean; size?: number }) {
@@ -950,13 +950,13 @@ function CreateMenu({
 
 function StarredFlowDialog({
   open,
-  projects,
+  items,
   starredSequences,
   onToggle,
   onClose,
 }: {
   open: boolean
-  projects: WorkbenchProjectIndex[]
+  items: TemplateWorkbenchItem[]
   starredSequences: Set<string>
   onToggle: (sequence: string) => void
   onClose: () => void
@@ -982,9 +982,9 @@ function StarredFlowDialog({
   if (!open) return null
 
   const normalizedQuery = query.trim().toLowerCase()
-  const filteredProjects = projects.filter(project => {
+  const filteredItems = items.filter(item => {
     if (!normalizedQuery) return true
-    return (project.mod_name || '未命名').toLowerCase().includes(normalizedQuery)
+    return item.name.toLowerCase().includes(normalizedQuery)
   })
 
   return createPortal(
@@ -1014,19 +1014,20 @@ function StarredFlowDialog({
           </label>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {filteredProjects.length === 0 ? (
+          {filteredItems.length === 0 ? (
             <div className="rounded-lg border border-dashed border-white/20 py-10 text-center text-sm text-[var(--dfw-text)] opacity-60">
               没有匹配的部署流程
             </div>
           ) : (
             <div className="space-y-2">
-              {filteredProjects.map(project => {
-                const starred = starredSequences.has(project.sequence)
+              {filteredItems.map(item => {
+                if (!item.sequence) return null
+                const starred = starredSequences.has(item.sequence)
                 return (
                   <button
-                    key={project.sequence}
+                    key={item.id}
                     type="button"
-                    onClick={() => onToggle(project.sequence)}
+                    onClick={() => onToggle(item.sequence!)}
                     className="flex h-[44px] w-full items-center rounded-lg border px-3 text-left transition hover:bg-white/5"
                     style={{ borderColor: starred ? starredColor : 'rgba(255,255,255,0.14)', color: 'var(--dfw-text)' }}
                   >
@@ -1034,7 +1035,7 @@ function StarredFlowDialog({
                       <StarGlyph filled={starred} />
                     </span>
                     <span className="min-w-0 flex-1 truncate" style={{ fontFamily: font, fontSize: 15, fontWeight: 500 }}>
-                      {project.mod_name || '未命名'}
+                      {item.name}
                     </span>
                     <span className="ml-3 text-xs opacity-60">{starred ? '已星标' : '未星标'}</span>
                   </button>
@@ -1322,7 +1323,7 @@ export default function TemplateWorkbench({
 
   const deploymentFlowItems = useMemo(() => {
     if (items) return projectItems.filter(isDeploymentFlowItem)
-    return registeredProjects.map(project => projectToItem(project, coverVersion[project.sequence] ?? 0))
+    return registeredProjects.map(project => createTemplateFileItem(project, coverVersion[project.sequence] ?? 0))
   }, [items, projectItems, registeredProjects, coverVersion])
 
   const starredFlowItems = useMemo(
@@ -1863,6 +1864,9 @@ export default function TemplateWorkbench({
                 key={item.sequence ?? item.id}
                 type="button"
                 onClick={() => openItem(item)}
+                onDoubleClick={() => {
+                  if (item.sequence) onOpenWorkbenchCanvas?.(item.sequence)
+                }}
                 className="truncate rounded-[4px] px-[8px] py-[4px] text-left transition-colors hover:bg-[var(--twb-hover)]"
                 style={{ color: 'var(--twb-text)', fontFamily: font, fontSize: 16, fontWeight: 400 }}
                 title={item.name}
@@ -2053,7 +2057,7 @@ export default function TemplateWorkbench({
 
       <StarredFlowDialog
         open={starredDialogOpen}
-        projects={registeredProjects}
+        items={deploymentFlowItems}
         starredSequences={starredSequenceSet}
         onToggle={toggleStarredSequence}
         onClose={() => setStarredDialogOpen(false)}
