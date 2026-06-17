@@ -139,10 +139,12 @@ export default function CreateProjectDialog({
   open,
   onClose,
   onCreated,
+  initialBasePath = '',
 }: {
   open: boolean
   onClose: () => void
   onCreated: (project: CreatedProjectInfo) => void
+  initialBasePath?: string
 }) {
   const [basePath, setBasePath] = useState('')
   const [modName, setModName] = useState('')
@@ -225,7 +227,7 @@ export default function CreateProjectDialog({
   useEffect(() => {
     if (!open) {
       // 重置
-      setBasePath('')
+      setBasePath(initialBasePath)
       setModName('')
       setModId('')
       setDescription('')
@@ -235,8 +237,10 @@ export default function CreateProjectDialog({
       setConflict(null)
       setExtraEntries([])
       setExtraWarnings([])
+      return
     }
-  }, [open])
+    setBasePath(initialBasePath)
+  }, [open, initialBasePath])
 
   useEffect(() => {
     setModId(deriveModIdFromName(modName, githubStatus.login))

@@ -8,20 +8,35 @@
 """
 from __future__ import annotations
 
+import io
+import json
 import re
 import shutil
+import tempfile
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
+import pycdlib
 
 from .template_workbench import (
+    _render_mod_info_toml,
+    _suggest_mod_id,
+    _validate_base_path,
+    generate_sequence,
     load_mod_index,
     save_mod_index,
+    to_project,
 )
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib
 
 router = APIRouter()
 
@@ -379,6 +394,191 @@ def _suggest_name(parent_dir: Path, name: str, exclude: Optional[str] = None) ->
             raise HTTPException(500, "无法找到可用文件名")
 
 
+def _join_base_dir(base_dir: str, relpath: str) -> str:
+    normalized_base = _normalize_relpath(base_dir)
+    normalized_rel = _normalize_relpath(relpath)
+    if not normalized_base:
+        return normalized_rel
+    if not normalized_rel:
+        return normalized_base
+    return f"{normalized_base}/{normalized_rel}"
+
+
+def normalize_archive_project_name(filename: str) -> str:
+    stem = Path(filename).stem.strip()
+    sanitized = re.sub(r"[^A-Za-z0-9._\- ]+", "_", stem).strip(" .")
+    return sanitized or "imported-project"
+
+
+def _is_valid_template_toml(raw: bytes) -> bool:
+    try:
+        data = tomllib.loads(raw.decode("utf-8"))
+    except Exception:
+        return False
+    section = data.get("MCStart")
+    return isinstance(section, dict) and section.get("MCStart") is True
+
+
+def _safe_extract_zip_bytes(raw: bytes, extract_dir: Path, *, password: Optional[str] = None) -> None:
+    pwd = password.encode("utf-8") if password else None
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw), "r") as archive:
+            for member in archive.namelist():
+                target = (extract_dir / member).resolve()
+                if not str(target).startswith(str(extract_dir.resolve())) and target != extract_dir.resolve():
+                    raise HTTPException(400, f"非法归档路径: {member}")
+            try:
+                archive.extractall(extract_dir, pwd=pwd)
+            except RuntimeError as exc:
+                message = str(exc).lower()
+                if "password" in message or "encrypted" in message:
+                    raise HTTPException(409, detail={
+                        "code": "password_required",
+                        "message": "该压缩包需要密码才能解压",
+                    }) from exc
+                raise HTTPException(400, f"解压失败: {exc}") from exc
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(400, f"非法 zip 文件: {exc}") from exc
+
+
+def _extract_iso_bytes(raw: bytes, extract_dir: Path, *, password: Optional[str] = None) -> None:
+    if password:
+        raise HTTPException(409, detail={
+            "code": "password_invalid",
+            "message": "ISO / MCSMOD 当前不支持密码解密",
+        })
+    temp_iso: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".iso") as temp_file:
+            temp_file.write(raw)
+            temp_iso = Path(temp_file.name)
+        iso = pycdlib.PyCdlib()
+        iso.open(str(temp_iso))
+        try:
+            zip_joliet_path = None
+            try:
+                meta_buf = io.BytesIO()
+                iso.get_file_from_iso_fp(meta_buf, joliet_path="/meta.json")
+                meta_info = json.loads(meta_buf.getvalue().decode("utf-8"))
+                zip_fname = meta_info.get("meta", meta_info).get("zip_file", "")
+                if zip_fname:
+                    zip_joliet_path = f"/{zip_fname}"
+            except Exception:
+                zip_joliet_path = None
+            if not zip_joliet_path:
+                for child in iso.list_children(joliet_path="/"):
+                    if child.is_dot() or child.is_dotdot():
+                        continue
+                    raw_name = child.file_identifier
+                    name = (raw_name.decode("utf-16-be") if isinstance(raw_name, bytes) else str(raw_name)).strip("\x00").split(";")[0]
+                    if name.lower().endswith(".zip"):
+                        zip_joliet_path = f"/{name}"
+                        break
+            if not zip_joliet_path:
+                raise HTTPException(400, "镜像内未找到可导入的 zip 内容")
+            zip_buf = io.BytesIO()
+            iso.get_file_from_iso_fp(zip_buf, joliet_path=zip_joliet_path)
+        finally:
+            iso.close()
+        _safe_extract_zip_bytes(zip_buf.getvalue(), extract_dir)
+    finally:
+        if temp_iso and temp_iso.exists():
+            try:
+                temp_iso.unlink()
+            except OSError:
+                pass
+
+
+def _flatten_single_top_dir(extract_dir: Path) -> Path:
+    children = [child for child in extract_dir.iterdir()]
+    if len(children) == 1 and children[0].is_dir():
+        return children[0]
+    return extract_dir
+
+
+def _collect_importable_files(root: Path) -> List[tuple[Path, str]]:
+    collected: List[tuple[Path, str]] = []
+    for file_path in root.rglob("*"):
+        if not file_path.is_file():
+            continue
+        relative_path = file_path.relative_to(root).as_posix()
+        _validate_relpath_file(relative_path)
+        collected.append((file_path, relative_path))
+    return collected
+
+
+def _write_uploaded_file(sequence: str, target_name: str, raw: bytes, file_id: Optional[str] = None) -> Dict[str, Any]:
+    relpath = _validate_relpath_file(target_name)
+    project_dir = _project_dir(sequence)
+    parent_dir = (project_dir / Path(relpath).parent).resolve()
+    if not str(parent_dir).startswith(str(project_dir.resolve())):
+        raise HTTPException(400, "非法文件路径")
+    parent_dir.mkdir(parents=True, exist_ok=True)
+    target_path = parent_dir / Path(relpath).name
+    try:
+        target_path.write_bytes(raw)
+    except OSError as exc:
+        raise HTTPException(500, f"写入失败: {exc}") from exc
+    files = _read_project_files(sequence)
+    files = [f for f in files if (f.get("path") or f.get("name")) != relpath]
+    meta = _build_meta(file_id or f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}", relpath, target_path, project_dir)
+    files.append(meta)
+    _write_project_files(sequence, files)
+    return meta
+
+
+def _create_project_from_template_toml(file_name: str, raw: bytes, target_dir: str) -> Dict[str, Any]:
+    if not _is_valid_template_toml(raw):
+        raise HTTPException(400, "该 TOML 未声明合法的 [MCStart] / MCStart=true 模板结构")
+    parsed = tomllib.loads(raw.decode("utf-8"))
+    modinfo = parsed.get("MODINFO") if isinstance(parsed.get("MODINFO"), dict) else {}
+    stem = Path(file_name).stem
+    mod_id = str(modinfo.get("mod_id") or stem).strip() or stem
+    mod_name = str(modinfo.get("mod_name") or stem).strip() or stem
+    description = str(modinfo.get("description") or "").strip()
+    author = str(modinfo.get("author") or "").strip()
+    base = _validate_base_path(str(Path(target_dir).resolve()))
+    actual_mod_id = mod_id if not (base / mod_id).exists() else _suggest_mod_id(base, mod_id)
+    target_project_dir = base / actual_mod_id
+    try:
+        target_project_dir.mkdir(parents=True, exist_ok=False)
+        (target_project_dir / f"{actual_mod_id}.toml").write_bytes(raw)
+    except OSError as exc:
+        raise HTTPException(500, f"创建模板项目失败: {exc}") from exc
+    data = load_mod_index()
+    sequence = generate_sequence(data)
+    data[sequence] = {
+        "mod_name": mod_name,
+        "path": str(target_project_dir),
+        "mod_id": actual_mod_id,
+        "description": description,
+        "author": author,
+        "cover": None,
+        "files": [],
+    }
+    save_mod_index(data)
+    return to_project(sequence, data[sequence]).model_dump()
+
+
+def _register_project_from_directory(project_dir: Path, project_name: str) -> Dict[str, Any]:
+    data = load_mod_index()
+    sequence = generate_sequence(data)
+    data[sequence] = {
+        "mod_name": project_name,
+        "path": str(project_dir),
+        "mod_id": project_name,
+        "description": "",
+        "author": "",
+        "cover": None,
+        "files": [],
+    }
+    save_mod_index(data)
+    synced = _sync_project_files(sequence)
+    project = to_project(sequence, data[sequence]).model_dump()
+    project["files"] = synced
+    return project
+
+
 # ---------------- Endpoints ----------------
 
 @router.get(
@@ -704,6 +904,12 @@ class CreateFolderPayload(BaseModel):
     path: str
 
 
+class ImportArchiveResult(BaseModel):
+    mode: str
+    project: Optional[Dict[str, Any]] = None
+    files: List[Dict[str, Any]] = []
+
+
 @router.post(
     "/projects/{sequence}/folders/create",
     summary="创建子目录（最多 5 层）",
@@ -751,3 +957,110 @@ def remove_folder(sequence: str, payload: CreateFolderPayload):
     except OSError as exc:
         raise HTTPException(500, f"删除目录失败: {exc}") from exc
     return {"success": True, "path": relpath}
+
+
+@router.post(
+    "/projects/{sequence}/import/files",
+    summary="批量导入普通文件到项目目录",
+)
+async def import_plain_files(
+    sequence: str,
+    files: List[UploadFile] = File(...),
+    relative_paths: List[str] = Form(...),
+):
+    _ensure_project(sequence)
+    if len(files) != len(relative_paths):
+        raise HTTPException(400, "files 与 relative_paths 数量不匹配")
+    imported: List[Dict[str, Any]] = []
+    for upload, relpath in zip(files, relative_paths):
+        raw = await upload.read()
+        target_name = _validate_relpath_file(relpath)
+        imported.append(_write_uploaded_file(sequence, target_name, raw))
+    return {"mode": "files-imported", "files": imported}
+
+
+@router.post(
+    "/import/template-toml",
+    summary="导入 TOML；合法模板注册为项目，否则按普通文件导入",
+)
+async def import_template_toml(
+    file: UploadFile = File(...),
+    target_dir: str = Form(""),
+    in_project_folder: bool = Form(False),
+    project_sequence: Optional[str] = Form(None),
+):
+    raw = await file.read()
+    if _is_valid_template_toml(raw) and not in_project_folder:
+        if not target_dir.strip():
+            raise HTTPException(400, "首页导入模板项目时必须指定导入目标目录")
+        project = _create_project_from_template_toml(file.filename or "template.toml", raw, target_dir)
+        return {"mode": "project-created", "project": project, "files": []}
+    if not project_sequence:
+        raise HTTPException(400, "当前不在项目目录中，普通 TOML 无法导入为文件")
+    relpath = _join_base_dir(target_dir, file.filename or "template.toml")
+    meta = _write_uploaded_file(project_sequence, relpath, raw)
+    return {"mode": "files-imported", "files": [meta]}
+
+
+@router.post(
+    "/import/archive",
+    summary="导入 zip / iso / mcsmod 到首页或项目目录",
+)
+async def import_archive(
+    file: UploadFile = File(...),
+    target_dir: str = Form(""),
+    in_project_folder: bool = Form(False),
+    project_sequence: Optional[str] = Form(None),
+    password: Optional[str] = Form(None),
+):
+    filename = file.filename or ""
+    lower = filename.lower()
+    raw = await file.read()
+    temp_dir = Path(tempfile.mkdtemp(prefix="workbench-import-"))
+    try:
+        if lower.endswith(".zip"):
+            _safe_extract_zip_bytes(raw, temp_dir, password=password)
+        elif lower.endswith(".iso") or lower.endswith(".mcsmod"):
+            _extract_iso_bytes(raw, temp_dir, password=password)
+        else:
+            raise HTTPException(400, f"不支持的归档类型: {filename}")
+        content_root = _flatten_single_top_dir(temp_dir)
+        entries = _collect_importable_files(content_root)
+        if not entries:
+            raise HTTPException(400, "归档中没有可导入的白名单文件")
+        if in_project_folder:
+            if not project_sequence:
+                raise HTTPException(400, "缺少 project_sequence")
+            imported: List[Dict[str, Any]] = []
+            for abs_path, rel in entries:
+                joined = _join_base_dir(target_dir, rel)
+                imported.append(_write_uploaded_file(project_sequence, joined, abs_path.read_bytes()))
+            return {"mode": "files-imported", "files": imported}
+        if not target_dir.strip():
+            raise HTTPException(400, "首页导入压缩包或镜像包时必须指定导入目标目录")
+        root_name = normalize_archive_project_name(filename)
+        base = _validate_base_path(str(Path(target_dir).resolve()))
+        project_dir = base / root_name
+        actual_root_name = root_name if not project_dir.exists() else _suggest_mod_id(base, root_name)
+        project_dir = base / actual_root_name
+        project_dir.mkdir(parents=True, exist_ok=False)
+        written_files: List[Dict[str, Any]] = []
+        try:
+            for abs_path, rel in entries:
+                destination = project_dir / rel
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(abs_path, destination)
+            toml_target = project_dir / f"{actual_root_name}.toml"
+            if not toml_target.exists():
+                toml_target.write_text(
+                    _render_mod_info_toml(actual_root_name, actual_root_name, "", "", None),
+                    encoding="utf-8",
+                )
+            project = _register_project_from_directory(project_dir, actual_root_name)
+            synced = project.get("files", [])
+            return {"mode": "project-created", "project": project, "files": synced}
+        except Exception:
+            shutil.rmtree(project_dir, ignore_errors=True)
+            raise
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)

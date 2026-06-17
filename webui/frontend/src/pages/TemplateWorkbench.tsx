@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode, type MouseEvent as ReactMouseEvent } from 'react'
 import CreateProjectDialog, { type CreatedProjectInfo } from '../components/CreateProjectDialog'
+import CreateWorkbenchFolderDialog from '../components/CreateWorkbenchFolderDialog'
 import EditProjectDialog, { type EditableProject } from '../components/EditProjectDialog'
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog'
 import ProjectContextMenu, { type ProjectContextAction } from '../components/ProjectContextMenu'
+import WorkbenchImportDialog, { type WorkbenchImportResult, type WorkbenchImportTargetContext } from '../components/WorkbenchImportDialog'
 import {
   CirclePlus,
   Clock,
@@ -80,10 +82,6 @@ export interface TemplateWorkbenchSlots {
 export interface TemplateWorkbenchProps {
   items?: TemplateWorkbenchItem[]
   slots?: TemplateWorkbenchSlots
-  onCreateProject?: () => void
-  onCreateFolder?: () => void
-  onUploadProject?: () => void
-  onImportProject?: () => void
   onOpenItem?: (item: TemplateWorkbenchItem) => void
   onOpenWorkbenchCanvas?: (sequence: string) => void
   onSelectSection?: (section: TemplateWorkbenchSection) => void
@@ -812,10 +810,6 @@ function QuickActions({
 export default function TemplateWorkbench({
   items,
   slots,
-  onCreateProject,
-  onCreateFolder,
-  onUploadProject,
-  onImportProject,
   onOpenItem,
   onOpenWorkbenchCanvas,
   onSelectSection,
@@ -826,6 +820,10 @@ export default function TemplateWorkbench({
   const [route, setRoute] = useState<TemplateWorkbenchRoute>({ type: 'home' })
   const [registeredProjects, setRegisteredProjects] = useState<WorkbenchProjectIndex[]>([])
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
+  const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false)
+  const [createFolderSubmitting, setCreateFolderSubmitting] = useState(false)
+  const [createFolderError, setCreateFolderError] = useState<string | null>(null)
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState<
     | { x: number; y: number; project: WorkbenchProjectIndex }
     | null
@@ -859,6 +857,18 @@ export default function TemplateWorkbench({
     if (route.type === 'home') return null
     return registeredProjects.find(project => project.sequence === route.sequence) ?? null
   }, [registeredProjects, route])
+
+  const currentProjectDir = route.type === 'project' ? normalizeWorkbenchPath(route.dir) : ''
+  const currentImportContext = useMemo<WorkbenchImportTargetContext>(() => ({
+    projectSequence: route.type === 'project' ? route.sequence : null,
+    currentDir: currentProjectDir,
+    inProjectFolder: route.type === 'project',
+  }), [route, currentProjectDir])
+
+  const derivedCreateProjectBasePath = useMemo(() => {
+    if (route.type !== 'project' || !selectedProject) return ''
+    return currentProjectDir ? `${selectedProject.path.replace(/[\\/]+$/, '')}/${currentProjectDir}` : selectedProject.path
+  }, [route, selectedProject, currentProjectDir])
 
   const contentItems = useMemo(() => {
     if (route.type === 'home') return projectItems
@@ -941,7 +951,6 @@ export default function TemplateWorkbench({
   }
 
   const createDeploymentProject = () => {
-    onCreateProject?.()
     setCreateProjectDialogOpen(true)
   }
 
@@ -949,6 +958,71 @@ export default function TemplateWorkbench({
     setCreateProjectDialogOpen(false)
     setRegisteredProjects(prev => prev.some(item => item.sequence === project.sequence) ? prev : [...prev, project])
     onOpenWorkbenchCanvas?.(project.sequence)
+  }
+
+  const handleCreateFolder = async (relativePath: string) => {
+    if (route.type !== 'project') {
+      setCreateFolderError('请先进入一个项目目录后再创建文件夹。')
+      return
+    }
+    setCreateFolderSubmitting(true)
+    setCreateFolderError(null)
+    try {
+      const path = currentProjectDir ? `${currentProjectDir}/${normalizeWorkbenchPath(relativePath)}` : normalizeWorkbenchPath(relativePath)
+      const response = await fetch(
+        `/api/template-workbench/projects/${encodeURIComponent(route.sequence)}/folders/create`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path }),
+        },
+      )
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        throw new Error(`创建失败 (${response.status}): ${text || '未知错误'}`)
+      }
+      setCreateFolderDialogOpen(false)
+      void reloadProjects()
+    } catch (err) {
+      setCreateFolderError((err as Error).message ?? String(err))
+    } finally {
+      setCreateFolderSubmitting(false)
+    }
+  }
+
+  const openCreateFolderDialog = () => {
+    setCreateFolderError(null)
+    setCreateFolderDialogOpen(true)
+  }
+
+  const openImportDialog = () => {
+    setActionError(null)
+    setImportDialogOpen(true)
+  }
+
+  const handleImported = (result: WorkbenchImportResult) => {
+    setImportDialogOpen(false)
+    if (result.mode === 'project-created') {
+      void reloadProjects()
+      return
+    }
+    if (route.type !== 'project' || !result.files) {
+      void reloadProjects()
+      return
+    }
+    setRegisteredProjects(prev => prev.map(project => {
+      if (project.sequence !== route.sequence) return project
+      const existing = new Map((project.files ?? []).map(file => [normalizeWorkbenchPath(file.path || file.name), file]))
+      for (const file of result.files ?? []) {
+        existing.set(normalizeWorkbenchPath(file.path || file.name), file)
+      }
+      return {
+        ...project,
+        files: Array.from(existing.values()).sort((a, b) => normalizeWorkbenchPath(a.path || a.name).localeCompare(normalizeWorkbenchPath(b.path || b.name)),
+        ),
+      }
+    }))
   }
 
   const openItem = async (item: TemplateWorkbenchItem) => {
@@ -1130,7 +1204,7 @@ export default function TemplateWorkbench({
       <header className="absolute left-[350px] top-0 z-10 h-[71px] w-[1570px] border-b" style={{ borderColor: 'var(--twb-border)' }}>
         <button
           type="button"
-          onClick={onCreateProject}
+          onClick={createDeploymentProject}
           className="absolute flex items-center justify-center transition-colors hover:bg-[var(--twb-hover)]"
           style={{ left: 18, top: 19, width: 33, height: 33, color: 'var(--twb-text)' }}
         >
@@ -1180,7 +1254,7 @@ export default function TemplateWorkbench({
         </button>
         <button
           type="button"
-          onClick={onImportProject}
+          onClick={openImportDialog}
           className="absolute flex items-center rounded-[6px] border transition-colors hover:bg-[var(--twb-hover)]"
           style={{ left: 1406, top: 15, width: 134, height: 41, borderColor: 'var(--twb-border)', color: 'var(--twb-text)' }}
         >
@@ -1200,8 +1274,8 @@ export default function TemplateWorkbench({
 
         <QuickActions
           onCreateProject={createDeploymentProject}
-          onCreateFolder={onCreateFolder}
-          onUploadProject={onUploadProject}
+          onCreateFolder={openCreateFolderDialog}
+          onUploadProject={openImportDialog}
         />
 
         {slots?.contentLeading}
@@ -1228,6 +1302,24 @@ export default function TemplateWorkbench({
         open={createProjectDialogOpen}
         onClose={() => setCreateProjectDialogOpen(false)}
         onCreated={handleCreatedProject}
+        initialBasePath={derivedCreateProjectBasePath}
+      />
+
+      <CreateWorkbenchFolderDialog
+        open={createFolderDialogOpen}
+        currentDir={currentProjectDir}
+        submitting={createFolderSubmitting}
+        errorMessage={createFolderError}
+        onClose={() => setCreateFolderDialogOpen(false)}
+        onCreate={handleCreateFolder}
+      />
+
+      <WorkbenchImportDialog
+        open={importDialogOpen}
+        title={route.type === 'project' ? '上传项目' : '导入项目'}
+        context={currentImportContext}
+        onClose={() => setImportDialogOpen(false)}
+        onImported={handleImported}
       />
 
       {contextMenu && (
