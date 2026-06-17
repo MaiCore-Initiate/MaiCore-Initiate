@@ -32,6 +32,11 @@ type WorkbenchFileKind = 'folder' | 'code' | 'binary' | 'text' | 'log' | 'templa
 type ContentHeaderMode = 'home' | 'breadcrumb'
 type FileConflictResolution = 'rename' | 'overwrite' | 'cancel'
 
+interface NewFileTarget {
+  projectSequence: string
+  currentDir: string
+}
+
 interface ContentHeaderBreadcrumb {
   label: string
   target: TemplateWorkbenchRoute
@@ -1158,18 +1163,34 @@ function ContentHeader({
   )
 }
 
+function NewFileQuickIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden>
+      <g opacity="0.2">
+        <path d="M23.75 5L23.75 13.75L32.5 13.75L23.75 5Z" fill="currentColor" />
+      </g>
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M23.75 5L23.75 13.75L32.5 13.75" />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M23.125 20L26.875 23.75L23.125 27.5" />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M16.875 20L13.125 23.75L16.875 27.5" />
+      <path d="M31.25 35C31.2705 35 31.2909 34.9995 31.3114 34.9984C31.3319 34.9975 31.3522 34.9959 31.3725 34.9939C31.393 34.9919 31.4133 34.9894 31.4334 34.9864C31.4536 34.9834 31.4737 34.98 31.4939 34.9759C31.5139 34.972 31.5339 34.9675 31.5537 34.9625C31.5736 34.9577 31.5933 34.9522 31.6128 34.9463C31.6323 34.9402 31.6519 34.9338 31.6711 34.9269C31.6903 34.92 31.7094 34.9127 31.7283 34.9048C31.7472 34.897 31.7659 34.8887 31.7844 34.88C31.803 34.8713 31.8213 34.862 31.8392 34.8523C31.8572 34.8428 31.875 34.8327 31.8927 34.8222C31.9102 34.8117 31.9275 34.8008 31.9445 34.7894C31.9616 34.778 31.9783 34.7663 31.9947 34.7541C32.0111 34.7419 32.0272 34.7292 32.043 34.7162C32.0588 34.7033 32.0742 34.6898 32.0894 34.6763C32.1045 34.6625 32.1194 34.6484 32.1339 34.6339C32.1484 34.6194 32.1625 34.6045 32.1763 34.5894C32.1898 34.5742 32.2033 34.5588 32.2162 34.543C32.2292 34.5272 32.2419 34.5111 32.2541 34.4947C32.2663 34.4783 32.278 34.4616 32.2894 34.4445C32.3008 34.4275 32.3117 34.4102 32.3222 34.3927C32.3327 34.375 32.3428 34.3572 32.3523 34.3392C32.362 34.3213 32.3713 34.303 32.38 34.2844C32.3887 34.2659 32.397 34.2472 32.4048 34.2283C32.4127 34.2094 32.42 34.1903 32.4269 34.1711C32.4339 34.1519 32.4403 34.1323 32.4463 34.1128C32.4522 34.0933 32.4577 34.0736 32.4625 34.0537C32.4675 34.0339 32.472 34.0139 32.4759 33.9939C32.48 33.9737 32.4834 33.9536 32.4864 33.9334C32.4894 33.9133 32.4919 33.893 32.4939 33.8725C32.4959 33.8522 32.4975 33.8319 32.4984 33.8114C32.4995 33.7909 32.5 33.7705 32.5 33.75L32.5 13.75L23.75 5L8.75 5C8.72954 5 8.7091 5.0005 8.68867 5.0015C8.66823 5.00251 8.64784 5.00402 8.62748 5.00602C8.60712 5.00803 8.58682 5.01053 8.56659 5.01353C8.54635 5.01653 8.5262 5.02003 8.50614 5.02402C8.48608 5.02801 8.46613 5.03248 8.44628 5.03745C8.42644 5.04243 8.40672 5.04789 8.38714 5.05383C8.36757 5.05977 8.34815 5.06618 8.32889 5.07306C8.30963 5.07996 8.29055 5.08732 8.27164 5.09516C8.25275 5.10298 8.23405 5.11127 8.21556 5.12002C8.19706 5.12877 8.17879 5.13796 8.16075 5.14759C8.14271 5.15724 8.12492 5.16732 8.10738 5.17784C8.08982 5.18835 8.07254 5.19929 8.05553 5.21066C8.03852 5.22203 8.0218 5.23381 8.00537 5.24598C7.98895 5.25817 7.97283 5.27075 7.95702 5.28373C7.94119 5.29671 7.9257 5.31007 7.91055 5.32381C7.89539 5.33755 7.88058 5.35165 7.86611 5.36611C7.85165 5.38058 7.83755 5.39539 7.82381 5.41055C7.81007 5.4257 7.79671 5.44119 7.78373 5.45702C7.77075 5.47283 7.75817 5.48895 7.74598 5.50537C7.73381 5.5218 7.72203 5.53852 7.71066 5.55553C7.69929 5.57254 7.68835 5.58982 7.67784 5.60738C7.66732 5.62492 7.65724 5.64271 7.64759 5.66075C7.63796 5.67879 7.62877 5.69706 7.62002 5.71556C7.61127 5.73405 7.60298 5.75275 7.59516 5.77164C7.58732 5.79055 7.57996 5.80963 7.57306 5.82889C7.56618 5.84815 7.55977 5.86757 7.55383 5.88714C7.54789 5.90672 7.54243 5.92644 7.53745 5.94628C7.53248 5.96613 7.52801 5.98608 7.52402 6.00614C7.52003 6.0262 7.51653 6.04635 7.51353 6.06659C7.51053 6.08682 7.50803 6.10712 7.50602 6.12748C7.50402 6.14784 7.50251 6.16823 7.5015 6.18867C7.5005 6.2091 7.5 6.22954 7.5 6.25L7.5 33.75C7.5 33.7705 7.5005 33.7909 7.5015 33.8114C7.50251 33.8319 7.50402 33.8522 7.50602 33.8725C7.50803 33.893 7.51053 33.9133 7.51353 33.9334C7.51653 33.9536 7.52003 33.9737 7.52402 33.9939C7.52801 34.0139 7.53248 34.0339 7.53745 34.0537C7.54243 34.0736 7.54789 34.0933 7.55383 34.1128C7.55977 34.1323 7.56618 34.1519 7.57306 34.1711C7.57996 34.1903 7.58732 34.2094 7.59516 34.2283C7.60298 34.2472 7.61127 34.2659 7.62002 34.2844C7.62877 34.303 7.63796 34.3213 7.64759 34.3392C7.65724 34.3572 7.66732 34.375 7.67784 34.3927C7.68835 34.4102 7.69929 34.4275 7.71066 34.4445C7.72202 34.4616 7.7338 34.4783 7.74598 34.4947C7.75817 34.5111 7.77075 34.5272 7.78373 34.543C7.79671 34.5588 7.81007 34.5742 7.82381 34.5894C7.83755 34.6045 7.85165 34.6194 7.86611 34.6339C7.88058 34.6484 7.89539 34.6625 7.91055 34.6763C7.9257 34.6898 7.94119 34.7033 7.95702 34.7162C7.97283 34.7292 7.98895 34.7419 8.00537 34.7541C8.0218 34.7663 8.03852 34.778 8.05553 34.7894C8.07254 34.8008 8.08982 34.8117 8.10738 34.8222C8.12492 34.8327 8.14271 34.8428 8.16075 34.8523C8.17879 34.862 8.19706 34.8713 8.21556 34.88C8.23405 34.8887 8.25275 34.897 8.27164 34.9048C8.29055 34.9127 8.30963 34.92 8.32889 34.9269C8.34815 34.9338 8.36757 34.9402 8.38714 34.9463C8.40672 34.9522 8.42644 34.9577 8.44628 34.9625C8.46613 34.9675 8.48608 34.972 8.50614 34.9759C8.5262 34.98 8.54635 34.9834 8.56659 34.9864C8.58682 34.9894 8.60712 34.9919 8.62748 34.9939C8.64784 34.9959 8.66823 34.9975 8.68867 34.9984C8.7091 34.9995 8.72954 35 8.75 35L31.25 35Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function QuickActions({
   onCreateProject,
+  onCreateFile,
   onCreateFolder,
   onUploadProject,
 }: {
   onCreateProject?: () => void
+  onCreateFile?: () => void
   onCreateFolder?: () => void
   onUploadProject?: () => void
 }) {
   return (
-    <div className="absolute" style={{ left: 400, top: 196, width: 961, height: 61, color: 'var(--twb-text)' }}>
-      <svg className="absolute inset-0 pointer-events-none" xmlns="http://www.w3.org/2000/svg" width="961" height="61" viewBox="0 0 961 61" aria-hidden>
+    <div className="absolute" style={{ left: 400, top: 196, width: 1291, height: 61, color: 'var(--twb-text)' }}>
+      <svg className="absolute inset-0 pointer-events-none" xmlns="http://www.w3.org/2000/svg" width="1291" height="61" viewBox="0 0 1291 61" aria-hidden>
         <g transform="translate(-399.5 -195.5)">
           <g>
             <rect width="300" height="60" rx="10" transform="translate(400 196)" fill="none" stroke="currentColor" strokeWidth="1" />
@@ -1200,6 +1221,22 @@ function QuickActions({
               <path d="M12.5,4.25v16.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
             </g>
             <g transform="translate(-8 -2)">
+              <text transform="translate(458 227)" fill="currentColor" fontSize="22" fontFamily="HarmonyOS Sans SC, HYWenHei, sans-serif" fontWeight="500">新建文件</text>
+              <text transform="translate(458 249)" fill="var(--twb-muted)" fontSize="15" fontFamily="HarmonyOS Sans SC, HYWenHei, sans-serif" fontWeight="300">新建用于导入的代码文件</text>
+            </g>
+            <g transform="translate(404.5 205.5)">
+              <NewFileQuickIcon />
+            </g>
+          </g>
+
+          <g transform="translate(660)">
+            <rect width="300" height="60" rx="10" transform="translate(400 196)" fill="none" stroke="currentColor" strokeWidth="1" />
+            <g transform="translate(657.5 213.5)">
+              <rect width="24" height="24" transform="translate(0.5 0.5)" fill="none" />
+              <path d="M4.25,12.5h16.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              <path d="M12.5,4.25v16.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            </g>
+            <g transform="translate(-8 -2)">
               <text transform="translate(458 227)" fill="currentColor" fontSize="22" fontFamily="HarmonyOS Sans SC, HYWenHei, sans-serif" fontWeight="500">新建文件夹</text>
               <text transform="translate(458 249)" fill="var(--twb-muted)" fontSize="15" fontFamily="HarmonyOS Sans SC, HYWenHei, sans-serif" fontWeight="300">文件收纳归类</text>
             </g>
@@ -1213,7 +1250,7 @@ function QuickActions({
             </g>
           </g>
 
-          <g transform="translate(660)">
+          <g transform="translate(990)">
             <rect width="300" height="60" rx="10" transform="translate(400 196)" fill="none" stroke="currentColor" strokeWidth="1" />
             <g transform="translate(657.5 213.5)">
               <rect width="24" height="24" transform="translate(0.5 0.5)" fill="none" />
@@ -1236,8 +1273,9 @@ function QuickActions({
         </g>
       </svg>
       <button type="button" onClick={onCreateProject} className="absolute left-0 top-0 h-[61px] w-[300px]" aria-label="新建项目" />
-      <button type="button" onClick={onCreateFolder} className="absolute left-[330px] top-0 h-[61px] w-[300px]" aria-label="新建文件夹" />
-      <button type="button" onClick={onUploadProject} className="absolute left-[660px] top-0 h-[61px] w-[300px]" aria-label="上传项目" />
+      <button type="button" onClick={onCreateFile} className="absolute left-[330px] top-0 h-[61px] w-[300px]" aria-label="新建文件" />
+      <button type="button" onClick={onCreateFolder} className="absolute left-[660px] top-0 h-[61px] w-[300px]" aria-label="新建文件夹" />
+      <button type="button" onClick={onUploadProject} className="absolute left-[990px] top-0 h-[61px] w-[300px]" aria-label="上传项目" />
     </div>
   )
 }
@@ -1260,8 +1298,10 @@ export default function TemplateWorkbench({
   const [createFolderSubmitting, setCreateFolderSubmitting] = useState(false)
   const [createFolderError, setCreateFolderError] = useState<string | null>(null)
   const [newFileDialogOpen, setNewFileDialogOpen] = useState(false)
+  const [newFileRequireTarget, setNewFileRequireTarget] = useState(false)
   const [newFileSubmitting, setNewFileSubmitting] = useState(false)
   const [newFileError, setNewFileError] = useState<string | null>(null)
+  const [newFileTarget, setNewFileTarget] = useState<NewFileTarget | null>(null)
   const [newFileConflict, setNewFileConflict] = useState<{
     name: string
     suggestedName: string
@@ -1410,6 +1450,27 @@ export default function TemplateWorkbench({
     ))
   }, [items, registeredProjects, coverVersion])
 
+  const newFileTargetOptions = useMemo(() => (
+    registeredProjects.flatMap(project => {
+      const projectName = project.mod_name || '未命名'
+      const rootOption = {
+        key: `${project.sequence}|`,
+        label: `${projectName} / 根目录`,
+        description: project.path,
+      }
+      const folderOptions = normalizeDirectoryList(project.directories).map(dir => ({
+        key: `${project.sequence}|${dir}`,
+        label: `${projectName} / ${dir}`,
+        description: project.path ? `${project.path.replace(/[\\/]+$/, '')}/${dir}` : dir,
+      }))
+      return [rootOption, ...folderOptions]
+    })
+  ), [registeredProjects])
+
+  const selectedNewFileTargetKey = newFileTarget
+    ? `${newFileTarget.projectSequence}|${newFileTarget.currentDir}`
+    : ''
+
   const visibleContentItems = useMemo(() => {
     const trimmedQuery = searchQuery.trim()
     if (!trimmedQuery) return contentItems
@@ -1551,10 +1612,11 @@ export default function TemplateWorkbench({
   }
 
   const openNewFileDialog = () => {
-    if (route.type !== 'project') {
-      setActionError('请先进入一个项目目录后再创建文件。')
-      return
-    }
+    const needsTarget = route.type !== 'project'
+    setNewFileRequireTarget(needsTarget)
+    setNewFileTarget(route.type === 'project'
+      ? { projectSequence: route.sequence, currentDir: currentProjectDir }
+      : null)
     setNewFileError(null)
     setNewFileConflict(null)
     setNewFileDialogOpen(true)
@@ -1562,22 +1624,37 @@ export default function TemplateWorkbench({
 
   const closeNewFileDialog = () => {
     setNewFileDialogOpen(false)
+    setNewFileRequireTarget(false)
     setNewFileSubmitting(false)
     setNewFileError(null)
+    setNewFileTarget(null)
     setNewFileConflict(null)
+  }
+
+  const handleNewFileTargetChange = (key: string) => {
+    const [projectSequence, currentDir = ''] = key.split('|')
+    if (!projectSequence) {
+      setNewFileTarget(null)
+      return
+    }
+    setNewFileTarget({ projectSequence, currentDir: normalizeWorkbenchPath(currentDir) })
   }
 
   const processNewFile = async (
     payload: { name: string; content: string },
     conflictResolution: Exclude<FileConflictResolution, 'cancel'> | null,
   ) => {
-    if (route.type !== 'project') return
+    if (!newFileTarget) {
+      setNewFileError('请选择文件要新建到哪个项目或文件夹。')
+      return
+    }
     setNewFileSubmitting(true)
     setNewFileError(null)
-    const relativeName = currentProjectDir ? `${currentProjectDir}/${normalizeWorkbenchPath(payload.name)}` : normalizeWorkbenchPath(payload.name)
+    const targetDir = normalizeWorkbenchPath(newFileTarget.currentDir)
+    const relativeName = targetDir ? `${targetDir}/${normalizeWorkbenchPath(payload.name)}` : normalizeWorkbenchPath(payload.name)
     try {
       const response = await fetch(
-        `/api/template-workbench/projects/${encodeURIComponent(route.sequence)}/files/create`,
+        `/api/template-workbench/projects/${encodeURIComponent(newFileTarget.projectSequence)}/files/create`,
         {
           method: 'POST',
           credentials: 'include',
@@ -1607,7 +1684,7 @@ export default function TemplateWorkbench({
       }
       const newFile = await response.json() as NonNullable<WorkbenchProjectIndex['files']>[number]
       setRegisteredProjects(prev => prev.map(project => {
-        if (project.sequence !== route.sequence) return project
+        if (project.sequence !== newFileTarget.projectSequence) return project
         const newKey = normalizeWorkbenchPath(newFile.path || newFile.name)
         const existing = new Map((project.files ?? []).map(file => [normalizeWorkbenchPath(file.path || file.name), file]))
         existing.set(newKey, newFile)
@@ -1997,6 +2074,7 @@ export default function TemplateWorkbench({
 
         <QuickActions
           onCreateProject={createDeploymentProject}
+          onCreateFile={openNewFileDialog}
           onCreateFolder={openCreateFolderDialog}
           onUploadProject={openImportDialog}
         />
@@ -2049,7 +2127,11 @@ export default function TemplateWorkbench({
         open={newFileDialogOpen}
         submitting={newFileSubmitting}
         errorMessage={newFileError}
+        targetOptions={newFileTargetOptions}
+        selectedTargetKey={selectedNewFileTargetKey}
+        requireTarget={newFileRequireTarget}
         conflictState={newFileConflict ? { name: newFileConflict.name, suggestedName: newFileConflict.suggestedName } : null}
+        onTargetChange={handleNewFileTargetChange}
         onClose={closeNewFileDialog}
         onCreate={payload => void processNewFile(payload, payload.conflictResolution)}
         onConflictResolve={handleNewFileConflictResolve}

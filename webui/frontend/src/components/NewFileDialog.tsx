@@ -2,15 +2,30 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { WORKBENCH_FILE_EXTENSIONS, type WorkbenchFileLanguage } from '../pages/workbench-canvas/types'
 
+const CREATION_BLOCKED_EXTENSIONS = ['.exe', '.jar'] as const
+const NEW_FILE_CREATABLE_EXTENSIONS = WORKBENCH_FILE_EXTENSIONS.filter(
+  extension => !CREATION_BLOCKED_EXTENSIONS.includes(extension as (typeof CREATION_BLOCKED_EXTENSIONS)[number]),
+)
+
+export interface NewFileTargetOption {
+  key: string
+  label: string
+  description?: string
+}
+
 export interface NewFileDialogProps {
   open: boolean
   defaultName?: string
   submitting?: boolean
   errorMessage?: string | null
+  targetOptions?: NewFileTargetOption[]
+  selectedTargetKey?: string
+  requireTarget?: boolean
   conflictState?: {
     name: string
     suggestedName: string
   } | null
+  onTargetChange?: (key: string) => void
   onClose: () => void
   onCreate: (payload: { name: string; content: string; conflictResolution: 'rename' | 'overwrite' | null }) => void
   onConflictResolve: (resolution: 'rename' | 'overwrite' | 'cancel') => void
@@ -64,7 +79,7 @@ function validateName(name: string): { ok: boolean; reason?: string } {
   if (!WORKBENCH_FILE_EXTENSIONS.includes(`.${ext}` as (typeof WORKBENCH_FILE_EXTENSIONS)[number])) {
     return { ok: false, reason: `不支持的后缀 .${ext}` }
   }
-  if (ext === 'exe' || ext === 'jar') {
+  if (CREATION_BLOCKED_EXTENSIONS.includes(`.${ext}` as (typeof CREATION_BLOCKED_EXTENSIONS)[number])) {
     return { ok: false, reason: `.${ext} 只能导入现有文件，不允许在工作台中直接新建` }
   }
   return { ok: true }
@@ -75,7 +90,11 @@ export default function NewFileDialog({
   defaultName = '',
   submitting = false,
   errorMessage = null,
+  targetOptions = [],
+  selectedTargetKey = '',
+  requireTarget = false,
   conflictState,
+  onTargetChange,
   onClose,
   onCreate,
   onConflictResolve,
@@ -89,11 +108,17 @@ export default function NewFileDialog({
   const onConflictResolveRef = useRef(onConflictResolve)
   const nameRef = useRef(name)
   const contentRef = useRef(content)
+  const submittingRef = useRef(submitting)
+  const requireTargetRef = useRef(requireTarget)
+  const selectedTargetKeyRef = useRef(selectedTargetKey)
   useEffect(() => { onCreateRef.current = onCreate }, [onCreate])
   useEffect(() => { onCloseRef.current = onClose }, [onClose])
   useEffect(() => { onConflictResolveRef.current = onConflictResolve }, [onConflictResolve])
   useEffect(() => { nameRef.current = name }, [name])
   useEffect(() => { contentRef.current = content }, [content])
+  useEffect(() => { submittingRef.current = submitting }, [submitting])
+  useEffect(() => { requireTargetRef.current = requireTarget }, [requireTarget])
+  useEffect(() => { selectedTargetKeyRef.current = selectedTargetKey }, [selectedTargetKey])
 
   // open 切换：进入时重置，离开时不重置（让 animation 顺利退出）
   useEffect(() => {
@@ -113,7 +138,10 @@ export default function NewFileDialog({
       } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
         const v = validateName(nameRef.current)
-        if (v.ok) handleCreate()
+        const targetReady = !requireTargetRef.current || Boolean(selectedTargetKeyRef.current)
+        if (v.ok && targetReady && !submittingRef.current) {
+          onCreateRef.current({ name: nameRef.current, content: contentRef.current, conflictResolution: null })
+        }
       }
     }
     window.addEventListener('keydown', onKey)
@@ -123,7 +151,9 @@ export default function NewFileDialog({
   if (!open) return null
 
   const validation = validateName(name)
-  const canCreate = validation.ok && !submitting
+  const targetReady = !requireTarget || Boolean(selectedTargetKey)
+  const selectedTarget = targetOptions.find(option => option.key === selectedTargetKey)
+  const canCreate = validation.ok && targetReady && !submitting
 
   const handleCreate = () => {
     if (!canCreate) return
@@ -161,6 +191,34 @@ export default function NewFileDialog({
         </header>
 
         <div className="flex-1 overflow-auto px-6 py-4">
+          {requireTarget && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[var(--dfw-text)]">
+                新建位置
+              </label>
+              <select
+                value={selectedTargetKey}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => onTargetChange?.(event.target.value)}
+                disabled={submitting || targetOptions.length === 0}
+                className="mt-2 w-full rounded-lg border border-white/20 bg-[var(--dfw-bg)] px-3 py-2 text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)] disabled:opacity-50"
+              >
+                <option value="" disabled>{targetOptions.length > 0 ? '请选择新建位置' : '暂无可用项目'}</option>
+                {targetOptions.map(option => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {selectedTarget?.description && (
+                <div className="mt-1 truncate text-xs text-[var(--dfw-text)] opacity-50">
+                  {selectedTarget.description}
+                </div>
+              )}
+              {!targetReady && (
+                <div className="mt-2 text-xs text-amber-200">⚠ 请选择文件要新建到哪个项目或文件夹</div>
+              )}
+            </div>
+          )}
           <label className="block text-sm font-medium text-[var(--dfw-text)]">
             文件名
           </label>
@@ -184,7 +242,7 @@ export default function NewFileDialog({
             <div className="mt-2 text-xs text-red-300">⚠ {errorMessage}</div>
           )}
           <div className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">
-            支持的后缀：{WORKBENCH_FILE_EXTENSIONS.map(e => e.replace('.', '')).join(' / ')}
+            可新建后缀：{NEW_FILE_CREATABLE_EXTENSIONS.map(e => e.replace('.', '')).join(' / ')}
           </div>
           <div className="mt-1 text-xs text-[var(--dfw-text)] opacity-50">
             其中 exe / jar 仅支持导入，不支持直接新建。
