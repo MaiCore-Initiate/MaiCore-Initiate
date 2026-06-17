@@ -48,8 +48,9 @@ export default function FileEditorModal({
       return
     }
     setLoading(true)
+    const refPath = (file.path?.trim() || file.name).replace(/\\/g, '/')
     fetch(
-      `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files/${encodeURIComponent(file.name)}/raw`,
+      `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files/raw?path=${encodeURIComponent(refPath)}`,
       { credentials: 'include' },
     )
       .then(async res => {
@@ -66,7 +67,7 @@ export default function FileEditorModal({
         }
       })
       .finally(() => setLoading(false))
-  }, [file?.id, file?.name, file?.binary, projectSequence, onDeleted])
+  }, [file?.id, file?.path, file?.name, file?.binary, projectSequence, onDeleted])
 
   const handleClose = useCallback(() => {
     if (dirty) {
@@ -93,7 +94,7 @@ export default function FileEditorModal({
 
   const performSave = useCallback(
     async (
-      name: string,
+      path: string,
       payload: { content: string; conflictResolution: FileConflictResolution | null },
       mode: 'save' | 'rename',
     ) => {
@@ -102,7 +103,7 @@ export default function FileEditorModal({
       setError(null)
       try {
         const res = await fetch(
-          `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files/${encodeURIComponent(name)}`,
+          `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files?path=${encodeURIComponent(path)}`,
           {
             method: 'PUT',
             credentials: 'include',
@@ -113,7 +114,7 @@ export default function FileEditorModal({
         if (res.status === 409) {
           const detail = await res.json().catch(() => null)
           setConflictState({
-            name,
+            name: path,
             suggestedName: detail?.detail?.suggestion ?? '',
             payload,
             mode,
@@ -142,44 +143,48 @@ export default function FileEditorModal({
 
   const handleSave = useCallback(async () => {
     if (!file) return
-    await performSave(file.name, { content, conflictResolution: null }, 'save')
+    const refPath = (file.path?.trim() || file.name).replace(/\\/g, '/')
+    await performSave(refPath, { content, conflictResolution: null }, 'save')
   }, [file, content, performSave])
 
   saveRef.current = handleSave
 
   const handleDownload = () => {
     if (!file || !projectSequence) return
-    const url = `/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/${encodeURIComponent(file.name)}/download`
+    const refPath = (file.path?.trim() || file.name).replace(/\\/g, '/')
+    const url = `/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/download?path=${encodeURIComponent(refPath)}`
     window.open(url, '_blank', 'noopener')
   }
 
   const startRename = () => {
     if (!file) return
-    setRenamingName(file.name)
-    setRenameInput(file.name)
+    const refPath = (file.path?.trim() || file.name).replace(/\\/g, '/')
+    setRenamingName(refPath)
+    setRenameInput(refPath)
   }
 
   const confirmRename = async () => {
     if (!file) return
-    if (!renameInput || renameInput === file.name) {
+    const refPath = (file.path?.trim() || file.name).replace(/\\/g, '/')
+    if (!renameInput || renameInput === refPath) {
       setRenamingName(null)
       return
     }
     setSaving(true)
     try {
       const res = await fetch(
-        `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files/${encodeURIComponent(file.name)}/rename`,
+        `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files/rename?path=${encodeURIComponent(refPath)}`,
         {
           method: 'PATCH',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ newName: renameInput }),
+          body: JSON.stringify({ newPath: renameInput }),
         },
       )
       if (res.status === 409) {
         const detail = await res.json().catch(() => null)
         setConflictState({
-          name: file.name,
+          name: refPath,
           suggestedName: detail?.detail?.suggestion ?? '',
           payload: { content, conflictResolution: null },
           mode: 'rename',
@@ -203,12 +208,13 @@ export default function FileEditorModal({
 
   const handleDelete = async () => {
     if (!file) return
-    const ok = window.confirm(`确定删除文件 "${file.name}" 吗？此操作不可撤销。`)
+    const refPath = (file.path?.trim() || file.name).replace(/\\/g, '/')
+    const ok = window.confirm(`确定删除文件 "${refPath}" 吗？此操作不可撤销。`)
     if (!ok) return
     setSaving(true)
     try {
       await fetch(
-        `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files/${encodeURIComponent(file.name)}`,
+        `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files?path=${encodeURIComponent(refPath)}`,
         { method: 'DELETE', credentials: 'include' },
       )
     } catch (err) {
@@ -227,6 +233,7 @@ export default function FileEditorModal({
     if (mode === 'save') {
       void performSave(conflictState.name, { ...payload, conflictResolution: resolution }, 'save')
     } else {
+      // 改名冲突：用后端建议的 suggestion 作为新路径，并触发 'rename' 模式
       void performSave(conflictState.suggestedName, { content: payload.content, conflictResolution: 'rename' }, 'rename')
     }
   }

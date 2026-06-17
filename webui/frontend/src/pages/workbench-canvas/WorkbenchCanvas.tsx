@@ -1133,14 +1133,18 @@ export default function WorkbenchCanvas({
     }
   }
 
-  const addImportedFileName = (name: string) => {
-    const nextList = Array.from(new Set([...metaRef.current.fileImportList, name]))
+  const addImportedFileName = (path: string) => {
+    // 路径用 `/` 分隔的多级形式（与 WorkbenchFileMeta.path 一致）。
+    // 占位符 {{file_path|path}} 按此字符串匹配。
+    const nextList = Array.from(new Set([...metaRef.current.fileImportList, path]))
     onBlockMetaPatch?.({ fileImportList: nextList, fileImport: true })
   }
 
-  const removeImportedFileName = (name: string) => {
-    onBlockMetaPatch?.({ fileImportList: metaRef.current.fileImportList.filter(item => item !== name) })
+  const removeImportedFileName = (path: string) => {
+    onBlockMetaPatch?.({ fileImportList: metaRef.current.fileImportList.filter(item => item !== path) })
   }
+
+  const fileRefKey = (file: WorkbenchFileMeta) => (file.path?.trim() || file.name)
 
   const normalizeDropTargetForSource = (sourceBlockId: WorkbenchBlockId, blockId: WorkbenchBlockId | null): WorkbenchBlockId | null => {
     if (!blockId) return null
@@ -1266,7 +1270,7 @@ export default function WorkbenchCanvas({
     if (to === 'init-file') {
       const fileId = parseFileBlockId(from)
       const file = fileId ? meta.files.find(item => item.id === fileId) : null
-      if (file) addImportedFileName(file.name)
+      if (file) addImportedFileName(fileRefKey(file))
     }
   }
 
@@ -1412,7 +1416,7 @@ export default function WorkbenchCanvas({
     if (targetBlockId === 'init-file') {
       const fileId = parseFileBlockId(sourceBlockId)
       const file = fileId ? meta.files.find(item => item.id === fileId) : null
-      if (file) removeImportedFileName(file.name)
+      if (file) removeImportedFileName(fileRefKey(file))
     }
   }
 
@@ -1615,7 +1619,7 @@ export default function WorkbenchCanvas({
       .flatMap(connection => {
         const fileId = parseFileBlockId(connection.from)
         const file = fileId ? meta.files.find(item => item.id === fileId) : null
-        return file ? [file.name] : []
+        return file ? [fileRefKey(file)] : []
       })
     setManualConnections(current => {
       const next = current.filter(connection => connection.from !== blockId && connection.to !== blockId)
@@ -2072,9 +2076,10 @@ export default function WorkbenchCanvas({
     }
   }
 
-  const processFileUpload = async (file: File, conflictResolution: FileConflictResolution | null) => {
+  const processFileUpload = async (file: File, conflictResolution: FileConflictResolution | null, overridePath?: string) => {
     if (!projectSequence) return
-    const name = file.name
+    // 工作台导入文件默认落在根目录；多级路径由调用方通过 overridePath 传入
+    const targetPath = (overridePath ?? file.name).replace(/\\/g, '/')
     try {
       const checkRes = await fetch(
         `/api/template-workbench/projects/${encodeURIComponent(projectSequence)}/files/check-name`,
@@ -2082,7 +2087,7 @@ export default function WorkbenchCanvas({
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name: targetPath }),
         },
       )
       if (!checkRes.ok) {
@@ -2090,7 +2095,7 @@ export default function WorkbenchCanvas({
         return
       }
       const check: { available: boolean; suggestion: string } = await checkRes.json()
-      let uploadName = name
+      let uploadPath = targetPath
       let resolution = conflictResolution
       if (!check.available) {
         if (!resolution) {
@@ -2098,10 +2103,10 @@ export default function WorkbenchCanvas({
           return
         }
         if (resolution === 'rename') {
-          uploadName = check.suggestion
+          uploadPath = check.suggestion
         }
       }
-      const params = new URLSearchParams({ filename: uploadName })
+      const params = new URLSearchParams({ path: uploadPath })
       if (resolution) params.set('conflictResolution', resolution)
       const form = new FormData()
       form.append('file', file)
@@ -2132,8 +2137,9 @@ export default function WorkbenchCanvas({
         patchCanvasState({ fileBlockPositions: next })
         return next
       })
+      const newKey = newMeta.path?.trim() || newMeta.name
       onBlockMetaPatch?.({
-        files: [...currentFiles.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
+        files: [...currentFiles.filter(f => f.id !== newMeta.id && (f.path || f.name) !== newKey), newMeta],
       })
     } catch (err) {
       setFileImportError(`上传异常: ${(err as Error).message ?? String(err)}`)
@@ -2215,8 +2221,9 @@ export default function WorkbenchCanvas({
         patchCanvasState({ fileBlockPositions: next })
         return next
       })
+      const newKey = newMeta.path?.trim() || newMeta.name
       onBlockMetaPatch?.({
-        files: [...currentFiles.filter(file => file.id !== newMeta.id && file.name !== newMeta.name), newMeta],
+        files: [...currentFiles.filter(f => f.id !== newMeta.id && (f.path || f.name) !== newKey), newMeta],
       })
       onSelectedBlockChange?.(createFileBlockId(newMeta.id))
       closeNewFileDialog()
@@ -2284,7 +2291,7 @@ export default function WorkbenchCanvas({
         })
         onBlockMetaPatch?.({
           files: nextFiles,
-          fileImportList: meta.fileImportList.filter(name => nextFiles.some(file => file.name === name)),
+          fileImportList: meta.fileImportList.filter(name => nextFiles.some(file => fileRefKey(file) === name)),
         })
       } catch {
         // 目录热检测失败时保持静默，等待下一次轮询重试

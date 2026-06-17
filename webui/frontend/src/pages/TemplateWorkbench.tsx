@@ -24,7 +24,7 @@ type TemplateWorkbenchRoute =
   | { type: 'home' }
   | { type: 'project'; sequence: string }
   | { type: 'templates'; sequence: string }
-type WorkbenchItemRole = 'project' | 'template-file' | 'imported-file'
+type WorkbenchItemRole = 'project' | 'template-file' | 'imported-file' | 'imported-folder'
 type WorkbenchFileKind = 'folder' | 'code' | 'binary' | 'text' | 'log' | 'template'
 
 export interface TemplateWorkbenchItem {
@@ -221,16 +221,38 @@ function createTemplateFileItem(project: WorkbenchProjectIndex, coverVersion = 0
 
 function createImportedFileItem(project: WorkbenchProjectIndex, file: NonNullable<WorkbenchProjectIndex['files']>[number]): TemplateWorkbenchItem {
   const kind = classifyFile(file.name, file.binary)
+  // 把多级路径显示为「目录/…/文件名」+ path 作 sourcePath，方便画布读取
+  const relpath = (file.path?.trim() || file.name).replace(/\\/g, '/')
+  const displayName = relpath
   return {
-    id: `${project.sequence}:file:${file.id || file.name}`,
-    name: file.name,
+    id: `${project.sequence}:file:${file.id || relpath}`,
+    name: displayName,
     type: kind === 'binary' ? 'archive' : 'script',
     role: 'imported-file',
     fileKind: kind,
-    fileName: file.name,
-    sourcePath: file.path,
+    fileName: relpath,
+    sourcePath: relpath,
     updatedAt: formatFileSize(file.size),
     sizeLabel: formatFileSize(file.size),
+    sequence: project.sequence,
+  }
+}
+
+function createImportedFolderItem(project: WorkbenchProjectIndex, dirRelpath: string, fileCount: number): TemplateWorkbenchItem {
+  // dirRelpath 形如 "version/JSON"，name 显示最后一段（"JSON"）
+  const parts = dirRelpath.split('/').filter(Boolean)
+  const tail = parts[parts.length - 1] ?? dirRelpath
+  return {
+    id: `${project.sequence}:folder:${dirRelpath}`,
+    name: tail,
+    type: 'folder',
+    role: 'imported-folder',
+    fileKind: 'folder',
+    fileName: tail,
+    sourcePath: dirRelpath,
+    updatedAt: `${fileCount} 个文件`,
+    sizeLabel: `${fileCount} 个文件`,
+    childCount: fileCount,
     sequence: project.sequence,
   }
 }
@@ -481,7 +503,7 @@ function ProjectCard({
   onOpen?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
 }) {
-  if (item.type === 'folder') return <FolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
+  if (item.type === 'folder' || item.role === 'imported-folder') return <FolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
   if (item.role === 'imported-file' || item.role === 'template-file') return <ImportedFileCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
   if (item.displayMode === 'folder') return <ProjectFolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
   return <FileCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
@@ -831,9 +853,27 @@ export default function TemplateWorkbench({
   const contentItems = useMemo(() => {
     if (route.type === 'home') return projectItems
     if (!selectedProject) return []
+    const files = selectedProject.files ?? []
+    // 把多级路径的 imported-file 分成两类：直接落根的文件 + 一级子目录（虚拟 folder）
+    const directFiles: typeof files = []
+    const folderCounts = new Map<string, number>()
+    for (const f of files) {
+      const rel = (f.path?.trim() || f.name).replace(/\\/g, '/')
+      const slash = rel.indexOf('/')
+      if (slash === -1) {
+        directFiles.push(f)
+      } else {
+        const folder = rel.slice(0, slash)
+        folderCounts.set(folder, (folderCounts.get(folder) ?? 0) + 1)
+      }
+    }
+    const folderItems = Array.from(folderCounts.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([folder, count]) => createImportedFolderItem(selectedProject, folder, count))
     return [
       createTemplateFileItem(selectedProject, coverVersion[selectedProject.sequence] ?? 0),
-      ...(selectedProject.files ?? []).map(file => createImportedFileItem(selectedProject, file)),
+      ...folderItems,
+      ...directFiles.map(file => createImportedFileItem(selectedProject, file)),
     ]
   }, [projectItems, route.type, selectedProject, coverVersion])
 

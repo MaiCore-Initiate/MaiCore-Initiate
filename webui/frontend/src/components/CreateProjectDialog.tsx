@@ -1,7 +1,53 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { pinyin } from 'pinyin-pro'
+import { Folder, X } from 'lucide-react'
 import FileConflictDialog, { type FileConflictResolution } from './FileConflictDialog'
+
+// 附加文件白名单后缀（与后端 _validate_extra_relpath 保持一致）
+const EXTRA_ALLOWED_EXT = [
+  '.py', '.cmd', '.bat', '.ps1', '.sh', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
+  '.json', '.txt', '.jsonl', '.log', '.java', '.jar', '.toml', '.exe',
+  '.yaml', '.xml',
+]
+const MAX_EXTRA_DEPTH = 5
+
+// 预解析一个 File 列表：按 webkitRelativePath 分组，过滤非法层级与后缀，返回 (entries, warnings)
+function partitionExtraFiles(
+  files: File[],
+): { entries: Array<{ file: File; relpath: string }>; warnings: string[] } {
+  const warnings: string[] = []
+  const entries: Array<{ file: File; relpath: string }> = []
+  for (const file of files) {
+    const relRaw = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
+    // 形如 "MyDir/sub/inner/file.py"，去掉第一段目录名（用户选择的根目录名），保留相对结构
+    const parts = relRaw.split(/[\\/]/).filter(Boolean)
+    if (parts.length <= 1) {
+      // 没有目录信息，直接落根
+      const relpath = parts[0] ?? file.name
+      const ext = '.' + (relpath.split('.').pop() ?? '').toLowerCase()
+      if (!EXTRA_ALLOWED_EXT.includes(ext)) {
+        warnings.push(`已跳过不支持的格式：${relpath}`)
+        continue
+      }
+      entries.push({ file, relpath })
+      continue
+    }
+    const subParts = parts.slice(1)
+    if (subParts.length > MAX_EXTRA_DEPTH + 1) {
+      warnings.push(`嵌套过深（>${MAX_EXTRA_DEPTH} 层），已跳过：${relRaw}`)
+      continue
+    }
+    const relpath = subParts.join('/')
+    const ext = '.' + (relpath.split('.').pop() ?? '').toLowerCase()
+    if (!EXTRA_ALLOWED_EXT.includes(ext)) {
+      warnings.push(`已跳过不支持的格式：${relpath}`)
+      continue
+    }
+    entries.push({ file, relpath })
+  }
+  return { entries, warnings }
+}
 
 export interface CreatedProjectInfo {
   sequence: string
@@ -114,7 +160,11 @@ export default function CreateProjectDialog({
     login: string
     message: string
   }>({ loaded: false, loggedIn: false, bound: false, login: '', message: '' })
+  // 附加目录/文件（用户从 picker 中选择的 File 列表）
+  const [extraEntries, setExtraEntries] = useState<Array<{ file: File; relpath: string }>>([])
+  const [extraWarnings, setExtraWarnings] = useState<string[]>([])
   const coverInputRef = useRef<HTMLInputElement | null>(null)
+  const extraDirInputRef = useRef<HTMLInputElement | null>(null)
 
   // 加载 GitHub 状态
   useEffect(() => {
@@ -183,6 +233,8 @@ export default function CreateProjectDialog({
       setSubmitting(false)
       setError(null)
       setConflict(null)
+      setExtraEntries([])
+      setExtraWarnings([])
     }
   }, [open])
 
@@ -204,7 +256,7 @@ export default function CreateProjectDialog({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, basePath, modName, modId, description, coverDataUrl, githubStatus])
+  }, [open, basePath, modName, modId, description, coverDataUrl, githubStatus, extraEntries])
 
   if (!open) return null
 
@@ -236,6 +288,29 @@ export default function CreateProjectDialog({
     }
   }
 
+  const handleExtraDirChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : []
+    event.target.value = ''
+    if (files.length === 0) return
+    const { entries, warnings } = partitionExtraFiles(files)
+    // 同 relpath 保留最后一份（避免选择多个目录时路径冲突）
+    const byPath = new Map<string, { file: File; relpath: string }>()
+    for (const e of entries) {
+      byPath.set(e.relpath, e)
+    }
+    setExtraEntries(prev => {
+      const merged = new Map<string, { file: File; relpath: string }>()
+      for (const e of prev) merged.set(e.relpath, e)
+      for (const e of byPath.values()) merged.set(e.relpath, e)
+      return Array.from(merged.values())
+    })
+    setExtraWarnings(prev => [...prev, ...warnings])
+  }
+
+  const removeExtraEntry = (relpath: string) => {
+    setExtraEntries(prev => prev.filter(e => e.relpath !== relpath))
+  }
+
   const callCheckPath = async (modIdToCheck: string): Promise<CheckProjectPathResponse> => {
     const res = await fetch('/api/template-workbench/projects/check-path', {
       method: 'POST',
@@ -251,20 +326,57 @@ export default function CreateProjectDialog({
     finalModId: string,
     conflictResolution: FileConflictResolution | null,
   ): Promise<CreatedProjectInfo> => {
-    const payload: Record<string, unknown> = {
-      base_path: basePath,
-      mod_name: modName.trim(),
-      mod_id: finalModId,
-      description: description.trim(),
-      author: author.trim(),
-      conflict_resolution: conflictResolution,
+    // 没有任何附加文件 → 走 JSON 简单接口（与旧行为一致）
+    if (extraEntries.length === 0) {
+      const payload: Record<string, unknown> = {
+        base_path: basePath,
+        mod_name: modName.trim(),
+        mod_id: finalModId,
+        description: description.trim(),
+        author: author.trim(),
+        conflict_resolution: conflictResolution,
+      }
+      if (coverDataUrl) payload.cover_data_url = coverDataUrl
+      const res = await fetch('/api/template-workbench/projects', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.status === 409) {
+        const detail = await res.json().catch(() => null)
+        const err: Error & { conflict?: { suggested: string } } = new Error(
+          detail?.detail?.message ?? '目录已存在冲突',
+        )
+        err.conflict = {
+          suggested: detail?.detail?.suggestion ?? `${finalModId} (1)`,
+        }
+        throw err
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`创建失败 (${res.status}): ${text || '未知错误'}`)
+      }
+      return await res.json() as CreatedProjectInfo
     }
-    if (coverDataUrl) payload.cover_data_url = coverDataUrl
-    const res = await fetch('/api/template-workbench/projects', {
+
+    // 有附加文件 → 走 multipart 接口
+    const form = new FormData()
+    form.append('base_path', basePath)
+    form.append('mod_name', modName.trim())
+    form.append('mod_id', finalModId)
+    form.append('description', description.trim())
+    form.append('author', author.trim())
+    if (conflictResolution) form.append('conflict_resolution', conflictResolution)
+    if (coverDataUrl) form.append('cover_data_url', coverDataUrl)
+    for (const entry of extraEntries) {
+      form.append('extra_files', entry.file, entry.file.name)
+      form.append('extra_relpaths', entry.relpath)
+    }
+    const res = await fetch('/api/template-workbench/projects/with-files', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: form,
     })
     if (res.status === 409) {
       const detail = await res.json().catch(() => null)
@@ -509,6 +621,72 @@ export default function CreateProjectDialog({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* 附加文件/目录 */}
+          <div>
+            <label className="block text-sm font-medium text-[var(--dfw-text)]">
+              附加文件 / 目录（可选，与项目目录结构一致，最深 5 层）
+            </label>
+            <p className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">
+              选择本地目录后，目录内的白名单文件会按原始层级落到项目根目录（最多 5 层嵌套）。
+              进入工作台后这些文件会出现在画布上，可连接到初始化块加入 <code className="font-mono">file_import_list</code>。
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                ref={extraDirInputRef}
+                type="file"
+                hidden
+                // @ts-expect-error webkitdirectory 是非标准但广泛支持的属性
+                webkitdirectory="true"
+                multiple
+                onChange={handleExtraDirChange}
+              />
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dfw-text)]/20 bg-transparent px-3 py-1.5 text-sm text-[var(--dfw-text)] transition hover:bg-white/5 disabled:opacity-50"
+                onClick={() => extraDirInputRef.current?.click()}
+                disabled={!githubReady}
+              >
+                <Folder size={16} />
+                选择目录…
+              </button>
+              {extraEntries.length > 0 && (
+                <span className="text-xs text-[var(--dfw-text)] opacity-70">
+                  已选 {extraEntries.length} 个文件
+                </span>
+              )}
+            </div>
+            {extraWarnings.length > 0 && (
+              <div className="mt-2 max-h-24 overflow-y-auto rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                {extraWarnings.map((w, idx) => (
+                  <div key={`${w}-${idx}`}>⚠ {w}</div>
+                ))}
+              </div>
+            )}
+            {extraEntries.length > 0 && (
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-md border border-white/10 bg-white/5 p-2 font-mono text-xs">
+                {extraEntries
+                  .slice()
+                  .sort((a, b) => a.relpath.localeCompare(b.relpath))
+                  .map(entry => (
+                    <div
+                      key={entry.relpath}
+                      className="flex items-center justify-between gap-2 px-1 py-0.5 hover:bg-white/5"
+                    >
+                      <span className="truncate text-[var(--dfw-text)]" title={entry.relpath}>{entry.relpath}</span>
+                      <button
+                        type="button"
+                        className="rounded p-0.5 text-[var(--dfw-text)] opacity-50 hover:bg-white/10 hover:opacity-100"
+                        onClick={() => removeExtraEntry(entry.relpath)}
+                        aria-label={`移除 ${entry.relpath}`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         </div>
 
