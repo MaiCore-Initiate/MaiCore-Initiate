@@ -50,6 +50,7 @@ class WorkbenchProject(BaseModel):
     description: str = ""
     author: str = ""
     cover: Optional[str] = None
+    directories: List[str] = []
     files: List[Dict[str, Any]] = []
     force_folder: Optional[bool] = None
     display_mode: str = "card"
@@ -128,6 +129,7 @@ def generate_sequence(existing: Dict[str, Dict[str, Any]]) -> str:
 
 def to_project(sequence: str, data: Dict[str, Any]) -> WorkbenchProject:
     files = data.get("files", [])
+    directories = data.get("directories", [])
     cover = data.get("cover")
     force_folder = data.get("force_folder")
     if force_folder is True:
@@ -135,7 +137,7 @@ def to_project(sequence: str, data: Dict[str, Any]) -> WorkbenchProject:
     elif force_folder is False:
         display_mode = "card"
     else:
-        display_mode = "folder" if (len(files) > 0 or cover) else "card"
+        display_mode = "folder" if (len(files) > 0 or len(directories) > 0 or cover) else "card"
     return WorkbenchProject(
         sequence=sequence,
         mod_name=str(data.get("mod_name", "")),
@@ -144,6 +146,7 @@ def to_project(sequence: str, data: Dict[str, Any]) -> WorkbenchProject:
         description=str(data.get("description", "")),
         author=str(data.get("author", "")),
         cover=cover,
+        directories=directories if isinstance(directories, list) else [],
         files=files if isinstance(files, list) else [],
         force_folder=force_folder,
         display_mode=display_mode,

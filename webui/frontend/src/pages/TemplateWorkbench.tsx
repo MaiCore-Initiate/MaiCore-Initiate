@@ -31,6 +31,7 @@ type ContentHeaderMode = 'home' | 'breadcrumb'
 
 interface ContentHeaderBreadcrumb {
   label: string
+  target: TemplateWorkbenchRoute
   dir: string
   active: boolean
 }
@@ -62,6 +63,7 @@ interface WorkbenchProjectIndex {
   description?: string
   author?: string
   cover?: string | null
+  directories?: string[]
   files?: Array<{
     id: string
     name: string
@@ -177,6 +179,48 @@ function parentWorkbenchPath(path: string) {
   return parts.join('/')
 }
 
+function directoryChainForFile(path: string) {
+  const normalized = normalizeWorkbenchPath(path)
+  if (!normalized) return []
+  const parent = parentWorkbenchPath(normalized)
+  if (!parent) return []
+  const chain: string[] = []
+  let current = ''
+  parent.split('/').filter(Boolean).forEach(part => {
+    current = current ? `${current}/${part}` : part
+    chain.push(current)
+  })
+  return chain
+}
+
+function directoryChainForDir(path: string) {
+  const normalized = normalizeWorkbenchPath(path)
+  if (!normalized) return []
+  const chain: string[] = []
+  let current = ''
+  normalized.split('/').filter(Boolean).forEach(part => {
+    current = current ? `${current}/${part}` : part
+    chain.push(current)
+  })
+  return chain
+}
+
+function normalizeDirectoryList(paths?: string[] | null) {
+  const set = new Set<string>()
+  for (const raw of paths ?? []) {
+    for (const dir of directoryChainForDir(raw)) set.add(dir)
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
+}
+
+function mergeDirectoryLists(...groups: Array<string[] | null | undefined>) {
+  const set = new Set<string>()
+  groups.forEach(group => {
+    normalizeDirectoryList(group).forEach(dir => set.add(dir))
+  })
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
+}
+
 function templateNameForProject(project: WorkbenchProjectIndex) {
   const pathName = basename(project.path)
   if (pathName.toLowerCase().endsWith('.toml')) return pathName
@@ -200,8 +244,9 @@ function resolveProjectDeploymentFlowCover(project: WorkbenchProjectIndex): stri
 
 function projectToItem(project: WorkbenchProjectIndex, coverVersion = 0): TemplateWorkbenchItem {
   const fileCount = project.files?.length ?? 0
+  const directoryCount = project.directories?.length ?? 0
   const coverUrl = projectCoverUrl(project, coverVersion)
-  const displayMode = project.display_mode ?? (fileCount > 0 || project.cover ? 'folder' : 'card')
+  const displayMode = project.display_mode ?? (fileCount > 0 || directoryCount > 0 || project.cover ? 'folder' : 'card')
   return {
     id: project.sequence,
     name: project.mod_name || '未命名',
@@ -265,8 +310,8 @@ function createImportedFolderItem(project: WorkbenchProjectIndex, dirRelpath: st
     fileKind: 'folder',
     fileName: tail,
     sourcePath: dirRelpath,
-    updatedAt: `${fileCount} 个文件`,
-    sizeLabel: `${fileCount} 个文件`,
+    updatedAt: fileCount > 0 ? `${fileCount} 个子项` : '空文件夹',
+    sizeLabel: fileCount > 0 ? `${fileCount} 个子项` : '空文件夹',
     childCount: fileCount,
     sequence: project.sequence,
   }
@@ -693,7 +738,7 @@ function ContentHeader({
   secondaryLabel?: string
   onSecondaryClick?: () => void
   breadcrumbs?: ContentHeaderBreadcrumb[]
-  onBreadcrumbClick?: (dir: string) => void
+  onBreadcrumbClick?: (target: TemplateWorkbenchRoute) => void
 }) {
   const LayoutIcon = layoutMode === 'card' ? CardSquaresIcon : ListDashesIcon
   return (
@@ -707,7 +752,7 @@ function ContentHeader({
               <div key={`${crumb.dir || 'root'}:${index}`} className="flex min-w-0 items-stretch">
                 <button
                   type="button"
-                  onClick={() => !isActive && onBreadcrumbClick?.(crumb.dir)}
+                  onClick={() => !isActive && onBreadcrumbClick?.(crumb.target)}
                   disabled={isActive}
                   className="relative inline-flex min-w-0 items-center whitespace-nowrap transition-colors disabled:cursor-default"
                   style={{
@@ -931,8 +976,22 @@ export default function TemplateWorkbench({
     if (!selectedProject) return []
     const currentDir = normalizeWorkbenchPath(route.dir)
     const files = selectedProject.files ?? []
+    const directories = normalizeDirectoryList(selectedProject.directories)
     const directFiles: typeof files = []
+    const childFolders = new Set<string>()
     const folderCounts = new Map<string, number>()
+
+    for (const dir of directories) {
+      const remaining = currentDir
+        ? (dir.startsWith(`${currentDir}/`) ? dir.slice(currentDir.length + 1) : '')
+        : dir
+      if (!remaining) continue
+      const slash = remaining.indexOf('/')
+      const child = slash === -1 ? remaining : remaining.slice(0, slash)
+      const folder = currentDir ? `${currentDir}/${child}` : child
+      childFolders.add(folder)
+    }
+
     for (const f of files) {
       const rel = normalizeWorkbenchPath(f.path?.trim() || f.name)
       if (!rel) continue
@@ -946,8 +1005,14 @@ export default function TemplateWorkbench({
       } else {
         const child = remaining.slice(0, slash)
         const folder = currentDir ? `${currentDir}/${child}` : child
-        folderCounts.set(folder, (folderCounts.get(folder) ?? 0) + 1)
+        childFolders.add(folder)
       }
+    }
+    for (const folder of childFolders) {
+      const prefix = `${folder}/`
+      const nestedDirectoryCount = directories.filter(dir => dir.startsWith(prefix)).length
+      const nestedFileCount = files.filter(file => normalizeWorkbenchPath(file.path?.trim() || file.name).startsWith(prefix)).length
+      folderCounts.set(folder, nestedDirectoryCount + nestedFileCount)
     }
     const folderItems = Array.from(folderCounts.entries())
       .sort(([a], [b]) => a.localeCompare(b))
@@ -983,12 +1048,16 @@ export default function TemplateWorkbench({
     if (route.type !== 'project') return []
     const projectLabel = selectedProject?.mod_name || '项目内容'
     const dirParts = normalizeWorkbenchPath(route.dir).split('/').filter(Boolean)
-    const crumbs: ContentHeaderBreadcrumb[] = [{ label: projectLabel, dir: '', active: dirParts.length === 0 }]
+    const crumbs: ContentHeaderBreadcrumb[] = [
+      { label: '主页', target: { type: 'home' }, dir: '', active: false },
+      { label: projectLabel, target: { type: 'project', sequence: route.sequence, dir: '' }, dir: '', active: dirParts.length === 0 },
+    ]
     let currentDir = ''
     dirParts.forEach((part, index) => {
       currentDir = currentDir ? `${currentDir}/${part}` : part
       crumbs.push({
         label: part,
+        target: { type: 'project', sequence: route.sequence, dir: currentDir },
         dir: currentDir,
         active: index === dirParts.length - 1,
       })
@@ -1051,8 +1120,20 @@ export default function TemplateWorkbench({
         const text = await response.text().catch(() => '')
         throw new Error(`创建失败 (${response.status}): ${text || '未知错误'}`)
       }
+      const result = await response.json().catch(() => null) as { directories?: string[] } | null
+      const normalizedPath = currentProjectDir ? `${currentProjectDir}/${normalizeWorkbenchPath(relativePath)}` : normalizeWorkbenchPath(relativePath)
+      setRegisteredProjects(prev => prev.map(project => {
+        if (project.sequence !== route.sequence) return project
+        return {
+          ...project,
+          directories: mergeDirectoryLists(
+            project.directories,
+            result?.directories,
+            directoryChainForDir(normalizedPath),
+          ),
+        }
+      }))
       setCreateFolderDialogOpen(false)
-      void reloadProjects()
     } catch (err) {
       setCreateFolderError((err as Error).message ?? String(err))
     } finally {
@@ -1086,8 +1167,10 @@ export default function TemplateWorkbench({
       for (const file of result.files ?? []) {
         existing.set(normalizeWorkbenchPath(file.path || file.name), file)
       }
+      const importedDirectories = (result.files ?? []).flatMap(file => directoryChainForFile(file.path || file.name))
       return {
         ...project,
+        directories: mergeDirectoryLists(project.directories, result.directories, importedDirectories),
         files: Array.from(existing.values()).sort((a, b) => normalizeWorkbenchPath(a.path || a.name).localeCompare(normalizeWorkbenchPath(b.path || b.name)),
         ),
       }
@@ -1126,9 +1209,12 @@ export default function TemplateWorkbench({
     }
   }
 
-  const navigateToBreadcrumb = (dir: string) => {
-    if (route.type !== 'project') return
-    setRoute({ type: 'project', sequence: route.sequence, dir: normalizeWorkbenchPath(dir) })
+  const navigateToBreadcrumb = (target: TemplateWorkbenchRoute) => {
+    if (target.type === 'home') {
+      setRoute({ type: 'home' })
+      return
+    }
+    setRoute({ type: 'project', sequence: target.sequence, dir: normalizeWorkbenchPath(target.dir) })
   }
 
   const toggleLayoutMode = () => {

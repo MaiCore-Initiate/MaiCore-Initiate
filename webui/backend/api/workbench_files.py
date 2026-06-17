@@ -257,12 +257,111 @@ def _read_project_files(sequence: str) -> List[Dict[str, Any]]:
     return files if isinstance(files, list) else []
 
 
+def _normalize_directory_entry(path: str) -> str:
+    normalized = _normalize_relpath(path)
+    if not normalized:
+        return ""
+    _validate_relpath_dir(normalized)
+    return normalized
+
+
+def _directory_chain_for_file(relpath: str) -> List[str]:
+    normalized = _normalize_relpath(relpath)
+    if not normalized:
+        return []
+    parent = Path(normalized).parent.as_posix()
+    if parent in ("", "."):
+        return []
+    current = ""
+    chain: List[str] = []
+    for part in parent.split("/"):
+        if not part:
+            continue
+        current = f"{current}/{part}" if current else part
+        _validate_relpath_dir(current)
+        chain.append(current)
+    return chain
+
+
+def _directory_chain_for_dir(relpath: str) -> List[str]:
+    normalized = _normalize_directory_entry(relpath)
+    if not normalized:
+        return []
+    current = ""
+    chain: List[str] = []
+    for part in normalized.split("/"):
+        current = f"{current}/{part}" if current else part
+        _validate_relpath_dir(current)
+        chain.append(current)
+    return chain
+
+
+def _normalize_directory_list(paths: List[str]) -> List[str]:
+    normalized: set[str] = set()
+    for raw in paths:
+        normalized.update(_directory_chain_for_dir(raw))
+    return sorted(normalized)
+
+
+def _read_project_directories(sequence: str) -> List[str]:
+    data = load_mod_index()
+    if sequence not in data:
+        return []
+    directories = data[sequence].get("directories", [])
+    return _normalize_directory_list(directories if isinstance(directories, list) else [])
+
+
 def _write_project_files(sequence: str, files: List[Dict[str, Any]]) -> None:
     data = load_mod_index()
     if sequence not in data:
         raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
     data[sequence]["files"] = files
     save_mod_index(data)
+
+
+def _write_project_directories(sequence: str, directories: List[str]) -> None:
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
+    data[sequence]["directories"] = _normalize_directory_list(directories)
+    save_mod_index(data)
+
+
+def _upsert_project_index(sequence: str, *, files: Optional[List[Dict[str, Any]]] = None, directories: Optional[List[str]] = None) -> None:
+    data = load_mod_index()
+    if sequence not in data:
+        raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
+    if files is not None:
+        data[sequence]["files"] = files
+    if directories is not None:
+        data[sequence]["directories"] = _normalize_directory_list(directories)
+    save_mod_index(data)
+
+
+def _merge_project_directories(sequence: str, *, dir_paths: Optional[List[str]] = None, file_paths: Optional[List[str]] = None) -> List[str]:
+    merged = set(_read_project_directories(sequence))
+    for dir_path in dir_paths or []:
+        merged.update(_directory_chain_for_dir(dir_path))
+    for file_path in file_paths or []:
+        merged.update(_directory_chain_for_file(file_path))
+    normalized = sorted(merged)
+    _write_project_directories(sequence, normalized)
+    return normalized
+
+
+def _prune_project_directories(sequence: str) -> List[str]:
+    project_dir = _project_dir(sequence)
+    kept: set[str] = set()
+    for relpath in _read_project_directories(sequence):
+        target = _safe_join(project_dir, relpath)
+        if target.exists() and target.is_dir():
+            kept.add(relpath)
+    for item in _read_project_files(sequence):
+        relpath = str(item.get("path") or item.get("name") or "").strip()
+        kept.update(_directory_chain_for_file(relpath))
+    normalized = sorted(kept)
+    _write_project_directories(sequence, normalized)
+    return normalized
 
 
 def _build_meta(file_id: str, relpath: str, abs_path: Path, project_dir: Path) -> Dict[str, Any]:
@@ -304,7 +403,7 @@ def _file_meta_signature(item: Dict[str, Any]) -> tuple[Any, ...]:
 
 
 def _sync_project_files(sequence: str) -> List[Dict[str, Any]]:
-    """递归扫描 project_dir 下最多 MAX_DIR_DEPTH 层目录中的白名单文件。"""
+    """递归扫描 project_dir 下最多 MAX_DIR_DEPTH 层目录中的白名单文件与目录。"""
     data = load_mod_index()
     if sequence not in data:
         raise HTTPException(404, f"工作台项目 '{sequence}' 未找到。")
@@ -320,6 +419,7 @@ def _sync_project_files(sequence: str) -> List[Dict[str, Any]]:
     tracked = project.get("files", [])
     if not isinstance(tracked, list):
         tracked = []
+    tracked_directories = _normalize_directory_list(project.get("directories", []) if isinstance(project.get("directories", []), list) else [])
     # 用 path 作为 key（多级目录下唯一）。兼容老数据：path 为空则退回 name
     tracked_by_path: Dict[str, Dict[str, Any]] = {}
     for item in tracked:
@@ -332,6 +432,7 @@ def _sync_project_files(sequence: str) -> List[Dict[str, Any]]:
             tracked_by_path[rel.replace("\\", "/").lstrip("/")] = item
     reserved_names = _reserved_project_names_from_project(project)
     synced: List[Dict[str, Any]] = []
+    scanned_directories: set[str] = set()
 
     def visit(directory: Path, depth_remaining: int, prefix: str) -> None:
         try:
@@ -345,6 +446,8 @@ def _sync_project_files(sequence: str) -> List[Dict[str, Any]]:
                     continue
                 if not SEGMENT_PATTERN.match(name):
                     continue
+                dir_relpath = f"{prefix}{name}"
+                scanned_directories.update(_directory_chain_for_dir(dir_relpath))
                 visit(entry, depth_remaining - 1, f"{prefix}{name}/")
                 continue
             if not entry.is_file():
@@ -371,8 +474,10 @@ def _sync_project_files(sequence: str) -> List[Dict[str, Any]]:
 
     tracked_signature = [_file_meta_signature(item) for item in tracked if isinstance(item, dict)]
     synced_signature = [_file_meta_signature(item) for item in synced]
-    if tracked_signature != synced_signature:
+    normalized_directories = sorted(scanned_directories)
+    if tracked_signature != synced_signature or tracked_directories != normalized_directories:
         project["files"] = synced
+        project["directories"] = normalized_directories
         save_mod_index(data)
     return synced
 
@@ -515,6 +620,19 @@ def _collect_importable_files(root: Path) -> List[tuple[Path, str]]:
     return collected
 
 
+def _collect_importable_directories(root: Path) -> List[str]:
+    collected: List[str] = []
+    for dir_path in root.rglob("*"):
+        if not dir_path.is_dir():
+            continue
+        relative_path = dir_path.relative_to(root).as_posix()
+        if relative_path in ("", "."):
+            continue
+        _validate_relpath_dir(relative_path)
+        collected.append(relative_path)
+    return sorted(set(collected))
+
+
 def _write_uploaded_file(sequence: str, target_name: str, raw: bytes, file_id: Optional[str] = None) -> Dict[str, Any]:
     relpath = _validate_relpath_file(target_name)
     project_dir = _project_dir(sequence)
@@ -531,7 +649,8 @@ def _write_uploaded_file(sequence: str, target_name: str, raw: bytes, file_id: O
     files = [f for f in files if (f.get("path") or f.get("name")) != relpath]
     meta = _build_meta(file_id or f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}", relpath, target_path, project_dir)
     files.append(meta)
-    _write_project_files(sequence, files)
+    directories = _merge_project_directories(sequence, file_paths=[relpath])
+    _upsert_project_index(sequence, files=files, directories=directories)
     return meta
 
 
@@ -562,6 +681,7 @@ def _create_project_from_template_toml(file_name: str, raw: bytes, target_dir: s
         "description": description,
         "author": author,
         "cover": None,
+        "directories": [],
         "files": [],
     }
     save_mod_index(data)
@@ -578,11 +698,14 @@ def _register_project_from_directory(project_dir: Path, project_name: str) -> Di
         "description": "",
         "author": "",
         "cover": None,
+        "directories": [],
         "files": [],
     }
     save_mod_index(data)
     synced = _sync_project_files(sequence)
-    project = to_project(sequence, data[sequence]).model_dump()
+    refreshed = load_mod_index()
+    project = to_project(sequence, refreshed[sequence]).model_dump()
+    project["directories"] = _read_project_directories(sequence)
     project["files"] = synced
     return project
 
@@ -702,7 +825,8 @@ async def upload_file(
     new_id = fileId or f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
     meta = _build_meta(new_id, target_name, target_path, project_dir)
     files.append(meta)
-    _write_project_files(sequence, files)
+    directories = _merge_project_directories(sequence, file_paths=[target_name])
+    _upsert_project_index(sequence, files=files, directories=directories)
 
     return meta
 
@@ -757,7 +881,8 @@ def create_file(sequence: str, payload: CreateFilePayload):
     new_id = payload.fileId or f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
     meta = _build_meta(new_id, target_name, target_path, project_dir)
     files.append(meta)
-    _write_project_files(sequence, files)
+    directories = _merge_project_directories(sequence, file_paths=[target_name])
+    _upsert_project_index(sequence, files=files, directories=directories)
     return meta
 
 
@@ -827,11 +952,13 @@ def write_file(sequence: str, path: str = Query(...), payload: WriteFilePayload 
         new_id = f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
         new_meta = _build_meta(new_id, relpath, target, project_dir)
         files.append(new_meta)
-        _write_project_files(sequence, files)
+        directories = _merge_project_directories(sequence, file_paths=[relpath])
+        _upsert_project_index(sequence, files=files, directories=directories)
         return new_meta
     new_meta = _build_meta(meta["id"], relpath, target, project_dir)
     files = [new_meta if f.get("id") == meta["id"] else f for f in files]
-    _write_project_files(sequence, files)
+    directories = _merge_project_directories(sequence, file_paths=[relpath])
+    _upsert_project_index(sequence, files=files, directories=directories)
     return new_meta
 
 
@@ -883,7 +1010,10 @@ def rename_file(sequence: str, payload: RenamePayload, path: Optional[str] = Que
         meta_id = f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"
         new_meta = _build_meta(meta_id, dst_rel, dst, project_dir)
         updated.append(new_meta)
-    _write_project_files(sequence, updated)
+    _upsert_project_index(sequence, files=updated)
+    directories = set(_prune_project_directories(sequence))
+    directories.update(_directory_chain_for_file(dst_rel))
+    _upsert_project_index(sequence, files=updated, directories=sorted(directories))
     return new_meta
 
 
@@ -902,7 +1032,9 @@ def delete_file(sequence: str, path: str = Query(...)):
         except OSError as exc:
             raise HTTPException(500, f"删除失败: {exc}") from exc
     files = [f for f in _read_project_files(sequence) if (f.get("path") or f.get("name")) != relpath]
-    _write_project_files(sequence, files)
+    _upsert_project_index(sequence, files=files)
+    directories = _prune_project_directories(sequence)
+    _upsert_project_index(sequence, files=files, directories=directories)
     return {"success": True, "path": relpath}
 
 
@@ -915,6 +1047,7 @@ class CreateFolderPayload(BaseModel):
 class ImportArchiveResult(BaseModel):
     mode: str
     project: Optional[Dict[str, Any]] = None
+    directories: List[str] = []
     files: List[Dict[str, Any]] = []
 
 
@@ -935,7 +1068,8 @@ def create_folder(sequence: str, payload: CreateFolderPayload):
         target.mkdir(parents=True, exist_ok=False)
     except OSError as exc:
         raise HTTPException(500, f"创建目录失败: {exc}") from exc
-    return {"success": True, "path": relpath}
+    directories = _merge_project_directories(sequence, dir_paths=[relpath])
+    return {"success": True, "path": relpath, "directories": directories}
 
 
 @router.post(
@@ -964,7 +1098,8 @@ def remove_folder(sequence: str, payload: CreateFolderPayload):
         target.rmdir()
     except OSError as exc:
         raise HTTPException(500, f"删除目录失败: {exc}") from exc
-    return {"success": True, "path": relpath}
+    directories = _prune_project_directories(sequence)
+    return {"success": True, "path": relpath, "directories": directories}
 
 
 @router.post(
@@ -984,7 +1119,7 @@ async def import_plain_files(
         raw = await upload.read()
         target_name = _validate_relpath_file(relpath)
         imported.append(_write_uploaded_file(sequence, target_name, raw))
-    return {"mode": "files-imported", "files": imported}
+    return {"mode": "files-imported", "directories": _read_project_directories(sequence), "files": imported}
 
 
 @router.post(
@@ -1007,7 +1142,7 @@ async def import_template_toml(
         raise HTTPException(400, "当前不在项目目录中，普通 TOML 无法导入为文件")
     relpath = _join_base_dir(target_dir, file.filename or "template.toml")
     meta = _write_uploaded_file(project_sequence, relpath, raw)
-    return {"mode": "files-imported", "files": [meta]}
+    return {"mode": "files-imported", "directories": _read_project_directories(project_sequence), "files": [meta]}
 
 
 @router.post(
@@ -1038,17 +1173,21 @@ async def import_archive(
         else:
             _extract_archive_bytes(raw, matched_suffix, temp_dir, password=password)
         content_root = _flatten_single_top_dir(temp_dir)
+        archive_directories = _collect_importable_directories(content_root)
         entries = _collect_importable_files(content_root)
-        if not entries:
+        if not entries and not archive_directories:
             raise HTTPException(400, "归档中没有可导入的白名单文件")
         if in_project_folder:
             if not project_sequence:
                 raise HTTPException(400, "缺少 project_sequence")
             imported: List[Dict[str, Any]] = []
+            merged_directories = [_join_base_dir(target_dir, directory) for directory in archive_directories]
+            if merged_directories:
+                _merge_project_directories(project_sequence, dir_paths=merged_directories)
             for abs_path, rel in entries:
                 joined = _join_base_dir(target_dir, rel)
                 imported.append(_write_uploaded_file(project_sequence, joined, abs_path.read_bytes()))
-            return {"mode": "files-imported", "files": imported}
+            return {"mode": "files-imported", "directories": _read_project_directories(project_sequence), "files": imported}
         if not target_dir.strip():
             raise HTTPException(400, "首页导入压缩包或镜像包时必须指定导入目标目录")
         root_name = normalize_archive_project_name(filename)
@@ -1059,6 +1198,8 @@ async def import_archive(
         project_dir.mkdir(parents=True, exist_ok=False)
         written_files: List[Dict[str, Any]] = []
         try:
+            for rel in archive_directories:
+                (project_dir / rel).mkdir(parents=True, exist_ok=True)
             for abs_path, rel in entries:
                 destination = project_dir / rel
                 destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1071,7 +1212,7 @@ async def import_archive(
                 )
             project = _register_project_from_directory(project_dir, actual_root_name)
             synced = project.get("files", [])
-            return {"mode": "project-created", "project": project, "files": synced}
+            return {"mode": "project-created", "project": project, "directories": project.get("directories", []), "files": synced}
         except Exception:
             shutil.rmtree(project_dir, ignore_errors=True)
             raise

@@ -19,7 +19,9 @@ export interface WorkbenchImportResult {
     description: string
     author: string
     cover: string | null
+    directories?: string[]
   }
+  directories?: string[]
   files?: Array<{
     id: string
     name: string
