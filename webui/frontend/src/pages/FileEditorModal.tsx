@@ -28,9 +28,10 @@ export default function FileEditorModal({
   const [renamingName, setRenamingName] = useState<string | null>(null)
   const [renameInput, setRenameInput] = useState('')
   const [conflictState, setConflictState] = useState<{
-    name: string
+    sourcePath: string
+    targetPath: string
     suggestedName: string
-    payload: { content: string; conflictResolution: FileConflictResolution | null }
+    payload?: { content: string; conflictResolution: FileConflictResolution | null }
     mode: 'save' | 'rename'
   } | null>(null)
   const saveRef = useRef<() => Promise<void>>(async () => {})
@@ -114,7 +115,8 @@ export default function FileEditorModal({
         if (res.status === 409) {
           const detail = await res.json().catch(() => null)
           setConflictState({
-            name: path,
+            sourcePath: path,
+            targetPath: path,
             suggestedName: detail?.detail?.suggestion ?? '',
             payload,
             mode,
@@ -134,6 +136,52 @@ export default function FileEditorModal({
         }
       } catch (err) {
         setError(`保存异常: ${(err as Error).message ?? String(err)}`)
+      } finally {
+        setSaving(false)
+      }
+    },
+    [file, projectSequence, onRenamed],
+  )
+
+  const performRename = useCallback(
+    async (
+      sourcePath: string,
+      targetPath: string,
+      conflictResolution: FileConflictResolution | null,
+    ) => {
+      if (!file) return
+      setSaving(true)
+      setError(null)
+      try {
+        const res = await fetch(
+          `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files/rename?path=${encodeURIComponent(sourcePath)}`,
+          {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newName: targetPath, conflictResolution }),
+          },
+        )
+        if (res.status === 409) {
+          const detail = await res.json().catch(() => null)
+          setConflictState({
+            sourcePath,
+            targetPath,
+            suggestedName: detail?.detail?.suggestion ?? '',
+            mode: 'rename',
+          })
+          return
+        }
+        if (!res.ok) {
+          const text = await res.text().catch(() => '')
+          setError(`重命名失败 (${res.status}): ${text || '未知错误'}`)
+          return
+        }
+        const updated: WorkbenchFileMeta = await res.json()
+        onRenamed?.(updated)
+        setRenamingName(null)
+      } catch (err) {
+        setError(`重命名异常: ${(err as Error).message ?? String(err)}`)
       } finally {
         setSaving(false)
       }
@@ -170,40 +218,7 @@ export default function FileEditorModal({
       setRenamingName(null)
       return
     }
-    setSaving(true)
-    try {
-      const res = await fetch(
-        `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files/rename?path=${encodeURIComponent(refPath)}`,
-        {
-          method: 'PATCH',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ newPath: renameInput }),
-        },
-      )
-      if (res.status === 409) {
-        const detail = await res.json().catch(() => null)
-        setConflictState({
-          name: refPath,
-          suggestedName: detail?.detail?.suggestion ?? '',
-          payload: { content, conflictResolution: null },
-          mode: 'rename',
-        })
-        return
-      }
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        setError(`重命名失败 (${res.status}): ${text || '未知错误'}`)
-        return
-      }
-      const updated: WorkbenchFileMeta = await res.json()
-      onRenamed?.(updated)
-      setRenamingName(null)
-    } catch (err) {
-      setError(`重命名异常: ${(err as Error).message ?? String(err)}`)
-    } finally {
-      setSaving(false)
-    }
+    await performRename(refPath, renameInput, null)
   }
 
   const handleDelete = async () => {
@@ -227,14 +242,14 @@ export default function FileEditorModal({
 
   const handleConflictResolve = (resolution: FileConflictResolution) => {
     if (!conflictState) return
-    const { payload, mode } = conflictState
+    const { payload, mode, sourcePath, targetPath, suggestedName } = conflictState
     setConflictState(null)
     if (resolution === 'cancel') return
-    if (mode === 'save') {
-      void performSave(conflictState.name, { ...payload, conflictResolution: resolution }, 'save')
+    if (mode === 'save' && payload) {
+      void performSave(targetPath, { ...payload, conflictResolution: resolution }, 'save')
     } else {
-      // 改名冲突：用后端建议的 suggestion 作为新路径，并触发 'rename' 模式
-      void performSave(conflictState.suggestedName, { content: payload.content, conflictResolution: 'rename' }, 'rename')
+      const nextTarget = suggestedName || targetPath
+      void performRename(sourcePath, nextTarget, resolution)
     }
   }
 
@@ -377,7 +392,7 @@ export default function FileEditorModal({
 
       <FileConflictDialog
         open={conflictState !== null}
-        conflictingName={conflictState?.name ?? ''}
+        conflictingName={conflictState?.targetPath ?? ''}
         suggestedName={conflictState?.suggestedName ?? ''}
         onResolve={handleConflictResolve}
       />

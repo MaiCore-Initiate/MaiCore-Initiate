@@ -1170,10 +1170,8 @@ class DeploymentModRuntime:
 
     # file_import_list 单条记录允许的目录嵌套层数。5 层 = "a/b/c/d/e/file.py"。
     MAX_FILE_IMPORT_DEPTH = 5
-    # 路径段合法字符：与工作台白名单一致（仅允许 ASCII 字母/数字/下划线/连字符/点/空格）。
-    FILE_IMPORT_SEGMENT_PATTERN = re.compile(
-        r"^[A-Za-z0-9_\- ](?:\.[A-Za-z0-9_\- ])*$"
-    )
+    # 路径段合法字符：与工作台白名单一致；"." / ".." / 空段由后续逻辑单独拦截。
+    FILE_IMPORT_SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9._\- ]{1,128}$")
 
     def _validate_file_import_path(self, raw_path: str) -> str:
         """校验 file_import_list 单条路径。

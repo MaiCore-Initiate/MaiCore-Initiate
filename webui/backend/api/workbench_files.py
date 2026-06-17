@@ -36,8 +36,8 @@ BINARY_EXTENSIONS = {".jar", ".exe"}
 CREATION_BLOCKED_EXTENSIONS = {".jar", ".exe"}
 # 文件名合法字符：字母/数字/下划线/连字符/点/空格，长度 1-128
 FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._\- ]{1,128}$")
-# 路径段合法字符：与文件名同规则但不允许点结尾（避免 ".."、"." 等逃逸段）
-SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9_\- ](?:\.[A-Za-z0-9_\- ])*$|^[A-Za-z0-9_\- ]{1,128}$")
+# 路径段合法字符：与文件名同规则；"." / ".." / 空段由归一化逻辑单独拦截
+SEGMENT_PATTERN = re.compile(r"^[A-Za-z0-9._\- ]{1,128}$")
 # 子目录路径最大嵌套层数（不含项目根）。5 层 = "a/b/c/d/e/file.py"
 MAX_DIR_DEPTH = 5
 # 文本文件最大 5 MB

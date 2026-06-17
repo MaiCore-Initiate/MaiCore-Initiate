@@ -22,8 +22,7 @@ export type TemplateWorkbenchItemType = 'deployment-flow' | 'folder' | 'script' 
 export type TemplateWorkbenchLayout = 'card' | 'list'
 type TemplateWorkbenchRoute =
   | { type: 'home' }
-  | { type: 'project'; sequence: string }
-  | { type: 'templates'; sequence: string }
+  | { type: 'project'; sequence: string; dir: string }
 type WorkbenchItemRole = 'project' | 'template-file' | 'imported-file' | 'imported-folder'
 type WorkbenchFileKind = 'folder' | 'code' | 'binary' | 'text' | 'log' | 'template'
 
@@ -161,6 +160,18 @@ function basename(path: string) {
   return normalized.split('/').filter(Boolean).pop() ?? path
 }
 
+function normalizeWorkbenchPath(path?: string | null) {
+  return (path ?? '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+}
+
+function parentWorkbenchPath(path: string) {
+  const normalized = normalizeWorkbenchPath(path)
+  if (!normalized) return ''
+  const parts = normalized.split('/')
+  parts.pop()
+  return parts.join('/')
+}
+
 function templateNameForProject(project: WorkbenchProjectIndex) {
   const pathName = basename(project.path)
   if (pathName.toLowerCase().endsWith('.toml')) return pathName
@@ -221,16 +232,15 @@ function createTemplateFileItem(project: WorkbenchProjectIndex, coverVersion = 0
 
 function createImportedFileItem(project: WorkbenchProjectIndex, file: NonNullable<WorkbenchProjectIndex['files']>[number]): TemplateWorkbenchItem {
   const kind = classifyFile(file.name, file.binary)
-  // 把多级路径显示为「目录/…/文件名」+ path 作 sourcePath，方便画布读取
-  const relpath = (file.path?.trim() || file.name).replace(/\\/g, '/')
-  const displayName = relpath
+  const relpath = normalizeWorkbenchPath(file.path?.trim() || file.name)
+  const displayName = basename(relpath)
   return {
     id: `${project.sequence}:file:${file.id || relpath}`,
     name: displayName,
     type: kind === 'binary' ? 'archive' : 'script',
     role: 'imported-file',
     fileKind: kind,
-    fileName: relpath,
+    fileName: displayName,
     sourcePath: relpath,
     updatedAt: formatFileSize(file.size),
     sizeLabel: formatFileSize(file.size),
@@ -853,29 +863,38 @@ export default function TemplateWorkbench({
   const contentItems = useMemo(() => {
     if (route.type === 'home') return projectItems
     if (!selectedProject) return []
+    const currentDir = normalizeWorkbenchPath(route.dir)
     const files = selectedProject.files ?? []
-    // 把多级路径的 imported-file 分成两类：直接落根的文件 + 一级子目录（虚拟 folder）
     const directFiles: typeof files = []
     const folderCounts = new Map<string, number>()
     for (const f of files) {
-      const rel = (f.path?.trim() || f.name).replace(/\\/g, '/')
-      const slash = rel.indexOf('/')
+      const rel = normalizeWorkbenchPath(f.path?.trim() || f.name)
+      if (!rel) continue
+      const remaining = currentDir
+        ? (rel.startsWith(`${currentDir}/`) ? rel.slice(currentDir.length + 1) : '')
+        : rel
+      if (!remaining) continue
+      const slash = remaining.indexOf('/')
       if (slash === -1) {
         directFiles.push(f)
       } else {
-        const folder = rel.slice(0, slash)
+        const child = remaining.slice(0, slash)
+        const folder = currentDir ? `${currentDir}/${child}` : child
         folderCounts.set(folder, (folderCounts.get(folder) ?? 0) + 1)
       }
     }
     const folderItems = Array.from(folderCounts.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([folder, count]) => createImportedFolderItem(selectedProject, folder, count))
+    const directFileItems = [...directFiles]
+      .sort((a, b) => normalizeWorkbenchPath(a.path || a.name).localeCompare(normalizeWorkbenchPath(b.path || b.name)))
+      .map(file => createImportedFileItem(selectedProject, file))
     return [
-      createTemplateFileItem(selectedProject, coverVersion[selectedProject.sequence] ?? 0),
+      ...(currentDir ? [] : [createTemplateFileItem(selectedProject, coverVersion[selectedProject.sequence] ?? 0)]),
       ...folderItems,
-      ...directFiles.map(file => createImportedFileItem(selectedProject, file)),
+      ...directFileItems,
     ]
-  }, [projectItems, route.type, selectedProject, coverVersion])
+  }, [projectItems, route, selectedProject, coverVersion])
 
   const cardLayout = useMemo(
     () => contentItems.map((_, index) => ({
@@ -895,7 +914,7 @@ export default function TemplateWorkbench({
 
   const contentTitle = route.type === 'home'
     ? '全部项目'
-    : selectedProject?.mod_name || '项目内容'
+    : (route.dir ? basename(route.dir) : selectedProject?.mod_name) || '项目内容'
   const contentSecondaryLabel = route.type === 'home' ? '回收站' : '返回上级'
 
   useEffect(() => {
@@ -935,7 +954,11 @@ export default function TemplateWorkbench({
   const openItem = async (item: TemplateWorkbenchItem) => {
     onOpenItem?.(item)
     if (item.role === 'project' && item.sequence && item.displayMode === 'folder') {
-      setRoute({ type: 'project', sequence: item.sequence })
+      setRoute({ type: 'project', sequence: item.sequence, dir: '' })
+      return
+    }
+    if (item.role === 'imported-folder' && item.sequence) {
+      setRoute({ type: 'project', sequence: item.sequence, dir: normalizeWorkbenchPath(item.sourcePath) })
       return
     }
     if (item.role === 'imported-file') return
@@ -952,6 +975,10 @@ export default function TemplateWorkbench({
 
   const navigateBackInWorkbench = () => {
     if (route.type === 'project') {
+      if (route.dir) {
+        setRoute({ type: 'project', sequence: route.sequence, dir: parentWorkbenchPath(route.dir) })
+        return
+      }
       setRoute({ type: 'home' })
     }
   }
