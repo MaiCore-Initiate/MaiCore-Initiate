@@ -7,6 +7,7 @@ import EditProjectDialog, { type EditableProject } from '../components/EditProje
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog'
 import ProjectContextMenu, { type ProjectContextAction } from '../components/ProjectContextMenu'
 import WorkbenchImportDialog, { type WorkbenchImportResult, type WorkbenchImportTargetContext } from '../components/WorkbenchImportDialog'
+import FileEditorModal from './FileEditorModal'
 import {
   CirclePlus,
   Clock,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react'
 import { CardSquaresIcon, ListDashesIcon } from '../components/icons/SidebarIcons'
 import { getFileIconByName } from './workbench-canvas/blocks/fileIcons'
+import type { WorkbenchFileMeta } from './workbench-canvas/types'
 
 export type TemplateWorkbenchSection = 'recent' | 'my-templates' | 'market' | 'starred'
 export type TemplateWorkbenchItemType = 'deployment-flow' | 'folder' | 'script' | 'archive'
@@ -61,6 +63,7 @@ export interface TemplateWorkbenchItem {
   forceFolder?: boolean | null
   displayMode?: 'folder' | 'card'
   fileCount?: number
+  fileMeta?: WorkbenchFileMeta
 }
 
 interface WorkbenchProjectIndex {
@@ -325,6 +328,7 @@ function createImportedFileItem(project: WorkbenchProjectIndex, file: NonNullabl
     updatedAt: formatFileSize(file.size),
     sizeLabel: formatFileSize(file.size),
     sequence: project.sequence,
+    fileMeta: file as WorkbenchFileMeta,
   }
 }
 
@@ -386,6 +390,22 @@ function isDeploymentFlowItem(item: TemplateWorkbenchItem) {
   return item.role === 'template-file' || (item.role === 'project' && item.fileKind === 'template')
 }
 
+function isEditableWorkbenchFile(item: TemplateWorkbenchItem) {
+  return item.role === 'imported-file' && item.fileKind !== 'binary' && item.fileKind !== 'template' && Boolean(item.sequence && item.fileMeta)
+}
+
+function openWorkbenchItemOnClick(
+  item: TemplateWorkbenchItem,
+  onOpen?: (item: TemplateWorkbenchItem) => void,
+  onEditFile?: (item: TemplateWorkbenchItem) => void,
+) {
+  if (isEditableWorkbenchFile(item)) {
+    onEditFile?.(item)
+    return
+  }
+  onOpen?.(item)
+}
+
 function StarGlyph({ filled, size = 24 }: { filled: boolean; size?: number }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -443,6 +463,7 @@ function FileCard({
   left,
   top,
   onOpen,
+  onEditFile,
   onContextMenu,
   starred = false,
   onToggleStar,
@@ -451,6 +472,7 @@ function FileCard({
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
+  onEditFile?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
   starred?: boolean
   onToggleStar?: (sequence: string) => void
@@ -460,6 +482,7 @@ function FileCard({
       role="button"
       tabIndex={0}
       onClick={() => onOpen?.(item)}
+      onDoubleClick={() => openWorkbenchItemOnClick(item, onOpen, onEditFile)}
       onKeyDown={event => {
         if (event.key !== 'Enter' && event.key !== ' ') return
         event.preventDefault()
@@ -506,6 +529,7 @@ function ImportedFileCard({
   left,
   top,
   onOpen,
+  onEditFile,
   onContextMenu,
   starred = false,
   onToggleStar,
@@ -514,6 +538,7 @@ function ImportedFileCard({
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
+  onEditFile?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
   starred?: boolean
   onToggleStar?: (sequence: string) => void
@@ -524,6 +549,7 @@ function ImportedFileCard({
       role="button"
       tabIndex={0}
       onClick={() => onOpen?.(item)}
+      onDoubleClick={() => openWorkbenchItemOnClick(item, onOpen, onEditFile)}
       onKeyDown={event => {
         if (event.key !== 'Enter' && event.key !== ' ') return
         event.preventDefault()
@@ -714,6 +740,7 @@ function ProjectCard({
   left,
   top,
   onOpen,
+  onEditFile,
   onContextMenu,
   starred = false,
   onToggleStar,
@@ -722,14 +749,15 @@ function ProjectCard({
   left: number
   top: number
   onOpen?: (item: TemplateWorkbenchItem) => void
+  onEditFile?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
   starred?: boolean
   onToggleStar?: (sequence: string) => void
 }) {
   if (item.type === 'folder' || item.role === 'imported-folder') return <FolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
-  if (item.role === 'imported-file' || item.role === 'template-file') return <ImportedFileCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
+  if (item.role === 'imported-file' || item.role === 'template-file') return <ImportedFileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
   if (item.displayMode === 'folder') return <ProjectFolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
-  return <FileCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
+  return <FileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
 }
 
 function FolderTypeGlyph() {
@@ -810,12 +838,14 @@ function FileTypeGlyph({ kind }: { kind?: WorkbenchFileKind }) {
 function ProjectList({
   items,
   onOpen,
+  onEditFile,
   onContextMenu,
   isStarred,
   onToggleStar,
 }: {
   items: TemplateWorkbenchItem[]
   onOpen?: (item: TemplateWorkbenchItem) => void
+  onEditFile?: (item: TemplateWorkbenchItem) => void
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
   isStarred?: (sequence?: string) => boolean
   onToggleStar?: (sequence: string) => void
@@ -835,6 +865,7 @@ function ProjectList({
             <button
               type="button"
               onClick={() => onOpen?.(item)}
+              onDoubleClick={() => openWorkbenchItemOnClick(item, onOpen, onEditFile)}
               onContextMenu={event => {
                 if (!onContextMenu) return
                 event.preventDefault()
@@ -1302,6 +1333,7 @@ export default function TemplateWorkbench({
   const [newFileSubmitting, setNewFileSubmitting] = useState(false)
   const [newFileError, setNewFileError] = useState<string | null>(null)
   const [newFileTarget, setNewFileTarget] = useState<NewFileTarget | null>(null)
+  const [editorFile, setEditorFile] = useState<{ projectSequence: string; file: WorkbenchFileMeta } | null>(null)
   const [newFileConflict, setNewFileConflict] = useState<{
     name: string
     suggestedName: string
@@ -1762,6 +1794,50 @@ export default function TemplateWorkbench({
     setCreateProjectDialogOpen(true)
   }
 
+  const openFileEditor = (item: TemplateWorkbenchItem) => {
+    if (!isEditableWorkbenchFile(item) || !item.sequence || !item.fileMeta) return
+    setEditorFile({ projectSequence: item.sequence, file: item.fileMeta })
+  }
+
+  const updateEditorFileMeta = (projectSequence: string, nextFile: WorkbenchFileMeta) => {
+    setRegisteredProjects(prev => prev.map(project => {
+      if (project.sequence !== projectSequence) return project
+      const nextKey = normalizeWorkbenchPath(nextFile.path || nextFile.name)
+      const files = project.files ?? []
+      const previousFile = files.find(file => file.id === nextFile.id)
+      const previousKey = normalizeWorkbenchPath(previousFile?.path || previousFile?.name)
+      return {
+        ...project,
+        directories: mergeDirectoryLists(project.directories, directoryChainForFile(nextFile.path || nextFile.name)),
+        workbench_meta: {
+          ...(project.workbench_meta ?? {}),
+          fileImportList: (project.workbench_meta?.fileImportList ?? []).map(path => (normalizeWorkbenchPath(path) === previousKey ? nextKey : path)),
+        },
+        files: files.map(file => (file.id === nextFile.id ? nextFile : file)),
+      }
+    }))
+    setEditorFile({ projectSequence, file: nextFile })
+  }
+
+  const removeEditorFileMeta = (projectSequence: string, fileId: string) => {
+    setRegisteredProjects(prev => prev.map(project => {
+      if (project.sequence !== projectSequence) return project
+      const removedFile = (project.files ?? []).find(file => file.id === fileId)
+      const removedKey = normalizeWorkbenchPath(removedFile?.path || removedFile?.name)
+      return {
+        ...project,
+        directories: mergeDirectoryLists(project.directories),
+        workbench_meta: {
+          ...(project.workbench_meta ?? {}),
+          fileImportList: (project.workbench_meta?.fileImportList ?? []).filter(path => normalizeWorkbenchPath(path) !== removedKey),
+        },
+        files: (project.files ?? []).filter(file => file.id !== fileId),
+      }
+    }))
+    setEditorFile(null)
+    void reloadProjects()
+  }
+
   const navigateBackInWorkbench = () => {
     if (route.type === 'project') {
       if (route.dir) {
@@ -2088,6 +2164,7 @@ export default function TemplateWorkbench({
             left={cardLayout[index].left}
             top={cardLayout[index].top}
             onOpen={openItem}
+            onEditFile={openFileEditor}
             onContextMenu={handleContextMenu}
             starred={isStarredSequence(item.sequence)}
             onToggleStar={toggleStarredSequence}
@@ -2098,6 +2175,7 @@ export default function TemplateWorkbench({
           <ProjectList
             items={visibleContentItems}
             onOpen={openItem}
+            onEditFile={openFileEditor}
             onContextMenu={handleContextMenu}
             isStarred={isStarredSequence}
             onToggleStar={toggleStarredSequence}
@@ -2143,6 +2221,24 @@ export default function TemplateWorkbench({
         starredSequences={starredSequenceSet}
         onToggle={toggleStarredSequence}
         onClose={() => setStarredDialogOpen(false)}
+      />
+
+      <FileEditorModal
+        file={editorFile?.file ?? null}
+        projectSequence={editorFile?.projectSequence ?? null}
+        onClose={() => setEditorFile(null)}
+        onSaved={(newMeta: WorkbenchFileMeta) => {
+          if (!editorFile) return
+          updateEditorFileMeta(editorFile.projectSequence, newMeta)
+        }}
+        onRenamed={(newMeta: WorkbenchFileMeta) => {
+          if (!editorFile) return
+          updateEditorFileMeta(editorFile.projectSequence, newMeta)
+        }}
+        onDeleted={() => {
+          if (!editorFile) return
+          removeEditorFileMeta(editorFile.projectSequence, editorFile.file.id)
+        }}
       />
 
       <WorkbenchImportDialog

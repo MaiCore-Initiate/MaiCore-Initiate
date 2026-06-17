@@ -10,12 +10,14 @@ export default function FileEditorModal({
   file,
   projectSequence,
   onClose,
+  onSaved,
   onRenamed,
   onDeleted,
 }: {
   file: WorkbenchFileMeta | null
   projectSequence: string | null
   onClose: () => void
+  onSaved?: (newMeta: WorkbenchFileMeta) => void
   onRenamed?: (newMeta: WorkbenchFileMeta) => void
   onDeleted?: () => void
 }) {
@@ -131,7 +133,9 @@ export default function FileEditorModal({
         const updated: WorkbenchFileMeta = await res.json()
         setOriginalContent(payload.content)
         setContent(payload.content)
-        if (mode === 'rename') {
+        if (mode === 'save') {
+          onSaved?.(updated)
+        } else {
           onRenamed?.(updated)
         }
       } catch (err) {
@@ -140,7 +144,7 @@ export default function FileEditorModal({
         setSaving(false)
       }
     },
-    [file, projectSequence, onRenamed],
+    [file, projectSequence, onSaved, onRenamed],
   )
 
   const performRename = useCallback(
