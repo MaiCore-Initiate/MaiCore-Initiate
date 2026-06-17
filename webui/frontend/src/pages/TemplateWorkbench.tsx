@@ -106,7 +106,7 @@ const sidebarItems: Array<{ id: TemplateWorkbenchSection; label: string; icon: t
 ]
 
 // 卡片网格布局：5 列等距、行高 250px；top 起始 306 与原视觉一致。
-// 用 useMemo 在 contentItems 变化时按 index 算 left/top，避免硬编码固定 4 个位置。
+// 用 useMemo 在当前显示项变化时按 index 算 left/top，避免硬编码固定 4 个位置。
 const CARD_COLUMNS = 5
 const CARD_LEFT_START = 400
 const CARD_LEFT_STEP = 293
@@ -935,6 +935,8 @@ export default function TemplateWorkbench({
   // cover cache buster：替换/重传封面时给对应 sequence 递增 version，projectCoverUrl 会拼到 ?v=<version>，
   // 让 <img src> 变化从而绕过浏览器对同名 cover 的启发式缓存
   const [coverVersion, setCoverVersion] = useState<Record<string, number>>({})
+  const [searchQuery, setSearchQuery] = useState('')
+  const [exactSearchEnabled, setExactSearchEnabled] = useState(false)
 
   const reloadProjects = useCallback(async () => {
     try {
@@ -1027,12 +1029,21 @@ export default function TemplateWorkbench({
     ]
   }, [projectItems, route, selectedProject, coverVersion])
 
+  const visibleContentItems = useMemo(() => {
+    const trimmedQuery = searchQuery.trim()
+    if (!trimmedQuery) return contentItems
+    if (exactSearchEnabled) return contentItems.filter(item => item.name === searchQuery)
+
+    const fuzzyQuery = trimmedQuery.toLowerCase()
+    return contentItems.filter(item => item.name.toLowerCase().includes(fuzzyQuery))
+  }, [contentItems, searchQuery, exactSearchEnabled])
+
   const cardLayout = useMemo(
-    () => contentItems.map((_, index) => ({
+    () => visibleContentItems.map((_, index) => ({
       left: CARD_LEFT_START + (index % CARD_COLUMNS) * CARD_LEFT_STEP,
       top: CARD_TOP_START + Math.floor(index / CARD_COLUMNS) * CARD_TOP_STEP,
     })),
-    [contentItems],
+    [visibleContentItems],
   )
 
   // main 高度按卡片排到的最底行自适应（最少保留原 1080px 设计稿高度）
@@ -1371,14 +1382,46 @@ export default function TemplateWorkbench({
           <Plus size={32} />
         </button>
         <div className="absolute left-[69px] top-[16px] h-[40px] w-px" style={{ background: 'var(--twb-border)' }} />
-        <label className="absolute flex items-center rounded-[6px] border" style={{ left: 95, top: 15, width: 482, height: 41, borderColor: 'var(--twb-border)', color: 'var(--twb-muted)' }}>
-          <Search size={30} className="ml-[10px]" />
-          <input
-            className="ml-[10px] min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--twb-muted)]"
-            placeholder="搜索项目、文件、文件夹"
-            style={{ color: 'var(--twb-text)', fontFamily: font, fontSize: 20, fontWeight: 300 }}
-          />
-        </label>
+        <div className="absolute flex items-center rounded-[6px] border" style={{ left: 95, top: 15, width: 482, height: 41, borderColor: 'var(--twb-border)', color: 'var(--twb-muted)' }}>
+          <label className="flex min-w-0 flex-1 items-center">
+            <span className="sr-only">搜索项目、文件、文件夹</span>
+            <Search size={30} className="ml-[10px]" />
+            <input
+              className="ml-[10px] min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--twb-muted)]"
+              placeholder="搜索项目、文件、文件夹"
+              value={searchQuery}
+              onChange={event => setSearchQuery(event.target.value)}
+              style={{ color: 'var(--twb-text)', fontFamily: font, fontSize: 20, fontWeight: 300 }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setExactSearchEnabled(prev => !prev)}
+            className="mr-[5px] flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[4px] transition-colors hover:bg-[var(--twb-hover)]"
+            style={{ color: exactSearchEnabled ? '#E5484D' : 'var(--twb-text)' }}
+            aria-label={exactSearchEnabled ? '关闭精确搜索' : '开启精确搜索'}
+            aria-pressed={exactSearchEnabled}
+            title={exactSearchEnabled ? '精确搜索已开启' : '开启精确搜索'}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden>
+              <path
+                d="M6.8125 25.1875C5.6625 24.0375 6.425 21.625 5.8375 20.2125C5.25 18.8 3 17.5625 3 16C3 14.4375 5.225 13.25 5.8375 11.7875C6.45 10.325 5.6625 7.9625 6.8125 6.8125C7.9625 5.6625 10.375 6.425 11.7875 5.8375C13.2 5.25 14.4375 3 16 3C17.5625 3 18.75 5.225 20.2125 5.8375C21.675 6.45 24.0375 5.6625 25.1875 6.8125C26.3375 7.9625 25.575 10.375 26.1625 11.7875C26.75 13.2 29 14.4375 29 16C29 17.5625 26.775 18.75 26.1625 20.2125C25.55 21.675 26.3375 24.0375 25.1875 25.1875C24.0375 26.3375 21.625 25.575 20.2125 26.1625C18.8 26.75 17.5625 29 16 29C14.4375 29 13.25 26.775 11.7875 26.1625C10.325 25.55 7.9625 26.3375 6.8125 25.1875Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              <path
+                d="M16 10L16 17"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              <circle cx="16" cy="21.5" r="1.5" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
         <div className="absolute" style={{ right: 30, top: 15 }}>{slots?.toolbarTrailing}</div>
         <button
           type="button"
@@ -1443,7 +1486,7 @@ export default function TemplateWorkbench({
 
         {slots?.contentLeading}
 
-        {layoutMode === 'card' && contentItems.map((item, index) => (
+        {layoutMode === 'card' && visibleContentItems.map((item, index) => (
           <ProjectCard
             key={item.id}
             item={item}
@@ -1455,7 +1498,7 @@ export default function TemplateWorkbench({
         ))}
 
         {layoutMode === 'list' && (
-          <ProjectList items={contentItems} onOpen={openItem} onContextMenu={handleContextMenu} />
+          <ProjectList items={visibleContentItems} onOpen={openItem} onContextMenu={handleContextMenu} />
         )}
 
         {slots?.contentTrailing}
