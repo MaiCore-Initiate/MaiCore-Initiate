@@ -1168,16 +1168,73 @@ class DeploymentModRuntime:
         escaped = raw.replace("\\", "\\\\").replace("\"", "\\\"")
         return f"\"{escaped}\""
 
+    # file_import_list 单条记录允许的目录嵌套层数。5 层 = "a/b/c/d/e/file.py"。
+    MAX_FILE_IMPORT_DEPTH = 5
+    # 路径段合法字符：与工作台白名单一致（仅允许 ASCII 字母/数字/下划线/连字符/点/空格）。
+    FILE_IMPORT_SEGMENT_PATTERN = re.compile(
+        r"^[A-Za-z0-9_\- ](?:\.[A-Za-z0-9_\- ])*$"
+    )
+
+    def _validate_file_import_path(self, raw_path: str) -> str:
+        """校验 file_import_list 单条路径。
+
+        归一化为 `/` 分隔、不含首尾斜杠、每段合法、最多 5 层目录（不含文件本身的层）。
+        """
+        if not raw_path or not str(raw_path).strip():
+            raise RuntimeError("file_import_list 路径不能为空")
+        normalized = str(raw_path).replace("\\", "/").strip("/")
+        if not normalized:
+            raise RuntimeError("file_import_list 路径不能为空")
+        if len(normalized) > 256:
+            raise RuntimeError(f"file_import_list 路径过长（>256）: {raw_path!r}")
+        parts = normalized.split("/")
+        for part in parts:
+            if not part or part == "." or part == "..":
+                raise RuntimeError(f"file_import_list 路径段非法: {raw_path!r}")
+            if not self.FILE_IMPORT_SEGMENT_PATTERN.match(part):
+                raise RuntimeError(f"file_import_list 路径段包含非法字符: {part!r}")
+        if len(parts) > self.MAX_FILE_IMPORT_DEPTH + 1:
+            raise RuntimeError(
+                f"file_import_list 路径嵌套层数超过 {self.MAX_FILE_IMPORT_DEPTH}: {raw_path!r}"
+            )
+        return normalized
+
     def _prepare_file_imports(self, state: RuntimeState) -> None:
         if not state.template.metadata.file_import:
             return
-        for filename in state.template.metadata.file_import_list:
-            file_path = os.path.join(state.template.metadata.template_root, filename)
+        seen_paths: Dict[str, None] = {}
+        for raw_filename in state.template.metadata.file_import_list:
+            filename = self._validate_file_import_path(raw_filename)
+            if filename in seen_paths:
+                self._notify(
+                    state,
+                    1,
+                    6,
+                    "准备模板运行时",
+                    "running",
+                    f"重复的文件导入条目已跳过: {filename}",
+                    event="detail",
+                )
+                continue
+            seen_paths[filename] = None
+            # 把多级路径（正斜杠形式）拼到项目根下；在 Windows 上 os.path.join 会自动转反斜杠
+            file_path = os.path.join(state.template.metadata.template_root, filename.replace("/", os.sep))
             if not os.path.isfile(file_path):
-                raise RuntimeError(f"模板导入文件不存在: {filename}")
+                raise RuntimeError(
+                    f"模板导入文件不存在: {filename}（项目根: {state.template.metadata.template_root}）"
+                )
+            # 字典 key 始终保留正斜杠形式，与 file_import_list 与 {{file_path|...}} 写法保持一致
             state.file_paths[filename] = os.path.abspath(file_path)
             self._notify(state, 1, 6, "准备模板运行时", "running", f"已导入文件: {filename}")
-            self._notify(state, 1, 6, "准备模板运行时", "running", f"文件路径: {state.file_paths[filename]}", event="detail")
+            self._notify(
+                state,
+                1,
+                6,
+                "准备模板运行时",
+                "running",
+                f"文件路径: {state.file_paths[filename]}",
+                event="detail",
+            )
 
     def _resolve_stage_path(
         self,
@@ -1390,7 +1447,8 @@ class DeploymentModRuntime:
             if kind == "key":
                 return self._resolve_template_key(raw_template, key)
             if kind == "file_path" and template_root:
-                return os.path.abspath(os.path.join(template_root, key))
+                # 多级路径：把正斜杠转 os.sep 后再 join，Windows 上结果一致
+                return os.path.abspath(os.path.join(template_root, key.replace("/", os.sep)))
             return ""
 
         for _ in range(5):
@@ -1928,20 +1986,35 @@ class DeploymentModRuntime:
         return self._resolve_tree_value(current, segments[index:], path)
 
     def _resolve_file_key(self, state: RuntimeState, path: str) -> str:
+        # 按 key 长度降序匹配，避免「a」先于「a/b/c」匹配。`{{file_key|version/JSON/version.json.version}}`
+        # 走的是「先匹配最长 filename，再截取 . 后面的 segments」的方式。
         for filename in sorted(state.file_paths.keys(), key=len, reverse=True):
             if path == filename:
                 return self._stringify_value(self._get_file_tree(state, filename), path)
             prefix = f"{filename}."
             if path.startswith(prefix):
-                return self._resolve_tree_value(self._get_file_tree(state, filename), path[len(prefix):].split("."), path)
-        raise RuntimeError(f"文件键路径不存在: {path}")
+                return self._resolve_tree_value(
+                    self._get_file_tree(state, filename),
+                    path[len(prefix):].split("."),
+                    path,
+                )
+        available = sorted(state.file_paths.keys())
+        hint = f"；已导入的文件: {available}" if available else ""
+        raise RuntimeError(f"文件键路径不存在: {path!r}{hint}")
 
     def _get_file_tree(self, state: RuntimeState, filename: str) -> Any:
         if filename in state.file_trees:
             return state.file_trees[filename]
         file_path = str(state.file_paths.get(filename, "") or "").strip()
         if not file_path:
-            raise RuntimeError(f"模板导入文件不存在: {filename}")
+            available = sorted(state.file_paths.keys())
+            raise RuntimeError(
+                f"模板导入文件未在 file_import_list 中声明: {filename!r}（已声明: {available}）"
+            )
+        if not os.path.isfile(file_path):
+            raise RuntimeError(
+                f"模板导入文件不存在: {filename}（绝对路径: {file_path}，项目根: {state.template.metadata.template_root}）"
+            )
         try:
             parsed = self._parse_structured_file(file_path)
         except Exception as exc:
