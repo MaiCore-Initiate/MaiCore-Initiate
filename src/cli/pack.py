@@ -279,9 +279,11 @@ def pack_instance(
                 "napcat_path_rel":  _rel_if_under(cfg.get("napcat_path", ""),  nickname_dir),
                 "venv_path_rel":    _rel_if_under(cfg.get("venv_path", ""),    nickname_dir),
                 "mongodb_path_rel": _rel_if_under(cfg.get("mongodb_path", ""), nickname_dir),
+                "webui_path_rel":   _rel_if_under(cfg.get("webui_path", ""),   nickname_dir),
                 # 原始绝对路径保留作参考（不用于自动还原）
                 "napcat_path_orig":  cfg.get("napcat_path", ""),
                 "adapter_path_orig": cfg.get("adapter_path", ""),
+                "webui_path_orig":   cfg.get("webui_path", ""),
             },
         }
     }
@@ -305,10 +307,37 @@ def pack_instance(
     return out_path
 
 
-def import_instance(mcsins_path: str, dest_dir: str) -> str:
+def read_mcsins_meta(mcsins_path: str) -> dict:
+    """读取 .mcsins 包内 meta.json，用于 CLI 展示或 WebUI 预览。"""
+    mcsins_path = os.path.abspath(mcsins_path)
+    if not os.path.exists(mcsins_path):
+        raise FileNotFoundError(f"文件不存在: {mcsins_path}")
+
+    iso = pycdlib.PyCdlib()
+    try:
+        iso.open(mcsins_path)
+        buf = io.BytesIO()
+        iso.get_file_from_iso_fp(buf, joliet_path="/meta.json")
+        raw_meta = json.loads(buf.getvalue().decode("utf-8"))
+        return raw_meta.get("meta", raw_meta)
+    finally:
+        try:
+            iso.close()
+        except Exception:
+            pass
+
+
+def import_instance(
+    mcsins_path: str,
+    dest_dir: str,
+    confirm: bool = True,
+    setup_venv: Optional[bool] = None,
+) -> str:
     """
     从 .mcsins 文件导入实例。
     展示元数据后交互确认，解压到 dest_dir/<serial>/，注册到 config_manager。
+    confirm=False 时跳过 CLI 确认，供 WebUI 在网页确认后调用。
+    setup_venv=None 时沿用 CLI 交互询问；True/False 时直接执行或跳过虚拟环境初始化。
     """
     from src.core.config import config_manager
 
@@ -316,14 +345,10 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
     if not os.path.exists(mcsins_path):
         raise FileNotFoundError(f"文件不存在: {mcsins_path}")
 
+    meta_info = read_mcsins_meta(mcsins_path)
+
     iso = pycdlib.PyCdlib()
     iso.open(mcsins_path)
-
-    # 读取 meta.json
-    buf = io.BytesIO()
-    iso.get_file_from_iso_fp(buf, joliet_path="/meta.json")
-    raw_meta = json.loads(buf.getvalue().decode("utf-8"))
-    meta_info = raw_meta.get("meta", raw_meta)
 
     # 展示实例信息
     console.rule("[bold]实例信息")
@@ -348,7 +373,7 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
             console.print(f"[bold cyan]{label}：[/bold cyan]{', '.join(items)}")
     console.rule()
 
-    if not Confirm.ask(f"确认导入到 {dest_dir} ?"):
+    if confirm and not Confirm.ask(f"确认导入到 {dest_dir} ?"):
         iso.close()
         raise RuntimeError("用户取消导入")
 
@@ -388,6 +413,7 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
 
     # 注册到 config_manager
     bot_type = meta_info.get("type", "MaiBot")
+    instance_config = meta_info.get("instance_config", {}) if isinstance(meta_info.get("instance_config", {}), dict) else {}
     if bot_type in ("MoFox-Core", "MoFox_bot"):
         path_key = "mofox_path"
     elif bot_type == "Neo-MoFox":
@@ -410,18 +436,19 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
     if cfg_key in existing:
         cfg_key = f"{instance_name}_{serial}"
 
-    adapter_path = _restore_path(meta_info.get("adapter_path_rel", ""), extract_dir)
-    napcat_path  = _restore_path(meta_info.get("napcat_path_rel", ""), extract_dir)
-    venv_path    = _restore_path(meta_info.get("venv_path_rel", ""), extract_dir)
-    mongodb_path = _restore_path(meta_info.get("mongodb_path_rel", ""), extract_dir)
-    webui_path   = _restore_path(meta_info.get("webui_path_rel", ""), extract_dir)
+    adapter_path = _restore_path(instance_config.get("adapter_path_rel", meta_info.get("adapter_path_rel", "")), extract_dir)
+    napcat_path  = _restore_path(instance_config.get("napcat_path_rel", meta_info.get("napcat_path_rel", "")), extract_dir)
+    venv_path    = _restore_path(instance_config.get("venv_path_rel", meta_info.get("venv_path_rel", "")), extract_dir)
+    mongodb_path = _restore_path(instance_config.get("mongodb_path_rel", meta_info.get("mongodb_path_rel", "")), extract_dir)
+    webui_path   = _restore_path(instance_config.get("webui_path_rel", meta_info.get("webui_path_rel", "")), extract_dir)
 
     config_manager.add_configuration(cfg_key, {
         "serial_number": serial,
         "nickname_path": instance_name,
         "version_path": meta_info.get("version", ""),
         "bot_type": bot_type,
-        "qq_account": meta_info.get("qq_account", ""),
+        "qq_account": instance_config.get("qq_account", meta_info.get("qq_account", "")),
+        "napcat_version": instance_config.get("napcat_version", meta_info.get("napcat_version", "")),
         path_key: bot_dir,
         "adapter_path": adapter_path,
         "napcat_path": napcat_path,
@@ -445,7 +472,12 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
             or (bot_type == "Neo-MoFox" and os.path.exists(pyproject_path))
         )
         if can_auto_setup:
-            if Confirm.ask("[yellow]未检测到虚拟环境，是否自动创建并安装依赖？[/yellow]", default=True):
+            should_setup_venv = (
+                Confirm.ask("[yellow]未检测到虚拟环境，是否自动创建并安装依赖？[/yellow]", default=True)
+                if setup_venv is None
+                else setup_venv
+            )
+            if should_setup_venv:
                 if bot_type in ("MoFox-Core", "MoFox_bot"):
                     from src.modules.deployment_core.mofox_deployer import MoFoxBotDeployer
                     deployer = MoFoxBotDeployer()
@@ -485,6 +517,8 @@ def import_instance(mcsins_path: str, dest_dir: str) -> str:
                     console.print("[yellow]⚠ 依赖安装失败，请手动安装[/yellow]")
                 else:
                     console.print(f"[red]✗ 虚拟环境创建失败：{result}[/red]")
+            else:
+                console.print("[yellow]⚠ 已跳过虚拟环境创建，请在导入后手动配置运行环境[/yellow]")
         else:
             console.print("[yellow]⚠ 未检测到虚拟环境且包内无 requirements.txt，请手动配置运行环境[/yellow]")
 

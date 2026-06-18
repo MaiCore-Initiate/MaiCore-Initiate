@@ -64,6 +64,7 @@ from src.webui_api import (
     terminal_router,
     pet_router,
     deployment_mod_router,
+    instance_pack_router,
 )
 from src.webui_api.pet_api_v2 import router as pet_v2_router
 from webui.backend.api.template_workbench import router as template_workbench_router
@@ -337,6 +338,9 @@ app.include_router(deploy_router, prefix="/api/deploy", tags=["部署管理"], d
 
 # MOD 模板部署 API
 app.include_router(deployment_mod_router, prefix="/api/deployment-mod", tags=["模板部署"], dependencies=auth_dep)
+
+# 实例打包与导入 API
+app.include_router(instance_pack_router, prefix="/api/instance-pack", tags=["实例打包"], dependencies=auth_dep)
 
 # 启动器管理API
 app.include_router(launcher_router, prefix="/api/launcher", tags=["启动器"], dependencies=auth_dep)

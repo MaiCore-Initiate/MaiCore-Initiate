@@ -64,7 +64,7 @@ ACTION_ORDER = [
     "misc.webshell.access",
     "misc.screensaver.access",
     "misc.desktop-pet.access",
-    "misc.custom-console.access",
+    "misc.package-instance.access",
     "misc.template-market.access",
 ]
 
@@ -163,7 +163,7 @@ def _default_role_templates() -> Dict[str, Dict[str, Dict[str, bool]]]:
     member_actions["misc.components.access"] = True
     member_actions["misc.screensaver.access"] = True
     member_actions["misc.desktop-pet.access"] = True
-    member_actions["misc.custom-console.access"] = True
+    member_actions["misc.package-instance.access"] = True
     member_actions["misc.template-market.access"] = True
 
     guest_actions = _empty_action_permissions()
@@ -178,7 +178,6 @@ def _default_role_templates() -> Dict[str, Dict[str, Dict[str, bool]]]:
     guest_actions["misc.components.access"] = True
     guest_actions["misc.screensaver.access"] = True
     guest_actions["misc.desktop-pet.access"] = True
-    guest_actions["misc.custom-console.access"] = True
     guest_actions["misc.template-market.access"] = True
 
     return {
@@ -377,6 +376,9 @@ class AccountStore:
         for role in ("member", "guest"):
             state["role_templates"][role]["pages"].update(role_templates.get(role, {}).get("pages", {}))
             state["role_templates"][role]["actions"].update(role_templates.get(role, {}).get("actions", {}))
+            legacy_custom_console = role_templates.get(role, {}).get("actions", {}).get("misc.custom-console.access")
+            if legacy_custom_console is not None and "misc.package-instance.access" not in role_templates.get(role, {}).get("actions", {}):
+                state["role_templates"][role]["actions"]["misc.package-instance.access"] = bool(legacy_custom_console and role == "member")
 
         state["register_policy"].update(raw.get("register_policy", {}))
         allowed_domains = state["register_policy"].get("allowed_domains") or []

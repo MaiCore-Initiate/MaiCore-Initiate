@@ -36,15 +36,20 @@
     "plugins": ["MCPServers", "ImaAPI"],
     "pack-source": "MaiCoreStart",
     "zip_file": "<cfg_name>.zip",
-
-    "napcat_version": "NapCat.Shell",
-    "qq_account": "123456789",
-
-    "napcat_path_rel": "NapCat/NapCatWinBootMain.exe",
-    "adapter_path_rel": "MaiBot/config/plugins/napcat_adapter",
-    "venv_path_rel": "MaiBot/.venv",
-    "mongodb_path_rel": "",
-    "webui_path_rel": "builtin"
+    "venv_packed": false,
+    "instance_config": {
+      "qq_account": "123456789",
+      "napcat_version": "NapCat.Shell",
+      "webui_path": "",
+      "napcat_path_rel": "NapCat/NapCatWinBootMain.exe",
+      "adapter_path_rel": "MaiBot/config/plugins/napcat_adapter",
+      "venv_path_rel": "MaiBot/.venv",
+      "mongodb_path_rel": "",
+      "webui_path_rel": "",
+      "napcat_path_orig": "D:/instances/demo/NapCat",
+      "adapter_path_orig": "D:/instances/demo/MaiBot/config/plugins/napcat_adapter",
+      "webui_path_orig": ""
+    }
   }
 }
 ```
@@ -66,9 +71,10 @@
 | `plugins` | 实际打包内容 | 打包进 zip 的插件文件夹名称列表 |
 | `pack-source` | 固定值 | 始终为 `"MaiCoreStart"` |
 | `zip_file` | 自动生成 | zip 文件名，导入时用于定位压缩包 |
-| `napcat_version` | `napcat_version` | NapCatQQ 版本标识 |
-| `qq_account` | `qq_account` | QQ 账号（仅信息参考，不含敏感数据） |
-| `*_path_rel` | 各路径字段 | 相对于 `extract_dir` 的相对路径，导入时还原；若路径在 nickname_dir 之外则为空字符串 |
+| `venv_packed` | 打包策略 | 是否包含虚拟环境 |
+| `instance_config.qq_account` | `qq_account` | QQ 账号（仅信息参考，不含敏感数据） |
+| `instance_config.napcat_version` | `napcat_version` | NapCatQQ 版本标识 |
+| `instance_config.*_path_rel` | 各路径字段 | 相对于 `extract_dir` 的相对路径，导入时还原；若路径在 nickname_dir 之外则为空字符串 |
 
 ### zip 内部目录结构
 
@@ -136,6 +142,15 @@ mcsb -in <文件.mcsins> [-s <目标目录>]
 - 从 `meta.json` 还原 napcat_path、adapter_path、venv_path 等相对路径
 - 若 zip 内无虚拟环境，询问是否自动创建 venv 并安装依赖（按 bot 类型分发：Neo-MoFox 用 `uv sync`，其他用 pip）
 
+### WebUI 导入
+
+WebUI 的“杂项 -> 打包实例”页面使用两段式导入：
+
+1. 上传 `.mcsins` 到 `/api/instance-pack/import/preview`，后端保存到临时目录并读取 `meta.json`。
+2. 用户在网页确认元数据、导入目录和是否自动创建虚拟环境后，请求 `/api/instance-pack/import/confirm`。
+
+WebUI 确认后调用 `import_instance(..., confirm=False, setup_venv=<用户选择>)`，不会触发 CLI 的 Rich 确认提示。
+
 ---
 
 ## 用例示例
@@ -171,6 +186,24 @@ mcsb import test.mcsins -s "D:\instances\"
 
 3. **路径相对化**：`napcat_path`、`adapter_path`、`venv_path` 等路径在打包时转换为相对路径存入 `meta.json`，仅对位于 `nickname_dir` 之下的路径有效；NapCat 等位于外部的路径不会记录。
 
+4. **WebUI 权限**：WebUI 打包/导入接口统一使用 `misc.package-instance.access` 权限。管理员默认可用，成员默认开放，访客默认关闭。
+
+---
+
+## WebUI API
+
+WebUI 后端在 `/api/instance-pack` 下暴露实例打包与导入接口：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/instances` | 返回实例列表、来源、默认导出路径和是否可打包 |
+| `GET` | `/instances/{identifier}/inventory` | 返回指定实例的组件、插件和虚拟环境路径 |
+| `POST` | `/export` | 调用 `pack_instance` 导出 `.mcsins` |
+| `POST` | `/import/preview` | 上传 `.mcsins` 并预览元数据 |
+| `POST` | `/import/confirm` | 确认导入预览阶段上传的 `.mcsins` |
+
+打包只允许 `source` 为 `register` 或旧配置缺省 `source` 的实例。导入成功后实例注册为 `source = "import"`。
+
 ---
 
 ## source 字段说明
@@ -193,8 +226,10 @@ mcsb import test.mcsins -s "D:\instances\"
 | `src/cli/pack.py` | 打包/导入核心逻辑 |
 | `src/cli/mcsb_cli.py` | CLI 参数解析入口 |
 | `src/core/config.py` | 配置管理，含 source 字段定义 |
+| `src/webui_api/instance_pack_api.py` | WebUI 打包/导入 API |
 | `src/webui_api/webui_config_api.py` | WebUI API，暴露 source 字段 |
 | `webui/frontend/src/pages/Config.tsx` | 来源徽章 UI |
+| `webui/frontend/src/pages/Misc.tsx` | WebUI 打包实例页面 |
 | `bin/mcsb.cmd` | Windows CMD 入口脚本 |
 | `bin/mcsb.ps1` | Windows PowerShell 入口脚本 |
 | `bin/mcsb.sh` | Linux/macOS 入口脚本 |

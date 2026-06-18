@@ -11,7 +11,7 @@ export const MISC_TAB_PERMISSION_MAP: Record<MiscTab, ActionPermissionKey> = {
   webshell: 'misc.webshell.access',
   screensaver: 'misc.screensaver.access',
   'desktop-pet': 'misc.desktop-pet.access',
-  'custom-console': 'misc.custom-console.access',
+  'package-instance': 'misc.package-instance.access',
 }
 
 export function getMiscTabPermission(tab?: MiscTab): ActionPermissionKey | null {

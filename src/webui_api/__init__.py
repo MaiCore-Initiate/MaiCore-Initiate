@@ -21,6 +21,7 @@ from .terminal_api import router as terminal_router
 from .pet_api import router as pet_router
 from .auth_api import router as auth_router
 from .deployment_mod_api import router as deployment_mod_router
+from .instance_pack_api import router as instance_pack_router
 
 __all__ = [
     "deploy_router",
@@ -41,4 +42,5 @@ __all__ = [
     "pet_router",
     "auth_router",
     "deployment_mod_router",
+    "instance_pack_router",
 ]

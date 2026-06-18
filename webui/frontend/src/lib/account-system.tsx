@@ -32,7 +32,7 @@ export type ActionPermissionKey =
   | 'misc.webshell.access'
   | 'misc.screensaver.access'
   | 'misc.desktop-pet.access'
-  | 'misc.custom-console.access'
+  | 'misc.package-instance.access'
 
 export interface AccountUser {
   id: string
@@ -331,7 +331,7 @@ export const ACTION_PERMISSION_ORDER: ActionPermissionKey[] = [
   'misc.webshell.access',
   'misc.screensaver.access',
   'misc.desktop-pet.access',
-  'misc.custom-console.access',
+  'misc.package-instance.access',
 ]
 
 export const ACTION_PERMISSION_LABELS: Record<ActionPermissionKey, string> = {
@@ -356,7 +356,7 @@ export const ACTION_PERMISSION_LABELS: Record<ActionPermissionKey, string> = {
   'misc.webshell.access': '杂项 / WebShell',
   'misc.screensaver.access': '杂项 / 屏保',
   'misc.desktop-pet.access': '杂项 / 桌宠',
-  'misc.custom-console.access': '杂项 / 自定义控制台',
+  'misc.package-instance.access': '杂项 / 打包实例',
 }
 
 const AccountSystemContext = createContext<AccountSystemContextValue | null>(null)
@@ -423,6 +423,7 @@ function createDefaultRoleTemplates(): Record<'member' | 'guest', RolePermission
   memberActions['misc.components.access'] = true
   memberActions['misc.screensaver.access'] = true
   memberActions['misc.desktop-pet.access'] = true
+  memberActions['misc.package-instance.access'] = true
 
   const guestActions = createEmptyActionPermissions()
   guestActions['appearance.customize'] = true
@@ -493,6 +494,19 @@ function normalizeState(raw: Partial<AccountSystemState> | null | undefined): Ac
   const defaults = createDefaultState()
   const roleTemplates = raw?.roleTemplates ?? defaults.roleTemplates
   const users = Array.isArray(raw?.users) && raw.users.length > 0 ? raw.users : defaults.users
+  const memberActions = {
+    ...defaults.roleTemplates.member.actions,
+    ...(roleTemplates.member?.actions ?? {}),
+  } as Record<ActionPermissionKey | 'misc.custom-console.access', boolean>
+  const guestActions = {
+    ...defaults.roleTemplates.guest.actions,
+    ...(roleTemplates.guest?.actions ?? {}),
+  } as Record<ActionPermissionKey | 'misc.custom-console.access', boolean>
+  if (memberActions['misc.custom-console.access'] && !memberActions['misc.package-instance.access']) {
+    memberActions['misc.package-instance.access'] = true
+  }
+  const { 'misc.custom-console.access': _legacyMemberCustomConsole, ...normalizedMemberActions } = memberActions
+  const { 'misc.custom-console.access': _legacyGuestCustomConsole, ...normalizedGuestActions } = guestActions
   const hasAdmin = users.some(user => user.role === 'admin')
   const normalizedUsers = hasAdmin ? users : [...users, defaults.users[0]]
 
@@ -506,20 +520,14 @@ function normalizeState(raw: Partial<AccountSystemState> | null | undefined): Ac
           ...defaults.roleTemplates.member.pages,
           ...(roleTemplates.member?.pages ?? {}),
         },
-        actions: {
-          ...defaults.roleTemplates.member.actions,
-          ...(roleTemplates.member?.actions ?? {}),
-        },
+        actions: normalizedMemberActions,
       },
       guest: {
         pages: {
           ...defaults.roleTemplates.guest.pages,
           ...(roleTemplates.guest?.pages ?? {}),
         },
-        actions: {
-          ...defaults.roleTemplates.guest.actions,
-          ...(roleTemplates.guest?.actions ?? {}),
-        },
+        actions: normalizedGuestActions,
       },
     },
     registerPolicy: {

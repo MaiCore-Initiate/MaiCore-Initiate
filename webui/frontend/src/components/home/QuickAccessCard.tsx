@@ -77,6 +77,7 @@ const PAGE_OPTIONS: PageOption[] = [
   { page: 'misc', label: 'WebShell', params: { miscTab: 'webshell' }, group: '杂项' },
   { page: 'misc', label: '屏保', params: { miscTab: 'screensaver' }, group: '杂项' },
   { page: 'misc', label: '桌宠', params: { miscTab: 'desktop-pet' }, group: '杂项' },
+  { page: 'misc', label: '打包实例', params: { miscTab: 'package-instance' }, group: '杂项' },
 
   // 其他组
   { page: 'settings', label: '设置', group: '其他' },

@@ -35,7 +35,7 @@ const pageLabels: Record<Page, string> = PAGE_PERMISSION_LABELS
 const titleFont = { fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const monoFont = { fontFamily: "'Ubuntu', 'HarmonyOS Sans SC', monospace" }
 
-const miscTabs = ['about', 'author', 'tech', 'libs', 'license', 'components', 'webshell', 'screensaver', 'desktop-pet', 'custom-console'] as const
+const miscTabs = ['about', 'author', 'tech', 'libs', 'license', 'components', 'webshell', 'screensaver', 'desktop-pet', 'package-instance'] as const
 const configActions = ['edit', 'open-config', 'open-folder'] as const
 const logSources = ['main', 'webui', 'desktop_pet'] as const
 
@@ -66,7 +66,11 @@ function isOneOf<T extends string>(value: unknown, options: readonly T[]): value
 
 function normalizeRouteSearch(search: Record<string, unknown>): SubPageParams | undefined {
   const params: SubPageParams = {}
-  if (isOneOf(search.miscTab, miscTabs)) params.miscTab = search.miscTab
+  if (search.miscTab === 'custom-console') {
+    params.miscTab = 'package-instance'
+  } else if (isOneOf(search.miscTab, miscTabs)) {
+    params.miscTab = search.miscTab
+  }
   if (isOneOf(search.configAction, configActions)) params.configAction = search.configAction
   if (isOneOf(search.logSource, logSources)) params.logSource = search.logSource
   if (typeof search.sequence === 'string') params.sequence = search.sequence

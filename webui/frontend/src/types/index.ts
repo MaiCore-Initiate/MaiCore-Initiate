@@ -1,5 +1,5 @@
 export type Page = 'home' | 'instances' | 'config' | 'knowledge' | 'db-migration' | 'plugins' | 'deploy' | 'status' | 'logs' | 'misc' | 'settings' | 'component-download' | 'template-workbench' | 'workbench-canvas'
-export type MiscTab = 'about' | 'author' | 'tech' | 'libs' | 'license' | 'components' | 'webshell' | 'screensaver' | 'desktop-pet' | 'custom-console'
+export type MiscTab = 'about' | 'author' | 'tech' | 'libs' | 'license' | 'components' | 'webshell' | 'screensaver' | 'desktop-pet' | 'package-instance'
 
 // 子页面参数类型
 export interface SubPageParams {
