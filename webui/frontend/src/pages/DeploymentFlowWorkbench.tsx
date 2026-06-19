@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode
 import { ArrowLeft, Plus } from 'lucide-react'
 import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar from './workbench-right-sidebar/WorkbenchRightSidebar'
+import WorkbenchRuntimePanel, {
+  type WorkbenchRunFormField,
+  type WorkbenchRunInputValue,
+  type WorkbenchRunProgress,
+  type WorkbenchRunStartOptions,
+} from './workbench-right-sidebar/WorkbenchRuntimePanel'
 import { rightSidebarCollapsedWidth, rightSidebarExpandedWidth } from './workbench-right-sidebar/constants'
 import type { WorkbenchModInfoMeta } from './workbench-right-sidebar/types'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
@@ -1321,6 +1327,27 @@ function resolveGridSpacing(scale: number) {
   return { logicalSpacing, screenSpacing }
 }
 
+function mergeWorkbenchProgress(
+  current: WorkbenchRunProgress | null,
+  next: WorkbenchRunProgress,
+): WorkbenchRunProgress {
+  return {
+    ...(current ?? {}),
+    ...next,
+    logs: next.logs ?? current?.logs ?? [],
+  }
+}
+
+function parseApiErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function defaultWorkbenchRunInputValue(field: WorkbenchRunFormField): WorkbenchRunInputValue {
+  if (field.field_type === 'boolean') return Boolean(field.default)
+  return field.default === undefined || field.default === null ? '' : String(field.default)
+}
+
 function collectDefaultExpanded(nodes: OutlineNode[], result = new Set<string>()) {
   for (const node of nodes) {
     if (node.defaultExpanded) result.add(node.id)
@@ -1906,6 +1933,16 @@ export default function DeploymentFlowWorkbench({
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saveTone, setSaveTone] = useState<'default' | 'saving' | 'success' | 'error'>('default')
+  const [runtimePanelOpen, setRuntimePanelOpen] = useState(false)
+  const [runtimeTaskId, setRuntimeTaskId] = useState<string | null>(null)
+  const [runtimeProgress, setRuntimeProgress] = useState<WorkbenchRunProgress | null>(null)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const [runtimeStarting, setRuntimeStarting] = useState(false)
+  const [runtimeFormFields, setRuntimeFormFields] = useState<WorkbenchRunFormField[]>([])
+  const [runtimeFormValues, setRuntimeFormValues] = useState<Record<string, WorkbenchRunInputValue>>({})
+  const [runtimeFormLoading, setRuntimeFormLoading] = useState(false)
+  const [runtimeFormError, setRuntimeFormError] = useState<string | null>(null)
+  const [runtimeFormLoaded, setRuntimeFormLoaded] = useState(false)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -2204,8 +2241,8 @@ export default function DeploymentFlowWorkbench({
     }))
   }
 
-  const handleSaveWorkbench = async () => {
-    if (!projectSequence || isSaving) return
+  const handleSaveWorkbench = async (): Promise<boolean> => {
+    if (!projectSequence || isSaving) return false
     setIsSaving(true)
     setSaveTone('saving')
     setSaveMessage('正在保存工作台…')
@@ -2233,17 +2270,187 @@ export default function DeploymentFlowWorkbench({
         setSaveTone(current => (current === 'success' ? 'default' : current))
         setSaveMessage(current => (current === '工作台已保存' ? null : current))
       }, 2200)
+      return true
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = parseApiErrorMessage(error)
       setSaveTone('error')
       setSaveMessage(`保存失败：${message}`)
       window.setTimeout(() => {
         setSaveTone(current => (current === 'error' ? 'default' : current))
       }, 2600)
+      return false
     } finally {
       setIsSaving(false)
     }
   }
+
+  const openRuntimePanel = () => {
+    setRuntimePanelOpen(true)
+    if (rightSidebarCollapsed) setRightSidebarCollapsed(false)
+  }
+
+  const refreshWorkbenchRunForm = async () => {
+    if (!projectSequence || runtimeFormLoading) return false
+    setRuntimeFormLoading(true)
+    setRuntimeFormError(null)
+
+    const saved = await handleSaveWorkbench()
+    if (!saved) {
+      setRuntimeFormLoading(false)
+      setRuntimeFormError('保存工作台失败，无法读取运行参数。')
+      return false
+    }
+
+    try {
+      const response = await fetch(`/api/deployment-mod/workbench/${encodeURIComponent(projectSequence)}/form`, { credentials: 'include' })
+      const payload = await response.json().catch(() => null) as { form?: { fields?: WorkbenchRunFormField[] }; detail?: string } | null
+      if (!response.ok) throw new Error(payload?.detail || `HTTP ${response.status}`)
+      const fields = Array.isArray(payload?.form?.fields) ? payload.form.fields : []
+      setRuntimeFormFields(fields)
+      setRuntimeFormLoaded(true)
+      setRuntimeFormValues(prev => {
+        const next: Record<string, WorkbenchRunInputValue> = {}
+        for (const field of fields) {
+          next[field.key] = prev[field.key] ?? defaultWorkbenchRunInputValue(field)
+        }
+        return next
+      })
+      return true
+    } catch (error) {
+      setRuntimeFormError(parseApiErrorMessage(error))
+      return false
+    } finally {
+      setRuntimeFormLoading(false)
+    }
+  }
+
+  const startWorkbenchRun = async (options: WorkbenchRunStartOptions) => {
+    openRuntimePanel()
+    if (!projectSequence) {
+      setRuntimeError('当前工作台项目缺少序列号，无法启动试运行。')
+      return
+    }
+
+    setRuntimeStarting(true)
+    setRuntimeError(null)
+    setRuntimeProgress({
+      status: 'running',
+      step: 0,
+      total_steps: options.mode === 'full' ? 6 : 1,
+      step_name: '保存工作台',
+      message: '正在写入当前画布生成的模板文件',
+      logs: [],
+    })
+
+    const saved = await handleSaveWorkbench()
+    if (!saved) {
+      setRuntimeStarting(false)
+      setRuntimeError('工作台保存失败，已取消试运行。')
+      setRuntimeProgress(prev => mergeWorkbenchProgress(prev, {
+        status: 'failed',
+        step_name: '保存工作台失败',
+        message: '请先处理保存错误后再试运行',
+      }))
+      return
+    }
+
+    const userInputs: Record<string, WorkbenchRunInputValue> = {
+      ...options.userInputs,
+      nickname: options.nickname || meta.modName || projectInfo?.mod_name || '工作台试运行',
+    }
+    if (options.serialNumber) userInputs.serial_number = options.serialNumber
+
+    try {
+      const response = await fetch(`/api/deployment-mod/workbench/${encodeURIComponent(projectSequence)}/run`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: options.mode,
+          stage: options.mode === 'stage' ? options.stage : '',
+          user_inputs: userInputs,
+          serial_number: options.serialNumber,
+        }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { detail?: string } | null
+        throw new Error(payload?.detail || `HTTP ${response.status}`)
+      }
+      const payload = await response.json() as { task_id?: string; message?: string }
+      if (!payload.task_id) throw new Error('后端没有返回任务 ID')
+      setRuntimeTaskId(payload.task_id)
+      setRuntimeProgress(prev => mergeWorkbenchProgress(prev, {
+        task_id: payload.task_id,
+        status: 'running',
+        step: 0,
+        total_steps: options.mode === 'full' ? 6 : 1,
+        step_name: '任务已启动',
+        message: payload.message || '工作台试运行任务已启动',
+      }))
+    } catch (error) {
+      const message = parseApiErrorMessage(error)
+      setRuntimeError(message)
+      setRuntimeProgress(prev => mergeWorkbenchProgress(prev, {
+        status: 'failed',
+        step_name: '启动试运行失败',
+        message,
+      }))
+    } finally {
+      setRuntimeStarting(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!runtimeTaskId) return
+
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+    const ws = new WebSocket(`${proto}://${location.host}/ws`)
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', channel: 'deployment_progress' }))
+    ws.onmessage = event => {
+      try {
+        const message = JSON.parse(event.data) as { type?: string; data?: WorkbenchRunProgress }
+        if (message.type !== 'deployment_progress' || message.data?.task_id !== runtimeTaskId) return
+        setRuntimeProgress(prev => mergeWorkbenchProgress(prev, message.data as WorkbenchRunProgress))
+        if (message.data.status === 'failed') setRuntimeError(String(message.data.message || '工作台试运行失败'))
+        if (message.data.status === 'completed') setRuntimeError(null)
+      } catch {
+        // 忽略非 JSON 推送。
+      }
+    }
+
+    return () => ws.close()
+  }, [runtimeTaskId])
+
+  useEffect(() => {
+    if (!runtimeTaskId) return
+
+    let cancelled = false
+    const loadProgress = async () => {
+      try {
+        const response = await fetch(`/api/deployment-mod/progress/${encodeURIComponent(runtimeTaskId)}`, { credentials: 'include' })
+        if (!response.ok) return
+        const payload = await response.json() as WorkbenchRunProgress & { success?: boolean }
+        if (cancelled || payload.success === false) return
+        setRuntimeProgress(prev => mergeWorkbenchProgress(prev, payload))
+        if (payload.status === 'failed') setRuntimeError(String(payload.message || '工作台试运行失败'))
+        if (payload.status === 'completed') setRuntimeError(null)
+      } catch {
+        // WebSocket 仍是主通道，轮询失败不打断运行面板。
+      }
+    }
+
+    void loadProgress()
+    const timer = window.setInterval(loadProgress, 3000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [runtimeTaskId])
+
+  useEffect(() => {
+    if (!runtimePanelOpen || !projectSequence || runtimeFormLoaded || runtimeFormLoading) return
+    void refreshWorkbenchRunForm()
+  }, [runtimePanelOpen, projectSequence, runtimeFormLoaded, runtimeFormLoading])
 
   return (
     <div
@@ -2326,47 +2533,68 @@ export default function DeploymentFlowWorkbench({
         rightReservedWidth={rightSidebarLeft}
         initialTabs={topTabs}
       />
-      <WorkbenchRightSidebar
-        collapsed={rightSidebarCollapsed}
-        width={rightSidebarWidth}
-        onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
-        onResize={setRightSidebarWidth}
-        selectedName={formatSelectedBlockName(selectedBlockId, meta)}
-        selectedBlockId={selectedBlockId}
-        focusTarget={rightSidebarFocusTarget}
-        onOpenFileEditor={setOpenFileEditorFileId}
-        meta={meta}
-        onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
-        hiddenFileBlockIds={canvasState.hiddenFileBlockIds ?? []}
-        onHiddenFileBlockIdsChange={hiddenFileBlockIds => setCanvasState(prev => ({ ...prev, hiddenFileBlockIds }))}
-        onDeleteFile={(fileId: string) => {
-          const removed = meta.files.find(file => file.id === fileId)
-          if (!removed) return
-          const refPath = (removed.path?.trim() || removed.name).replace(/\\/g, '/')
-          const ok = window.confirm(`确定删除文件 "${refPath}" 吗？此操作不可撤销。`)
-          if (!ok) return
-          void (async () => {
-            try {
-              await fetch(
-                `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files?path=${encodeURIComponent(refPath)}`,
-                { method: 'DELETE', credentials: 'include' },
-              )
-            } finally {
-              setMeta(prev => ({
-                ...prev,
-                files: prev.files.filter(file => file.id !== fileId),
-                fileImportList: prev.fileImportList.filter(name => name !== refPath),
-              }))
-              setCanvasState(prev => ({
-                ...prev,
-                hiddenFileBlockIds: (prev.hiddenFileBlockIds ?? []).filter(id => id !== fileId),
-              }))
-              if (openFileEditorFileId === fileId) setOpenFileEditorFileId(null)
-              if (selectedBlockId === `file:${fileId}`) setSelectedBlockId(null)
-            }
-          })()
-        }}
-      />
+      {runtimePanelOpen ? (
+        <WorkbenchRuntimePanel
+          collapsed={rightSidebarCollapsed}
+          width={rightSidebarWidth}
+          taskId={runtimeTaskId}
+          progress={runtimeProgress}
+          error={runtimeError}
+          formFields={runtimeFormFields}
+          formValues={runtimeFormValues}
+          formLoading={runtimeFormLoading}
+          formError={runtimeFormError}
+          starting={runtimeStarting}
+          onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
+          onResize={setRightSidebarWidth}
+          onStart={options => void startWorkbenchRun(options)}
+          onFormValueChange={(key, value) => setRuntimeFormValues(prev => ({ ...prev, [key]: value }))}
+          onRefreshForm={() => void refreshWorkbenchRunForm()}
+          onClose={() => setRuntimePanelOpen(false)}
+        />
+      ) : (
+        <WorkbenchRightSidebar
+          collapsed={rightSidebarCollapsed}
+          width={rightSidebarWidth}
+          onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
+          onResize={setRightSidebarWidth}
+          selectedName={formatSelectedBlockName(selectedBlockId, meta)}
+          selectedBlockId={selectedBlockId}
+          focusTarget={rightSidebarFocusTarget}
+          onOpenFileEditor={setOpenFileEditorFileId}
+          meta={meta}
+          onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
+          hiddenFileBlockIds={canvasState.hiddenFileBlockIds ?? []}
+          onHiddenFileBlockIdsChange={hiddenFileBlockIds => setCanvasState(prev => ({ ...prev, hiddenFileBlockIds }))}
+          onDeleteFile={(fileId: string) => {
+            const removed = meta.files.find(file => file.id === fileId)
+            if (!removed) return
+            const refPath = (removed.path?.trim() || removed.name).replace(/\\/g, '/')
+            const ok = window.confirm(`确定删除文件 "${refPath}" 吗？此操作不可撤销。`)
+            if (!ok) return
+            void (async () => {
+              try {
+                await fetch(
+                  `/api/template-workbench/projects/${encodeURIComponent(projectSequence ?? '')}/files?path=${encodeURIComponent(refPath)}`,
+                  { method: 'DELETE', credentials: 'include' },
+                )
+              } finally {
+                setMeta(prev => ({
+                  ...prev,
+                  files: prev.files.filter(file => file.id !== fileId),
+                  fileImportList: prev.fileImportList.filter(name => name !== refPath),
+                }))
+                setCanvasState(prev => ({
+                  ...prev,
+                  hiddenFileBlockIds: (prev.hiddenFileBlockIds ?? []).filter(id => id !== fileId),
+                }))
+                if (openFileEditorFileId === fileId) setOpenFileEditorFileId(null)
+                if (selectedBlockId === `file:${fileId}`) setSelectedBlockId(null)
+              }
+            })()
+          }}
+        />
+      )}
       <WorkbenchBottomBar
         scale={viewport.scale}
         leftBoundary={leftSidebarRight}
@@ -2374,6 +2602,9 @@ export default function DeploymentFlowWorkbench({
         collapsedLeft={leftSidebarRight + 30}
         onScaleChange={setScaleFromBottomBar}
         onAddNode={openAddNodeFromBottomBar}
+        onRun={openRuntimePanel}
+        runActive={runtimeStarting || runtimeProgress?.status === 'running'}
+        runDisabled={!projectSequence}
       />
       <FileEditorModal
         file={

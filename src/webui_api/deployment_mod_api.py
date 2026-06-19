@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """Deployment MOD WebUI API。"""
 import asyncio
+import json
 import threading
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,6 +34,96 @@ class TemplateStageRequest(BaseModel):
     stage: str
     user_inputs: Dict[str, Any] = {}
     serial_number: str = ""
+
+
+class WorkbenchRunRequest(BaseModel):
+    mode: str = "full"
+    stage: str = ""
+    user_inputs: Dict[str, Any] = {}
+    serial_number: str = ""
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+WORKBENCH_INDEX_PATH = PROJECT_ROOT / "config" / "MOD.json"
+
+
+def _load_workbench_index() -> Dict[str, Dict[str, Any]]:
+    try:
+        with WORKBENCH_INDEX_PATH.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="工作台索引不存在") from exc
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=500, detail=f"读取工作台索引失败: {exc}") from exc
+    return data if isinstance(data, dict) else {}
+
+
+def _resolve_workbench_project(sequence: str) -> tuple[Dict[str, Any], Path]:
+    data = _load_workbench_index()
+    if sequence not in data:
+        raise HTTPException(status_code=404, detail=f"工作台项目 '{sequence}' 未找到")
+
+    project = data[sequence]
+    raw_path = str(project.get("path", "") or "").strip()
+    if not raw_path:
+        raise HTTPException(status_code=400, detail=f"工作台项目 '{sequence}' 未配置 path")
+
+    project_path = Path(raw_path)
+    if not project_path.is_absolute():
+        project_path = PROJECT_ROOT / project_path
+    project_path = project_path.resolve()
+    if project_path.suffix.lower() == ".toml":
+        project_dir = project_path.parent
+    else:
+        project_dir = project_path
+    if not project_dir.exists() or not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"工作台项目目录不存在: {project_dir}")
+    return project, project_dir
+
+
+def _resolve_workbench_template_path(sequence: str) -> tuple[Dict[str, Any], Path]:
+    project, project_dir = _resolve_workbench_project(sequence)
+    mod_id = str(project.get("mod_id") or project.get("workbench_meta", {}).get("modId") or "").strip()
+    candidates = []
+    if mod_id:
+        candidates.append(project_dir / f"{mod_id}.toml")
+    candidates.append(project_dir / "DeploymentMOD.toml")
+
+    for path in candidates:
+        if path.is_file():
+            return project, path
+
+    toml_files = sorted(project_dir.glob("*.toml"))
+    if toml_files:
+        return project, toml_files[0]
+
+    raise HTTPException(status_code=404, detail=f"工作台项目未找到可运行的 TOML 模板: {project_dir}")
+
+
+def _append_task_log(task_id: str, kwargs: Dict[str, Any]) -> None:
+    msg = kwargs.get("message", "")
+    if not msg:
+        return
+    step_name = kwargs.get("step_name", "")
+    status = kwargs.get("status", "running")
+    event = kwargs.get("event", "stage")
+    prefix = f"[{datetime.now().strftime('%H:%M:%S')}]"
+    if event:
+        prefix += f" [{event}]"
+    if step_name:
+        prefix += f" [{step_name}]"
+    if status:
+        prefix += f" [{status}]"
+    logs = _deploy_tasks[task_id].setdefault("logs", [])
+    logs.append(f"{prefix} {msg}")
+    if len(logs) > 2000:
+        _deploy_tasks[task_id]["logs"] = logs[-2000:]
+
+
+def _record_task_progress(task_id: str, serial_number: str, kwargs: Dict[str, Any]) -> None:
+    _deploy_tasks[task_id].update(kwargs)
+    _append_task_log(task_id, kwargs)
+    _dispatch_progress(serial_number, {"task_id": task_id, **kwargs, "logs": _deploy_tasks[task_id].get("logs", [])[-500:]})
 
 
 def _find_template_item(template, stage_name: str, item_id: str):
@@ -265,6 +357,108 @@ async def run_template_stage(request: TemplateStageRequest):
 
     threading.Thread(target=_run_stage, daemon=True).start()
     return {"success": True, "task_id": task_id, "message": "模板阶段任务已启动"}
+
+
+@router.post("/workbench/{sequence}/run", summary="执行工作台试运行", dependencies=[Depends(require_action("deploy.manage"))])
+async def run_workbench_template(sequence: str, request: WorkbenchRunRequest):
+    _, template_path = _resolve_workbench_template_path(sequence)
+    mode = str(request.mode or "full").strip().lower()
+    if mode not in {"full", "stage"}:
+        raise HTTPException(status_code=400, detail=f"不支持的工作台运行模式: {request.mode}")
+    if mode == "stage" and not str(request.stage or "").strip():
+        raise HTTPException(status_code=400, detail="阶段运行缺少 stage")
+
+    task_id = f"workbench_mod_{uuid.uuid4().hex[:8]}"
+    user_inputs = dict(request.user_inputs or {})
+    serial_number = str(request.serial_number or user_inputs.get("serial_number") or "").strip()
+    if mode == "full" and not serial_number:
+        serial_number = f"workbench_{uuid.uuid4().hex[:8]}"
+    if serial_number:
+        user_inputs["serial_number"] = serial_number
+    if mode == "full":
+        user_inputs.setdefault("nickname", str(user_inputs.get("nickname") or f"工作台试运行 {serial_number}").strip())
+        user_inputs.setdefault("bot_type", "Custom")
+    _deploy_tasks[task_id] = {
+        "status": "running",
+        "step": 0,
+        "total_steps": 6 if mode == "full" else 1,
+        "logs": [],
+        "template_path": str(template_path),
+        "project_sequence": sequence,
+        "mode": mode,
+        "stage": request.stage if mode == "stage" else "full",
+    }
+    _remember_main_event_loop()
+
+    def _run_workbench():
+        def progress_cb(**kwargs):
+            _record_task_progress(task_id, serial_number, kwargs)
+
+        try:
+            progress_cb(
+                step=0,
+                total_steps=6 if mode == "full" else 1,
+                step_name="准备工作台试运行",
+                status="running",
+                message=f"模板文件: {template_path}",
+                event="detail",
+            )
+            template = deployment_mod_executor.planner.parser.parse_file(str(template_path))
+            template.metadata.source = "workbench"
+            plan = deployment_mod_executor.planner.build_plan(template, user_inputs)
+
+            if mode == "stage":
+                result = deployment_mod_executor.runtime.execute_stage(
+                    template,
+                    plan,
+                    request.stage,
+                    progress_callback=progress_cb,
+                    serial_number=serial_number,
+                )
+            else:
+                result = deployment_mod_executor.runtime.execute(
+                    template,
+                    plan,
+                    progress_callback=progress_cb,
+                )
+
+            _deploy_tasks[task_id]["status"] = "completed" if result.success else "failed"
+            _deploy_tasks[task_id]["result"] = result.to_dict()
+            progress_cb(
+                step=6 if mode == "full" else 1,
+                total_steps=6 if mode == "full" else 1,
+                step_name="工作台试运行完成" if result.success else "工作台试运行失败",
+                status="completed" if result.success else "failed",
+                message=result.message,
+            )
+        except Exception as exc:
+            _deploy_tasks[task_id]["status"] = "failed"
+            progress_cb(
+                step=0,
+                total_steps=6 if mode == "full" else 1,
+                step_name="工作台试运行失败",
+                status="failed",
+                message=str(exc),
+            )
+
+    threading.Thread(target=_run_workbench, daemon=True).start()
+    return {"success": True, "task_id": task_id, "message": "工作台试运行任务已启动"}
+
+
+@router.get("/workbench/{sequence}/form", summary="获取工作台试运行表单")
+async def get_workbench_template_form(sequence: str):
+    _, template_path = _resolve_workbench_template_path(sequence)
+    try:
+        template = deployment_mod_executor.planner.parser.parse_file(str(template_path))
+        template.metadata.source = "workbench"
+        return {
+            "success": True,
+            "template_path": str(template_path),
+            "form": _enrich_form_schema(template),
+            "launches": [item.to_dict() for item in template.launches],
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/progress/{task_id}", summary="查询模板部署进度")

@@ -14,6 +14,8 @@ export interface WorkbenchBottomBarProps {
   onAddNode?: () => void
   onRun?: () => void
   onDebug?: () => void
+  runActive?: boolean
+  runDisabled?: boolean
 }
 
 function formatZoom(scale: number) {
@@ -43,6 +45,8 @@ export default function WorkbenchBottomBar({
   onAddNode,
   onRun,
   onDebug,
+  runActive = false,
+  runDisabled = false,
 }: WorkbenchBottomBarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [zoomOpen, setZoomOpen] = useState(false)
@@ -196,18 +200,19 @@ export default function WorkbenchBottomBar({
         <button
           type="button"
           onClick={onRun}
-          className="absolute bottom-0 left-0 top-0 z-10 flex w-[min(120px,calc(100%-39px))] min-w-[45px] items-center justify-center gap-[8px] rounded-[20px] border px-[8px] text-[20px] font-medium leading-none transition-opacity hover:opacity-[0.88]"
+          disabled={runDisabled}
+          className="absolute bottom-0 left-0 top-0 z-10 flex w-[min(120px,calc(100%-39px))] min-w-[45px] items-center justify-center gap-[8px] rounded-[20px] border px-[8px] text-[20px] font-medium leading-none transition-opacity hover:opacity-[0.88] disabled:cursor-default disabled:opacity-55"
           style={{
             borderColor: 'var(--dfw-sidebar-border)',
             background: 'var(--dfw-bottom-run-bg)',
             color: 'var(--dfw-bottom-action-text)',
             fontFamily: font,
           }}
-          aria-label="试运行"
-          title="试运行"
+          aria-label={runActive ? '运行中' : '试运行'}
+          title={runActive ? '运行中' : '试运行'}
         >
           <Play size={30} strokeWidth={2} className="shrink-0" />
-          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">试运行</span>
+          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{runActive ? '运行中' : '试运行'}</span>
         </button>
       </div>
       </div>
