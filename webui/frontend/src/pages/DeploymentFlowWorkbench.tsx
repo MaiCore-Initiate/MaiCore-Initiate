@@ -3152,8 +3152,6 @@ export default function DeploymentFlowWorkbench({
         enabled={debugPanelOpen || Boolean(debugSessionId)}
         session={debugSession}
         selectedProcessId={debugSelectedProcessId}
-        leftBoundary={leftSidebarRight}
-        rightReservedWidth={rightSidebarLeft}
         viewportHeight={workbenchRef.current?.clientHeight ?? window.innerHeight}
         onProcessSelect={setDebugSelectedProcessId}
         onVisibleHeightChange={setDebugTimelineHeight}

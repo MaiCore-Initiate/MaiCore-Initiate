@@ -9,13 +9,15 @@ const defaultHeight = 180
 const minVisibleHeight = 96
 const hideThreshold = 72
 const minTrackWidth = 6
+const chromeBarHeight = 61
+const topChromeTop = 19.5
+const bottomChromeBottom = 30
+const maximizedGap = 30
 
 interface WorkbenchDebugTimelineDrawerProps {
   enabled: boolean
   session: WorkbenchDebugSession | null
   selectedProcessId: number | null
-  leftBoundary: number
-  rightReservedWidth: number
   viewportHeight: number
   onProcessSelect: (pid: number) => void
   onVisibleHeightChange?: (height: number) => void
@@ -121,8 +123,6 @@ export default function WorkbenchDebugTimelineDrawer({
   enabled,
   session,
   selectedProcessId,
-  leftBoundary,
-  rightReservedWidth,
   viewportHeight,
   onProcessSelect,
   onVisibleHeightChange,
@@ -145,8 +145,18 @@ export default function WorkbenchDebugTimelineDrawer({
   const longestDuration = lanes.reduce((max, lane) => (
     lane.processes.reduce((innerMax, process) => Math.max(innerMax, processDurationMs(process, nowMs, sessionStart)), max)
   ), 1)
-  const maxHeight = clampNumber(Math.round(viewportHeight * 0.45), minVisibleHeight, 360)
-  const activeHeight = enabled && visible ? clampNumber(height, minVisibleHeight, maxHeight) : hiddenHeight
+  const fullHeight = Math.max(minVisibleHeight, Math.round(viewportHeight))
+  const normalMaxHeight = clampNumber(
+    Math.round(viewportHeight - topChromeTop - chromeBarHeight - maximizedGap - chromeBarHeight - bottomChromeBottom),
+    minVisibleHeight,
+    fullHeight,
+  )
+  const isMaximized = height >= fullHeight - 1
+  const activeHeight = enabled && visible
+    ? isMaximized
+      ? fullHeight
+      : clampNumber(height, minVisibleHeight, normalMaxHeight)
+    : hiddenHeight
   const hoveredProcess = useMemo(() => (
     lanes.flatMap(lane => lane.processes).find(process => process.pid === hoveredPid) ?? null
   ), [hoveredPid, lanes])
@@ -186,19 +196,26 @@ export default function WorkbenchDebugTimelineDrawer({
     }
   }
 
+  const resolveDraggedHeight = (rawHeight: number) => {
+    if (rawHeight > normalMaxHeight) return fullHeight
+    return clampNumber(rawHeight, minVisibleHeight, normalMaxHeight)
+  }
+
   const updateDrag = (event: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
     event.preventDefault()
     event.stopPropagation()
     const delta = drag.startY - event.clientY
-    const nextHeight = clampNumber(drag.startHeight + delta, 0, maxHeight)
-    if (nextHeight <= hideThreshold && !drag.fromHidden) {
+    const rawHeight = drag.startHeight >= fullHeight - 1 && delta < 0
+      ? normalMaxHeight + delta
+      : drag.startHeight + delta
+    if (rawHeight <= hideThreshold && !drag.fromHidden) {
       setHeight(minVisibleHeight)
       return
     }
     setVisible(true)
-    setHeight(Math.max(minVisibleHeight, nextHeight))
+    setHeight(resolveDraggedHeight(rawHeight))
   }
 
   const stopDrag = (event: PointerEvent<HTMLDivElement>) => {
@@ -210,13 +227,15 @@ export default function WorkbenchDebugTimelineDrawer({
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     const delta = drag.startY - event.clientY
-    const finalHeight = drag.startHeight + delta
+    const finalHeight = drag.startHeight >= fullHeight - 1 && delta < 0
+      ? normalMaxHeight + delta
+      : drag.startHeight + delta
     if (finalHeight <= hideThreshold) {
       setVisible(false)
       setHoveredPid(null)
     } else {
       setVisible(true)
-      setHeight(clampNumber(finalHeight, minVisibleHeight, maxHeight))
+      setHeight(resolveDraggedHeight(finalHeight))
     }
     dragRef.current = null
   }
@@ -229,7 +248,7 @@ export default function WorkbenchDebugTimelineDrawer({
         <div
           data-workbench-ui
           className="absolute bottom-0 z-20 h-[18px] cursor-ns-resize"
-          style={{ left: leftBoundary, right: rightReservedWidth }}
+          style={{ left: 0, right: 0 }}
           onPointerEnter={() => setHoveringHotZone(true)}
           onPointerLeave={() => setHoveringHotZone(false)}
           onPointerDown={event => startDrag(event, true)}
@@ -252,10 +271,10 @@ export default function WorkbenchDebugTimelineDrawer({
 
       <section
         data-workbench-ui
-        className="absolute bottom-0 z-20 overflow-hidden border-t transition-[height,opacity] duration-150 ease-out"
+        className={`absolute bottom-0 overflow-hidden border-t transition-[height,opacity] duration-150 ease-out ${isMaximized ? 'z-40' : 'z-20'}`}
         style={{
-          left: leftBoundary,
-          right: rightReservedWidth,
+          left: 0,
+          right: 0,
           height: activeHeight,
           opacity: visible ? 1 : 0,
           pointerEvents: visible ? 'auto' : 'none',
