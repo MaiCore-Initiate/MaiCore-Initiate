@@ -14,6 +14,7 @@ import WorkbenchDebugPanel, {
   type WorkbenchDebugSession,
   type WorkbenchDebugStartOptions,
 } from './workbench-right-sidebar/WorkbenchDebugPanel'
+import WorkbenchDebugTimelineDrawer from './workbench-debug-timeline/WorkbenchDebugTimelineDrawer'
 import { rightSidebarCollapsedWidth, rightSidebarExpandedWidth } from './workbench-right-sidebar/constants'
 import type { WorkbenchModInfoMeta } from './workbench-right-sidebar/types'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
@@ -3101,6 +3102,15 @@ export default function DeploymentFlowWorkbench({
           }}
         />
       )}
+      <WorkbenchDebugTimelineDrawer
+        enabled={debugPanelOpen || Boolean(debugSessionId)}
+        session={debugSession}
+        selectedProcessId={debugSelectedProcessId}
+        leftBoundary={leftSidebarRight}
+        rightReservedWidth={rightSidebarLeft}
+        viewportHeight={workbenchRef.current?.clientHeight ?? window.innerHeight}
+        onProcessSelect={setDebugSelectedProcessId}
+      />
       <WorkbenchBottomBar
         scale={viewport.scale}
         leftBoundary={leftSidebarRight}
