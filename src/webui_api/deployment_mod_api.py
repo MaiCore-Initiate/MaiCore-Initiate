@@ -13,7 +13,9 @@ from pydantic import BaseModel
 
 from ..modules.deployment import deployment_manager
 from ..modules.deployment_mod import deployment_mod_executor, deployment_mod_registry
+from ..modules.deployment_mod.debug_session import DebugMonitorUnavailable, DebugSessionStopped, debug_session_manager
 from .auth_core import require_action
+from . import deploy_api as deploy_api_module
 from .deploy_api import _deploy_tasks, _dispatch_progress, _remember_main_event_loop
 
 router = APIRouter()
@@ -39,6 +41,16 @@ class TemplateStageRequest(BaseModel):
 class WorkbenchRunRequest(BaseModel):
     mode: str = "full"
     stage: str = ""
+    user_inputs: Dict[str, Any] = {}
+    serial_number: str = ""
+
+
+class WorkbenchDebugStartRequest(BaseModel):
+    scope: str = "full"
+    stage: str = ""
+    block_key: str = ""
+    monitor_level: str = "normal"
+    hydrate_context: bool = True
     user_inputs: Dict[str, Any] = {}
     serial_number: str = ""
 
@@ -124,6 +136,25 @@ def _record_task_progress(task_id: str, serial_number: str, kwargs: Dict[str, An
     _deploy_tasks[task_id].update(kwargs)
     _append_task_log(task_id, kwargs)
     _dispatch_progress(serial_number, {"task_id": task_id, **kwargs, "logs": _deploy_tasks[task_id].get("logs", [])[-500:]})
+
+
+def _get_debug_broadcast_func():
+    from webui.backend.main import broadcast_deployment_debug
+    return broadcast_deployment_debug
+
+
+def _dispatch_debug(session_id: str, payload: Dict[str, Any]) -> None:
+    loop = deploy_api_module._main_event_loop
+    if loop is None or loop.is_closed() or not loop.is_running():
+        return
+    try:
+        future = asyncio.run_coroutine_threadsafe(
+            _get_debug_broadcast_func()(session_id, payload),
+            loop,
+        )
+        future.add_done_callback(deploy_api_module._consume_future_exception)
+    except Exception:
+        pass
 
 
 def _find_template_item(template, stage_name: str, item_id: str):
@@ -443,6 +474,172 @@ async def run_workbench_template(sequence: str, request: WorkbenchRunRequest):
 
     threading.Thread(target=_run_workbench, daemon=True).start()
     return {"success": True, "task_id": task_id, "message": "工作台试运行任务已启动"}
+
+
+@router.post("/workbench/{sequence}/debug/start", summary="启动工作台调试", dependencies=[Depends(require_action("deploy.manage"))])
+async def start_workbench_debug(sequence: str, request: WorkbenchDebugStartRequest):
+    _, template_path = _resolve_workbench_template_path(sequence)
+    scope = str(request.scope or "full").strip().lower()
+    if scope not in {"full", "stage", "block"}:
+        raise HTTPException(status_code=400, detail=f"不支持的调试范围: {request.scope}")
+    if scope == "stage" and not str(request.stage or "").strip():
+        raise HTTPException(status_code=400, detail="分区调试缺少 stage")
+    if scope == "block" and not str(request.block_key or "").strip():
+        raise HTTPException(status_code=400, detail="单块调试缺少 block_key")
+
+    monitor_level = str(request.monitor_level or "normal").strip().lower()
+    if monitor_level not in {"normal", "strict"}:
+        raise HTTPException(status_code=400, detail=f"不支持的监控级别: {request.monitor_level}")
+
+    task_id = f"workbench_debug_{uuid.uuid4().hex[:8]}"
+    user_inputs = dict(request.user_inputs or {})
+    serial_number = str(request.serial_number or user_inputs.get("serial_number") or "").strip()
+    if scope == "full" and not serial_number:
+        serial_number = f"workbench_debug_{uuid.uuid4().hex[:8]}"
+    if serial_number:
+        user_inputs["serial_number"] = serial_number
+    if scope == "full":
+        user_inputs.setdefault("nickname", str(user_inputs.get("nickname") or f"工作台调试 {serial_number}").strip())
+        user_inputs.setdefault("bot_type", "Custom")
+
+    _remember_main_event_loop()
+
+    try:
+        session = debug_session_manager.create(
+            task_id=task_id,
+            project_sequence=sequence,
+            template_path=str(template_path),
+            scope=scope,
+            stage=request.stage if scope == "stage" else "",
+            block_key=request.block_key if scope == "block" else "",
+            monitor_level=monitor_level,
+            hydrate_context=bool(request.hydrate_context),
+            on_update=lambda payload: _dispatch_debug(payload["session_id"], payload),
+        )
+    except DebugMonitorUnavailable as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _deploy_tasks[task_id] = {
+        "status": "running",
+        "step": 0,
+        "total_steps": 6 if scope == "full" else 1,
+        "logs": [],
+        "template_path": str(template_path),
+        "project_sequence": sequence,
+        "mode": "debug",
+        "debug_session_id": session.session_id,
+        "scope": scope,
+        "stage": request.stage,
+        "block_key": request.block_key,
+    }
+
+    def _run_debug():
+        def progress_cb(**kwargs):
+            _record_task_progress(task_id, serial_number or session.session_id, kwargs)
+            session.record_runtime_event({"task_id": task_id, **kwargs})
+
+        try:
+            session.mark_running("工作台调试任务已启动")
+            progress_cb(
+                step=0,
+                total_steps=6 if scope == "full" else 1,
+                step_name="准备工作台调试",
+                status="running",
+                message=f"模板文件: {template_path}",
+                event="detail",
+            )
+            template = deployment_mod_executor.planner.parser.parse_file(str(template_path))
+            template.metadata.source = "workbench"
+            plan = deployment_mod_executor.planner.build_plan(template, user_inputs)
+
+            if scope == "stage":
+                result = deployment_mod_executor.runtime.execute_stage(
+                    template,
+                    plan,
+                    request.stage,
+                    progress_callback=progress_cb,
+                    serial_number=serial_number,
+                    debug_controller=session,
+                )
+            elif scope == "block":
+                result = deployment_mod_executor.runtime.execute_block(
+                    template,
+                    plan,
+                    request.block_key,
+                    progress_callback=progress_cb,
+                    serial_number=serial_number,
+                    hydrate_context=bool(request.hydrate_context),
+                    debug_controller=session,
+                )
+            else:
+                result = deployment_mod_executor.runtime.execute(
+                    template,
+                    plan,
+                    progress_callback=progress_cb,
+                    debug_controller=session,
+                )
+
+            _deploy_tasks[task_id]["status"] = "completed" if result.success else "failed"
+            _deploy_tasks[task_id]["result"] = result.to_dict()
+            progress_cb(
+                step=6 if scope == "full" else 1,
+                total_steps=6 if scope == "full" else 1,
+                step_name="工作台调试完成" if result.success else "工作台调试失败",
+                status="completed" if result.success else "failed",
+                message=result.message,
+            )
+            session.finish(success=result.success, message=result.message, result=result.to_dict())
+        except DebugSessionStopped:
+            _deploy_tasks[task_id]["status"] = "stopped"
+            session.finish(success=False, message="调试会话已停止")
+        except Exception as exc:
+            _deploy_tasks[task_id]["status"] = "failed"
+            progress_cb(
+                step=0,
+                total_steps=6 if scope == "full" else 1,
+                step_name="工作台调试失败",
+                status="failed",
+                message=str(exc),
+            )
+            session.finish(success=False, message=str(exc), error=str(exc))
+
+    threading.Thread(target=_run_debug, daemon=True).start()
+    return {"success": True, "session_id": session.session_id, "task_id": task_id, "message": "工作台调试任务已启动", "session": session.to_dict()}
+
+
+@router.get("/debug/{session_id}", summary="获取工作台调试会话", dependencies=[Depends(require_action("deploy.manage"))])
+async def get_workbench_debug_session(session_id: str):
+    session = debug_session_manager.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="调试会话不存在")
+    return {"success": True, "session": session.to_dict()}
+
+
+@router.post("/debug/{session_id}/pause", summary="暂停工作台调试", dependencies=[Depends(require_action("deploy.manage"))])
+async def pause_workbench_debug_session(session_id: str):
+    session = debug_session_manager.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="调试会话不存在")
+    session.pause()
+    return {"success": True, "session": session.to_dict()}
+
+
+@router.post("/debug/{session_id}/resume", summary="恢复工作台调试", dependencies=[Depends(require_action("deploy.manage"))])
+async def resume_workbench_debug_session(session_id: str):
+    session = debug_session_manager.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="调试会话不存在")
+    session.resume()
+    return {"success": True, "session": session.to_dict()}
+
+
+@router.post("/debug/{session_id}/stop", summary="停止工作台调试", dependencies=[Depends(require_action("deploy.manage"))])
+async def stop_workbench_debug_session(session_id: str):
+    session = debug_session_manager.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="调试会话不存在")
+    session.stop()
+    return {"success": True, "session": session.to_dict()}
 
 
 @router.get("/workbench/{sequence}/form", summary="获取工作台试运行表单")

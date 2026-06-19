@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Bug, Cpu, Plus } from 'lucide-react'
 import WorkbenchBottomBar from './WorkbenchBottomBar'
 import WorkbenchRightSidebar from './workbench-right-sidebar/WorkbenchRightSidebar'
 import WorkbenchRuntimePanel, {
@@ -8,6 +8,12 @@ import WorkbenchRuntimePanel, {
   type WorkbenchRunProgress,
   type WorkbenchRunStartOptions,
 } from './workbench-right-sidebar/WorkbenchRuntimePanel'
+import WorkbenchDebugPanel, {
+  type WorkbenchDebugBlockOption,
+  type WorkbenchDebugProcess,
+  type WorkbenchDebugSession,
+  type WorkbenchDebugStartOptions,
+} from './workbench-right-sidebar/WorkbenchDebugPanel'
 import { rightSidebarCollapsedWidth, rightSidebarExpandedWidth } from './workbench-right-sidebar/constants'
 import type { WorkbenchModInfoMeta } from './workbench-right-sidebar/types'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
@@ -526,6 +532,63 @@ function formatSelectedBlockName(blockId: WorkbenchBlockId | null, meta: Workben
     return uninstallItemName ? `[[UninstallItem]] ${uninstallItemIndex}：${uninstallItemName}` : `[[UninstallItem]] ${uninstallItemIndex}`
   }
   return baseBlockNames[blockId as keyof typeof baseBlockNames]
+}
+
+function createDebugBlockOptions(meta: WorkbenchMetaState, connected: ConnectedIndexSets): WorkbenchDebugBlockOption[] {
+  const options: WorkbenchDebugBlockOption[] = []
+  if (connected.stages.components) {
+    options.push({ value: 'components', label: '[COMPONENTS] 组件分区', stage: 'components' })
+    connected.componentIndices.forEach(index => {
+      const item = meta.components[index]
+      options.push({ value: `component:${index}`, label: `组件 ${index}: ${item?.name || item?.id || '未命名'}`, stage: 'components' })
+    })
+  }
+  if (connected.stages.deploy) {
+    options.push({ value: 'deploy', label: '[DEPLOY] 部署分区', stage: 'deployments' })
+    connected.deploymentIndices.forEach(index => {
+      const item = meta.deployments[index]
+      options.push({ value: `deployment:${index}`, label: `部署 ${index}: ${item?.name || item?.id || '未命名'}`, stage: 'deployments' })
+    })
+  }
+  if (connected.stages.config) {
+    options.push({ value: 'config', label: '[CONFIG] 配置分区', stage: 'configs' })
+    connected.configItemIndices.forEach(index => {
+      const item = meta.configItems[index]
+      options.push({ value: `config-item:${index}`, label: `配置 ${index}: ${item?.name || item?.id || '未命名'}`, stage: 'configs' })
+    })
+  }
+  if (connected.stages.launch) {
+    options.push({ value: 'launch', label: '[LAUNCH] 启动分区', stage: 'launches' })
+    connected.launchItemIndices.forEach(index => {
+      const item = meta.launchItems[index]
+      options.push({ value: `launch-item:${index}`, label: `启动 ${index}: ${item?.name || item?.id || '未命名'}`, stage: 'launches' })
+    })
+  }
+  if (connected.stages.uninstall) {
+    options.push({ value: 'uninstall', label: '[UNINSTALL] 卸载分区', stage: 'uninstalls' })
+    connected.uninstallItemIndices.forEach(index => {
+      const item = meta.uninstallItems[index]
+      options.push({ value: `uninstall-item:${index}`, label: `卸载 ${index}: ${item?.name || item?.id || '未命名'}`, stage: 'uninstalls' })
+    })
+  }
+  return options
+}
+
+function formatDebugDuration(durationMs?: number) {
+  const value = Math.max(0, Math.round(durationMs ?? 0))
+  if (value < 1000) return `${value}ms`
+  const seconds = Math.floor(value / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes}m ${seconds % 60}s`
+}
+
+function debugStatusColor(status?: string) {
+  if (status === 'completed') return '#86efac'
+  if (status === 'failed') return '#fca5a5'
+  if (status === 'running') return '#93c5fd'
+  if (status === 'paused') return '#fde68a'
+  return 'rgba(226, 232, 240, 0.62)'
 }
 
 function createDenoPermissionOutlineChildren(meta: WorkbenchMetaState): OutlineNode[] {
@@ -1917,6 +1980,199 @@ function WorkbenchLeftSidebar({
   )
 }
 
+function WorkbenchDebugLeftSidebar({
+  collapsed,
+  width,
+  onToggleCollapsed,
+  onBackToLibrary,
+  onSave,
+  saveStatusLabel,
+  saveTone,
+  onResize,
+  session,
+  selectedProcessId,
+  onProcessSelect,
+}: {
+  collapsed: boolean
+  width: number
+  onToggleCollapsed: () => void
+  onBackToLibrary: () => void
+  onSave: () => void
+  saveStatusLabel: string
+  saveTone: 'default' | 'saving' | 'success' | 'error'
+  onResize: (width: number) => void
+  session: WorkbenchDebugSession | null
+  selectedProcessId: number | null
+  onProcessSelect: (pid: number) => void
+}) {
+  const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
+  const processesByBlock = useMemo(() => {
+    const map = new Map<string, WorkbenchDebugProcess[]>()
+    for (const process of session?.processes ?? []) {
+      const blockId = process.block_id || 'session'
+      const list = map.get(blockId) ?? []
+      list.push(process)
+      map.set(blockId, list)
+    }
+    return map
+  }, [session?.processes])
+
+  const startResize = (event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    resizeStartRef.current = { pointerId: event.pointerId, x: event.clientX, width }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const resize = (event: PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current
+    if (!start || start.pointerId !== event.pointerId) return
+    const nextWidth = start.width + event.clientX - start.x
+    if (nextWidth < leftSidebarMinWidth - 24) {
+      resizeStartRef.current = null
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+      onToggleCollapsed()
+      return
+    }
+    onResize(clamp(nextWidth, leftSidebarMinWidth, leftSidebarMaxWidth))
+  }
+
+  const stopResize = (event: PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current
+    if (!start || start.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    resizeStartRef.current = null
+  }
+
+  if (collapsed) {
+    return (
+      <aside data-workbench-ui className="absolute left-0 top-0 z-20 h-full" style={{ width: leftSidebarCollapsedWidth }}>
+        <div
+          className="absolute inset-y-0 left-0 border"
+          style={{ width: leftSidebarCollapsedWidth, borderColor: 'var(--dfw-sidebar-border)', background: 'var(--dfw-sidebar-bg)', borderRadius: '0 30px 30px 0' }}
+        />
+        <SidebarToolButton left={15} label="展开调试侧栏" onClick={onToggleCollapsed}>
+          <TextAlignLeftGlyph />
+        </SidebarToolButton>
+      </aside>
+    )
+  }
+
+  return (
+    <aside data-workbench-ui className="absolute left-0 top-0 z-20 h-full" style={{ width }}>
+      <div
+        className="absolute inset-0 border"
+        style={{ borderColor: 'var(--dfw-sidebar-border)', background: 'var(--dfw-sidebar-bg)', borderRadius: '0 30px 30px 0' }}
+      />
+      <SidebarToolButton left={20} label="返回项目列表" onClick={onBackToLibrary}>
+        <ArrowLeft size={30} strokeWidth={2} />
+      </SidebarToolButton>
+      <SidebarToolButton left={70} label={saveStatusLabel} onClick={onSave} tone={saveTone}>
+        <SaveGlyph />
+      </SidebarToolButton>
+      <SidebarToolButton left={120} label="收起左侧边栏" onClick={onToggleCollapsed}>
+        <TextAlignLeftGlyph />
+      </SidebarToolButton>
+      <SidebarToolButton left={170} label="调试视图">
+        <Bug size={28} strokeWidth={2} />
+      </SidebarToolButton>
+      <div className="absolute h-px" style={{ left: 20, top: 109.5, width: Math.max(0, width - 40), background: 'var(--dfw-sidebar-border)' }} aria-hidden />
+
+      <div className="absolute" style={{ left: 20, right: 18, top: 128, bottom: 22 }}>
+        <div className="mb-[14px] flex items-center justify-between gap-[10px]">
+          <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[20px] font-semibold" style={{ color: 'var(--dfw-text)', fontFamily: outlineFont }}>
+            调试进程
+          </div>
+          <div className="shrink-0 text-[12px]" style={{ color: 'rgba(226, 232, 240, 0.48)' }}>
+            {session?.processes?.length ?? 0} 个
+          </div>
+        </div>
+        <div className="absolute left-0 right-0 top-[42px] bottom-0 overflow-y-auto overflow-x-hidden pr-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {(session?.blocks ?? []).length ? (
+            <div className="flex flex-col gap-[10px]">
+              {(session?.blocks ?? []).map(block => {
+                const processes = processesByBlock.get(block.id) ?? []
+                return (
+                  <section key={block.id} className="rounded-[8px] border px-[10px] py-[9px]" style={{ borderColor: 'var(--dfw-sidebar-border)', background: 'rgba(15, 23, 42, 0.12)' }}>
+                    <div className="mb-[7px] flex items-center justify-between gap-[8px]">
+                      <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-semibold" style={{ color: 'rgba(226, 232, 240, 0.86)' }}>
+                        {block.label || block.id}
+                      </div>
+                      <div className="shrink-0 text-[11px]" style={{ color: debugStatusColor(block.status) }}>
+                        {block.status || 'pending'}
+                      </div>
+                    </div>
+                    <div className="mb-[8px] flex items-center gap-[8px] text-[11px]" style={{ color: 'rgba(226, 232, 240, 0.48)' }}>
+                      <span>{processes.length} 进程</span>
+                      <span>{block.command_count ?? 0} 命令</span>
+                      <span>{formatDebugDuration(block.duration_ms)}</span>
+                    </div>
+                    {processes.length ? (
+                      <div className="flex flex-col gap-[5px]">
+                        {processes.map(process => {
+                          const selected = selectedProcessId === process.pid
+                          return (
+                            <button
+                              key={`${block.id}-${process.pid}`}
+                              type="button"
+                              onClick={() => onProcessSelect(process.pid)}
+                              className="grid min-h-[42px] grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-[8px] rounded-[7px] border px-[8px] py-[6px] text-left transition-colors hover:bg-[var(--dfw-control-hover)]"
+                              style={{
+                                borderColor: selected ? 'rgba(96, 165, 250, 0.9)' : 'rgba(148, 163, 184, 0.22)',
+                                background: selected ? 'rgba(59, 130, 246, 0.18)' : 'rgba(2, 6, 23, 0.12)',
+                                color: 'var(--dfw-text)',
+                              }}
+                            >
+                              <Cpu size={16} strokeWidth={2} style={{ color: debugStatusColor(process.status) }} />
+                              <span className="min-w-0">
+                                <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-semibold">
+                                  {process.name || process.label || `PID ${process.pid}`}
+                                </span>
+                                <span className="block overflow-hidden text-ellipsis whitespace-nowrap text-[11px]" style={{ color: 'rgba(226, 232, 240, 0.48)' }}>
+                                  PID {process.pid}{process.parent_pid ? ` / PPID ${process.parent_pid}` : ''}
+                                </span>
+                              </span>
+                              <span className="shrink-0 text-[11px]" style={{ color: 'rgba(226, 232, 240, 0.54)' }}>
+                                {formatDebugDuration(process.duration_ms)}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-[7px] border px-[8px] py-[8px] text-center text-[12px]" style={{ borderColor: 'rgba(148, 163, 184, 0.18)', color: 'rgba(226, 232, 240, 0.42)' }}>
+                        暂无子进程
+                      </div>
+                    )}
+                  </section>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="rounded-[8px] border px-[12px] py-[18px] text-center text-[13px] leading-[20px]" style={{ borderColor: 'var(--dfw-sidebar-border)', color: 'rgba(226, 232, 240, 0.48)', background: 'rgba(15, 23, 42, 0.12)' }}>
+              启动调试后会按块显示子进程
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="absolute bottom-[30px] right-[-5px] top-[30px] w-[10px] cursor-ew-resize"
+        onPointerDown={startResize}
+        onPointerMove={resize}
+        onPointerUp={stopResize}
+        onPointerCancel={stopResize}
+        aria-label="调整左侧调试栏宽度"
+        title="调整左侧调试栏宽度"
+      />
+    </aside>
+  )
+}
+
 export default function DeploymentFlowWorkbench({
   onBackToLibrary,
   outline,
@@ -1950,6 +2206,12 @@ export default function DeploymentFlowWorkbench({
   const [runtimeFormError, setRuntimeFormError] = useState<string | null>(null)
   const [runtimeFormLoaded, setRuntimeFormLoaded] = useState(false)
   const [runtimeFormAutoTried, setRuntimeFormAutoTried] = useState(false)
+  const [debugPanelOpen, setDebugPanelOpen] = useState(false)
+  const [debugSessionId, setDebugSessionId] = useState<string | null>(null)
+  const [debugSession, setDebugSession] = useState<WorkbenchDebugSession | null>(null)
+  const [debugError, setDebugError] = useState<string | null>(null)
+  const [debugStarting, setDebugStarting] = useState(false)
+  const [debugSelectedProcessId, setDebugSelectedProcessId] = useState<number | null>(null)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -2005,6 +2267,10 @@ export default function DeploymentFlowWorkbench({
     [outline, meta, connectedIndexSets],
   )
   const blockMeta = meta
+  const debugBlockOptions = useMemo(
+    () => createDebugBlockOptions(meta, connectedIndexSets),
+    [meta, connectedIndexSets],
+  )
 
   const cancelViewportAnimation = () => {
     if (viewportAnimationFrameRef.current === null) return
@@ -2123,6 +2389,10 @@ export default function DeploymentFlowWorkbench({
     setRuntimeFormError(null)
     setRuntimeFormLoaded(false)
     setRuntimeFormAutoTried(false)
+    setDebugSessionId(null)
+    setDebugSession(null)
+    setDebugError(null)
+    setDebugSelectedProcessId(null)
   }, [projectSequence])
 
   useEffect(() => {
@@ -2301,6 +2571,13 @@ export default function DeploymentFlowWorkbench({
 
   const openRuntimePanel = () => {
     setRuntimePanelOpen(true)
+    setDebugPanelOpen(false)
+    if (rightSidebarCollapsed) setRightSidebarCollapsed(false)
+  }
+
+  const openDebugPanel = () => {
+    setDebugPanelOpen(true)
+    setRuntimePanelOpen(false)
     if (rightSidebarCollapsed) setRightSidebarCollapsed(false)
   }
 
@@ -2418,6 +2695,98 @@ export default function DeploymentFlowWorkbench({
     }
   }
 
+  const startWorkbenchDebug = async (options: WorkbenchDebugStartOptions) => {
+    openDebugPanel()
+    if (!projectSequence) {
+      setDebugError('当前工作台项目缺少序列号，无法启动调试。')
+      return
+    }
+
+    setDebugStarting(true)
+    setDebugError(null)
+    setDebugSessionId(null)
+    setDebugSelectedProcessId(null)
+    setDebugSession({
+      status: 'running',
+      message: '正在写入当前画布生成的模板文件',
+      scope: options.scope,
+      stage: options.scope === 'stage' ? options.stage : '',
+      block_key: options.scope === 'block' ? options.blockKey : '',
+      monitor_level: options.monitorLevel,
+      hydrate_context: options.hydrateContext,
+      blocks: [],
+      commands: [],
+      processes: [],
+      logs: [],
+    })
+
+    const saved = await handleSaveWorkbench()
+    if (!saved) {
+      setDebugStarting(false)
+      setDebugError('工作台保存失败，已取消调试。')
+      setDebugSession(prev => ({
+        ...(prev ?? {}),
+        status: 'failed',
+        message: '请先处理保存错误后再调试',
+      }))
+      return
+    }
+
+    const userInputs: Record<string, WorkbenchRunInputValue> = {
+      ...options.userInputs,
+      nickname: options.nickname || meta.modName || projectInfo?.mod_name || '工作台调试',
+    }
+    if (options.serialNumber) userInputs.serial_number = options.serialNumber
+
+    try {
+      const response = await fetch(`/api/deployment-mod/workbench/${encodeURIComponent(projectSequence)}/debug/start`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: options.scope,
+          stage: options.scope === 'stage' ? options.stage : '',
+          block_key: options.scope === 'block' ? options.blockKey : '',
+          monitor_level: options.monitorLevel,
+          hydrate_context: options.hydrateContext,
+          user_inputs: userInputs,
+          serial_number: options.serialNumber,
+        }),
+      })
+      const payload = await response.json().catch(() => null) as { session_id?: string; session?: WorkbenchDebugSession; detail?: string; message?: string } | null
+      if (!response.ok) throw new Error(payload?.detail || `HTTP ${response.status}`)
+      if (!payload?.session_id) throw new Error('后端没有返回调试会话 ID')
+      setDebugSessionId(payload.session_id)
+      setDebugSession(payload.session ?? null)
+    } catch (error) {
+      const message = parseApiErrorMessage(error)
+      setDebugError(message)
+      setDebugSession(prev => ({
+        ...(prev ?? {}),
+        status: 'failed',
+        message,
+      }))
+    } finally {
+      setDebugStarting(false)
+    }
+  }
+
+  const controlDebugSession = async (action: 'pause' | 'resume' | 'stop') => {
+    if (!debugSessionId) return
+    try {
+      const response = await fetch(`/api/deployment-mod/debug/${encodeURIComponent(debugSessionId)}/${action}`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const payload = await response.json().catch(() => null) as { session?: WorkbenchDebugSession; detail?: string } | null
+      if (!response.ok) throw new Error(payload?.detail || `HTTP ${response.status}`)
+      if (payload?.session) setDebugSession(payload.session)
+      setDebugError(null)
+    } catch (error) {
+      setDebugError(parseApiErrorMessage(error))
+    }
+  }
+
   useEffect(() => {
     if (!runtimeTaskId) return
 
@@ -2479,9 +2848,75 @@ export default function DeploymentFlowWorkbench({
   }, [runtimeTaskId])
 
   useEffect(() => {
-    if (!runtimePanelOpen || !projectSequence || runtimeFormAutoTried || runtimeFormLoaded || runtimeFormLoading) return
+    if (!debugSessionId) return
+
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+    const ws = new WebSocket(`${proto}://${location.host}/ws`)
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', channel: 'deployment_debug' }))
+    ws.onmessage = event => {
+      try {
+        const message = JSON.parse(event.data) as { type?: string; session_id?: string; data?: WorkbenchDebugSession }
+        if (message.type !== 'deployment_debug') return
+        const session = message.data
+        if (!session || (message.session_id !== debugSessionId && session.session_id !== debugSessionId)) return
+        setDebugSession(session)
+        if (session.status === 'failed') setDebugError(session.error || session.message || '工作台调试失败')
+        if (session.status === 'completed') setDebugError(null)
+      } catch {
+        // 忽略非 JSON 推送。
+      }
+    }
+
+    return () => ws.close()
+  }, [debugSessionId])
+
+  useEffect(() => {
+    if (!debugSessionId) return
+
+    let cancelled = false
+    let timer: number | null = null
+    const stopPolling = () => {
+      if (timer === null) return
+      window.clearInterval(timer)
+      timer = null
+    }
+    const loadSession = async () => {
+      try {
+        const response = await fetch(`/api/deployment-mod/debug/${encodeURIComponent(debugSessionId)}`, { credentials: 'include' })
+        if (!response.ok) return
+        const payload = await response.json() as { success?: boolean; session?: WorkbenchDebugSession }
+        if (cancelled || payload.success === false || !payload.session) return
+        setDebugSession(payload.session)
+        if (payload.session.status === 'failed') setDebugError(payload.session.error || payload.session.message || '工作台调试失败')
+        if (payload.session.status === 'completed') setDebugError(null)
+        if (['completed', 'failed', 'stopped'].includes(String(payload.session.status || ''))) stopPolling()
+      } catch {
+        // WebSocket 仍是主通道，轮询失败不打断调试面板。
+      }
+    }
+
+    void loadSession()
+    timer = window.setInterval(loadSession, 2000)
+    return () => {
+      cancelled = true
+      stopPolling()
+    }
+  }, [debugSessionId])
+
+  useEffect(() => {
+    const processes = debugSession?.processes ?? []
+    if (!processes.length) {
+      setDebugSelectedProcessId(null)
+      return
+    }
+    if (debugSelectedProcessId && processes.some(process => process.pid === debugSelectedProcessId)) return
+    setDebugSelectedProcessId(processes[0].pid)
+  }, [debugSelectedProcessId, debugSession?.processes])
+
+  useEffect(() => {
+    if (!(runtimePanelOpen || debugPanelOpen) || !projectSequence || runtimeFormAutoTried || runtimeFormLoaded || runtimeFormLoading) return
     void refreshWorkbenchRunForm()
-  }, [runtimePanelOpen, projectSequence, runtimeFormAutoTried, runtimeFormLoaded, runtimeFormLoading])
+  }, [runtimePanelOpen, debugPanelOpen, projectSequence, runtimeFormAutoTried, runtimeFormLoaded, runtimeFormLoading])
 
   return (
     <div
@@ -2544,27 +2979,67 @@ export default function DeploymentFlowWorkbench({
         onCanvasStatePatch={patch => setCanvasState(prev => ({ ...prev, ...patch }))}
         onViewportChange={next => updateViewport(next)}
       />
-      <WorkbenchLeftSidebar
-        collapsed={leftSidebarCollapsed}
-        width={leftSidebarWidth}
-        onToggleCollapsed={() => setLeftSidebarCollapsed(prev => !prev)}
-        onSave={() => void handleSaveWorkbench()}
-        saveStatusLabel={isSaving ? '正在保存…' : saveMessage ?? '保存模板'}
-        saveTone={saveTone}
-        onResize={setLeftSidebarWidth}
-        onBackToLibrary={onBackToLibrary}
-        outline={effectiveOutline}
-        selectedBlockId={selectedBlockId}
-        onBlockSelect={setSelectedBlockId}
-        onOutlineNodeDoubleClick={focusRightSidebarFromOutline}
-      />
+      {debugPanelOpen ? (
+        <WorkbenchDebugLeftSidebar
+          collapsed={leftSidebarCollapsed}
+          width={leftSidebarWidth}
+          onToggleCollapsed={() => setLeftSidebarCollapsed(prev => !prev)}
+          onSave={() => void handleSaveWorkbench()}
+          saveStatusLabel={isSaving ? '正在保存…' : saveMessage ?? '保存模板'}
+          saveTone={saveTone}
+          onResize={setLeftSidebarWidth}
+          onBackToLibrary={onBackToLibrary}
+          session={debugSession}
+          selectedProcessId={debugSelectedProcessId}
+          onProcessSelect={setDebugSelectedProcessId}
+        />
+      ) : (
+        <WorkbenchLeftSidebar
+          collapsed={leftSidebarCollapsed}
+          width={leftSidebarWidth}
+          onToggleCollapsed={() => setLeftSidebarCollapsed(prev => !prev)}
+          onSave={() => void handleSaveWorkbench()}
+          saveStatusLabel={isSaving ? '正在保存…' : saveMessage ?? '保存模板'}
+          saveTone={saveTone}
+          onResize={setLeftSidebarWidth}
+          onBackToLibrary={onBackToLibrary}
+          outline={effectiveOutline}
+          selectedBlockId={selectedBlockId}
+          onBlockSelect={setSelectedBlockId}
+          onOutlineNodeDoubleClick={focusRightSidebarFromOutline}
+        />
+      )}
       <WorkbenchTopTabs
         onBackToLibrary={onBackToLibrary}
         leftBoundary={leftSidebarRight}
         rightReservedWidth={rightSidebarLeft}
         initialTabs={topTabs}
       />
-      {runtimePanelOpen ? (
+      {debugPanelOpen ? (
+        <WorkbenchDebugPanel
+          collapsed={rightSidebarCollapsed}
+          width={rightSidebarWidth}
+          sessionId={debugSessionId}
+          session={debugSession}
+          selectedProcessId={debugSelectedProcessId}
+          error={debugError}
+          formFields={runtimeFormFields}
+          formValues={runtimeFormValues}
+          formLoading={runtimeFormLoading}
+          formError={runtimeFormError}
+          starting={debugStarting}
+          blockOptions={debugBlockOptions}
+          onToggleCollapsed={() => setRightSidebarCollapsed(prev => !prev)}
+          onResize={setRightSidebarWidth}
+          onStart={options => void startWorkbenchDebug(options)}
+          onPause={() => void controlDebugSession('pause')}
+          onResume={() => void controlDebugSession('resume')}
+          onStop={() => void controlDebugSession('stop')}
+          onFormValueChange={(key, value) => setRuntimeFormValues(prev => ({ ...prev, [key]: value }))}
+          onRefreshForm={() => void refreshWorkbenchRunForm()}
+          onClose={() => setDebugPanelOpen(false)}
+        />
+      ) : runtimePanelOpen ? (
         <WorkbenchRuntimePanel
           collapsed={rightSidebarCollapsed}
           width={rightSidebarWidth}
@@ -2634,6 +3109,7 @@ export default function DeploymentFlowWorkbench({
         onScaleChange={setScaleFromBottomBar}
         onAddNode={openAddNodeFromBottomBar}
         onRun={openRuntimePanel}
+        onDebug={openDebugPanel}
         runActive={runtimeStarting || runtimeProgress?.status === 'running'}
         runDisabled={!projectSequence}
       />

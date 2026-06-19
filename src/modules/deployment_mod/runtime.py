@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager
 import json
 import os
 import re
@@ -39,6 +40,7 @@ from .models import (
     TemplateDefinition,
     UninstallDefinition,
 )
+from .debug_session import DebugSessionStopped
 
 logger = structlog.get_logger(__name__)
 urllib3.disable_warnings(InsecureRequestWarning)
@@ -82,6 +84,7 @@ class RuntimeState:
     opened_files: List[str] = field(default_factory=list)
     launched_items: List[str] = field(default_factory=list)
     removed_paths: List[str] = field(default_factory=list)
+    debug_controller: Optional[Any] = None
 
 
 class DeploymentModRuntime:
@@ -218,6 +221,7 @@ class DeploymentModRuntime:
         template: TemplateDefinition,
         plan: DeploymentPlan,
         progress_callback: Optional[Callable] = None,
+        debug_controller: Optional[Any] = None,
     ) -> RuntimeResult:
         runtime_root = os.path.join(
             os.getcwd(),
@@ -234,18 +238,16 @@ class DeploymentModRuntime:
             runtime_root=runtime_root,
             instance_serial_number=str(plan.template_inputs.get("serial_number", "") or ""),
             runtime_log_file=os.path.join(runtime_root, "execution.log"),
+            debug_controller=debug_controller,
         )
 
         try:
+            self._debug_wait(state)
             self._notify(state, 1, 6, "准备模板运行时", "running", f"模板: {template.metadata.mod_name}")
             self._notify(state, 1, 6, "准备模板运行时", "running", f"运行时目录: {runtime_root}", event="detail")
             self._notify(state, 1, 6, "准备模板运行时", "running", f"执行日志: {state.runtime_log_file}", event="detail")
             self._prepare_file_imports(state)
-
-            # 自动将所有用户输入的表单字段导出到环境变量池，供模板通过 {{env|...}} 引用
-            for key, value in state.plan.template_inputs.items():
-                if value and str(value).strip():
-                    state.env_pool[key] = str(value).strip()
+            self._hydrate_template_inputs(state)
 
             self._notify(state, 2, 6, "组件安装阶段", "running", "开始执行组件安装阶段")
             self._execute_components(state)
@@ -281,10 +283,11 @@ class DeploymentModRuntime:
         stage: str,
         progress_callback: Optional[Callable] = None,
         serial_number: str = "",
+        debug_controller: Optional[Any] = None,
     ) -> RuntimeResult:
         normalized_stage = self._normalize_stage(stage)
         if normalized_stage == "full":
-            return self.execute(template, plan, progress_callback=progress_callback)
+            return self.execute(template, plan, progress_callback=progress_callback, debug_controller=debug_controller)
 
         runtime_root = os.path.join(
             os.getcwd(),
@@ -301,10 +304,13 @@ class DeploymentModRuntime:
             runtime_root=runtime_root,
             instance_serial_number=serial_number or str(plan.template_inputs.get("serial_number", "") or ""),
             runtime_log_file=os.path.join(runtime_root, "execution.log"),
+            debug_controller=debug_controller,
         )
 
         try:
+            self._debug_wait(state)
             self._prepare_file_imports(state)
+            self._hydrate_template_inputs(state)
             should_restore_instance_state = normalized_stage in {"launches", "configs", "uninstalls"} or (
                 normalized_stage == "deployments" and bool(serial_number)
             )
@@ -312,6 +318,7 @@ class DeploymentModRuntime:
                 self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"模板: {template.metadata.mod_name}")
             else:
                 self._restore_runtime_state_for_instance(state, state.instance_serial_number)
+                self._hydrate_template_inputs(state)
                 self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"实例序列号: {state.instance_serial_number}")
             self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"运行时目录: {runtime_root}", event="detail")
             self._notify(state, 1, 1, f"执行 {normalized_stage} 阶段", "running", f"执行日志: {state.runtime_log_file}", event="detail")
@@ -339,19 +346,270 @@ class DeploymentModRuntime:
             self._notify(state, 1, 1, f"{normalized_stage} 阶段失败", "failed", str(exc))
             return self._build_runtime_result(state, success=False, message=str(exc), stage=normalized_stage)
 
-    def _execute_components(self, state: RuntimeState) -> None:
-        ordered_components = self._ordered_items(
-            state.template.components_section.list,
-            state.template.components,
+    def execute_block(
+        self,
+        template: TemplateDefinition,
+        plan: DeploymentPlan,
+        block_key: str,
+        progress_callback: Optional[Callable] = None,
+        serial_number: str = "",
+        hydrate_context: bool = True,
+        debug_controller: Optional[Any] = None,
+    ) -> RuntimeResult:
+        normalized_block = str(block_key or "").strip()
+        if not normalized_block:
+            raise RuntimeError("单块运行缺少 block_key")
+
+        runtime_root = os.path.join(
+            os.getcwd(),
+            "data",
+            "template_runtime",
+            f"{template.metadata.mod_id.replace('.', '_')}_block_{int(time.time())}",
         )
-        bindings = {item.component_id: item for item in state.plan.component_bindings}
-        for component in ordered_components:
-            binding = bindings.get(component.id)
-            enabled = binding.enabled if binding else self._component_requires_processing(component)
-            if not enabled:
-                self._notify(state, 2, 6, f"跳过组件 {component.name}", "skipped", "用户未选择或模板无需处理该组件")
-                continue
-            self._execute_component(state, component)
+        os.makedirs(runtime_root, exist_ok=True)
+
+        state = RuntimeState(
+            template=template,
+            plan=plan,
+            progress_callback=progress_callback,
+            runtime_root=runtime_root,
+            instance_serial_number=serial_number or str(plan.template_inputs.get("serial_number", "") or ""),
+            runtime_log_file=os.path.join(runtime_root, "execution.log"),
+            debug_controller=debug_controller,
+        )
+
+        try:
+            self._debug_wait(state)
+            self._prepare_file_imports(state)
+            self._hydrate_template_inputs(state)
+            required_stage = self._stage_for_block_key(normalized_block)
+            should_restore = hydrate_context and (
+                required_stage in {"launches", "configs", "uninstalls"}
+                or (required_stage == "deployments" and bool(state.instance_serial_number))
+            )
+            if should_restore:
+                self._restore_runtime_state_for_instance(state, state.instance_serial_number)
+                self._hydrate_template_inputs(state)
+
+            self._notify(state, 1, 1, "执行单块调试", "running", f"块: {normalized_block}", event="detail")
+            self._notify(state, 1, 1, "执行单块调试", "running", f"运行时目录: {runtime_root}", event="detail")
+            self._execute_single_block(state, normalized_block)
+            if required_stage in {"deployments", "launches", "configs"} and state.instance_serial_number:
+                self._persist_runtime_files_for_existing_instance(state)
+            self._notify(state, 1, 1, "单块调试完成", "completed", "块执行成功")
+            return self._build_runtime_result(state, success=True, message="块执行成功", stage=normalized_block)
+        except Exception as exc:
+            logger.error("模板单块执行失败", template_id=template.metadata.mod_id, block=normalized_block, error=str(exc))
+            status_message = "调试会话已停止" if isinstance(exc, DebugSessionStopped) else str(exc)
+            self._notify(state, 1, 1, "单块调试失败", "failed", status_message)
+            return self._build_runtime_result(state, success=False, message=status_message, stage=normalized_block)
+
+    def _hydrate_template_inputs(self, state: RuntimeState) -> None:
+        for key, value in state.plan.template_inputs.items():
+            if value and str(value).strip():
+                state.env_pool[str(key)] = str(value).strip()
+
+    def _stage_for_block_key(self, block_key: str) -> str:
+        if block_key in {"components", "component"}:
+            return "components"
+        if block_key in {"deploy", "deployment", "deployments"}:
+            return "deployments"
+        if block_key in {"launch", "launches"}:
+            return "launches"
+        if block_key in {"config", "configs"}:
+            return "configs"
+        if block_key in {"uninstall", "uninstalls"}:
+            return "uninstalls"
+        if block_key.startswith("component:"):
+            return "components"
+        if block_key.startswith("deployment:"):
+            return "deployments"
+        if block_key.startswith("launch-item:"):
+            return "launches"
+        if block_key.startswith("config-item:"):
+            return "configs"
+        if block_key.startswith("uninstall-item:"):
+            return "uninstalls"
+        raise RuntimeError(f"未知工作台块: {block_key}")
+
+    def _execute_single_block(self, state: RuntimeState, block_key: str) -> None:
+        if block_key in {"components", "component"}:
+            self._execute_components(state)
+            return
+        if block_key in {"deploy", "deployment", "deployments"}:
+            self._execute_deployments(state)
+            return
+        if block_key in {"launch", "launches"}:
+            self._execute_launches(state)
+            return
+        if block_key in {"config", "configs"}:
+            self._execute_configs(state)
+            return
+        if block_key in {"uninstall", "uninstalls"}:
+            self._execute_uninstalls(state)
+            return
+
+        prefix, _, index_text = block_key.partition(":")
+        try:
+            index = int(index_text)
+        except ValueError as exc:
+            raise RuntimeError(f"工作台块索引非法: {block_key}") from exc
+
+        if prefix == "component":
+            component = self._item_by_index(state.template.components, index, block_key)
+            with self._debug_block(state, "components", block_key, f"组件 {component.name}", item_id=component.id):
+                self._execute_component(state, component)
+            return
+        if prefix == "deployment":
+            deployment = self._item_by_index(state.template.deployments, index, block_key)
+            with self._debug_block(state, "deployments", block_key, f"部署 {deployment.name}", item_id=deployment.id):
+                self._execute_deployment(state, deployment)
+            return
+        if prefix == "launch-item":
+            launch = self._item_by_index(state.template.launches, index, block_key)
+            with self._debug_block(state, "launches", block_key, f"启动 {launch.name}", item_id=launch.id):
+                self._execute_launch(state, launch)
+            return
+        if prefix == "config-item":
+            config = self._item_by_index(state.template.configs, index, block_key)
+            with self._debug_block(state, "configs", block_key, f"配置 {config.name}", item_id=config.id or config.name):
+                file_path = self._execute_config_item(state, config)
+            if file_path:
+                open_files_in_editor([file_path])
+            return
+        if prefix == "uninstall-item":
+            uninstall = self._item_by_index(state.template.uninstalls, index, block_key)
+            with self._debug_block(state, "uninstalls", block_key, f"卸载 {uninstall.name}", item_id=uninstall.id):
+                self._execute_uninstall(state, uninstall)
+            self._finalize_uninstall_cleanup(state, remove_instance_config=uninstall.remove_instance_config)
+            return
+
+        raise RuntimeError(f"未知工作台块: {block_key}")
+
+    @staticmethod
+    def _item_by_index(items: Sequence[Any], index: int, block_key: str) -> Any:
+        if index < 0 or index >= len(items):
+            raise RuntimeError(f"工作台块不存在: {block_key}")
+        return items[index]
+
+    @contextmanager
+    def _debug_block(
+        self,
+        state: RuntimeState,
+        stage: str,
+        block_id: str,
+        label: str,
+        item_id: str = "",
+    ):
+        self._debug_wait(state)
+        controller = state.debug_controller
+        if not controller:
+            yield
+            return
+        controller.enter_block(stage=stage, block_id=block_id, label=label, item_id=item_id)
+        try:
+            yield
+        except Exception as exc:
+            controller.leave_block(status="failed", error=str(exc))
+            raise
+        else:
+            controller.leave_block(status="completed")
+
+    def _debug_wait(self, state: RuntimeState) -> None:
+        controller = state.debug_controller
+        if controller:
+            controller.wait_if_paused()
+
+    def _debug_item_block_id(self, state: RuntimeState, kind: str, item: Any) -> str:
+        if kind == "component":
+            return f"component:{self._index_for_item(state.template.components, item)}"
+        if kind == "deployment":
+            return f"deployment:{self._index_for_item(state.template.deployments, item)}"
+        if kind == "launch":
+            return f"launch-item:{self._index_for_item(state.template.launches, item)}"
+        if kind == "config":
+            return f"config-item:{self._index_for_item(state.template.configs, item)}"
+        if kind == "uninstall":
+            return f"uninstall-item:{self._index_for_item(state.template.uninstalls, item)}"
+        return str(getattr(item, "id", "") or kind)
+
+    @staticmethod
+    def _index_for_item(items: Sequence[Any], target: Any) -> int:
+        for index, item in enumerate(items):
+            if item is target:
+                return index
+        target_id = str(getattr(target, "id", "") or getattr(target, "name", "") or "")
+        for index, item in enumerate(items):
+            item_id = str(getattr(item, "id", "") or getattr(item, "name", "") or "")
+            if target_id and item_id == target_id:
+                return index
+        return 0
+
+    def _debug_command_started(self, state: RuntimeState, label: str, payload: Dict[str, Any]) -> str:
+        controller = state.debug_controller
+        if not controller:
+            return ""
+        return controller.command_started(label=label, scope="runtime", **payload)
+
+    def _debug_command_meta(self, state: RuntimeState, command_id: str, payload: Dict[str, Any]) -> None:
+        if state.debug_controller and command_id:
+            state.debug_controller.command_meta(command_id, payload)
+
+    def _debug_command_output(
+        self,
+        state: RuntimeState,
+        command_id: str,
+        line: str,
+        command_index: Optional[int],
+        runtime: str,
+    ) -> None:
+        if state.debug_controller and command_id:
+            state.debug_controller.command_output(command_id, line, command_index=command_index, runtime=runtime)
+
+    def _debug_command_finished(
+        self,
+        state: RuntimeState,
+        command_id: str,
+        *,
+        status: str,
+        returncode: Any = None,
+        error: str = "",
+    ) -> None:
+        if state.debug_controller and command_id:
+            state.debug_controller.command_finished(command_id, status=status, returncode=returncode, error=error)
+
+    def _debug_register_process(
+        self,
+        state: RuntimeState,
+        process: subprocess.Popen,
+        command_id: str,
+        label: str,
+        command_line: Sequence[str],
+    ) -> None:
+        if state.debug_controller and command_id:
+            state.debug_controller.register_process(process, command_id=command_id, label=label, command_line=command_line)
+
+    def _execute_components(self, state: RuntimeState) -> None:
+        with self._debug_block(state, "components", "components", "[COMPONENTS]"):
+            ordered_components = self._ordered_items(
+                state.template.components_section.list,
+                state.template.components,
+            )
+            bindings = {item.component_id: item for item in state.plan.component_bindings}
+            for component in ordered_components:
+                binding = bindings.get(component.id)
+                enabled = binding.enabled if binding else self._component_requires_processing(component)
+                if not enabled:
+                    self._notify(state, 2, 6, f"跳过组件 {component.name}", "skipped", "用户未选择或模板无需处理该组件")
+                    continue
+                with self._debug_block(
+                    state,
+                    "components",
+                    self._debug_item_block_id(state, "component", component),
+                    f"组件 {component.name}",
+                    item_id=component.id,
+                ):
+                    self._execute_component(state, component)
 
     def _execute_component(self, state: RuntimeState, component: ComponentDefinition) -> None:
         scope = self._build_scope(state, state.template.components_section.env_input, component.env_input, component.env_input_list)
@@ -591,21 +849,29 @@ class DeploymentModRuntime:
         self._operate_asset(state, asset_path, install_path, is_deployment=False, label=f"组件 {component.name}")
 
     def _execute_deployments(self, state: RuntimeState) -> None:
-        ordered_deployments = self._ordered_items(
-            state.template.deployments_section.list,
-            state.template.deployments,
-        )
-        for deployment in ordered_deployments:
-            enabled = bool(
-                state.plan.template_inputs.get(
-                    f"deployment::{deployment.id}",
-                    deployment.deploy if deployment.choose else deployment.deploy,
-                )
+        with self._debug_block(state, "deployments", "deploy", "[DEPLOY]"):
+            ordered_deployments = self._ordered_items(
+                state.template.deployments_section.list,
+                state.template.deployments,
             )
-            if not enabled:
-                self._notify(state, 3, 6, f"跳过部署 {deployment.name}", "skipped", "用户未选择该部署项")
-                continue
-            self._execute_deployment(state, deployment)
+            for deployment in ordered_deployments:
+                enabled = bool(
+                    state.plan.template_inputs.get(
+                        f"deployment::{deployment.id}",
+                        deployment.deploy if deployment.choose else deployment.deploy,
+                    )
+                )
+                if not enabled:
+                    self._notify(state, 3, 6, f"跳过部署 {deployment.name}", "skipped", "用户未选择该部署项")
+                    continue
+                with self._debug_block(
+                    state,
+                    "deployments",
+                    self._debug_item_block_id(state, "deployment", deployment),
+                    f"部署 {deployment.name}",
+                    item_id=deployment.id,
+                ):
+                    self._execute_deployment(state, deployment)
 
     def _execute_deployment(self, state: RuntimeState, deployment: DeploymentDefinition) -> None:
         scope = self._build_scope(state, state.template.deployments_section.env_input, deployment.env_input, deployment.env_input_list)
@@ -741,72 +1007,103 @@ class DeploymentModRuntime:
         self._notify(state, 3, 6, f"部署 {deployment_name}", "completed", f"已复制文件到: {final_root}", event="detail")
 
     def _execute_launches(self, state: RuntimeState) -> None:
-        ordered_launches = self._ordered_items(state.template.launches_section.list, state.template.launches)
-        for launch in ordered_launches:
-            enabled = bool(
-                state.plan.template_inputs.get(
-                    f"launch::{launch.id}",
-                    launch.launch if launch.choose else launch.launch,
+        with self._debug_block(state, "launches", "launch", "[LAUNCH]"):
+            ordered_launches = self._ordered_items(state.template.launches_section.list, state.template.launches)
+            for launch in ordered_launches:
+                enabled = bool(
+                    state.plan.template_inputs.get(
+                        f"launch::{launch.id}",
+                        launch.launch if launch.choose else launch.launch,
+                    )
                 )
-            )
-            if not enabled:
-                self._notify(state, 4, 6, f"跳过启动 {launch.name}", "skipped", "用户未选择该启动项")
-                continue
-            scope = self._build_scope(state, state.template.launches_section.env_input, launch.env_input, launch.env_input_list)
-            cwd = self._guess_launch_workdir(state, launch)
-            self._run_command_list(
-                state,
-                launch.launch_command,
-                cwd,
-                scope,
-                f"启动 {launch.name}",
-                detached=True,
-                runtime=launch.runtime,
-                command_theme=launch.command_theme,
-            )
-            state.launched_items.append(launch.id)
-            self._export_env_bindings(state, state.template.launches_section.env_output, launch.env_output, launch.env_output_list, scope)
+                if not enabled:
+                    self._notify(state, 4, 6, f"跳过启动 {launch.name}", "skipped", "用户未选择该启动项")
+                    continue
+                with self._debug_block(
+                    state,
+                    "launches",
+                    self._debug_item_block_id(state, "launch", launch),
+                    f"启动 {launch.name}",
+                    item_id=launch.id,
+                ):
+                    self._execute_launch(state, launch)
+
+    def _execute_launch(self, state: RuntimeState, launch: LaunchDefinition) -> None:
+        scope = self._build_scope(state, state.template.launches_section.env_input, launch.env_input, launch.env_input_list)
+        cwd = self._guess_launch_workdir(state, launch)
+        self._run_command_list(
+            state,
+            launch.launch_command,
+            cwd,
+            scope,
+            f"启动 {launch.name}",
+            detached=True,
+            runtime=launch.runtime,
+            command_theme=launch.command_theme,
+        )
+        state.launched_items.append(launch.id)
+        self._export_env_bindings(state, state.template.launches_section.env_output, launch.env_output, launch.env_output_list, scope)
 
     def _execute_configs(self, state: RuntimeState) -> None:
-        ordered_configs = self._ordered_items(state.template.configs_section.list, state.template.configs)
-        files_to_open: List[str] = []
-        for config in ordered_configs:
-            enabled = bool(state.plan.template_inputs.get(f"config::{config.id or config.name}", True if config.choose else True))
-            if not enabled:
-                self._notify(state, 5, 6, f"跳过配置 {config.name}", "skipped", "用户未选择打开该配置文件")
-                continue
-            scope = self._build_scope(state, state.template.configs_section.env_input, config.env_input, config.env_input_list)
-            file_path = self._resolve_text(state, config.file_path, scope)
-            if not file_path:
-                raise RuntimeError(f"配置项 {config.name} 未能解析出文件路径")
-            files_to_open.append(file_path)
-            state.opened_files.append(file_path)
-            self._export_env_bindings(state, state.template.configs_section.env_output, config.env_output, config.env_output_list, scope)
+        with self._debug_block(state, "configs", "config", "[CONFIG]"):
+            ordered_configs = self._ordered_items(state.template.configs_section.list, state.template.configs)
+            files_to_open: List[str] = []
+            for config in ordered_configs:
+                enabled = bool(state.plan.template_inputs.get(f"config::{config.id or config.name}", True if config.choose else True))
+                if not enabled:
+                    self._notify(state, 5, 6, f"跳过配置 {config.name}", "skipped", "用户未选择打开该配置文件")
+                    continue
+                with self._debug_block(
+                    state,
+                    "configs",
+                    self._debug_item_block_id(state, "config", config),
+                    f"配置 {config.name}",
+                    item_id=config.id or config.name,
+                ):
+                    file_path = self._execute_config_item(state, config)
+                    files_to_open.append(file_path)
 
-        if files_to_open:
-            open_files_in_editor(files_to_open)
+            if files_to_open:
+                open_files_in_editor(files_to_open)
+
+    def _execute_config_item(self, state: RuntimeState, config: ConfigDefinition) -> str:
+        scope = self._build_scope(state, state.template.configs_section.env_input, config.env_input, config.env_input_list)
+        file_path = self._resolve_text(state, config.file_path, scope)
+        if not file_path:
+            raise RuntimeError(f"配置项 {config.name} 未能解析出文件路径")
+        state.opened_files.append(file_path)
+        self._export_env_bindings(state, state.template.configs_section.env_output, config.env_output, config.env_output_list, scope)
+        return file_path
 
     def _execute_uninstalls(self, state: RuntimeState) -> None:
-        ordered_uninstalls = self._ordered_items(state.template.uninstalls_section.list, state.template.uninstalls)
-        if not ordered_uninstalls:
-            raise RuntimeError("模板未声明任何卸载项")
+        with self._debug_block(state, "uninstalls", "uninstall", "[UNINSTALL]"):
+            ordered_uninstalls = self._ordered_items(state.template.uninstalls_section.list, state.template.uninstalls)
+            if not ordered_uninstalls:
+                raise RuntimeError("模板未声明任何卸载项")
 
-        remove_instance_config = False
+            remove_instance_config = False
 
-        for uninstall in ordered_uninstalls:
-            enabled = bool(
-                state.plan.template_inputs.get(
-                    f"uninstall::{uninstall.id}",
-                    uninstall.uninstall if uninstall.choose else uninstall.uninstall,
+            for uninstall in ordered_uninstalls:
+                enabled = bool(
+                    state.plan.template_inputs.get(
+                        f"uninstall::{uninstall.id}",
+                        uninstall.uninstall if uninstall.choose else uninstall.uninstall,
+                    )
                 )
-            )
-            if not enabled:
-                self._notify(state, 1, 1, f"跳过卸载 {uninstall.name}", "skipped", "用户未选择该卸载项")
-                continue
+                if not enabled:
+                    self._notify(state, 1, 1, f"跳过卸载 {uninstall.name}", "skipped", "用户未选择该卸载项")
+                    continue
 
-            self._execute_uninstall(state, uninstall)
-            remove_instance_config = remove_instance_config or uninstall.remove_instance_config
-        self._finalize_uninstall_cleanup(state, remove_instance_config=remove_instance_config)
+                with self._debug_block(
+                    state,
+                    "uninstalls",
+                    self._debug_item_block_id(state, "uninstall", uninstall),
+                    f"卸载 {uninstall.name}",
+                    item_id=uninstall.id,
+                ):
+                    self._execute_uninstall(state, uninstall)
+                remove_instance_config = remove_instance_config or uninstall.remove_instance_config
+            self._finalize_uninstall_cleanup(state, remove_instance_config=remove_instance_config)
 
     def _execute_uninstall(self, state: RuntimeState, uninstall: UninstallDefinition) -> None:
         scope = self._build_scope(
@@ -2082,6 +2379,17 @@ class DeploymentModRuntime:
         env.update(scope.env_values)
         runtime_label = self._runtime_label(runtime)
         primary_command = resolved_commands[0] if resolved_commands else script_path
+        command_payload = {
+            "runtime": runtime,
+            "runtime_label": runtime_label,
+            "script_path": script_path,
+            "cwd": cwd,
+            "command_count": len(resolved_commands),
+            "primary_command": primary_command,
+            "commands": resolved_commands,
+            "command_theme": command_theme,
+        }
+        command_id = self._debug_command_started(state, label, command_payload)
 
         logger.info(
             "执行命令脚本",
@@ -2102,14 +2410,8 @@ class DeploymentModRuntime:
             event="command",
             data={
                 "command_status": "started",
-                "runtime": runtime,
-                "runtime_label": runtime_label,
-                "script_path": script_path,
-                "cwd": cwd,
-                "command_count": len(resolved_commands),
-                "primary_command": primary_command,
-                "commands": resolved_commands,
-                "command_theme": command_theme,
+                **command_payload,
+                "debug_command_id": command_id,
             },
         )
 
@@ -2120,6 +2422,7 @@ class DeploymentModRuntime:
             else:
                 popen_kwargs["start_new_session"] = True
             process = subprocess.Popen(cmd, **popen_kwargs)
+            self._debug_register_process(state, process, command_id, label, cmd)
             self._notify(
                 state,
                 4,
@@ -2138,8 +2441,10 @@ class DeploymentModRuntime:
                     "primary_command": primary_command,
                     "pid": getattr(process, "pid", None),
                     "command_theme": command_theme,
+                    "debug_command_id": command_id,
                 },
             )
+            self._debug_command_finished(state, command_id, status="detached", returncode=0)
             return CommandExecutionResult(output="", returncode=0, script_path=script_path, detached=True)
 
         try:
@@ -2156,6 +2461,7 @@ class DeploymentModRuntime:
                 bufsize=1,
             )
         except OSError as exc:
+            self._debug_command_finished(state, command_id, status="failed", error=str(exc))
             self._notify(
                 state,
                 0,
@@ -2173,28 +2479,36 @@ class DeploymentModRuntime:
                     "command_count": len(resolved_commands),
                     "primary_command": primary_command,
                     "command_theme": command_theme,
+                    "debug_command_id": command_id,
                 },
             )
             raise RuntimeError(f"{label} 无法启动进程: {exc}")
 
+        self._debug_register_process(state, process, command_id, label, cmd)
         output_lines: List[str] = []
-        self._stream_process_output(
-            state,
-            process,
-            label,
-            output_lines,
-            timeout_seconds=600,
-            runtime=runtime,
-        )
-
         try:
+            self._stream_process_output(
+                state,
+                process,
+                label,
+                output_lines,
+                timeout_seconds=600,
+                runtime=runtime,
+                command_id=command_id,
+            )
             returncode = process.wait()
-        except Exception:
+        except DebugSessionStopped:
             process.kill()
-            raise RuntimeError(f"{label} 进程等待失败")
+            self._debug_command_finished(state, command_id, status="stopped", error="调试会话已停止")
+            raise
+        except Exception as exc:
+            process.kill()
+            self._debug_command_finished(state, command_id, status="failed", error=str(exc))
+            raise RuntimeError(f"{label} 进程等待失败: {exc}")
 
         full_output = "\n".join(output_lines).strip()
         if returncode != 0 and raise_on_error:
+            self._debug_command_finished(state, command_id, status="failed", returncode=returncode, error=full_output)
             self._notify(
                 state,
                 0,
@@ -2214,10 +2528,18 @@ class DeploymentModRuntime:
                     "returncode": returncode,
                     "line_count": len(output_lines),
                     "command_theme": command_theme,
+                    "debug_command_id": command_id,
                 },
             )
             raise RuntimeError(f"{label} 执行失败 (返回码 {returncode}):\n{full_output}")
 
+        self._debug_command_finished(
+            state,
+            command_id,
+            status="failed" if returncode != 0 else "completed",
+            returncode=returncode,
+            error=full_output if returncode != 0 else "",
+        )
         self._notify(
             state,
             0,
@@ -2237,6 +2559,7 @@ class DeploymentModRuntime:
                 "returncode": returncode,
                 "line_count": len(output_lines),
                 "command_theme": command_theme,
+                "debug_command_id": command_id,
             },
         )
         return CommandExecutionResult(output=full_output, returncode=returncode, script_path=script_path)
@@ -2249,6 +2572,7 @@ class DeploymentModRuntime:
         output_lines: List[str],
         timeout_seconds: int = 600,
         runtime: str = "",
+        command_id: str = "",
     ) -> None:
         """实时流式读取子进程输出，并通过事件系统同步到 CLI / WebUI。"""
         import queue
@@ -2284,7 +2608,8 @@ class DeploymentModRuntime:
 
         try:
             while True:
-                if time.monotonic() - start_time > timeout_seconds:
+                self._debug_wait(state)
+                if timeout_seconds > 0 and time.monotonic() - start_time > timeout_seconds:
                     process.kill()
                     raise RuntimeError(f"{label} 执行超时（超过 {timeout_seconds // 60} 分钟）")
 
@@ -2301,6 +2626,7 @@ class DeploymentModRuntime:
                     if marker_type == "begin":
                         active_command_index = int(marker.get("command_index", 0))
                     marker_message = str(marker.get("command") or marker.get("cwd") or marker_type)
+                    self._debug_command_meta(state, command_id, marker)
                     self._notify(
                         state,
                         0,
@@ -2315,6 +2641,7 @@ class DeploymentModRuntime:
 
                 output_lines.append(line)
                 if line.strip():
+                    self._debug_command_output(state, command_id, line, active_command_index, runtime)
                     self._notify(
                         state,
                         0,
@@ -2335,6 +2662,7 @@ class DeploymentModRuntime:
                     if marker_type == "begin":
                         active_command_index = int(marker.get("command_index", 0))
                     marker_message = str(marker.get("command") or marker.get("cwd") or marker_type)
+                    self._debug_command_meta(state, command_id, marker)
                     self._notify(
                         state,
                         0,
@@ -2349,6 +2677,7 @@ class DeploymentModRuntime:
 
                 output_lines.append(line)
                 if line.strip():
+                    self._debug_command_output(state, command_id, line, active_command_index, runtime)
                     self._notify(
                         state,
                         0,
@@ -2462,6 +2791,109 @@ class DeploymentModRuntime:
             raise
         return target_path
 
+    def _run_asset_process(
+        self,
+        state: RuntimeState,
+        cmd: Sequence[str],
+        cwd: str,
+        label: str,
+        runtime_label: str,
+    ) -> None:
+        command_text = " ".join(str(item) for item in cmd)
+        command_payload = {
+            "runtime": runtime_label.lower(),
+            "runtime_label": runtime_label,
+            "cwd": cwd,
+            "primary_command": command_text,
+            "commands": [command_text],
+            "command_count": 1,
+        }
+        command_id = self._debug_command_started(state, label, command_payload)
+        self._notify(
+            state,
+            0,
+            0,
+            label,
+            "running",
+            f"开始执行资源进程: {command_text}",
+            event="command",
+            data={"command_status": "started", **command_payload, "debug_command_id": command_id},
+        )
+        try:
+            process = subprocess.Popen(
+                list(cmd),
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                shell=False,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+            )
+        except OSError as exc:
+            self._debug_command_finished(state, command_id, status="failed", error=str(exc))
+            self._notify(
+                state,
+                0,
+                0,
+                label,
+                "failed",
+                f"资源进程无法启动: {exc}",
+                event="command",
+                data={"command_status": "failed", **command_payload, "debug_command_id": command_id},
+            )
+            raise RuntimeError(f"{label} 资源进程无法启动: {exc}") from exc
+
+        self._debug_register_process(state, process, command_id, label, list(cmd))
+        output_lines: List[str] = []
+        try:
+            self._stream_process_output(
+                state,
+                process,
+                label,
+                output_lines,
+                timeout_seconds=0,
+                runtime=runtime_label.lower(),
+                command_id=command_id,
+            )
+            returncode = process.wait()
+        except DebugSessionStopped:
+            process.kill()
+            self._debug_command_finished(state, command_id, status="stopped", error="调试会话已停止")
+            raise
+        except Exception as exc:
+            process.kill()
+            self._debug_command_finished(state, command_id, status="failed", error=str(exc))
+            raise RuntimeError(f"{label} 资源进程执行异常: {exc}") from exc
+
+        if returncode != 0:
+            full_output = "\n".join(output_lines).strip()
+            self._debug_command_finished(state, command_id, status="failed", returncode=returncode, error=full_output)
+            self._notify(
+                state,
+                0,
+                0,
+                label,
+                "failed",
+                f"资源进程执行失败，返回码 {returncode}",
+                event="command",
+                data={"command_status": "failed", "returncode": returncode, "line_count": len(output_lines), "debug_command_id": command_id},
+            )
+            raise RuntimeError(f"{label} 资源进程执行失败 (返回码 {returncode}):\n{full_output}")
+
+        self._debug_command_finished(state, command_id, status="completed", returncode=0)
+        self._notify(
+            state,
+            0,
+            0,
+            label,
+            "completed",
+            "资源进程执行完成",
+            event="command",
+            data={"command_status": "completed", "returncode": 0, "line_count": len(output_lines), "debug_command_id": command_id},
+        )
+
     def _operate_asset(
         self,
         state: RuntimeState,
@@ -2488,31 +2920,31 @@ class DeploymentModRuntime:
             return
         if extension in {".exe", ".msi"}:
             self._notify(state, 0, 0, label, "running", f"执行安装程序: {asset_path}", event="detail")
-            subprocess.run([asset_path], cwd=target_dir, check=True)
+            self._run_asset_process(state, [asset_path], target_dir, label, "Executable")
             return
         if extension == ".ps1":
             self._notify(state, 0, 0, label, "running", f"执行 PowerShell 脚本资源: {asset_path}", event="detail")
-            subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", asset_path], cwd=target_dir, check=True)
+            self._run_asset_process(state, ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", asset_path], target_dir, label, "PowerShell")
             return
         if extension in {".bat", ".cmd"}:
             self._notify(state, 0, 0, label, "running", f"执行批处理资源: {asset_path}", event="detail")
-            subprocess.run(["cmd.exe", "/c", asset_path], cwd=target_dir, check=True)
+            self._run_asset_process(state, ["cmd.exe", "/c", asset_path], target_dir, label, "cmd")
             return
         if extension == ".sh":
             self._notify(state, 0, 0, label, "running", f"执行 Shell 脚本资源: {asset_path}", event="detail")
-            subprocess.run(["bash", asset_path], cwd=target_dir, check=True)
+            self._run_asset_process(state, ["bash", asset_path], target_dir, label, "bash")
             return
         if extension == ".py":
             self._notify(state, 0, 0, label, "running", f"执行 Python 脚本资源: {asset_path}", event="detail")
-            subprocess.run([sys.executable, asset_path], cwd=target_dir, check=True)
+            self._run_asset_process(state, [sys.executable, asset_path], target_dir, label, "python")
             return
         if extension in {".js", ".mjs", ".cjs", ".jsx"}:
             self._notify(state, 0, 0, label, "running", f"执行 Node 脚本资源: {asset_path}", event="detail")
-            subprocess.run(["node", asset_path], cwd=target_dir, check=True)
+            self._run_asset_process(state, ["node", asset_path], target_dir, label, "node")
             return
         if extension in {".ts", ".tsx"}:
             self._notify(state, 0, 0, label, "running", f"执行 Deno 脚本资源: {asset_path}", event="detail")
-            subprocess.run(["deno", "run", asset_path], cwd=target_dir, check=True)
+            self._run_asset_process(state, ["deno", "run", asset_path], target_dir, label, "deno")
             return
         if is_deployment:
             shutil.copy2(asset_path, os.path.join(target_dir, os.path.basename(asset_path)))
@@ -2606,6 +3038,15 @@ class DeploymentModRuntime:
             cmd.extend(["-b", ref_name])
         cmd.extend([repo_url, target_dir])
         clone_cwd = os.path.dirname(target_dir) or os.getcwd()
+        command_payload = {
+            "runtime": "git",
+            "runtime_label": "Git",
+            "cwd": clone_cwd,
+            "primary_command": " ".join(cmd),
+            "commands": [" ".join(cmd)],
+            "command_count": 1,
+        }
+        command_id = self._debug_command_started(state, label, command_payload)
         self._notify(
             state,
             0,
@@ -2616,10 +3057,8 @@ class DeploymentModRuntime:
             event="command",
             data={
                 "command_status": "started",
-                "runtime_label": "Git",
-                "cwd": clone_cwd,
-                "primary_command": " ".join(cmd),
-                "command_count": 1,
+                **command_payload,
+                "debug_command_id": command_id,
             },
         )
         try:
@@ -2634,21 +3073,29 @@ class DeploymentModRuntime:
                 bufsize=1,
             )
         except OSError as exc:
+            self._debug_command_finished(state, command_id, status="failed", error=str(exc))
             self._notify(state, 0, 0, label, "failed", f"Git 无法启动: {exc}", event="command", data={"command_status": "failed"})
             logger.warning("Git 克隆启动失败", repo=repo_url, target=target_dir, error=str(exc))
             return False
 
+        self._debug_register_process(state, process, command_id, label, cmd)
         output_lines: List[str] = []
         try:
-            self._stream_process_output(state, process, label, output_lines, timeout_seconds=1800)
+            self._stream_process_output(state, process, label, output_lines, timeout_seconds=1800, runtime="git", command_id=command_id)
             returncode = process.wait()
+        except DebugSessionStopped:
+            process.kill()
+            self._debug_command_finished(state, command_id, status="stopped", error="调试会话已停止")
+            raise
         except Exception as exc:
             process.kill()
+            self._debug_command_finished(state, command_id, status="failed", error=str(exc))
             self._notify(state, 0, 0, label, "failed", f"Git 克隆异常: {exc}", event="command", data={"command_status": "failed"})
             logger.warning("Git 克隆异常，准备回退", repo=repo_url, target=target_dir, error=str(exc))
             return False
 
         if returncode == 0:
+            self._debug_command_finished(state, command_id, status="completed", returncode=0)
             self._notify(
                 state,
                 0,
@@ -2657,11 +3104,12 @@ class DeploymentModRuntime:
                 "completed",
                 "Git 克隆完成",
                 event="command",
-                data={"command_status": "completed", "returncode": 0, "line_count": len(output_lines)},
+                data={"command_status": "completed", "returncode": 0, "line_count": len(output_lines), "debug_command_id": command_id},
             )
             return True
 
         full_output = "\n".join(output_lines).strip()
+        self._debug_command_finished(state, command_id, status="failed", returncode=returncode, error=full_output)
         self._notify(
             state,
             0,
@@ -2670,7 +3118,7 @@ class DeploymentModRuntime:
             "failed",
             f"Git 克隆失败，返回码 {returncode}",
             event="command",
-            data={"command_status": "failed", "returncode": returncode, "line_count": len(output_lines)},
+            data={"command_status": "failed", "returncode": returncode, "line_count": len(output_lines), "debug_command_id": command_id},
         )
         logger.warning("Git 克隆失败，准备回退", repo=repo_url, target=target_dir, error=full_output)
         return False

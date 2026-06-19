@@ -187,6 +187,7 @@ class ConnectionManager:
         self.active_connections: Dict[str, Set[WebSocket]] = {
             "instance_status": set(),
             "deployment_progress": set(),
+            "deployment_debug": set(),
             "process_resources": set(),
             "logs": set()
         }
@@ -295,6 +296,7 @@ def _is_allowed_ws_channel(channel: str, user: Dict[str, Any]) -> bool:
 
     page_channel_map = {
         "deployment_progress": "deploy",
+        "deployment_debug": "deploy",
         "process_resources": "status",
         "logs": "logs",
         "instance_status": "status",
@@ -917,6 +919,16 @@ async def broadcast_deployment_progress(serial: str, progress: Dict[str, Any]):
         "type": "deployment_progress",
         "serial": serial,
         "data": progress,
+        "timestamp": datetime.now().isoformat()
+    })
+
+
+async def broadcast_deployment_debug(session_id: str, payload: Dict[str, Any]):
+    """广播工作台调试会话更新"""
+    await manager.broadcast("deployment_debug", {
+        "type": "deployment_debug",
+        "session_id": session_id,
+        "data": payload,
         "timestamp": datetime.now().isoformat()
     })
 
