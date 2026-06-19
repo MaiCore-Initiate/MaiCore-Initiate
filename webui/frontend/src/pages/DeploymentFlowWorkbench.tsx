@@ -1949,6 +1949,7 @@ export default function DeploymentFlowWorkbench({
   const [runtimeFormLoading, setRuntimeFormLoading] = useState(false)
   const [runtimeFormError, setRuntimeFormError] = useState<string | null>(null)
   const [runtimeFormLoaded, setRuntimeFormLoaded] = useState(false)
+  const [runtimeFormAutoTried, setRuntimeFormAutoTried] = useState(false)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -2114,6 +2115,14 @@ export default function DeploymentFlowWorkbench({
     return () => {
       cancelled = true
     }
+  }, [projectSequence])
+
+  useEffect(() => {
+    setRuntimeFormFields([])
+    setRuntimeFormValues({})
+    setRuntimeFormError(null)
+    setRuntimeFormLoaded(false)
+    setRuntimeFormAutoTried(false)
   }, [projectSequence])
 
   useEffect(() => {
@@ -2297,6 +2306,7 @@ export default function DeploymentFlowWorkbench({
 
   const refreshWorkbenchRunForm = async () => {
     if (!projectSequence || runtimeFormLoading) return false
+    setRuntimeFormAutoTried(true)
     setRuntimeFormLoading(true)
     setRuntimeFormError(null)
 
@@ -2324,6 +2334,7 @@ export default function DeploymentFlowWorkbench({
       return true
     } catch (error) {
       setRuntimeFormError(parseApiErrorMessage(error))
+      setRuntimeFormLoaded(true)
       return false
     } finally {
       setRuntimeFormLoading(false)
@@ -2468,9 +2479,9 @@ export default function DeploymentFlowWorkbench({
   }, [runtimeTaskId])
 
   useEffect(() => {
-    if (!runtimePanelOpen || !projectSequence || runtimeFormLoaded || runtimeFormLoading) return
+    if (!runtimePanelOpen || !projectSequence || runtimeFormAutoTried || runtimeFormLoaded || runtimeFormLoading) return
     void refreshWorkbenchRunForm()
-  }, [runtimePanelOpen, projectSequence, runtimeFormLoaded, runtimeFormLoading])
+  }, [runtimePanelOpen, projectSequence, runtimeFormAutoTried, runtimeFormLoaded, runtimeFormLoading])
 
   return (
     <div
