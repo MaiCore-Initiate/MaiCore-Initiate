@@ -643,6 +643,7 @@ export default function WorkbenchTransientEditor({
         </div>
         <button
           type="button"
+          onPointerDown={event => event.stopPropagation()}
           onClick={onClose}
           className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-[8px] text-slate-300 transition-colors hover:bg-slate-700/80 hover:text-slate-50"
           aria-label="关闭临时编辑框"
