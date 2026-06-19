@@ -69,7 +69,6 @@ export interface WorkbenchRightSidebarProps {
   focusTarget?: { id: string; nonce: number } | null
   meta?: WorkbenchModInfoMeta
   bottomInset?: number
-  embedded?: boolean
   onMetaPatch?: (patch: Partial<WorkbenchModInfoMeta>) => void
   onOpenFileEditor?: (fileId: string) => void
   onDeleteFile?: (fileId: string) => void

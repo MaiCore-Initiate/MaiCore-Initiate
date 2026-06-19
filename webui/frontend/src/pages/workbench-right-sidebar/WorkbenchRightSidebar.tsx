@@ -87,7 +87,6 @@ const WorkbenchRightSidebar = ({
   focusTarget = null,
   meta = emptyModInfoMeta,
   bottomInset = 0,
-  embedded = false,
   onMetaPatch,
   onOpenFileEditor,
   onDeleteFile,
@@ -510,12 +509,8 @@ const WorkbenchRightSidebar = ({
   return (
     <aside
       data-workbench-ui
-      className={embedded
-        ? 'absolute inset-0 z-0'
-        : 'absolute right-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out'}
-      style={embedded
-        ? { color: 'var(--dfw-text)', fontFamily: font }
-        : { width, bottom: bottomInset, color: 'var(--dfw-text)', fontFamily: font }}
+      className="absolute right-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out"
+      style={{ width, bottom: bottomInset, color: 'var(--dfw-text)', fontFamily: font }}
     >
       <div
         className="absolute inset-0 border"
@@ -535,28 +530,26 @@ const WorkbenchRightSidebar = ({
         }}
       />
       <div
-        className={`absolute left-[25px] top-[22px] h-[36px] overflow-hidden text-ellipsis whitespace-nowrap leading-[36px] ${embedded ? 'right-[25px]' : 'right-[82px]'}`}
+        className="absolute left-[25px] right-[82px] top-[22px] h-[36px] overflow-hidden text-ellipsis whitespace-nowrap leading-[36px]"
         style={{ fontSize: 30, fontWeight: 600 }}
         title={`当前选中：${selectedName}`}
       >
         当前选中：<span style={{ fontWeight: 300 }}>{selectedName}</span>
       </div>
-      {!embedded && (
-        <button
-          type="button"
-          onClick={onToggleCollapsed}
-          className="absolute right-[23px] top-[23px] flex h-[40px] w-[40px] items-center justify-center rounded-[9px] border transition-colors hover:bg-[var(--dfw-control-hover)]"
-          style={{
-            borderColor: 'var(--dfw-sidebar-border)',
-            background: 'var(--dfw-sidebar-bg)',
-            color: 'var(--dfw-text)',
-          }}
-          aria-label="收起右侧边栏"
-          title="收起右侧边栏"
-        >
-          <TextAlignRightGlyph />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={onToggleCollapsed}
+        className="absolute right-[23px] top-[23px] flex h-[40px] w-[40px] items-center justify-center rounded-[9px] border transition-colors hover:bg-[var(--dfw-control-hover)]"
+        style={{
+          borderColor: 'var(--dfw-sidebar-border)',
+          background: 'var(--dfw-sidebar-bg)',
+          color: 'var(--dfw-text)',
+        }}
+        aria-label="收起右侧边栏"
+        title="收起右侧边栏"
+      >
+        <TextAlignRightGlyph />
+      </button>
 
       <WorkbenchPlaceholderProvider value={placeholderContextValue}>
         <div ref={scrollContainerRef} className="absolute left-[19.5px] right-[20.5px] top-[102px] bottom-[24px] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1498,17 +1491,15 @@ const WorkbenchRightSidebar = ({
           )}
         </div>
       </WorkbenchPlaceholderProvider>
-      {!embedded && (
-        <div
-          className="absolute bottom-[30px] left-[-5px] top-[30px] w-[10px] cursor-ew-resize"
-          onPointerDown={startResize}
-          onPointerMove={resize}
-          onPointerUp={stopResize}
-          onPointerCancel={stopResize}
-          aria-label="调整右侧边栏宽度"
-          title="调整右侧边栏宽度"
-        />
-      )}
+      <div
+        className="absolute bottom-[30px] left-[-5px] top-[30px] w-[10px] cursor-ew-resize"
+        onPointerDown={startResize}
+        onPointerMove={resize}
+        onPointerUp={stopResize}
+        onPointerCancel={stopResize}
+        aria-label="调整右侧边栏宽度"
+        title="调整右侧边栏宽度"
+      />
     </aside>
   )
 }
