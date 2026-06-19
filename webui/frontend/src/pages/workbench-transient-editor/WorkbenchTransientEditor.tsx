@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ExternalLink, GripVertical, X } from 'lucide-react'
+import WorkbenchRightSidebar from '../workbench-right-sidebar/WorkbenchRightSidebar'
 import {
   parseFileBlockId,
   type WorkbenchBlockId,
@@ -32,8 +33,8 @@ import {
 } from '../workbench-right-sidebar/defaultMetas'
 import type { WorkbenchModInfoMeta } from '../workbench-right-sidebar/types'
 
-const panelWidth = 380
-const panelMaxHeight = 520
+const panelWidth = 680
+const panelMaxHeight = 760
 const viewportMargin = 12
 
 interface WorkbenchTransientEditorProps {
@@ -45,6 +46,8 @@ interface WorkbenchTransientEditorProps {
   onClose: () => void
   onMetaPatch: (patch: Partial<WorkbenchModInfoMeta>) => void
   onOpenFileEditor?: (fileId: string) => void
+  hiddenFileBlockIds?: string[]
+  onHiddenFileBlockIdsChange?: (next: string[]) => void
 }
 
 interface SelectOption {
@@ -260,8 +263,11 @@ export default function WorkbenchTransientEditor({
   onClose,
   onMetaPatch,
   onOpenFileEditor,
+  hiddenFileBlockIds = [],
+  onHiddenFileBlockIdsChange,
 }: WorkbenchTransientEditorProps) {
   const [position, setPosition] = useState(() => resolveInitialPosition(anchor))
+  const [viewMode, setViewMode] = useState<'full' | 'quick'>('full')
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; startPosition: WorkbenchPoint } | null>(null)
   const componentIndex = parseComponentBlockIndex(blockId)
   const deploymentIndex = parseDeploymentBlockIndex(blockId)
@@ -641,6 +647,33 @@ export default function WorkbenchTransientEditor({
           </h2>
           <p className="text-[11px] leading-[14px] text-slate-400">{modeLabel}快捷编辑</p>
         </div>
+        <div
+          className="flex shrink-0 overflow-hidden rounded-[8px] border border-slate-700/70"
+          onPointerDown={event => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => setViewMode('full')}
+            className="h-[28px] px-[9px] text-[12px] font-medium transition-colors"
+            style={{
+              background: viewMode === 'full' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(15, 23, 42, 0.42)',
+              color: viewMode === 'full' ? '#e0f2fe' : '#94a3b8',
+            }}
+          >
+            完整
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('quick')}
+            className="h-[28px] border-l border-slate-700/70 px-[9px] text-[12px] font-medium transition-colors"
+            style={{
+              background: viewMode === 'quick' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(15, 23, 42, 0.42)',
+              color: viewMode === 'quick' ? '#e0f2fe' : '#94a3b8',
+            }}
+          >
+            快捷
+          </button>
+        </div>
         <button
           type="button"
           onPointerDown={event => event.stopPropagation()}
@@ -653,9 +686,35 @@ export default function WorkbenchTransientEditor({
         </button>
       </div>
 
-      <div className="grid max-h-[474px] gap-[10px] overflow-y-auto px-[12px] py-[12px]">
-        {body}
-      </div>
+      {viewMode === 'full' ? (
+        <div
+          className="relative overflow-hidden"
+          style={{ height: `min(${panelMaxHeight - 46}px, calc(100vh - 94px))` }}
+        >
+          <WorkbenchRightSidebar
+            collapsed={false}
+            width={panelWidth}
+            onToggleCollapsed={() => undefined}
+            onResize={() => undefined}
+            selectedName={selectedName}
+            selectedBlockId={blockId}
+            meta={meta}
+            bottomInset={0}
+            embedded
+            onMetaPatch={onMetaPatch}
+            onOpenFileEditor={onOpenFileEditor}
+            hiddenFileBlockIds={hiddenFileBlockIds}
+            onHiddenFileBlockIdsChange={onHiddenFileBlockIdsChange}
+          />
+        </div>
+      ) : (
+        <div
+          className="grid gap-[10px] overflow-y-auto px-[12px] py-[12px]"
+          style={{ maxHeight: `min(${panelMaxHeight - 46}px, calc(100vh - 94px))` }}
+        >
+          {body}
+        </div>
+      )}
     </section>
   )
 }

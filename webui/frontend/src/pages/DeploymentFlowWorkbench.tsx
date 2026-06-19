@@ -3146,6 +3146,8 @@ export default function DeploymentFlowWorkbench({
           onClose={() => setTransientEditor(null)}
           onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
           onOpenFileEditor={setOpenFileEditorFileId}
+          hiddenFileBlockIds={canvasState.hiddenFileBlockIds ?? []}
+          onHiddenFileBlockIdsChange={hiddenFileBlockIds => setCanvasState(prev => ({ ...prev, hiddenFileBlockIds }))}
         />
       )}
       <WorkbenchDebugTimelineDrawer
