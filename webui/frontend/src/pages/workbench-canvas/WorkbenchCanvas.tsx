@@ -363,6 +363,7 @@ export default function WorkbenchCanvas({
   blockMeta,
   onBlockMetaPatch,
   onOpenFileEditor,
+  onBlockDoubleClick,
   projectSequence = null,
   canvasState,
   onCanvasStatePatch,
@@ -1764,6 +1765,12 @@ export default function WorkbenchCanvas({
     setSelectionContextMenu(null)
     applyBlockSelection([blockId], blockId)
 
+    const handled = onBlockDoubleClick?.(blockId, { x: event.clientX, y: event.clientY })
+    if (handled) {
+      setLinkSourceBlockId(null)
+      return
+    }
+
     if (!linkSourceBlockId) {
       setLinkSourceBlockId(blockId)
       return
@@ -1783,6 +1790,21 @@ export default function WorkbenchCanvas({
       addManualConnection(linkSourceBlockId, normalizedTarget)
     }
     setLinkSourceBlockId(null)
+  }
+
+  const handleFileBlockDoubleClick = (blockId: WorkbenchBlockId, file: WorkbenchFileMeta, event: MouseEvent<SVGGElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    clearDragTimer()
+    dragRef.current = null
+    setAddNodePopoverPosition(null)
+    setAddNodePopoverSource(null)
+    setSelectionContextMenu(null)
+    applyBlockSelection([blockId], blockId)
+
+    const handled = onBlockDoubleClick?.(blockId, { x: event.clientX, y: event.clientY })
+    if (handled) return
+    openFileEditorForBlock(file)
   }
 
   const clearManualConnectionsFor = (blockId: WorkbenchBlockId) => {
@@ -3391,7 +3413,7 @@ export default function WorkbenchCanvas({
                 size={block.size}
                 selected={selectedBlockIdSet.has(blockId)}
                 onSelect={() => handleBlockSelect(blockId)}
-                onBodyDoubleClick={() => openFileEditorForBlock(block.file)}
+                onBodyDoubleClick={event => handleFileBlockDoubleClick(blockId, block.file, event)}
                 onConnectorDragStart={(source, fromPoint, event) => startDragConnector(source, fromPoint, blockId, event)}
                 dragHandlers={createDragHandlers(blockId)}
               />

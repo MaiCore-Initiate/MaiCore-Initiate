@@ -19,8 +19,9 @@ import { rightSidebarCollapsedWidth, rightSidebarExpandedWidth } from './workben
 import type { WorkbenchModInfoMeta } from './workbench-right-sidebar/types'
 import WorkbenchTopTabs from './WorkbenchTopTabs'
 import WorkbenchCanvas from './workbench-canvas/WorkbenchCanvas'
+import WorkbenchTransientEditor from './workbench-transient-editor/WorkbenchTransientEditor'
 import FileEditorModal from './FileEditorModal'
-import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchCanvasState, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchCustomInstallRule, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
+import type { WorkbenchAddNodeAnchor, WorkbenchBlockId, WorkbenchCanvasState, WorkbenchComponentBlockId, WorkbenchComponentMeta, WorkbenchConfigItemBlockId, WorkbenchConfigItemMeta, WorkbenchCustomInstallRule, WorkbenchDeploymentBlockId, WorkbenchDeploymentMeta, WorkbenchEnvVariableEntry, WorkbenchFileMeta, WorkbenchLaunchItemBlockId, WorkbenchLaunchItemMeta, WorkbenchPoint, WorkbenchUninstallItemBlockId, WorkbenchUninstallItemMeta, WorkbenchVersionFormattingRule, WorkbenchVisibleBlocks } from './workbench-canvas/types'
 
 const outlineFont = "'JetBrainsMono Nerd Font', 'HarmonyOS Sans SC', monospace"
 const gridBaseSpacing = 32
@@ -532,7 +533,12 @@ function formatSelectedBlockName(blockId: WorkbenchBlockId | null, meta: Workben
     const uninstallItemName = meta.uninstallItems[uninstallItemIndex]?.name
     return uninstallItemName ? `[[UninstallItem]] ${uninstallItemIndex}：${uninstallItemName}` : `[[UninstallItem]] ${uninstallItemIndex}`
   }
-  return baseBlockNames[blockId as keyof typeof baseBlockNames]
+  if (blockId.startsWith('file:')) {
+    const fileId = blockId.slice('file:'.length)
+    const fileName = meta.files.find(file => file.id === fileId)?.name
+    return fileName ? `文件：${fileName}` : '文件块'
+  }
+  return baseBlockNames[blockId as keyof typeof baseBlockNames] ?? blockId
 }
 
 function createDebugBlockOptions(meta: WorkbenchMetaState, connected: ConnectedIndexSets): WorkbenchDebugBlockOption[] {
@@ -2213,10 +2219,12 @@ export default function DeploymentFlowWorkbench({
   const [debugError, setDebugError] = useState<string | null>(null)
   const [debugStarting, setDebugStarting] = useState(false)
   const [debugSelectedProcessId, setDebugSelectedProcessId] = useState<number | null>(null)
+  const [transientEditor, setTransientEditor] = useState<{ blockId: WorkbenchBlockId; anchor: WorkbenchPoint } | null>(null)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
   const viewportAnimationFrameRef = useRef<number | null>(null)
+  const transientEditorEnabled = runtimePanelOpen || debugPanelOpen
   const grid = resolveGridSpacing(viewport.scale)
   const gridStyle = {
     backgroundSize: `${grid.screenSpacing}px ${grid.screenSpacing}px`,
@@ -2919,6 +2927,21 @@ export default function DeploymentFlowWorkbench({
     void refreshWorkbenchRunForm()
   }, [runtimePanelOpen, debugPanelOpen, projectSequence, runtimeFormAutoTried, runtimeFormLoaded, runtimeFormLoading])
 
+  useEffect(() => {
+    if (!transientEditorEnabled) setTransientEditor(null)
+  }, [transientEditorEnabled])
+
+  useEffect(() => {
+    setTransientEditor(null)
+  }, [projectSequence])
+
+  const openTransientEditorForBlock = (blockId: WorkbenchBlockId, anchor: WorkbenchPoint) => {
+    if (!transientEditorEnabled) return false
+    setSelectedBlockId(blockId)
+    setTransientEditor({ blockId, anchor })
+    return true
+  }
+
   return (
     <div
       ref={workbenchRef}
@@ -2975,6 +2998,7 @@ export default function DeploymentFlowWorkbench({
         blockMeta={blockMeta}
         onBlockMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
         onOpenFileEditor={setOpenFileEditorFileId}
+        onBlockDoubleClick={openTransientEditorForBlock}
         projectSequence={projectSequence}
         canvasState={canvasState}
         onCanvasStatePatch={patch => setCanvasState(prev => ({ ...prev, ...patch }))}
@@ -3100,6 +3124,18 @@ export default function DeploymentFlowWorkbench({
               }
             })()
           }}
+        />
+      )}
+      {transientEditor && transientEditorEnabled && (
+        <WorkbenchTransientEditor
+          blockId={transientEditor.blockId}
+          anchor={transientEditor.anchor}
+          selectedName={formatSelectedBlockName(transientEditor.blockId, meta)}
+          meta={meta}
+          modeLabel={debugPanelOpen ? '调试' : '运行'}
+          onClose={() => setTransientEditor(null)}
+          onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
+          onOpenFileEditor={setOpenFileEditorFileId}
         />
       )}
       <WorkbenchDebugTimelineDrawer

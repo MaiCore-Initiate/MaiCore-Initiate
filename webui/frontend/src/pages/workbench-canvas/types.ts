@@ -239,6 +239,7 @@ export interface WorkbenchCanvasProps {
   blockMeta?: Partial<WorkbenchBlockMeta>
   onBlockMetaPatch?: (patch: Partial<WorkbenchBlockMeta>) => void
   onOpenFileEditor?: (fileId: string) => void
+  onBlockDoubleClick?: (blockId: WorkbenchBlockId, screenPoint: WorkbenchPoint) => boolean | void
   projectSequence?: string | null
   canvasState?: Partial<WorkbenchCanvasState>
   onCanvasStatePatch?: (patch: Partial<WorkbenchCanvasState>) => void
