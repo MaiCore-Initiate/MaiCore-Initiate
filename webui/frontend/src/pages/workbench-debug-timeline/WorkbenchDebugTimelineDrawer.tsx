@@ -247,7 +247,7 @@ export default function WorkbenchDebugTimelineDrawer({
       {!visible && (
         <div
           data-workbench-ui
-          className="absolute bottom-0 z-20 h-[18px] cursor-ns-resize"
+          className="absolute bottom-0 z-20 h-[18px] cursor-ns-resize select-none"
           style={{ left: 0, right: 0 }}
           onPointerEnter={() => setHoveringHotZone(true)}
           onPointerLeave={() => setHoveringHotZone(false)}
@@ -271,7 +271,7 @@ export default function WorkbenchDebugTimelineDrawer({
 
       <section
         data-workbench-ui
-        className={`absolute bottom-0 overflow-hidden border-t transition-[height,opacity] duration-150 ease-out ${isMaximized ? 'z-40' : 'z-20'}`}
+        className={`absolute bottom-0 select-none overflow-hidden border-t transition-[height,opacity] duration-150 ease-out ${isMaximized ? 'z-40' : 'z-20'}`}
         style={{
           left: 0,
           right: 0,
