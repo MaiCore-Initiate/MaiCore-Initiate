@@ -1331,11 +1331,17 @@ function mergeWorkbenchProgress(
   current: WorkbenchRunProgress | null,
   next: WorkbenchRunProgress,
 ): WorkbenchRunProgress {
-  return {
+  const merged = {
     ...(current ?? {}),
     ...next,
     logs: next.logs ?? current?.logs ?? [],
   }
+  if (current && JSON.stringify(current) === JSON.stringify(merged)) return current
+  return merged
+}
+
+function isWorkbenchRunDone(status?: string) {
+  return status === 'completed' || status === 'failed'
 }
 
 function parseApiErrorMessage(error: unknown) {
@@ -2333,6 +2339,7 @@ export default function DeploymentFlowWorkbench({
 
     setRuntimeStarting(true)
     setRuntimeError(null)
+    setRuntimeTaskId(null)
     setRuntimeProgress({
       status: 'running',
       step: 0,
@@ -2411,8 +2418,11 @@ export default function DeploymentFlowWorkbench({
         const message = JSON.parse(event.data) as { type?: string; data?: WorkbenchRunProgress }
         if (message.type !== 'deployment_progress' || message.data?.task_id !== runtimeTaskId) return
         setRuntimeProgress(prev => mergeWorkbenchProgress(prev, message.data as WorkbenchRunProgress))
-        if (message.data.status === 'failed') setRuntimeError(String(message.data.message || '工作台试运行失败'))
-        if (message.data.status === 'completed') setRuntimeError(null)
+        if (message.data.status === 'failed') {
+          const nextError = String(message.data.message || '工作台试运行失败')
+          setRuntimeError(prev => (prev === nextError ? prev : nextError))
+        }
+        if (message.data.status === 'completed') setRuntimeError(prev => (prev === null ? prev : null))
       } catch {
         // 忽略非 JSON 推送。
       }
@@ -2425,6 +2435,12 @@ export default function DeploymentFlowWorkbench({
     if (!runtimeTaskId) return
 
     let cancelled = false
+    let timer: number | null = null
+    const stopPolling = () => {
+      if (timer === null) return
+      window.clearInterval(timer)
+      timer = null
+    }
     const loadProgress = async () => {
       try {
         const response = await fetch(`/api/deployment-mod/progress/${encodeURIComponent(runtimeTaskId)}`, { credentials: 'include' })
@@ -2432,18 +2448,22 @@ export default function DeploymentFlowWorkbench({
         const payload = await response.json() as WorkbenchRunProgress & { success?: boolean }
         if (cancelled || payload.success === false) return
         setRuntimeProgress(prev => mergeWorkbenchProgress(prev, payload))
-        if (payload.status === 'failed') setRuntimeError(String(payload.message || '工作台试运行失败'))
-        if (payload.status === 'completed') setRuntimeError(null)
+        if (payload.status === 'failed') {
+          const nextError = String(payload.message || '工作台试运行失败')
+          setRuntimeError(prev => (prev === nextError ? prev : nextError))
+        }
+        if (payload.status === 'completed') setRuntimeError(prev => (prev === null ? prev : null))
+        if (isWorkbenchRunDone(payload.status)) stopPolling()
       } catch {
         // WebSocket 仍是主通道，轮询失败不打断运行面板。
       }
     }
 
     void loadProgress()
-    const timer = window.setInterval(loadProgress, 3000)
+    timer = window.setInterval(loadProgress, 3000)
     return () => {
       cancelled = true
-      window.clearInterval(timer)
+      stopPolling()
     }
   }, [runtimeTaskId])
 
