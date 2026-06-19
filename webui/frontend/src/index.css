@@ -253,6 +253,17 @@ html.theme-animating *::after {
   --dfw-blue: #0084ff;
 }
 
+[data-workbench-ui],
+[data-workbench-ui] :where(button, div, span, p, h1, h2, h3, h4, h5, h6, label, section, aside, nav, header, footer, li, svg) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-workbench-ui] :where(input, textarea, select, option, [contenteditable='true'], .monaco-editor, .monaco-editor *) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 .dark .deployment-flow-workbench,
 .theme-dark .deployment-flow-workbench {
   --dfw-bg: #000000;
