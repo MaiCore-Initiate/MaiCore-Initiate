@@ -68,6 +68,7 @@ export interface WorkbenchRightSidebarProps {
   selectedBlockId?: WorkbenchBlockId | null
   focusTarget?: { id: string; nonce: number } | null
   meta?: WorkbenchModInfoMeta
+  bottomInset?: number
   onMetaPatch?: (patch: Partial<WorkbenchModInfoMeta>) => void
   onOpenFileEditor?: (fileId: string) => void
   onDeleteFile?: (fileId: string) => void

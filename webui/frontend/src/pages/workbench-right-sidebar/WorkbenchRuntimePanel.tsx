@@ -67,6 +67,7 @@ interface WorkbenchRuntimePanelProps {
   formLoading?: boolean
   formError?: string | null
   starting?: boolean
+  bottomInset?: number
   onToggleCollapsed: () => void
   onResize: (width: number) => void
   onStart: (options: WorkbenchRunStartOptions) => void
@@ -166,6 +167,7 @@ export default function WorkbenchRuntimePanel({
   formLoading = false,
   formError = null,
   starting = false,
+  bottomInset = 0,
   onToggleCollapsed,
   onResize,
   onStart,
@@ -229,8 +231,8 @@ export default function WorkbenchRuntimePanel({
     return (
       <aside
         data-workbench-ui
-        className="absolute right-0 top-0 z-20 h-full transition-[width] duration-150 ease-out"
-        style={{ width: rightSidebarCollapsedWidth }}
+        className="absolute right-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out"
+        style={{ width: rightSidebarCollapsedWidth, bottom: bottomInset }}
       >
         <div
           className="absolute inset-y-0 right-0 border"
@@ -262,8 +264,8 @@ export default function WorkbenchRuntimePanel({
   return (
     <aside
       data-workbench-ui
-      className="absolute right-0 top-0 z-20 h-full transition-[width] duration-150 ease-out"
-      style={{ width, color: 'var(--dfw-text)', fontFamily: font }}
+      className="absolute right-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out"
+      style={{ width, bottom: bottomInset, color: 'var(--dfw-text)', fontFamily: font }}
     >
       <div
         className="absolute inset-0 border"

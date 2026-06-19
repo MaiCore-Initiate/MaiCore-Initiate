@@ -18,6 +18,7 @@ interface WorkbenchDebugTimelineDrawerProps {
   rightReservedWidth: number
   viewportHeight: number
   onProcessSelect: (pid: number) => void
+  onVisibleHeightChange?: (height: number) => void
 }
 
 interface TimelineLane {
@@ -124,6 +125,7 @@ export default function WorkbenchDebugTimelineDrawer({
   rightReservedWidth,
   viewportHeight,
   onProcessSelect,
+  onVisibleHeightChange,
 }: WorkbenchDebugTimelineDrawerProps) {
   const [visible, setVisible] = useState(false)
   const [height, setHeight] = useState(defaultHeight)
@@ -144,10 +146,14 @@ export default function WorkbenchDebugTimelineDrawer({
     lane.processes.reduce((innerMax, process) => Math.max(innerMax, processDurationMs(process, nowMs, sessionStart)), max)
   ), 1)
   const maxHeight = clampNumber(Math.round(viewportHeight * 0.45), minVisibleHeight, 360)
-  const activeHeight = visible ? clampNumber(height, minVisibleHeight, maxHeight) : hiddenHeight
+  const activeHeight = enabled && visible ? clampNumber(height, minVisibleHeight, maxHeight) : hiddenHeight
   const hoveredProcess = useMemo(() => (
     lanes.flatMap(lane => lane.processes).find(process => process.pid === hoveredPid) ?? null
   ), [hoveredPid, lanes])
+
+  useEffect(() => {
+    onVisibleHeightChange?.(activeHeight)
+  }, [activeHeight, onVisibleHeightChange])
 
   useEffect(() => {
     if (!enabled) {

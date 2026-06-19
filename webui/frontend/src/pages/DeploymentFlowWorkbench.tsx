@@ -1866,6 +1866,7 @@ function WorkbenchLeftSidebar({
   selectedBlockId,
   onBlockSelect,
   onOutlineNodeDoubleClick,
+  bottomInset = 0,
 }: {
   collapsed: boolean
   width: number
@@ -1879,6 +1880,7 @@ function WorkbenchLeftSidebar({
   selectedBlockId: WorkbenchBlockId | null
   onBlockSelect: (blockId: WorkbenchBlockId) => void
   onOutlineNodeDoubleClick: (node: OutlineNode) => void
+  bottomInset?: number
 }) {
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
 
@@ -1921,8 +1923,8 @@ function WorkbenchLeftSidebar({
     return (
       <aside
         data-workbench-ui
-        className="absolute left-0 top-0 z-20 h-full"
-        style={{ width: leftSidebarCollapsedWidth }}
+        className="absolute left-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out"
+        style={{ width: leftSidebarCollapsedWidth, bottom: bottomInset }}
       >
         <div
           className="absolute inset-y-0 left-0 border"
@@ -1941,7 +1943,7 @@ function WorkbenchLeftSidebar({
   }
 
   return (
-    <aside data-workbench-ui className="absolute left-0 top-0 z-20 h-full" style={{ width }}>
+    <aside data-workbench-ui className="absolute left-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out" style={{ width, bottom: bottomInset }}>
       <div
         className="absolute inset-0 border"
         style={{
@@ -1999,6 +2001,7 @@ function WorkbenchDebugLeftSidebar({
   session,
   selectedProcessId,
   onProcessSelect,
+  bottomInset = 0,
 }: {
   collapsed: boolean
   width: number
@@ -2011,6 +2014,7 @@ function WorkbenchDebugLeftSidebar({
   session: WorkbenchDebugSession | null
   selectedProcessId: number | null
   onProcessSelect: (pid: number) => void
+  bottomInset?: number
 }) {
   const resizeStartRef = useRef<{ pointerId: number; x: number; width: number } | null>(null)
   const processesByBlock = useMemo(() => {
@@ -2057,7 +2061,7 @@ function WorkbenchDebugLeftSidebar({
 
   if (collapsed) {
     return (
-      <aside data-workbench-ui className="absolute left-0 top-0 z-20 h-full" style={{ width: leftSidebarCollapsedWidth }}>
+      <aside data-workbench-ui className="absolute left-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out" style={{ width: leftSidebarCollapsedWidth, bottom: bottomInset }}>
         <div
           className="absolute inset-y-0 left-0 border"
           style={{ width: leftSidebarCollapsedWidth, borderColor: 'var(--dfw-sidebar-border)', background: 'var(--dfw-sidebar-bg)', borderRadius: '0 30px 30px 0' }}
@@ -2070,7 +2074,7 @@ function WorkbenchDebugLeftSidebar({
   }
 
   return (
-    <aside data-workbench-ui className="absolute left-0 top-0 z-20 h-full" style={{ width }}>
+    <aside data-workbench-ui className="absolute left-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out" style={{ width, bottom: bottomInset }}>
       <div
         className="absolute inset-0 border"
         style={{ borderColor: 'var(--dfw-sidebar-border)', background: 'var(--dfw-sidebar-bg)', borderRadius: '0 30px 30px 0' }}
@@ -2220,6 +2224,7 @@ export default function DeploymentFlowWorkbench({
   const [debugStarting, setDebugStarting] = useState(false)
   const [debugSelectedProcessId, setDebugSelectedProcessId] = useState<number | null>(null)
   const [transientEditor, setTransientEditor] = useState<{ blockId: WorkbenchBlockId; anchor: WorkbenchPoint } | null>(null)
+  const [debugTimelineHeight, setDebugTimelineHeight] = useState(0)
   const workbenchRef = useRef<HTMLDivElement | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewportX: number; viewportY: number } | null>(null)
   const viewportRef = useRef<WorkbenchViewport>(viewport)
@@ -3017,6 +3022,7 @@ export default function DeploymentFlowWorkbench({
           session={debugSession}
           selectedProcessId={debugSelectedProcessId}
           onProcessSelect={setDebugSelectedProcessId}
+          bottomInset={debugTimelineHeight}
         />
       ) : (
         <WorkbenchLeftSidebar
@@ -3032,6 +3038,7 @@ export default function DeploymentFlowWorkbench({
           selectedBlockId={selectedBlockId}
           onBlockSelect={setSelectedBlockId}
           onOutlineNodeDoubleClick={focusRightSidebarFromOutline}
+          bottomInset={debugTimelineHeight}
         />
       )}
       <WorkbenchTopTabs
@@ -3063,6 +3070,7 @@ export default function DeploymentFlowWorkbench({
           onFormValueChange={(key, value) => setRuntimeFormValues(prev => ({ ...prev, [key]: value }))}
           onRefreshForm={() => void refreshWorkbenchRunForm()}
           onClose={() => setDebugPanelOpen(false)}
+          bottomInset={debugTimelineHeight}
         />
       ) : runtimePanelOpen ? (
         <WorkbenchRuntimePanel
@@ -3082,6 +3090,7 @@ export default function DeploymentFlowWorkbench({
           onFormValueChange={(key, value) => setRuntimeFormValues(prev => ({ ...prev, [key]: value }))}
           onRefreshForm={() => void refreshWorkbenchRunForm()}
           onClose={() => setRuntimePanelOpen(false)}
+          bottomInset={debugTimelineHeight}
         />
       ) : (
         <WorkbenchRightSidebar
@@ -3094,6 +3103,7 @@ export default function DeploymentFlowWorkbench({
           focusTarget={rightSidebarFocusTarget}
           onOpenFileEditor={setOpenFileEditorFileId}
           meta={meta}
+          bottomInset={debugTimelineHeight}
           onMetaPatch={patch => setMeta(prev => ({ ...prev, ...patch }))}
           hiddenFileBlockIds={canvasState.hiddenFileBlockIds ?? []}
           onHiddenFileBlockIdsChange={hiddenFileBlockIds => setCanvasState(prev => ({ ...prev, hiddenFileBlockIds }))}
@@ -3146,6 +3156,7 @@ export default function DeploymentFlowWorkbench({
         rightReservedWidth={rightSidebarLeft}
         viewportHeight={workbenchRef.current?.clientHeight ?? window.innerHeight}
         onProcessSelect={setDebugSelectedProcessId}
+        onVisibleHeightChange={setDebugTimelineHeight}
       />
       <WorkbenchBottomBar
         scale={viewport.scale}
@@ -3158,6 +3169,7 @@ export default function DeploymentFlowWorkbench({
         onDebug={openDebugPanel}
         runActive={runtimeStarting || runtimeProgress?.status === 'running'}
         runDisabled={!projectSequence}
+        bottomInset={debugTimelineHeight}
       />
       <FileEditorModal
         file={

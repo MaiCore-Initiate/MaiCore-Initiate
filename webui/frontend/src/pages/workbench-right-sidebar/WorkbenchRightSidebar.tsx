@@ -86,6 +86,7 @@ const WorkbenchRightSidebar = ({
   selectedBlockId = 'init',
   focusTarget = null,
   meta = emptyModInfoMeta,
+  bottomInset = 0,
   onMetaPatch,
   onOpenFileEditor,
   onDeleteFile,
@@ -475,8 +476,8 @@ const WorkbenchRightSidebar = ({
     return (
       <aside
         data-workbench-ui
-        className="absolute right-0 top-0 z-20 h-full transition-[width] duration-150 ease-out"
-        style={{ width: rightSidebarCollapsedWidth }}
+        className="absolute right-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out"
+        style={{ width: rightSidebarCollapsedWidth, bottom: bottomInset }}
       >
         <div
           className="absolute inset-y-0 right-0 border"
@@ -508,8 +509,8 @@ const WorkbenchRightSidebar = ({
   return (
     <aside
       data-workbench-ui
-      className="absolute right-0 top-0 z-20 h-full transition-[width] duration-150 ease-out"
-      style={{ width, color: 'var(--dfw-text)', fontFamily: font }}
+      className="absolute right-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out"
+      style={{ width, bottom: bottomInset, color: 'var(--dfw-text)', fontFamily: font }}
     >
       <div
         className="absolute inset-0 border"

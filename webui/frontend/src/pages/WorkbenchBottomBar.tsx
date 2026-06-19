@@ -16,6 +16,7 @@ export interface WorkbenchBottomBarProps {
   onDebug?: () => void
   runActive?: boolean
   runDisabled?: boolean
+  bottomInset?: number
 }
 
 function formatZoom(scale: number) {
@@ -47,6 +48,7 @@ export default function WorkbenchBottomBar({
   onDebug,
   runActive = false,
   runDisabled = false,
+  bottomInset = 0,
 }: WorkbenchBottomBarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [zoomOpen, setZoomOpen] = useState(false)
@@ -55,8 +57,9 @@ export default function WorkbenchBottomBar({
   return (
     <div
       data-workbench-ui
-      className="absolute bottom-[30px] z-30 h-[61px] transition-[left,right,width,max-width,transform] duration-200 ease-out"
+      className="absolute z-30 h-[61px] transition-[bottom,left,right,width,max-width,transform] duration-200 ease-out"
       style={{
+        bottom: 30 + bottomInset,
         left: collapsed ? collapsedLeft : leftBoundary,
         right: collapsed ? 'auto' : rightReservedWidth,
         width: collapsed ? 61 : 'auto',

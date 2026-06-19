@@ -136,6 +136,7 @@ interface WorkbenchDebugPanelProps {
   formError?: string | null
   starting?: boolean
   blockOptions: WorkbenchDebugBlockOption[]
+  bottomInset?: number
   onToggleCollapsed: () => void
   onResize: (width: number) => void
   onStart: (options: WorkbenchDebugStartOptions) => void
@@ -257,6 +258,7 @@ export default function WorkbenchDebugPanel({
   formError = null,
   starting = false,
   blockOptions,
+  bottomInset = 0,
   onToggleCollapsed,
   onResize,
   onStart,
@@ -325,7 +327,7 @@ export default function WorkbenchDebugPanel({
 
   if (collapsed) {
     return (
-      <aside data-workbench-ui className="absolute right-0 top-0 z-20 h-full transition-[width] duration-150 ease-out" style={{ width: rightSidebarCollapsedWidth }}>
+      <aside data-workbench-ui className="absolute right-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out" style={{ width: rightSidebarCollapsedWidth, bottom: bottomInset }}>
         <div className="absolute inset-y-0 right-0 border" style={{ width: rightSidebarCollapsedWidth, borderColor: 'var(--dfw-sidebar-border)', background: 'var(--dfw-sidebar-bg)', borderRadius: '30px 0 0 30px' }} />
         <button
           type="button"
@@ -342,7 +344,7 @@ export default function WorkbenchDebugPanel({
   }
 
   return (
-    <aside data-workbench-ui className="absolute right-0 top-0 z-20 h-full transition-[width] duration-150 ease-out" style={{ width, color: 'var(--dfw-text)', fontFamily: font }}>
+    <aside data-workbench-ui className="absolute right-0 top-0 z-20 transition-[bottom,width] duration-150 ease-out" style={{ width, bottom: bottomInset, color: 'var(--dfw-text)', fontFamily: font }}>
       <div className="absolute inset-0 border" style={{ borderColor: 'var(--dfw-sidebar-border)', background: 'var(--dfw-sidebar-bg)', borderRadius: '30px 0 0 30px' }} />
       <div className="absolute left-0 top-0 h-[86px] w-full border" style={{ borderColor: 'var(--dfw-sidebar-border)', background: 'var(--dfw-sidebar-bg)', borderRadius: '30px 0 0 0' }} />
       <div className="absolute left-[25px] right-[132px] top-[22px] flex h-[36px] items-center gap-[10px] overflow-hidden text-[30px] font-semibold leading-[36px]" title="调试">
