@@ -23,7 +23,7 @@ import { CardSquaresIcon, ListDashesIcon } from '../components/icons/SidebarIcon
 import { getFileIconByName } from './workbench-canvas/blocks/fileIcons'
 import type { WorkbenchFileMeta } from './workbench-canvas/types'
 
-export type TemplateWorkbenchSection = 'recent' | 'my-templates' | 'market' | 'starred'
+export type TemplateWorkbenchSection = 'recent' | 'my-templates' | 'market' | 'package-publish' | 'starred'
 export type TemplateWorkbenchItemType = 'deployment-flow' | 'folder' | 'script' | 'archive'
 export type TemplateWorkbenchLayout = 'card' | 'list'
 type TemplateWorkbenchRoute =
@@ -132,14 +132,17 @@ export interface TemplateWorkbenchProps {
   onOpenWorkbenchCanvas?: (sequence: string) => void
   onSelectSection?: (section: TemplateWorkbenchSection) => void
   onReturnToSource?: () => void
+  onPackageTemplate?: (item: TemplateWorkbenchItem) => void
+  onPublishTemplate?: (item: TemplateWorkbenchItem) => void
 }
 
 const defaultItems: TemplateWorkbenchItem[] = []
 
-const sidebarItems: Array<{ id: TemplateWorkbenchSection; label: string; icon: typeof Clock; top: number }> = [
+const sidebarItems: Array<{ id: TemplateWorkbenchSection; label: string; icon: (props: { size?: number; className?: string }) => ReactNode; top: number }> = [
   { id: 'recent', label: '最近', icon: Clock, top: 96 },
   { id: 'my-templates', label: '我的模板', icon: File, top: 149 },
   { id: 'market', label: '资源集市', icon: Globe, top: 202 },
+  { id: 'package-publish', label: '打包与发布', icon: PackagePublishSidebarIcon, top: 255 },
 ]
 
 // 卡片网格布局：5 列等距、行高 250px；top 起始 306 与原视觉一致。
@@ -154,6 +157,8 @@ const font = "'HarmonyOS Sans SC', 'HYWenHei', sans-serif"
 const layoutCookieName = 'template_workbench_layout'
 const starredFlowsCookieName = 'template_workbench_starred_flows'
 const starredColor = '#FFD500'
+const packageSelectionColor = '#0084FF'
+const packageSelectionBackground = 'rgba(0, 132, 255, 0.5)'
 const starPath =
   'M12.4125 17.8781L17.1375 20.8781C17.7469 21.2625 18.4969 20.6906 18.3188 19.9875L16.95 14.6062C16.9453 14.5877 16.9414 14.569 16.9382 14.5503C16.9348 14.5314 16.9322 14.5125 16.9303 14.4935C16.9284 14.4745 16.927 14.4555 16.9265 14.4365C16.9258 14.4173 16.9258 14.3982 16.9266 14.3792C16.9273 14.36 16.9286 14.341 16.9307 14.3221C16.9328 14.303 16.9355 14.2842 16.9389 14.2655C16.9422 14.2466 16.9463 14.228 16.951 14.2095C16.9556 14.1909 16.961 14.1726 16.967 14.1545C16.973 14.1364 16.9795 14.1185 16.9868 14.1008C16.994 14.0831 17.0019 14.0657 17.0103 14.0486C17.0187 14.0315 17.0278 14.0147 17.0375 13.9983C17.0471 13.9818 17.0573 13.9656 17.0681 13.9499C17.0787 13.9341 17.0901 13.9188 17.102 13.9038C17.1138 13.8888 17.1261 13.8742 17.139 13.8602C17.1519 13.846 17.1652 13.8323 17.179 13.8192C17.1929 13.8061 17.2072 13.7934 17.2219 13.7812L21.4594 10.2468C22.0125 9.78747 21.7313 8.85934 21.0094 8.81247L15.4781 8.45622C15.4594 8.45512 15.4406 8.45336 15.4221 8.45092C15.4034 8.44847 15.385 8.44536 15.3666 8.44158C15.3482 8.43781 15.3299 8.43336 15.3119 8.42826C15.2938 8.42316 15.2759 8.41741 15.2583 8.41102C15.2407 8.40463 15.2232 8.3976 15.2062 8.38995C15.1889 8.3823 15.1721 8.37404 15.1556 8.36516C15.139 8.35629 15.1228 8.34683 15.107 8.33679C15.0911 8.32675 15.0757 8.31614 15.0606 8.30498C15.0455 8.29381 15.0309 8.28211 15.0166 8.26989C15.0024 8.25766 14.9885 8.24494 14.9752 8.23171C14.9619 8.21849 14.949 8.2048 14.9367 8.19065C14.9244 8.17649 14.9125 8.16192 14.9013 8.14691C14.89 8.1319 14.8793 8.1165 14.8691 8.10073C14.8589 8.08494 14.8494 8.0688 14.8404 8.05233C14.8314 8.03586 14.8229 8.01908 14.8152 8.00199C14.8074 7.98491 14.8002 7.96756 14.7938 7.94997L12.7313 2.75622C12.7245 2.73759 12.717 2.71925 12.7089 2.7012C12.7006 2.68315 12.6918 2.66543 12.6822 2.64806C12.6727 2.63068 12.6625 2.61369 12.6518 2.59709C12.6409 2.58049 12.6295 2.56433 12.6175 2.54861C12.6054 2.53288 12.5927 2.51764 12.5795 2.50288C12.5662 2.48812 12.5524 2.47389 12.5381 2.46018C12.5238 2.44648 12.509 2.43334 12.4937 2.42076C12.4783 2.40819 12.4626 2.39621 12.4464 2.38485C12.4301 2.37348 12.4135 2.36275 12.3965 2.35265C12.3794 2.34255 12.362 2.33312 12.3443 2.32436C12.3265 2.31559 12.3084 2.30751 12.29 2.30012C12.2716 2.29274 12.253 2.28607 12.234 2.28011C12.2151 2.27415 12.196 2.26891 12.1767 2.26441C12.1574 2.25991 12.1379 2.25616 12.1184 2.25315C12.0987 2.25013 12.079 2.24786 12.0594 2.24635C12.0396 2.24484 12.0198 2.24408 12 2.24408C11.9801 2.24408 11.9604 2.24484 11.9407 2.24635C11.9209 2.24786 11.9012 2.25013 11.8816 2.25315C11.862 2.25616 11.8426 2.25991 11.8233 2.26441C11.804 2.26891 11.7849 2.27415 11.766 2.28011C11.7471 2.28607 11.7284 2.29274 11.71 2.30012C11.6917 2.30751 11.6736 2.31559 11.6558 2.32436C11.638 2.33312 11.6206 2.34255 11.6035 2.35265C11.5865 2.36275 11.5698 2.37348 11.5537 2.38485C11.5374 2.39621 11.5216 2.40819 11.5063 2.42076C11.491 2.43334 11.4762 2.44648 11.4619 2.46018C11.4476 2.47389 11.4338 2.48812 11.4205 2.50288C11.4073 2.51764 11.3946 2.53288 11.3826 2.54861C11.3705 2.56433 11.3591 2.58049 11.3482 2.5971C11.3374 2.61369 11.3272 2.63068 11.3177 2.64806C11.3082 2.66543 11.2993 2.68315 11.2912 2.7012C11.283 2.71925 11.2755 2.73759 11.2687 2.75622L9.20625 7.94997C9.19971 7.96756 9.19256 7.98491 9.18478 8.00199C9.177 8.01908 9.16861 8.03586 9.15961 8.05233C9.15061 8.0688 9.14103 8.08494 9.13087 8.10073C9.1207 8.1165 9.10998 8.1319 9.0987 8.14691C9.08741 8.16192 9.07561 8.17649 9.06328 8.19065C9.05094 8.2048 9.03811 8.21849 9.02479 8.23171C9.01146 8.24494 8.99767 8.25766 8.98343 8.26989C8.96918 8.28211 8.95452 8.2938 8.93943 8.30497C8.92433 8.31614 8.90886 8.32675 8.89299 8.33679C8.87713 8.34683 8.86093 8.35629 8.84439 8.36516C8.82784 8.37404 8.811 8.3823 8.79386 8.38995C8.77671 8.3976 8.75931 8.40463 8.74167 8.41102C8.72401 8.4174 8.70615 8.42315 8.68809 8.42826C8.67002 8.43336 8.65179 8.43781 8.63341 8.44158C8.61501 8.44536 8.59652 8.44847 8.57791 8.45092C8.55929 8.45336 8.54061 8.45512 8.52187 8.45622L2.99062 8.81247C2.26875 8.85934 1.9875 9.78747 2.54062 10.2468L6.77812 13.7812C6.79283 13.7934 6.8071 13.8061 6.82093 13.8192C6.83475 13.8323 6.8481 13.846 6.86097 13.8602C6.87383 13.8742 6.88618 13.8888 6.89803 13.9038C6.90988 13.9188 6.92119 13.9341 6.93195 13.9499C6.94271 13.9656 6.95291 13.9818 6.96255 13.9983C6.97219 14.0148 6.98122 14.0315 6.98968 14.0486C6.99814 14.0657 7.00597 14.0831 7.01321 14.1008C7.02044 14.1185 7.02705 14.1364 7.03303 14.1545C7.039 14.1726 7.04434 14.1909 7.04902 14.2095C7.05371 14.228 7.05774 14.2466 7.06113 14.2655C7.0645 14.2842 7.06721 14.303 7.06927 14.3221C7.07132 14.341 7.07271 14.36 7.07343 14.3792C7.07414 14.3982 7.07419 14.4173 7.07357 14.4365C7.07295 14.4555 7.07166 14.4745 7.0697 14.4935C7.06774 14.5125 7.06511 14.5314 7.06183 14.5503C7.05854 14.569 7.05459 14.5877 7.05 14.6062L5.78437 19.5937C5.56875 20.4375 6.46875 21.1219 7.19062 20.6625L11.5875 17.8781C11.6028 17.8684 11.6185 17.8592 11.6345 17.8505C11.6504 17.8419 11.6666 17.8339 11.6832 17.8264C11.6997 17.8189 11.7165 17.812 11.7336 17.8057C11.7505 17.7994 11.7678 17.7937 11.7852 17.7887C11.8027 17.7836 11.8202 17.7791 11.8379 17.7754C11.8556 17.7715 11.8735 17.7683 11.8915 17.7658C11.9095 17.7632 11.9275 17.7613 11.9456 17.76C11.9637 17.7587 11.9818 17.7581 12 17.7581C12.0181 17.7581 12.0362 17.7587 12.0544 17.76C12.0725 17.7613 12.0905 17.7632 12.1085 17.7658C12.1265 17.7683 12.1443 17.7715 12.1621 17.7754C12.1797 17.7791 12.1974 17.7836 12.2148 17.7887C12.2322 17.7937 12.2494 17.7994 12.2665 17.8057C12.2835 17.812 12.3003 17.8189 12.3168 17.8264C12.3333 17.8339 12.3496 17.8419 12.3655 17.8505C12.3815 17.8592 12.3971 17.8684 12.4125 17.8781Z'
 
@@ -443,6 +448,23 @@ function deleteDescriptionForKind(kind: WorkbenchDeleteTargetKind) {
   return '将移入回收站，30 天内可以恢复。'
 }
 
+function PackagePublishSidebarIcon({ size = 32, className }: { size?: number; className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 32 32" fill="none" className={className} aria-hidden>
+      <g opacity="0.2">
+        <path
+          fill="currentColor"
+          d="M10 16C10 15.8363 10.004 15.6728 10.012 15.5094C10.0201 15.3459 10.0321 15.1827 10.0482 15.0199C10.0642 14.857 10.0842 14.6946 10.1082 14.5328C10.1322 14.3708 10.1602 14.2096 10.1922 14.0491C10.2241 13.8886 10.2599 13.729 10.2997 13.5702C10.3394 13.4115 10.3831 13.2538 10.4306 13.0971C10.4781 12.9405 10.5294 12.7852 10.5846 12.6311C10.6397 12.477 10.6986 12.3244 10.7612 12.1732C10.8238 12.022 10.8901 11.8724 10.9601 11.7245C11.0301 11.5765 11.1036 11.4304 11.1808 11.286C11.2579 11.1417 11.3386 10.9993 11.4227 10.859C11.5069 10.7186 11.5944 10.5804 11.6853 10.4443C11.7762 10.3082 11.8704 10.1745 11.9679 10.043C12.0654 9.91155 12.1661 9.78257 12.2699 9.65606C12.3737 9.52955 12.4806 9.40567 12.5905 9.28441C12.7004 9.16315 12.8132 9.04465 12.9289 8.92894C13.0446 8.81321 13.1631 8.7004 13.2844 8.59049C13.4056 8.48058 13.5295 8.37371 13.6561 8.2699C13.7826 8.16607 13.9116 8.06541 14.043 7.96793C14.1744 7.87044 14.3082 7.77623 14.4443 7.6853C14.5804 7.59438 14.7186 7.50685 14.859 7.42271C14.9994 7.33857 15.1416 7.25794 15.286 7.18079C15.4304 7.10364 15.5765 7.03008 15.7245 6.96011C15.8724 6.89014 16.022 6.82383 16.1731 6.7612C16.3244 6.69858 16.477 6.6397 16.6311 6.58456C16.7852 6.52943 16.9405 6.47811 17.0971 6.4306C17.2537 6.38309 17.4115 6.33945 17.5702 6.29969C17.729 6.25992 17.8886 6.22407 18.0491 6.19215C18.2096 6.16022 18.3709 6.13225 18.5327 6.10824C18.6946 6.08422 18.857 6.06419 19.0199 6.04815C19.1828 6.03211 19.3459 6.02007 19.5094 6.01205C19.6728 6.00402 19.8364 6 20 6C20.1636 6 20.3272 6.00402 20.4906 6.01205C20.6541 6.02007 20.8172 6.03211 20.9801 6.04815C21.143 6.06419 21.3054 6.08422 21.4673 6.10824C21.6291 6.13225 21.7904 6.16022 21.9509 6.19215C22.1114 6.22407 22.271 6.25992 22.4298 6.29969C22.5885 6.33945 22.7463 6.38309 22.9029 6.4306C23.0595 6.47811 23.2148 6.52943 23.3689 6.58456C23.523 6.6397 23.6756 6.69858 23.8269 6.7612C23.978 6.82383 24.1276 6.89014 24.2755 6.96011C24.4235 7.03008 24.5696 7.10364 24.714 7.18079C24.8584 7.25794 25.0006 7.33857 25.141 7.42271C25.2814 7.50685 25.4196 7.59438 25.5557 7.6853C25.6917 7.77623 25.8255 7.87044 25.957 7.96793C26.0884 8.06541 26.2174 8.16607 26.3439 8.2699C26.4705 8.37371 26.5944 8.48058 26.7156 8.59049C26.8369 8.7004 26.9554 8.81321 27.0711 8.92894C27.1868 9.04465 27.2996 9.16315 27.4095 9.28441C27.5194 9.40567 27.6262 9.52955 27.7301 9.65606C27.834 9.78257 27.9346 9.91155 28.0321 10.043C28.1295 10.1744 28.2237 10.3082 28.3148 10.4443C28.4056 10.5804 28.4931 10.7186 28.5772 10.859C28.6614 10.9993 28.7421 11.1417 28.8193 11.286C28.8964 11.4304 28.9699 11.5765 29.0399 11.7245C29.1099 11.8724 29.1761 12.022 29.2388 12.1732C29.3014 12.3244 29.3603 12.477 29.4154 12.6311C29.4705 12.7852 29.5219 12.9405 29.5694 13.0971C29.6169 13.2538 29.6605 13.4115 29.7003 13.5702C29.7401 13.729 29.776 13.8886 29.8079 14.0491C29.8398 14.2096 29.8678 14.3708 29.8918 14.5328C29.9158 14.6946 29.9357 14.857 29.9519 15.0199C29.9679 15.1827 29.9799 15.3459 29.988 15.5094C29.996 15.6728 30 15.8363 30 16C30 16.1637 29.996 16.3272 29.988 16.4906C29.9799 16.6541 29.9679 16.8173 29.9519 16.9801C29.9357 17.143 29.9158 17.3054 29.8918 17.4673C29.8678 17.6292 29.8398 17.7904 29.8079 17.9509C29.776 18.1114 29.7401 18.271 29.7003 18.4298C29.6605 18.5885 29.6169 18.7463 29.5694 18.9029C29.5219 19.0595 29.4705 19.2148 29.4154 19.3689C29.3603 19.523 29.3014 19.6756 29.2388 19.8269C29.1761 19.978 29.1099 20.1276 29.0399 20.2755C28.9699 20.4235 28.8964 20.5696 28.8193 20.714C28.7421 20.8584 28.6614 21.0006 28.5772 21.141C28.4931 21.2814 28.4056 21.4196 28.3148 21.5557C28.2237 21.6919 28.1295 21.8256 28.0321 21.957C27.9346 22.0884 27.834 22.2174 27.7301 22.3439C27.6262 22.4705 27.5194 22.5944 27.4095 22.7156C27.2996 22.8369 27.1868 22.9554 27.0711 23.0711C26.9554 23.1868 26.8369 23.2996 26.7156 23.4095C26.5944 23.5194 26.4705 23.6262 26.3439 23.7301C26.2174 23.834 26.0884 23.9346 25.957 24.0321C25.8256 24.1295 25.6919 24.2237 25.5557 24.3148C25.4196 24.4056 25.2814 24.4931 25.141 24.5772C25.0006 24.6614 24.8584 24.7421 24.714 24.8193C24.5696 24.8964 24.4235 24.9699 24.2755 25.0399C24.1276 25.1099 23.978 25.1761 23.8269 25.2388C23.6756 25.3014 23.523 25.3604 23.3689 25.4155C23.2148 25.4706 23.0595 25.5219 22.9029 25.5694C22.7463 25.6169 22.5885 25.6605 22.4298 25.7003C22.271 25.7401 22.1114 25.776 21.9509 25.8079C21.7904 25.8398 21.6291 25.8678 21.4673 25.8918C21.3054 25.9158 21.143 25.9357 20.9801 25.9519C20.8172 25.9679 20.6541 25.9799 20.4906 25.988C20.3272 25.996 20.1636 26 20 26L9 26C8.88544 26 8.77095 25.9972 8.65652 25.9916C8.54211 25.986 8.42789 25.9775 8.31388 25.9662C8.19986 25.9551 8.0862 25.9411 7.97289 25.9242C7.85956 25.9074 7.74673 25.8879 7.63436 25.8655C7.522 25.8431 7.41026 25.8181 7.29914 25.7903C7.18801 25.7624 7.07764 25.7319 6.96801 25.6986C6.85838 25.6654 6.74964 25.6294 6.64178 25.5907C6.53391 25.5521 6.42705 25.511 6.32121 25.4671C6.21537 25.4233 6.11067 25.3769 6.00711 25.3279C5.90355 25.279 5.80126 25.2275 5.70022 25.1735C5.59919 25.1195 5.49954 25.063 5.40127 25.0041C5.30301 24.9452 5.20626 24.8839 5.11101 24.8202C5.01575 24.7566 4.92211 24.6908 4.8301 24.6225C4.73809 24.5543 4.64781 24.4837 4.55925 24.4111C4.47069 24.3384 4.38398 24.2635 4.29909 24.1866C4.2142 24.1098 4.13126 24.0308 4.05025 23.9498C3.96924 23.8687 3.89028 23.7857 3.81334 23.7009C3.7364 23.616 3.6616 23.5294 3.58892 23.4408C3.51625 23.3521 3.44579 23.2619 3.37755 23.1699C3.30931 23.0779 3.24336 22.9842 3.17971 22.889C3.11606 22.7938 3.05479 22.697 2.9959 22.5987C2.937 22.5005 2.88055 22.4009 2.82655 22.2997C2.77255 22.1987 2.72106 22.0965 2.67208 21.9929C2.62309 21.8892 2.57668 21.7846 2.53284 21.6787C2.489 21.5729 2.44779 21.4661 2.40919 21.3582C2.3706 21.2504 2.33467 21.1416 2.30141 21.032C2.26816 20.9224 2.23762 20.812 2.20977 20.7009C2.18194 20.5898 2.15685 20.478 2.1345 20.3656C2.11215 20.2533 2.09257 20.1405 2.07576 20.0271C2.05895 19.9137 2.04494 19.8001 2.03371 19.6861C2.02248 19.5721 2.01405 19.4579 2.00844 19.3435C2.00281 19.2291 2 19.1146 2 19C2 18.8854 2.00281 18.7709 2.00844 18.6565C2.01405 18.5421 2.02248 18.4279 2.03371 18.3139C2.04494 18.1999 2.05895 18.0862 2.07576 17.9729C2.09257 17.8595 2.11215 17.7467 2.1345 17.6344C2.15685 17.522 2.18194 17.4103 2.20977 17.2991C2.23762 17.188 2.26816 17.0777 2.30141 16.968C2.33467 16.8584 2.3706 16.7497 2.40919 16.6418C2.44779 16.5339 2.489 16.4271 2.53284 16.3213C2.57668 16.2154 2.62309 16.1107 2.67208 16.0071C2.72106 15.9035 2.77255 15.8013 2.82655 15.7002C2.88055 15.5992 2.937 15.4995 2.9959 15.4012C3.05479 15.303 3.11606 15.2063 3.17971 15.111C3.24336 15.0157 3.30931 14.9221 3.37755 14.8301C3.44579 14.7381 3.51625 14.6478 3.58892 14.5592C3.6616 14.4707 3.7364 14.384 3.81334 14.2991C3.89028 14.2142 3.96924 14.1313 4.05025 14.0503C4.13126 13.9692 4.2142 13.8903 4.29909 13.8134C4.38398 13.7365 4.47069 13.6616 4.55925 13.5889C4.6478 13.5162 4.73809 13.4458 4.8301 13.3775C4.92211 13.3092 5.01575 13.2433 5.11101 13.1798C5.20626 13.1161 5.30301 13.0548 5.40127 12.9959C5.49954 12.937 5.59919 12.8805 5.70022 12.8265C5.80126 12.7725 5.90355 12.721 6.00711 12.6721C6.11067 12.6231 6.21537 12.5767 6.32121 12.5329C6.42705 12.489 6.53391 12.4478 6.64178 12.4092C6.74964 12.3706 6.85838 12.3347 6.96801 12.3014C7.07764 12.2682 7.18801 12.2376 7.29914 12.2098C7.41026 12.1819 7.522 12.1568 7.63436 12.1345C7.74673 12.1122 7.85956 12.0926 7.97289 12.0758C8.0862 12.059 8.19986 12.0449 8.31388 12.0337C8.42789 12.0225 8.5421 12.014 8.65652 12.0084C8.77095 12.0028 8.88544 12 9 12C9.29284 11.9999 9.58459 12.0176 9.87525 12.0532C10.1659 12.0887 10.4533 12.1418 10.7375 12.2125"
+        />
+      </g>
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M12 26L9 26C5.13401 26 2 22.866 2 19C2 15.134 5.13401 12 9 12C9.59284 12 10.1659 12.0887 10.7375 12.2125" />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M10 16C10 10.4772 14.4772 6 20 6C25.5228 6 30 10.4772 30 16C30 18.2628 29.2479 20.35 28 22" />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M14.7625 20.2375L19 16L23.2375 20.2375" />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M19 26L19 16" />
+    </svg>
+  )
+}
+
 function openWorkbenchItemOnClick(
   item: TemplateWorkbenchItem,
   onOpen?: (item: TemplateWorkbenchItem) => void,
@@ -516,6 +538,7 @@ function FileCard({
   onContextMenu,
   starred = false,
   onToggleStar,
+  selected = false,
 }: {
   item: TemplateWorkbenchItem
   left: number
@@ -525,6 +548,7 @@ function FileCard({
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
   starred?: boolean
   onToggleStar?: (sequence: string) => void
+  selected?: boolean
 }) {
   return (
     <div
@@ -543,7 +567,15 @@ function FileCard({
         onContextMenu(event, item)
       }}
       className="absolute cursor-pointer overflow-hidden rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
-      style={{ left, top, width: 272, height: 206.72, borderColor: 'var(--twb-card-border)', color: 'var(--twb-text)' }}
+      style={{
+        left,
+        top,
+        width: 272,
+        height: 206.72,
+        borderColor: selected ? packageSelectionColor : 'var(--twb-card-border)',
+        color: 'var(--twb-text)',
+        boxShadow: selected ? `0 0 0 2px ${packageSelectionColor}` : undefined,
+      }}
     >
       {item.cover ? (
         <div
@@ -582,6 +614,7 @@ function ImportedFileCard({
   onContextMenu,
   starred = false,
   onToggleStar,
+  selected = false,
 }: {
   item: TemplateWorkbenchItem
   left: number
@@ -591,6 +624,7 @@ function ImportedFileCard({
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
   starred?: boolean
   onToggleStar?: (sequence: string) => void
+  selected?: boolean
 }) {
   const Icon = getFileIconByName(item.fileName ?? item.name)
   return (
@@ -610,7 +644,15 @@ function ImportedFileCard({
         onContextMenu(event, item)
       }}
       className="absolute cursor-pointer overflow-hidden rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
-      style={{ left, top, width: 272, height: 206.72, borderColor: 'var(--twb-card-border)', color: 'var(--twb-text)' }}
+      style={{
+        left,
+        top,
+        width: 272,
+        height: 206.72,
+        borderColor: selected ? packageSelectionColor : 'var(--twb-card-border)',
+        color: 'var(--twb-text)',
+        boxShadow: selected ? `0 0 0 2px ${packageSelectionColor}` : undefined,
+      }}
     >
       {item.cover ? (
         <div
@@ -793,6 +835,7 @@ function ProjectCard({
   onContextMenu,
   starred = false,
   onToggleStar,
+  selected = false,
 }: {
   item: TemplateWorkbenchItem
   left: number
@@ -802,11 +845,12 @@ function ProjectCard({
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
   starred?: boolean
   onToggleStar?: (sequence: string) => void
+  selected?: boolean
 }) {
   if (item.type === 'folder' || item.role === 'imported-folder') return <FolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
-  if (item.role === 'imported-file' || item.role === 'template-file') return <ImportedFileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
+  if (item.role === 'imported-file' || item.role === 'template-file') return <ImportedFileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} selected={selected} />
   if (item.displayMode === 'folder') return <ProjectFolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
-  return <FileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
+  return <FileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} selected={selected} />
 }
 
 function FolderTypeGlyph() {
@@ -891,6 +935,7 @@ function ProjectList({
   onContextMenu,
   isStarred,
   onToggleStar,
+  selectedItemId,
 }: {
   items: TemplateWorkbenchItem[]
   onOpen?: (item: TemplateWorkbenchItem) => void
@@ -898,6 +943,7 @@ function ProjectList({
   onContextMenu?: (event: ReactMouseEvent, item: TemplateWorkbenchItem) => void
   isStarred?: (sequence?: string) => boolean
   onToggleStar?: (sequence: string) => void
+  selectedItemId?: string | null
 }) {
   const rowStart = 61
   const rowGap = 80
@@ -909,6 +955,7 @@ function ProjectList({
         const rowY = rowStart + index * rowGap
         const NameIcon = item.fileKind === 'folder' ? null : getFileIconByName(item.fileName ?? item.name)
         const isDeploymentFlow = item.fileKind === 'template'
+        const selected = item.id === selectedItemId
         return (
           <div key={item.id} className="absolute" style={{ left: 0, top: rowY, width: 1470, height: 60 }}>
             <button
@@ -921,6 +968,7 @@ function ProjectList({
                 onContextMenu(event, item)
               }}
               className="absolute inset-0 z-0 rounded-[5px] transition-colors hover:bg-[var(--twb-hover)]"
+              style={{ background: selected ? packageSelectionBackground : undefined }}
               aria-label={`打开${item.name}`}
             />
             {isDeploymentFlow ? (
@@ -1428,6 +1476,104 @@ function NewFileQuickIcon() {
   )
 }
 
+function PackageProjectQuickIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden>
+      <path
+        d="M35 27.7031L35 12.2968C34.9998 12.2692 34.9989 12.2415 34.9969 12.2139C34.9948 12.1863 34.992 12.1588 34.9883 12.1314C34.9845 12.104 34.9798 12.0767 34.9742 12.0496C34.9688 12.0225 34.9623 11.9956 34.955 11.969C34.9477 11.9423 34.9395 11.9159 34.9305 11.8897C34.9214 11.8636 34.9116 11.8377 34.9008 11.8122C34.89 11.7867 34.8784 11.7616 34.8661 11.7369C34.8538 11.7122 34.8405 11.6878 34.8264 11.664C34.8125 11.6401 34.7977 11.6167 34.7822 11.5938C34.7667 11.5709 34.7505 11.5485 34.7334 11.5267C34.7164 11.5048 34.6987 11.4836 34.6805 11.4629C34.662 11.4422 34.643 11.4222 34.6233 11.4027C34.6036 11.3833 34.5833 11.3645 34.5623 11.3464C34.5414 11.3283 34.52 11.3109 34.498 11.2942C34.4759 11.2775 34.4533 11.2616 34.4302 11.2464C34.407 11.2312 34.3834 11.2167 34.3594 11.2031L20.6094 3.4687C20.5864 3.4554 20.5629 3.44287 20.5391 3.43111C20.5152 3.41934 20.491 3.40836 20.4664 3.39819C20.4418 3.38801 20.4169 3.37864 20.3917 3.37009C20.3665 3.36155 20.3411 3.35384 20.3155 3.34695C20.2897 3.34007 20.2639 3.33403 20.2378 3.32884C20.2117 3.32365 20.1854 3.31932 20.1591 3.31584C20.1327 3.31237 20.1063 3.30977 20.0797 3.30803C20.0531 3.30629 20.0266 3.30542 20 3.30542C19.9734 3.30542 19.9469 3.30629 19.9203 3.30803C19.8937 3.30977 19.8673 3.31237 19.8409 3.31584C19.8146 3.31932 19.7883 3.32365 19.7622 3.32884C19.7361 3.33403 19.7103 3.34007 19.6845 3.34695C19.6589 3.35384 19.6335 3.36155 19.6083 3.37009C19.5831 3.37864 19.5582 3.38801 19.5336 3.39819C19.509 3.40836 19.4848 3.41934 19.4609 3.43111C19.4371 3.44287 19.4136 3.4554 19.3906 3.4687L5.64062 11.2031C5.61656 11.2167 5.59297 11.2312 5.56986 11.2464C5.54675 11.2616 5.52417 11.2775 5.50209 11.2942C5.48003 11.3109 5.45854 11.3283 5.43761 11.3464C5.41668 11.3645 5.39638 11.3833 5.37669 11.4027C5.35699 11.4222 5.33795 11.4422 5.31956 11.4629C5.30119 11.4836 5.2835 11.5048 5.26652 11.5267C5.24954 11.5485 5.23329 11.5709 5.21777 11.5938C5.20225 11.6167 5.18751 11.6401 5.17352 11.664C5.15954 11.6878 5.14635 11.7122 5.13395 11.7369C5.12157 11.7616 5.11001 11.7867 5.09927 11.8122C5.08853 11.8377 5.07863 11.8636 5.06958 11.8897C5.06053 11.9159 5.05234 11.9423 5.04503 11.969C5.03771 11.9956 5.03127 12.0225 5.02572 12.0496C5.02017 12.0767 5.01551 12.104 5.01175 12.1314C5.00799 12.1588 5.00513 12.1863 5.00316 12.2139C5.0012 12.2415 5.00015 12.2692 5 12.2968L5 27.7031C5.00015 27.7307 5.0012 27.7584 5.00316 27.786C5.00513 27.8135 5.00799 27.841 5.01175 27.8685C5.01551 27.8959 5.02017 27.9232 5.02572 27.9503C5.03127 27.9773 5.03771 28.0042 5.04503 28.0309C5.05234 28.0576 5.06053 28.084 5.06958 28.1101C5.07863 28.1362 5.08853 28.1621 5.09927 28.1876C5.11001 28.2131 5.12157 28.2382 5.13395 28.2631C5.14635 28.2878 5.15954 28.312 5.17352 28.3359C5.18751 28.3598 5.20225 28.3831 5.21777 28.406C5.23329 28.429 5.24954 28.4514 5.26652 28.4732C5.2835 28.4951 5.30119 28.5164 5.31956 28.537C5.33795 28.5578 5.35699 28.5778 5.37669 28.5971C5.39638 28.6167 5.41668 28.6354 5.43761 28.6535C5.45854 28.6715 5.48003 28.689 5.50209 28.7057C5.52417 28.7225 5.54675 28.7384 5.56986 28.7535C5.59297 28.7687 5.61656 28.7832 5.64062 28.7968L19.3906 36.5312C19.4136 36.5445 19.4371 36.5571 19.4609 36.5689C19.4848 36.5806 19.509 36.5915 19.5336 36.6017C19.5582 36.6118 19.5831 36.6212 19.6083 36.6298C19.6335 36.6384 19.6589 36.646 19.6845 36.6529C19.7103 36.6598 19.7361 36.6659 19.7622 36.671C19.7883 36.6762 19.8146 36.6806 19.8409 36.684C19.8673 36.6876 19.8937 36.6901 19.9203 36.6918C19.9469 36.6935 19.9734 36.6945 20 36.6945C20.0266 36.6945 20.0531 36.6935 20.0797 36.6918C20.1063 36.6901 20.1327 36.6876 20.1591 36.684C20.1854 36.6806 20.2117 36.6762 20.2378 36.671C20.2639 36.6659 20.2897 36.6598 20.3155 36.6529C20.3411 36.646 20.3665 36.6384 20.3917 36.6298C20.4169 36.6212 20.4418 36.6118 20.4664 36.6017C20.491 36.5915 20.5152 36.5806 20.5391 36.5689C20.5629 36.5571 20.5864 36.5445 20.6094 36.5312L34.3594 28.7968C34.3834 28.7832 34.407 28.7687 34.4302 28.7535C34.4533 28.7384 34.4759 28.7225 34.498 28.7057C34.52 28.689 34.5414 28.6715 34.5623 28.6535C34.5833 28.6354 34.6036 28.6167 34.6233 28.5971C34.643 28.5778 34.662 28.5578 34.6805 28.537C34.6987 28.5164 34.7164 28.4951 34.7334 28.4732C34.7505 28.4514 34.7667 28.429 34.7822 28.406C34.7977 28.3831 34.8125 28.3598 34.8264 28.3359C34.8405 28.312 34.8538 28.2878 34.8661 28.2631C34.8784 28.2382 34.89 28.2131 34.9008 28.1876C34.9116 28.1621 34.9214 28.1364 34.9305 28.1103C34.9395 28.084 34.9477 28.0576 34.955 28.0309C34.9623 28.0042 34.9688 27.9773 34.9742 27.9503C34.9798 27.9232 34.9845 27.8959 34.9883 27.8685C34.992 27.841 34.9948 27.8135 34.9969 27.786C34.9989 27.7584 34.9998 27.7307 35 27.7031Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M27.6562 23.8281L27.6562 15.7031L12.5 7.34375" />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M34.8281 11.6562L20.1406 20L5.17188 11.6562" />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M20.1406 20L20 36.6875" />
+    </svg>
+  )
+}
+
+function PublishProjectQuickIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden>
+      <g opacity="0.2">
+        <path d="M23.75 5L23.75 13.75L32.5 13.75L23.75 5Z" fill="currentColor" />
+      </g>
+      <path
+        d="M31.25 35L8.75 35C8.72954 35 8.7091 34.9995 8.68867 34.9984C8.66823 34.9975 8.64784 34.9959 8.62748 34.9939C8.60712 34.9919 8.58682 34.9894 8.56659 34.9864C8.54635 34.9834 8.5262 34.98 8.50614 34.9759C8.48608 34.972 8.46613 34.9675 8.44628 34.9625C8.42644 34.9577 8.40672 34.9522 8.38714 34.9463C8.36757 34.9402 8.34815 34.9338 8.32889 34.9269C8.30963 34.92 8.29055 34.9127 8.27164 34.9048C8.25275 34.897 8.23405 34.8887 8.21556 34.88C8.19706 34.8713 8.17879 34.862 8.16075 34.8523C8.14271 34.8428 8.12492 34.8327 8.10738 34.8222C8.08982 34.8117 8.07254 34.8008 8.05553 34.7894C8.03852 34.778 8.0218 34.7663 8.00537 34.7541C7.98895 34.7419 7.97283 34.7292 7.95702 34.7162C7.94119 34.7033 7.9257 34.6898 7.91055 34.6763C7.89539 34.6625 7.88058 34.6484 7.86611 34.6339C7.85165 34.6194 7.83755 34.6045 7.82381 34.5894C7.81007 34.5742 7.79671 34.5588 7.78373 34.543C7.77075 34.5272 7.75817 34.5111 7.74598 34.4947C7.7338 34.4783 7.72202 34.4616 7.71066 34.4445C7.69929 34.4275 7.68835 34.4102 7.67784 34.3927C7.66732 34.375 7.65724 34.3572 7.64759 34.3392C7.63796 34.3213 7.62877 34.303 7.62002 34.2844C7.61127 34.2659 7.60298 34.2472 7.59516 34.2283C7.58732 34.2094 7.57996 34.1903 7.57306 34.1711C7.56618 34.1519 7.55977 34.1323 7.55383 34.1128C7.54789 34.0933 7.54243 34.0736 7.53745 34.0537C7.53248 34.0339 7.52801 34.0139 7.52402 33.9939C7.52003 33.9737 7.51653 33.9536 7.51353 33.9334C7.51053 33.9133 7.50803 33.893 7.50602 33.8725C7.50402 33.8522 7.50251 33.8319 7.5015 33.8114C7.5005 33.7909 7.5 33.7705 7.5 33.75L7.5 6.25C7.5 6.22954 7.5005 6.2091 7.5015 6.18867C7.50251 6.16823 7.50402 6.14784 7.50602 6.12748C7.50803 6.10712 7.51053 6.08682 7.51353 6.06659C7.51653 6.04635 7.52003 6.0262 7.52402 6.00614C7.52801 5.98608 7.53248 5.96613 7.53745 5.94628C7.54243 5.92644 7.54789 5.90672 7.55383 5.88714C7.55977 5.86757 7.56618 5.84815 7.57306 5.82889C7.57996 5.80963 7.58732 5.79055 7.59516 5.77164C7.60298 5.75275 7.61127 5.73405 7.62002 5.71556C7.62877 5.69706 7.63796 5.67879 7.64759 5.66075C7.65724 5.64271 7.66732 5.62492 7.67784 5.60738C7.68835 5.58982 7.69929 5.57254 7.71066 5.55553C7.72202 5.53852 7.7338 5.5218 7.74598 5.50537C7.75817 5.48895 7.77075 5.47283 7.78373 5.45702C7.79671 5.44119 7.81007 5.4257 7.82381 5.41055C7.83755 5.39539 7.85165 5.38058 7.86611 5.36611C7.88058 5.35165 7.89539 5.33755 7.91055 5.32381C7.9257 5.31007 7.94119 5.29671 7.95702 5.28373C7.97283 5.27075 7.98895 5.25817 8.00537 5.24598C8.0218 5.2338 8.03852 5.22202 8.05553 5.21066C8.07254 5.19929 8.08982 5.18835 8.10738 5.17784C8.12492 5.16732 8.14271 5.15724 8.16075 5.14759C8.17879 5.13796 8.19706 5.12877 8.21556 5.12002C8.23405 5.11127 8.25275 5.10298 8.27164 5.09516C8.29055 5.08732 8.30963 5.07996 8.32889 5.07306C8.34815 5.06618 8.36757 5.05977 8.38714 5.05383C8.40672 5.04789 8.42644 5.04243 8.44628 5.03745C8.46613 5.03248 8.48608 5.02801 8.50614 5.02402C8.5262 5.02003 8.54635 5.01653 8.56659 5.01353C8.58682 5.01053 8.60712 5.00803 8.62748 5.00602C8.64784 5.00402 8.66823 5.00251 8.68867 5.0015C8.7091 5.0005 8.72954 5 8.75 5L23.75 5L32.5 13.75L32.5 33.75C32.5 33.7705 32.4995 33.7909 32.4984 33.8114C32.4975 33.8319 32.4959 33.8522 32.4939 33.8725C32.4919 33.893 32.4894 33.9133 32.4864 33.9334C32.4834 33.9536 32.48 33.9737 32.4759 33.9939C32.472 34.0139 32.4675 34.0339 32.4625 34.0537C32.4577 34.0736 32.4522 34.0933 32.4463 34.1128C32.4403 34.1323 32.4339 34.1519 32.4269 34.1711C32.42 34.1903 32.4127 34.2094 32.4048 34.2283C32.397 34.2472 32.3887 34.2659 32.38 34.2844C32.3713 34.303 32.362 34.3213 32.3523 34.3392C32.3428 34.3572 32.3327 34.375 32.3222 34.3927C32.3117 34.4102 32.3008 34.4275 32.2894 34.4445C32.278 34.4616 32.2663 34.4783 32.2541 34.4947C32.2419 34.5111 32.2292 34.5272 32.2162 34.543C32.2033 34.5588 32.1898 34.5742 32.1763 34.5894C32.1625 34.6045 32.1484 34.6194 32.1339 34.6339C32.1194 34.6484 32.1045 34.6625 32.0894 34.6763C32.0742 34.6898 32.0588 34.7033 32.043 34.7162C32.0272 34.7292 32.0111 34.7419 31.9947 34.7541C31.9783 34.7663 31.9616 34.778 31.9445 34.7894C31.9275 34.8008 31.9102 34.8117 31.8927 34.8222C31.875 34.8327 31.8572 34.8428 31.8392 34.8523C31.8213 34.862 31.803 34.8713 31.7844 34.88C31.7659 34.8887 31.7472 34.897 31.7283 34.9048C31.7094 34.9127 31.6903 34.92 31.6711 34.9269C31.6519 34.9338 31.6323 34.9402 31.6128 34.9463C31.5933 34.9522 31.5736 34.9577 31.5537 34.9625C31.5339 34.9675 31.5139 34.972 31.4939 34.9759C31.4737 34.98 31.4536 34.9834 31.4334 34.9864C31.4133 34.9894 31.393 34.9919 31.3725 34.9939C31.3522 34.9959 31.3319 34.9975 31.3114 34.9984C31.2909 34.9995 31.2705 35 31.25 35Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M23.75 5L23.75 13.75L32.5 13.75" />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M15.625 23.125L20 18.75L24.375 23.125" />
+      <path stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" d="M20 28.75L20 18.75" />
+    </svg>
+  )
+}
+
+function PackageQuickActions({
+  onPackageProject,
+  onPublishProject,
+}: {
+  onPackageProject?: () => void
+  onPublishProject?: () => void
+}) {
+  return (
+    <div className="absolute flex gap-[30px]" style={{ left: 400, top: 196, width: 630, height: 61, color: 'var(--twb-text)' }}>
+      <PackageQuickActionButton
+        label="打包项目"
+        description="打包模板文件，用于分发它们"
+        icon={<PackageProjectQuickIcon />}
+        onClick={onPackageProject}
+      />
+      <PackageQuickActionButton
+        label="发布项目"
+        description="将流程发布到启动器中"
+        icon={<PublishProjectQuickIcon />}
+        onClick={onPublishProject}
+      />
+    </div>
+  )
+}
+
+function PackageQuickActionButton({
+  label,
+  description,
+  icon,
+  onClick,
+}: {
+  label: string
+  description: string
+  icon: ReactNode
+  onClick?: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative h-[61px] w-[300px] rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
+      style={{ borderColor: 'currentColor', color: 'var(--twb-text)' }}
+      aria-label={label}
+    >
+      <span className="absolute left-[5px] top-[10px] flex h-[40px] w-[40px] items-center justify-center" aria-hidden>
+        {icon}
+      </span>
+      <span className="absolute left-[58px] top-[20px] leading-none" style={{ fontFamily: font, fontSize: 22, fontWeight: 500 }}>
+        {label}
+      </span>
+      <span className="absolute left-[58px] top-[43px] max-w-[220px] truncate leading-none" style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 15, fontWeight: 300 }}>
+        {description}
+      </span>
+      <span className="absolute left-[262px] top-[22px] h-[17px] w-[17px]" aria-hidden>
+        <span className="absolute left-0 top-[8px] h-[2px] w-[17px] rounded-full bg-current" />
+        <span className="absolute left-[8px] top-0 h-[17px] w-[2px] rounded-full bg-current" />
+      </span>
+    </button>
+  )
+}
+
 function QuickActions({
   onCreateProject,
   onCreateFile,
@@ -1538,6 +1684,8 @@ export default function TemplateWorkbench({
   onOpenWorkbenchCanvas,
   onSelectSection,
   onReturnToSource,
+  onPackageTemplate,
+  onPublishTemplate,
 }: TemplateWorkbenchProps) {
   const [activeSection, setActiveSection] = useState<TemplateWorkbenchSection>('my-templates')
   const [layoutMode, setLayoutMode] = useState<TemplateWorkbenchLayout>(() => readLayoutCookie())
@@ -1575,8 +1723,10 @@ export default function TemplateWorkbench({
   const [searchQuery, setSearchQuery] = useState('')
   const [exactSearchEnabled, setExactSearchEnabled] = useState(false)
   const [starredSequences, setStarredSequences] = useState<string[]>(() => readStarredFlowsCookie())
+  const [selectedPackageTemplateId, setSelectedPackageTemplateId] = useState<string | null>(null)
 
   const starredSequenceSet = useMemo(() => new Set(starredSequences), [starredSequences])
+  const isPackagePublishPage = activeSection === 'package-publish'
 
   const persistStarredSequences = useCallback((values: string[]) => {
     const uniqueValues = Array.from(new Set(values.filter(Boolean)))
@@ -1643,6 +1793,7 @@ export default function TemplateWorkbench({
 
   const contentItems = useMemo(() => {
     if (activeSection === 'starred') return starredFlowItems
+    if (activeSection === 'package-publish') return deploymentFlowItems
     if (route.type === 'home') return projectItems
     if (!selectedProject) return []
     const currentDir = normalizeWorkbenchPath(route.dir)
@@ -1692,7 +1843,7 @@ export default function TemplateWorkbench({
       ...folderItems,
       ...directFileItems,
     ]
-  }, [activeSection, projectItems, route, selectedProject, coverVersion, starredFlowItems])
+  }, [activeSection, projectItems, route, selectedProject, coverVersion, starredFlowItems, deploymentFlowItems])
 
   const globalSearchItems = useMemo(() => {
     if (items) return items
@@ -1726,12 +1877,17 @@ export default function TemplateWorkbench({
 
   const visibleContentItems = useMemo(() => {
     const trimmedQuery = searchQuery.trim()
+    const searchSource = isPackagePublishPage ? deploymentFlowItems : globalSearchItems
     if (!trimmedQuery) return contentItems
-    if (exactSearchEnabled) return globalSearchItems.filter(item => item.name === searchQuery)
+    if (exactSearchEnabled) return searchSource.filter(item => item.name === searchQuery)
 
     const fuzzyQuery = trimmedQuery.toLowerCase()
-    return globalSearchItems.filter(item => item.name.toLowerCase().includes(fuzzyQuery))
-  }, [contentItems, globalSearchItems, searchQuery, exactSearchEnabled])
+    return searchSource.filter(item => item.name.toLowerCase().includes(fuzzyQuery))
+  }, [contentItems, deploymentFlowItems, globalSearchItems, isPackagePublishPage, searchQuery, exactSearchEnabled])
+
+  const selectedPackageTemplate = useMemo(() => (
+    deploymentFlowItems.find(item => item.id === selectedPackageTemplateId) ?? null
+  ), [deploymentFlowItems, selectedPackageTemplateId])
 
   const cardLayout = useMemo(
     () => visibleContentItems.map((_, index) => ({
@@ -1795,13 +1951,40 @@ export default function TemplateWorkbench({
     if (next.length !== starredSequences.length) persistStarredSequences(next)
   }, [persistStarredSequences, registeredProjects, starredSequences])
 
+  useEffect(() => {
+    if (!selectedPackageTemplateId) return
+    if (deploymentFlowItems.some(item => item.id === selectedPackageTemplateId)) return
+    setSelectedPackageTemplateId(null)
+  }, [deploymentFlowItems, selectedPackageTemplateId])
+
   const selectSection = (section: TemplateWorkbenchSection) => {
     setActiveSection(section)
     setRoute({ type: 'home' })
+    setCreateMenuOpen(false)
     onSelectSection?.(section)
   }
 
+  const selectPackageTemplate = (item: TemplateWorkbenchItem) => {
+    if (!isDeploymentFlowItem(item)) return
+    setActionError(null)
+    setSelectedPackageTemplateId(item.id)
+  }
+
+  const handlePackageTemplateAction = (action: 'package' | 'publish') => {
+    if (!selectedPackageTemplate) {
+      setActionError('请先选择一个模板。')
+      return
+    }
+    setActionError(null)
+    if (action === 'package') {
+      onPackageTemplate?.(selectedPackageTemplate)
+      return
+    }
+    onPublishTemplate?.(selectedPackageTemplate)
+  }
+
   const createDeploymentProject = () => {
+    if (isPackagePublishPage) return
     setActionError(null)
     setCreateProjectDialogOpen(true)
   }
@@ -1994,6 +2177,10 @@ export default function TemplateWorkbench({
   }
 
   const openItem = async (item: TemplateWorkbenchItem) => {
+    if (isPackagePublishPage) {
+      selectPackageTemplate(item)
+      return
+    }
     onOpenItem?.(item)
     if (item.role === 'project' && item.sequence && item.displayMode === 'folder') {
       setRoute({ type: 'project', sequence: item.sequence, dir: '' })
@@ -2250,8 +2437,8 @@ export default function TemplateWorkbench({
           </button>
         ))}
 
-        <div className="absolute left-[25px] top-[278px] h-px w-[300px]" style={{ background: 'var(--twb-border)' }} />
-        <div className="absolute flex items-center" style={{ left: 17, top: 296, width: 316, height: 40, color: 'var(--twb-text)' }}>
+        <div className="absolute left-[25px] top-[331px] h-px w-[300px]" style={{ background: 'var(--twb-border)' }} />
+        <div className="absolute flex items-center" style={{ left: 17, top: 349, width: 316, height: 40, color: 'var(--twb-text)' }}>
           <button
             type="button"
             onClick={() => selectSection('starred')}
@@ -2276,17 +2463,24 @@ export default function TemplateWorkbench({
         </div>
 
         {starredFlowItems.length > 0 && (
-          <div className="absolute left-[54px] top-[348px] flex max-h-[240px] w-[260px] flex-col gap-[6px] overflow-y-auto">
+          <div className="absolute left-[54px] top-[401px] flex max-h-[240px] w-[260px] flex-col gap-[6px] overflow-y-auto">
             {starredFlowItems.map(item => (
               <button
                 key={item.sequence ?? item.id}
                 type="button"
                 onClick={() => openItem(item)}
                 onDoubleClick={() => {
+                  if (isPackagePublishPage) return
                   if (item.sequence) onOpenWorkbenchCanvas?.(item.sequence)
                 }}
                 className="truncate rounded-[4px] px-[8px] py-[4px] text-left transition-colors hover:bg-[var(--twb-hover)]"
-                style={{ color: 'var(--twb-text)', fontFamily: font, fontSize: 16, fontWeight: 400 }}
+                style={{
+                  color: 'var(--twb-text)',
+                  fontFamily: font,
+                  fontSize: 16,
+                  fontWeight: 400,
+                  background: isPackagePublishPage && selectedPackageTemplateId === item.id ? packageSelectionBackground : undefined,
+                }}
                 title={item.name}
               >
                 {item.name}
@@ -2301,16 +2495,20 @@ export default function TemplateWorkbench({
       <header className="absolute left-[350px] top-0 z-10 h-[71px] w-[1570px] border-b" style={{ borderColor: 'var(--twb-border)' }}>
         <button
           type="button"
-          onClick={() => setCreateMenuOpen(prev => !prev)}
-          className="absolute flex items-center justify-center transition-colors hover:bg-[var(--twb-hover)]"
-          style={{ left: 18, top: 19, width: 33, height: 33, color: 'var(--twb-text)' }}
-          aria-label="打开新建菜单"
+          onClick={() => {
+            if (isPackagePublishPage) return
+            setCreateMenuOpen(prev => !prev)
+          }}
+          disabled={isPackagePublishPage}
+          className="absolute flex items-center justify-center transition-colors enabled:hover:bg-[var(--twb-hover)] disabled:cursor-not-allowed"
+          style={{ left: 18, top: 19, width: 33, height: 33, color: 'var(--twb-text)', opacity: isPackagePublishPage ? 0.35 : 1 }}
+          aria-label={isPackagePublishPage ? '新建功能在打包与发布页不可用' : '打开新建菜单'}
           aria-expanded={createMenuOpen}
         >
           <Plus size={32} />
         </button>
         <CreateMenu
-          open={createMenuOpen}
+          open={!isPackagePublishPage && createMenuOpen}
           onCreateFile={openNewFileDialog}
           onCreateTemplate={createDeploymentProject}
           onCreateFolder={openCreateFolderDialog}
@@ -2323,7 +2521,7 @@ export default function TemplateWorkbench({
             <Search size={30} className="ml-[10px]" />
             <input
               className="ml-[10px] min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--twb-muted)]"
-              placeholder="搜索项目、文件、文件夹"
+              placeholder={isPackagePublishPage ? '搜索模板文件' : '搜索项目、文件、文件夹'}
               value={searchQuery}
               onChange={event => setSearchQuery(event.target.value)}
               style={{ color: 'var(--twb-text)', fontFamily: font, fontSize: 20, fontWeight: 300 }}
@@ -2408,17 +2606,24 @@ export default function TemplateWorkbench({
           mode={contentHeaderMode}
           breadcrumbs={contentBreadcrumbs}
           onBreadcrumbClick={navigateToBreadcrumb}
-          title="全部项目"
+          title={isPackagePublishPage ? '打包与发布' : '全部项目'}
           secondaryLabel="回收站"
           onSecondaryClick={() => setTrashDialogOpen(true)}
         />
 
-        <QuickActions
-          onCreateProject={createDeploymentProject}
-          onCreateFile={openNewFileDialog}
-          onCreateFolder={openCreateFolderDialog}
-          onUploadProject={openImportDialog}
-        />
+        {isPackagePublishPage ? (
+          <PackageQuickActions
+            onPackageProject={() => handlePackageTemplateAction('package')}
+            onPublishProject={() => handlePackageTemplateAction('publish')}
+          />
+        ) : (
+          <QuickActions
+            onCreateProject={createDeploymentProject}
+            onCreateFile={openNewFileDialog}
+            onCreateFolder={openCreateFolderDialog}
+            onUploadProject={openImportDialog}
+          />
+        )}
 
         {slots?.contentLeading}
 
@@ -2433,6 +2638,7 @@ export default function TemplateWorkbench({
             onContextMenu={handleContextMenu}
             starred={isStarredSequence(item.sequence)}
             onToggleStar={toggleStarredSequence}
+            selected={isPackagePublishPage && item.id === selectedPackageTemplateId}
           />
         ))}
 
@@ -2444,6 +2650,7 @@ export default function TemplateWorkbench({
             onContextMenu={handleContextMenu}
             isStarred={isStarredSequence}
             onToggleStar={toggleStarredSequence}
+            selectedItemId={isPackagePublishPage ? selectedPackageTemplateId : null}
           />
         )}
 
