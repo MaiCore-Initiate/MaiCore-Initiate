@@ -1560,10 +1560,10 @@ function PackageQuickActionButton({
       <span className="absolute left-[5px] top-[10px] flex h-[40px] w-[40px] items-center justify-center" aria-hidden>
         {icon}
       </span>
-      <span className="absolute left-[58px] top-[20px] leading-none" style={{ fontFamily: font, fontSize: 22, fontWeight: 500 }}>
+      <span className="absolute left-[58px] top-[10px] leading-none" style={{ fontFamily: font, fontSize: 22, fontWeight: 500 }}>
         {label}
       </span>
-      <span className="absolute left-[58px] top-[43px] max-w-[220px] truncate leading-none" style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 15, fontWeight: 300 }}>
+      <span className="absolute left-[58px] top-[33px] max-w-[220px] truncate leading-none" style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 15, fontWeight: 300 }}>
         {description}
       </span>
       <span className="absolute left-[262px] top-[22px] h-[17px] w-[17px]" aria-hidden>
