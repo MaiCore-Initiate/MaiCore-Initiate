@@ -11,9 +11,9 @@ function ProgressBar({ value, max, color, isDark }: { value: number; max: number
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
   return (
     <div
-      className="h-[17px] rounded-[8.5px] relative"
+      className="h-[17px] min-w-[120px] flex-1 rounded-[8.5px] relative"
       style={{
-        width: 358,
+        maxWidth: 420,
         background: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.18)',
         border: `1px solid ${isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.35)'}`,
         boxShadow: isDark ? 'inset 0 0 0 1px rgba(255,255,255,0.04)' : 'none',
@@ -64,18 +64,18 @@ export default function SystemOverviewCard() {
         <h2 className="pb-[16px]" style={{ ...titleStyle, color: titleColor }}>系统概览</h2>
 
         <div className="space-y-[10px]">
-          <div className="flex items-center gap-[12px]">
+          <div className="flex flex-wrap items-center gap-x-[12px] gap-y-[6px]">
             <span className="shrink-0 w-[80px]" style={{ ...labelFont, color: labelColor }}>内存用量</span>
             <ProgressBar value={memUsed} max={memTotal} color="#f6a7cb" isDark={isDark} />
-            <span className="shrink-0" style={valueFont}>{memUsed}MB/{memTotal}MB</span>
+            <span className="shrink-0 max-w-full truncate" style={valueFont}>{memUsed}MB/{memTotal}MB</span>
           </div>
-          <div className="flex items-center gap-[12px]">
+          <div className="flex flex-wrap items-center gap-x-[12px] gap-y-[6px]">
             <span className="shrink-0 w-[80px]">
               <span style={{ fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace", fontSize: 20, color: labelColor }}>CPU</span>
               <span style={{ ...labelFont, color: labelColor }}>用量</span>
             </span>
             <ProgressBar value={cpuPct} max={100} color="#fff0a0" isDark={isDark} />
-            <span className="shrink-0" style={valueFont}>CPU用量 | {cpuPct.toFixed(0)}% | {cpuCount}核</span>
+            <span className="shrink-0 max-w-full truncate" style={valueFont}>CPU用量 | {cpuPct.toFixed(0)}% | {cpuCount}核</span>
           </div>
         </div>
 
@@ -88,9 +88,9 @@ export default function SystemOverviewCard() {
             ['GPU', info?.gpu],
             ['操作系统', info?.os],
           ] as const).map(([label, val]) => (
-            <div key={label} className="flex items-baseline gap-[20px]">
+            <div key={label} className="flex min-w-0 items-baseline gap-[20px]">
               <span className="shrink-0 w-[80px]" style={{ ...labelFont, color: labelColor }}>{label}</span>
-              <span className="truncate" style={valueFont}>{val ?? '...'}</span>
+              <span className="min-w-0 truncate" style={valueFont}>{val ?? '...'}</span>
             </div>
           ))}
         </div>

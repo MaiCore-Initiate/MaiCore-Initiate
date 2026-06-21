@@ -276,9 +276,9 @@ export default function QuickAccessCard({
             </button>
           </div>
 
-          <div className="flex flex-col items-center gap-[7px]">
+          <div className="flex w-full flex-col items-center gap-[7px]">
             {displayItems.length === 0 ? (
-              <div className="flex items-center justify-center rounded-[30px] border-3 border-dashed border-[#9e9e9e]" style={{ width: 316, height: 60 }}>
+              <div className="flex h-[60px] w-full max-w-[340px] items-center justify-center rounded-[30px] border-3 border-dashed border-[#9e9e9e]">
                 <span className="text-[#9e9e9e] font-semibold text-base" style={{ fontFamily: "'Segoe UI', 'HarmonyOS Sans SC', sans-serif" }}>no accessible items</span>
               </div>
             ) : displayItems.map(item => {
@@ -287,14 +287,15 @@ export default function QuickAccessCard({
                 <button
                   key={item.id}
                   onClick={() => handleItemClick(item)}
-                  className="flex items-center gap-3 cursor-pointer transition-all backdrop-blur-[4px] hover:border-[rgba(112,112,112,0.65)]"
+                  className="flex h-[60px] w-full max-w-[340px] items-center gap-3 cursor-pointer transition-all backdrop-blur-[4px] hover:border-[rgba(112,112,112,0.65)]"
                   style={{
-                    width: 316, height: 60, borderRadius: 30, paddingLeft: 16,
+                    borderRadius: 30, padding: '0 16px',
                     border: `3px solid ${itemBorder}`, background: isDark ? 'rgba(255,255,255,0.04)' : 'transparent',
                   }}
                 >
-                  {Icon && <Icon style={{ color: itemText }} />}
+                  {Icon && <Icon className="shrink-0" style={{ color: itemText }} />}
                   <span
+                    className="min-w-0 truncate"
                     style={{ color: itemText, fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: isDark ? 500 : 400, marginTop: 4 }}
                   >
                     {item.label}

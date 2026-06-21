@@ -204,31 +204,31 @@ export default function InstanceOverviewCard() {
       <div className="p-[33px] flex flex-col h-full">
         <h2 className="pb-[16px]" style={{ ...titleStyle, color: titleColor }}>实例概览</h2>
 
-        <div className="flex flex-1 gap-0">
+        <div className="flex flex-1 flex-wrap gap-y-[18px]">
           {/* 左侧统计 */}
-          <div className="space-y-[6px] pr-[24px]">
+          <div className="min-w-[190px] flex-[0_1_260px] space-y-[6px] pr-[clamp(12px,2vw,24px)]">
             {stats.map(([label, val]) => (
             <div key={label} className="flex items-baseline gap-[16px]">
                 <span className="shrink-0 w-[100px]" style={{ ...labelFont, color: labelColor }}>{label}</span>
-                <span style={valueFont}>{val}</span>
+                <span className="min-w-0 truncate" style={valueFont}>{val}</span>
               </div>
             ))}
           </div>
 
           {/* 分隔线 */}
-          <div className="w-[3px] self-stretch rounded-full shrink-0" style={{ backgroundColor: dividerColor }} />
+          <div className="w-[3px] self-stretch rounded-full shrink-0 max-[1320px]:hidden" style={{ backgroundColor: dividerColor }} />
 
           {/* 右侧常用实例 */}
           <AccessGuard
             allowed={canControlInstances}
-            className="flex-1 pl-[24px] flex flex-col relative"
+            className="min-w-[240px] flex-[1_1_320px] pl-[clamp(0px,2vw,24px)] flex flex-col relative"
             radius={24}
             detail="当前账号可以查看实例统计，但没有快捷启动权限。"
           >
             <span className="mb-[12px]" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: labelColor }}>
               常用实例/快捷启动
             </span>
-            <div className="flex-1 relative">
+            <div className="flex-1 min-h-[74px] relative">
               {displayList.length === 0 ? (
                 <div className="flex items-center justify-center h-full rounded-[20px] border-2 border-dashed border-black/15 relative">
                   <span className="text-black/20" style={{ fontSize: 20, fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }}>No instances</span>
@@ -245,12 +245,12 @@ export default function InstanceOverviewCard() {
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-wrap gap-[10px]">
+                  <div className="flex flex-wrap gap-[10px] pr-[56px]">
                     {displayList.slice(0, 6).map(inst => (
                       <div
                         key={inst.serial}
                         onClick={() => quickLaunch(inst.serial)}
-                        className="flex items-center gap-[8px] px-[16px] h-[40px] rounded-[20px] border-2 border-[#707070] cursor-pointer hover:bg-white/30 transition-all"
+                        className="min-w-0 max-w-full flex items-center gap-[8px] px-[16px] h-[40px] rounded-[20px] border-2 border-[#707070] cursor-pointer hover:bg-white/30 transition-all"
                         style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))', opacity: launching === inst.serial ? 0.5 : 1, borderColor: pillBorder, color: pillText, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}
                       >
                         {launching === inst.serial && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black/50 shrink-0" />}

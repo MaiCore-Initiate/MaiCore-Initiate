@@ -1326,69 +1326,71 @@ export default function DashboardChartCard() {
 
   return (
     <GlassCard bgOpacity={isDark ? 0.72 : 0.45} borderColor={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.5)'}>
-      <div className="px-[24px] py-[20px] flex h-full gap-[16px]">
+      <div className="flex h-full min-h-0 flex-col gap-[14px] px-[clamp(16px,1.5vw,24px)] py-[clamp(16px,1.25vw,20px)] xl:flex-row xl:gap-[16px]">
         {/* 左侧面板 */}
-        <div className="flex flex-col shrink-0" style={{ width: 150 }}>
+        <div className="flex min-w-0 shrink-0 flex-col xl:w-[150px]">
           <h2 className="pb-[12px]" style={{ ...titleStyle, color: isDark ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.92)' }}>仪表盘</h2>
 
-          <div className="flex flex-col gap-[4px] mb-[16px]">
-            <span style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.68)' : '#707070' }}>时间粒度</span>
-            <div className="flex rounded-full overflow-hidden" style={{ border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`, width: 'fit-content', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
-              {granularities.map((g) => (
-                <button key={g} onClick={() => setGranularity(g)} className="transition-all cursor-pointer flex items-center justify-center" style={pillBtn(granularity === g)}>{g}</button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-[4px]">
-            <span style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.68)' : '#707070' }}>区分实例</span>
-            <div className="flex rounded-full overflow-hidden" style={{ border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`, width: 'fit-content', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
-              {(['关', '开'] as const).map((opt) => (
-                <button key={opt} onClick={() => setSplitByInstance(opt === '开')} className="transition-all cursor-pointer flex items-center justify-center" style={pillBtn((opt === '开') === splitByInstance)}>{opt}</button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-[4px] mt-[16px]">
-            <span style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.68)' : '#707070' }}>筛选实例</span>
-            <button
-              ref={pickerBtnRef}
-              onClick={() => { setShowInstancePicker((v) => !v); setInstanceSearch('') }}
-              className="cursor-pointer text-center truncate"
-              style={{
-                ...labelFont, fontSize: 16, color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.7)',
-                border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`, borderRadius: 30,
-                padding: '5px 14px', background: isDark ? 'rgba(255,255,255,0.08)' : '#ffffff36', width: 145,
-                filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))',
-              }}
-            >{selectedInstanceLabel}</button>
-          </div>
-
-          <div className="mt-auto flex flex-col gap-[4px] pt-[12px]">
-            {series.map((s, si) => (
-              <div key={`leg${si}`} className="flex items-center gap-[4px]">
-                <div
-                  className="w-[10px] h-[10px] rounded-[2px]"
-                  style={{
-                    background: INSTANCE_COLORS[s.colorIdx].bar,
-                    border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}`,
-                  }}
-                />
-                <svg width="14" height="7" viewBox="0 0 14 7">
-                  <path d="M0,5 C3,5 4,2 7,2 C10,2 11,5 14,5" fill="none" stroke={INSTANCE_COLORS[s.colorIdx].line} strokeWidth={1.5} />
-                </svg>
-                <span style={{ ...labelFont, fontSize: 11, color: isDark ? 'rgba(255,255,255,0.52)' : 'rgba(0,0,0,0.45)' }}>
-                  {getInstanceDisplayName(s.id, instanceInfo)}
-                </span>
+          <div className="flex min-w-0 flex-wrap gap-x-[18px] gap-y-[10px] xl:block">
+            <div className="flex flex-col gap-[4px] xl:mb-[16px]">
+              <span style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.68)' : '#707070' }}>时间粒度</span>
+              <div className="flex rounded-full overflow-hidden" style={{ border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`, width: 'fit-content', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                {granularities.map((g) => (
+                  <button key={g} onClick={() => setGranularity(g)} className="transition-all cursor-pointer flex items-center justify-center" style={pillBtn(granularity === g)}>{g}</button>
+                ))}
               </div>
-            ))}
+            </div>
+
+            <div className="flex flex-col gap-[4px]">
+              <span style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.68)' : '#707070' }}>区分实例</span>
+              <div className="flex rounded-full overflow-hidden" style={{ border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`, width: 'fit-content', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
+                {(['关', '开'] as const).map((opt) => (
+                  <button key={opt} onClick={() => setSplitByInstance(opt === '开')} className="transition-all cursor-pointer flex items-center justify-center" style={pillBtn((opt === '开') === splitByInstance)}>{opt}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex min-w-[145px] flex-col gap-[4px] xl:mt-[16px]">
+              <span style={{ ...labelFont, fontSize: 17, color: isDark ? 'rgba(255,255,255,0.68)' : '#707070' }}>筛选实例</span>
+              <button
+                ref={pickerBtnRef}
+                onClick={() => { setShowInstancePicker((v) => !v); setInstanceSearch('') }}
+                className="max-w-[220px] cursor-pointer truncate text-center"
+                style={{
+                  ...labelFont, fontSize: 16, color: isDark ? 'rgba(255,255,255,0.82)' : 'rgba(0,0,0,0.7)',
+                  border: `2px solid ${isDark ? 'rgba(255,255,255,0.3)' : '#707070'}`, borderRadius: 30,
+                  padding: '5px 14px', background: isDark ? 'rgba(255,255,255,0.08)' : '#ffffff36', width: '100%',
+                  filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))',
+                }}
+              >{selectedInstanceLabel}</button>
+            </div>
+
+            <div className="flex min-w-0 flex-wrap gap-x-[8px] gap-y-[4px] pt-[6px] xl:mt-auto xl:flex-col xl:flex-nowrap xl:pt-[12px]">
+              {series.map((s, si) => (
+                <div key={`leg${si}`} className="flex min-w-0 items-center gap-[4px]">
+                  <div
+                    className="h-[10px] w-[10px] shrink-0 rounded-[2px]"
+                    style={{
+                      background: INSTANCE_COLORS[s.colorIdx].bar,
+                      border: `1px solid ${isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}`,
+                    }}
+                  />
+                  <svg width="14" height="7" viewBox="0 0 14 7" className="shrink-0">
+                    <path d="M0,5 C3,5 4,2 7,2 C10,2 11,5 14,5" fill="none" stroke={INSTANCE_COLORS[s.colorIdx].line} strokeWidth={1.5} />
+                  </svg>
+                  <span className="min-w-0 max-w-[120px] truncate" style={{ ...labelFont, fontSize: 11, color: isDark ? 'rgba(255,255,255,0.52)' : 'rgba(0,0,0,0.45)' }}>
+                    {getInstanceDisplayName(s.id, instanceInfo)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* 右侧图表 */}
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="mb-[2px] flex items-center justify-between gap-3" style={{ paddingLeft: 55 }}>
-            <span style={{ ...labelFont, fontSize: 20, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)' }}>
+        <div className="flex min-h-[210px] flex-1 min-w-0 flex-col">
+          <div className="mb-[2px] flex items-center justify-between gap-3 xl:pl-[55px]">
+            <span className="min-w-0 truncate" style={{ ...labelFont, fontSize: 20, color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)' }}>
               启动次数/启动时间({timeUnit})
             </span>
             <button
