@@ -21,6 +21,7 @@ from ..modules.deployment_core import (
 )
 from ..core.config import config_manager
 from .auth_core import require_action
+from .published_templates import get_instance_publish_state
 
 router = APIRouter()
 
@@ -303,6 +304,7 @@ async def get_all_instances():
         
         instances = []
         for name, config in configs.items():
+            publish_state = get_instance_publish_state(config)
             instances.append({
                 "id": name,
                 "serial_number": config.get("serial_number", ""),
@@ -324,6 +326,7 @@ async def get_all_instances():
                 "deployment_profile": config.get("deployment_profile", {}),
                 "component_bindings": config.get("component_bindings", []),
                 "template_inputs": config.get("template_inputs", {}),
+                **{key: value for key, value in publish_state.items() if key != "deployment_flow_record"},
             })
         
         return {
@@ -343,6 +346,7 @@ async def get_instance_detail(serial_number: str):
         
         for name, config in configs.items():
             if config.get("serial_number") == serial_number:
+                publish_state = get_instance_publish_state(config)
                 return {
                     "success": True,
                     "instance": {
@@ -366,7 +370,8 @@ async def get_instance_detail(serial_number: str):
                         "mod_binding": config.get("mod_binding", {}),
                         "deployment_profile": config.get("deployment_profile", {}),
                         "component_bindings": config.get("component_bindings", []),
-                        "template_inputs": config.get("template_inputs", {})
+                        "template_inputs": config.get("template_inputs", {}),
+                        **{key: value for key, value in publish_state.items() if key != "deployment_flow_record"},
                     }
                 }
         
@@ -439,6 +444,11 @@ async def delete_instance(serial_number: str):
         
         # 返回实例信息供确认
         config = configs[config_key]
+        publish_state = get_instance_publish_state(config)
+        if publish_state["is_published_template"]:
+            if not publish_state["published_active"]:
+                raise HTTPException(status_code=403, detail="该实例所属部署流已取消发布，不能删除")
+            raise HTTPException(status_code=400, detail="该实例由部署流管理，请通过部署流卸载逻辑删除")
         return {
             "success": True,
             "confirm_required": True,
@@ -462,6 +472,16 @@ async def confirm_delete_instance(serial_number: str, request: DeleteInstanceReq
     try:
         if request.serial_number != serial_number:
             raise HTTPException(status_code=400, detail="序列号不匹配")
+
+        configs = config_manager.get_all_configurations()
+        for config in configs.values():
+            if config.get("serial_number") == serial_number:
+                publish_state = get_instance_publish_state(config)
+                if publish_state["is_published_template"]:
+                    if not publish_state["published_active"]:
+                        raise HTTPException(status_code=403, detail="该实例所属部署流已取消发布，不能删除")
+                    raise HTTPException(status_code=400, detail="该实例由部署流管理，请通过部署流卸载逻辑删除")
+                break
 
         result = deployment_manager.delete_instance_webui(
             serial_number, request.confirm_nickname, request.backup

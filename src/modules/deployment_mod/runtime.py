@@ -276,6 +276,61 @@ class DeploymentModRuntime:
             self._notify(state, 6, 6, "模板运行失败", "failed", str(exc))
             return self._build_runtime_result(state, success=False, message=str(exc), stage="full")
 
+    def execute_deployment_setup(
+        self,
+        template: TemplateDefinition,
+        plan: DeploymentPlan,
+        progress_callback: Optional[Callable] = None,
+        debug_controller: Optional[Any] = None,
+    ) -> RuntimeResult:
+        """执行发布部署流的安装阶段：组件、部署、实例注册。"""
+        runtime_root = os.path.join(
+            os.getcwd(),
+            "data",
+            "template_runtime",
+            f"{template.metadata.mod_id.replace('.', '_')}_deploy_{int(time.time())}",
+        )
+        os.makedirs(runtime_root, exist_ok=True)
+
+        state = RuntimeState(
+            template=template,
+            plan=plan,
+            progress_callback=progress_callback,
+            runtime_root=runtime_root,
+            instance_serial_number=str(plan.template_inputs.get("serial_number", "") or ""),
+            runtime_log_file=os.path.join(runtime_root, "execution.log"),
+            debug_controller=debug_controller,
+        )
+
+        try:
+            self._debug_wait(state)
+            self._notify(state, 1, 4, "准备部署流运行时", "running", f"模板: {template.metadata.mod_name}")
+            self._notify(state, 1, 4, "准备部署流运行时", "running", f"运行时目录: {runtime_root}", event="detail")
+            self._notify(state, 1, 4, "准备部署流运行时", "running", f"执行日志: {state.runtime_log_file}", event="detail")
+            self._prepare_file_imports(state)
+            self._hydrate_template_inputs(state)
+
+            self._notify(state, 2, 4, "组件安装阶段", "running", "开始执行组件安装阶段")
+            self._execute_components(state)
+
+            self._notify(state, 3, 4, "部署阶段", "running", "开始执行部署阶段")
+            self._execute_deployments(state)
+
+            instance_config_name, instance_config = self._persist_instance_config(state)
+            self._notify(state, 4, 4, "实例注册完成", "completed", "部署流实例已注册")
+            return self._build_runtime_result(
+                state,
+                success=True,
+                message="部署流部署成功",
+                stage="deployments",
+                instance_config_name=instance_config_name,
+                instance_config=instance_config,
+            )
+        except Exception as exc:
+            logger.error("部署流安装失败", template_id=template.metadata.mod_id, error=str(exc))
+            self._notify(state, 4, 4, "部署流安装失败", "failed", str(exc))
+            return self._build_runtime_result(state, success=False, message=str(exc), stage="deployments")
+
     def execute_stage(
         self,
         template: TemplateDefinition,

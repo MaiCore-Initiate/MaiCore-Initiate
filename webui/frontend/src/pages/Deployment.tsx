@@ -7,6 +7,8 @@ interface VersionInfo { name: string; display_name: string; type: string; [k: st
 interface Instance {
   id: string; serial_number: string; nickname: string; bot_type: string
   version: string; qq_account: string; mai_path: string; mofox_path: string; neo_mofox_path: string
+  is_published_template?: boolean; published_active?: boolean; deployment_flow_name?: string
+  deployment_flow_sequence?: string; deployment_profile?: Record<string, any>
 }
 interface DeployProgress {
   task_id: string; step: number; total_steps: number; step_name: string
@@ -14,6 +16,44 @@ interface DeployProgress {
 }
 
 type SelectOption = { value: string; label: string; disabled?: boolean }
+type DeployTab = 'deploy' | 'update' | 'delete' | 'flow'
+
+interface PublishedFlowSummary {
+  sequence: string
+  template_id: string
+  name: string
+  version: string
+  description: string
+  author: string
+  cover?: string | null
+  published?: boolean
+  invalid?: boolean
+  invalid_reason?: string
+  component_count?: number
+  deployment_count?: number
+  launch_count?: number
+  config_count?: number
+  uninstall_count?: number
+}
+
+interface TemplateFormField {
+  key: string
+  label: string
+  field_type: 'text' | 'select' | 'boolean' | 'hidden'
+  required?: boolean
+  default?: any
+  options?: Array<{ label: string; value: string }>
+  description?: string
+}
+
+interface PublishedFlowDetail extends PublishedFlowSummary {
+  form?: { fields?: TemplateFormField[] }
+  components?: Array<Record<string, any>>
+  deployments?: Array<Record<string, any>>
+  launches?: Array<Record<string, any>>
+  configs?: Array<Record<string, any>>
+  uninstalls?: Array<Record<string, any>>
+}
 
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
@@ -542,6 +582,273 @@ function ToggleItem({ label, checked, onChange }: { label: string; checked: bool
   )
 }
 
+function FormFieldInput({ field, value, onChange, disabled }: {
+  field: TemplateFormField
+  value: any
+  onChange: (value: any) => void
+  disabled?: boolean
+}) {
+  if (field.field_type === 'hidden') return null
+  if (field.field_type === 'boolean') {
+    return (
+      <div className="flex flex-col gap-[4px]">
+        <ToggleItem label={field.label} checked={Boolean(value)} onChange={onChange} />
+        {field.description && <span style={{ ...monoFont, fontSize: 16, color: 'var(--mc-text-muted)' }}>{field.description}</span>}
+      </div>
+    )
+  }
+  if (field.field_type === 'select') {
+    return (
+      <div className="flex flex-col gap-[6px]">
+        <span style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>{field.label}{field.required ? ' *' : ''}</span>
+        <CustomSelect
+          value={String(value ?? '')}
+          onChange={onChange}
+          disabled={disabled}
+          options={(field.options ?? []).map(option => ({ value: String(option.value), label: option.label || String(option.value) }))}
+          placeholder="请选择"
+        />
+        {field.description && <span style={{ ...monoFont, fontSize: 16, color: 'var(--mc-text-muted)' }}>{field.description}</span>}
+      </div>
+    )
+  }
+  return (
+    <InputField
+      label={`${field.label}${field.required ? ' *' : ''}`}
+      value={String(value ?? '')}
+      onChange={onChange}
+      placeholder={field.description || field.label}
+      disabled={disabled}
+    />
+  )
+}
+
+function buildInitialInputs(fields: TemplateFormField[]) {
+  const values: Record<string, any> = {}
+  fields.forEach(field => {
+    if (field.default !== undefined && field.default !== null) values[field.key] = field.default
+    else if (field.field_type === 'boolean') values[field.key] = false
+    else values[field.key] = ''
+  })
+  return values
+}
+
+function flowCoverUrl(flow: PublishedFlowSummary | PublishedFlowDetail) {
+  return flow.cover ? `/api/template-workbench/projects/${encodeURIComponent(flow.sequence)}/cover` : ''
+}
+
+function isDeploymentSetupField(field: TemplateFormField) {
+  const key = String(field.key || '')
+  if (field.field_type === 'hidden') return false
+  if (key.startsWith('component::')) return false
+  if (key.startsWith('launch::') || key.startsWith('config::') || key.startsWith('uninstall::')) return false
+  if (/^(path|version|link)::(launch|config|uninstall)::/.test(key)) return false
+  return true
+}
+
+function DeploymentFlowTab() {
+  const { notify } = useNotification()
+  const [flows, setFlows] = useState<PublishedFlowSummary[]>([])
+  const [detail, setDetail] = useState<PublishedFlowDetail | null>(null)
+  const [inputs, setInputs] = useState<Record<string, any>>({})
+  const [step, setStep] = useState(1)
+  const [taskId, setTaskId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  const allFields = detail?.form?.fields ?? []
+  const componentFields = allFields.filter(field => field.key.startsWith('component::'))
+  const infoFields = allFields.filter(isDeploymentSetupField)
+  const forcedComponents = (detail?.components ?? []).filter(component => !component.choose)
+  const selectableComponentIds = new Set(componentFields.map(field => field.key.replace(/^component::/, '')))
+
+  useEffect(() => {
+    setLoading(true)
+    fetch('/api/deployment-mod/published', { credentials: 'include' })
+      .then(async res => {
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || data.success === false) throw new Error(data.detail || '读取部署流失败')
+        setFlows(data.templates ?? [])
+      })
+      .catch((err: any) => notify(err?.message || '读取部署流失败', 'error'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const loadDetail = async (sequence: string) => {
+    setDetailLoading(true)
+    try {
+      const res = await fetch(`/api/deployment-mod/published/${encodeURIComponent(sequence)}`, { credentials: 'include' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data.detail || '读取部署流详情失败')
+      const nextDetail = data.template as PublishedFlowDetail
+      setDetail(nextDetail)
+      const nextInputs = buildInitialInputs(nextDetail.form?.fields ?? [])
+      nextInputs.nickname = nextInputs.nickname || ''
+      nextInputs.serial_number = nextInputs.serial_number || ''
+      setInputs(nextInputs)
+      setStep(2)
+    } catch (err: any) {
+      notify(err?.message || '读取部署流详情失败', 'error')
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const setInputValue = (key: string, value: any) => {
+    setInputs(prev => ({ ...prev, [key]: value }))
+  }
+
+  const canContinueInfo = infoFields.every(field => {
+    if (!field.required) return true
+    const value = inputs[field.key]
+    return value !== undefined && value !== null && String(value).trim() !== ''
+  })
+
+  const handleDeploy = async () => {
+    if (!detail) return
+    try {
+      const res = await fetch(`/api/deployment-mod/published/${encodeURIComponent(detail.sequence)}/deploy`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_inputs: inputs }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data.detail || data.message || '部署流启动失败')
+      setTaskId(data.task_id)
+      setStep(4)
+    } catch (err: any) {
+      notify(err?.message || '部署流启动失败', 'error')
+    }
+  }
+
+  const reset = () => {
+    setDetail(null)
+    setInputs({})
+    setStep(1)
+    setTaskId(null)
+  }
+
+  if (step === 4 && taskId) {
+    return <ProgressPanel taskId={taskId} onDone={reset} />
+  }
+
+  return (
+    <div className="flex flex-col gap-[18px] h-full min-h-0 overflow-y-auto custom-scrollbar pr-[4px]">
+      <div className="flex gap-[12px] items-center animate-fade-slide-up">
+        {['选择部署流', '信息输入', '组件选择', '执行结果'].map((name, index) => (
+          <div key={name} className="flex items-center gap-[6px]">
+            <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center text-white font-bold"
+              style={{ background: step > index + 1 ? '#22c55e' : step === index + 1 ? '#3b82f6' : 'var(--mc-control-solid)', fontSize: 15 }}>
+              {step > index + 1 ? '✓' : index + 1}
+            </div>
+            <span style={{ ...smallLabel, color: step === index + 1 ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }}>{name}</span>
+            {index < 3 && <div className="w-[24px] h-[2px]" style={{ background: 'var(--mc-border-soft)' }} />}
+          </div>
+        ))}
+      </div>
+
+      {step === 1 && (
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-[16px]">
+          {loading ? (
+            <div className="col-span-full flex items-center gap-[10px] h-[100px] justify-center">
+              <div className="w-[22px] h-[22px] rounded-full animate-spin" style={{ border: '3px solid var(--mc-loading-ring)', borderTopColor: 'var(--mc-loading-ring-active)' }} />
+              <span style={{ ...monoFont, color: 'var(--mc-text-faint)' }}>正在加载部署流...</span>
+            </div>
+          ) : flows.length === 0 ? (
+            <div className="col-span-full rounded-[20px] border-3 border-dashed p-[40px] text-center" style={{ borderColor: 'var(--mc-empty-border)' }}>
+              <span style={{ ...monoFont, color: 'var(--mc-empty-text)' }}>暂无已发布部署流</span>
+            </div>
+          ) : flows.map((flow, index) => {
+            const cover = flowCoverUrl(flow)
+            return (
+              <button
+                key={flow.sequence}
+                type="button"
+                disabled={Boolean(flow.invalid) || detailLoading}
+                onClick={() => void loadDetail(flow.sequence)}
+                className="min-h-[190px] rounded-[18px] overflow-hidden text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed animate-fade-slide-up transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                style={{ animationDelay: `${index * 50}ms`, background: 'var(--mc-panel-bg-soft)', border: '2px solid var(--mc-border-soft)' }}
+              >
+                <div className="h-[88px] bg-cover bg-center flex items-center justify-center" style={{ backgroundImage: cover ? `url("${cover}")` : undefined, backgroundColor: 'var(--mc-control-bg-soft)' }}>
+                  {!cover && <span style={{ ...sectionTitle, color: 'var(--mc-text-faint)' }}>MOD</span>}
+                </div>
+                <div className="p-[14px] flex flex-col gap-[4px]">
+                  <span className="truncate" style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>{flow.name || flow.template_id}</span>
+                  <span style={{ ...monoFont, fontSize: 16, color: 'var(--mc-text-secondary)' }}>版本：{flow.version || '-'}</span>
+                  <span className="line-clamp-2" style={{ ...monoFont, fontSize: 15, color: flow.invalid ? '#dc2626' : 'var(--mc-text-muted)' }}>
+                    {flow.invalid ? flow.invalid_reason : (flow.description || '无描述')}
+                  </span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {step === 2 && detail && (
+        <div className="flex flex-col gap-[16px] animate-fade-slide-up">
+          <h3 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>{detail.name}</h3>
+          <div className="grid grid-cols-2 gap-[16px]">
+            {infoFields.map(field => (
+              <FormFieldInput key={field.key} field={field} value={inputs[field.key]} onChange={value => setInputValue(field.key, value)} />
+            ))}
+          </div>
+          {infoFields.length === 0 && (
+            <span style={{ ...monoFont, color: 'var(--mc-text-muted)' }}>该部署流不需要额外信息。</span>
+          )}
+          <div className="flex gap-[12px]">
+            <button onClick={() => setStep(1)} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer" style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
+              <span style={smallLabel}>上一步</span>
+            </button>
+            <button disabled={!canContinueInfo} onClick={() => setStep(3)} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" style={{ background: 'rgba(74,222,128,0.3)', border: '2px solid var(--mc-border-strong)' }}>
+              <span style={smallLabel}>下一步</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && detail && (
+        <div className="flex flex-col gap-[16px] animate-fade-slide-up">
+          <h3 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>组件选择</h3>
+          {componentFields.length > 0 ? (
+            <div className="flex flex-col gap-[10px]">
+              {componentFields.map(field => (
+                <FormFieldInput key={field.key} field={field} value={inputs[field.key]} onChange={value => setInputValue(field.key, value)} />
+              ))}
+            </div>
+          ) : (
+            <span style={{ ...monoFont, color: 'var(--mc-text-muted)' }}>该部署流没有用户可选组件。</span>
+          )}
+          {forcedComponents.length > 0 && (
+            <div className="rounded-[16px] p-[16px]" style={{ background: 'var(--mc-panel-bg-soft)', border: '1px solid var(--mc-border-soft)' }}>
+              <span style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>强制安装或检查的组件</span>
+              <div className="mt-[8px] flex flex-wrap gap-[8px]">
+                {forcedComponents.map(component => (
+                  <span key={String(component.id || component.name)} className="rounded-[12px] px-[12px] py-[4px]" style={{ ...monoFont, fontSize: 16, background: 'var(--mc-control-bg-soft)', color: 'var(--mc-text-secondary)', border: '1px solid var(--mc-border-soft)' }}>
+                    {String(component.name || component.id)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {(detail.components ?? []).filter(component => component.choose && !selectableComponentIds.has(String(component.id))).length > 0 && (
+            <span style={{ ...monoFont, fontSize: 16, color: 'var(--mc-text-muted)' }}>部分可选组件不是安装项，已按模板默认逻辑处理。</span>
+          )}
+          <div className="flex gap-[12px]">
+            <button onClick={() => setStep(2)} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer" style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
+              <span style={smallLabel}>上一步</span>
+            </button>
+            <button onClick={handleDeploy} className="h-[50px] px-[32px] rounded-[25px] cursor-pointer" style={{ background: 'rgba(74,222,128,0.3)', border: '2px solid var(--mc-border-strong)' }}>
+              <span style={smallLabel}>开始部署</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── 子标签页2：更新实例 ─── */
 function UpdateTab() {
   const { notify } = useNotification()
@@ -694,6 +1001,7 @@ function DeleteTab() {
   const [deleting, setDeleting] = useState(false)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [taskId, setTaskId] = useState<string | null>(null)
 
   const reload = () => {
     setLoading(true)
@@ -704,6 +1012,11 @@ function DeleteTab() {
           id, serial_number: cfg.serial_number || '', nickname: cfg.nickname || cfg.serial_number || '',
           bot_type: cfg.bot_type || 'MaiBot', version: cfg.version || '', qq_account: cfg.qq_account || '',
           mai_path: cfg.mai_path || '', mofox_path: cfg.mofox_path || '', neo_mofox_path: cfg.neo_mofox_path || '',
+          is_published_template: Boolean(cfg.is_published_template),
+          published_active: cfg.published_active !== false,
+          deployment_flow_name: cfg.deployment_flow_name || '',
+          deployment_flow_sequence: cfg.deployment_flow_sequence || '',
+          deployment_profile: cfg.deployment_profile || {},
         }))
         setInstances(list); setSelected(null); setConfirmName('')
       }).catch(() => {}).finally(() => setLoading(false))
@@ -715,15 +1028,23 @@ function DeleteTab() {
 
   const handleDelete = async () => {
     if (!inst || confirmName !== inst.nickname) { notify('昵称不匹配', 'error'); return }
+    if (inst.is_published_template && inst.published_active === false) {
+      notify('该实例所属部署流已取消发布，不能删除', 'error')
+      return
+    }
     setDeleting(true)
     try {
-      const res = await fetch(`/api/deploy/instances/${inst.serial_number}/confirm-delete`, {
+      const isFlowInstance = Boolean(inst.is_published_template)
+      const res = await fetch(isFlowInstance ? `/api/deployment-mod/instances/${encodeURIComponent(inst.serial_number)}/stage` : `/api/deploy/instances/${inst.serial_number}/confirm-delete`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serial_number: inst.serial_number, confirm_nickname: confirmName, backup: true })
+        body: JSON.stringify(isFlowInstance ? { stage: 'uninstall', user_inputs: {} } : { serial_number: inst.serial_number, confirm_nickname: confirmName, backup: true })
       })
       const d = await res.json()
-      if (d.success) {
+      if (isFlowInstance && d.task_id) {
+        setTaskId(d.task_id)
+        notify('卸载任务已启动', 'success')
+      } else if (d.success) {
         const msg = d.backup_path ? `删除成功，备份位置：${d.backup_path}` : (d.message || '删除成功')
         notify(msg, 'success')
         reload()
@@ -734,6 +1055,8 @@ function DeleteTab() {
   }
 
   const filtered = instances.filter(i => !search || i.nickname.toLowerCase().includes(search.toLowerCase()) || i.serial_number.toLowerCase().includes(search.toLowerCase()))
+
+  if (taskId) return <ProgressPanel taskId={taskId} onDone={() => { setTaskId(null); reload() }} />
 
   return (
     <div className="flex gap-[24px] flex-1 min-h-0 overflow-hidden">
@@ -788,6 +1111,13 @@ function DeleteTab() {
               <div className="rounded-[16px] bg-red-500/10 border-2 border-red-400/50 p-[16px]">
                 <span className="animate-fade-slide-up" style={{ ...smallLabel, color: '#dc2626', ...getTextDriftStyle(7, 'hint') }}>此操作不可逆！请输入实例昵称「{inst.nickname}」以确认删除</span>
               </div>
+              {inst.is_published_template && (
+                <div className="rounded-[16px] p-[14px]" style={{ background: inst.published_active === false ? 'rgba(120,120,120,0.16)' : 'rgba(96,165,250,0.16)', border: '1px solid var(--mc-border-soft)' }}>
+                  <span style={{ ...monoFont, fontSize: 18, color: 'var(--mc-text-secondary)' }}>
+                    {inst.published_active === false ? '部署流已取消发布，删除权限已收回。' : `将通过部署流「${inst.deployment_flow_name || inst.deployment_profile?.uninstall_id || '未命名'}」的卸载逻辑删除。`}
+                  </span>
+                </div>
+              )}
               <div className="flex flex-col gap-[6px]">
                 <span className="animate-fade-slide-up" style={{ ...smallLabel, ...getTextDriftStyle(8, 'label'), color: 'var(--mc-text-primary)' }}>输入实例昵称确认</span>
                 <input
@@ -798,7 +1128,7 @@ function DeleteTab() {
                   style={{ ...monoFont, fontSize: 22, background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)', color: 'var(--mc-text-primary)' }}
                 />
               </div>
-              <button disabled={confirmName !== inst.nickname || deleting} onClick={handleDelete}
+              <button disabled={confirmName !== inst.nickname || deleting || (inst.is_published_template && inst.published_active === false)} onClick={handleDelete}
                 className="self-start h-[50px] px-[32px] rounded-[25px] cursor-pointer transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: 'rgba(239,68,68,0.3)', border: '2px solid rgba(239,68,68,0.6)' }}>
                 <span className="animate-fade-slide-up" style={{ ...smallLabel, color: '#dc2626', ...getTextDriftStyle(9, 'value') }}>{deleting ? '删除中...' : '确认删除'}</span>
@@ -817,7 +1147,7 @@ function DeleteTab() {
 
 /* ─── 主组件 ─── */
 export default function Deployment() {
-  const [tab, setTab] = useState<'deploy' | 'update' | 'delete'>('deploy')
+  const [tab, setTab] = useState<DeployTab>('deploy')
 
   return (
     <div className="flex flex-col p-6 h-full overflow-hidden">
@@ -827,6 +1157,7 @@ export default function Deployment() {
         <PillTab label="部署新实例" selected={tab === 'deploy'} onClick={() => setTab('deploy')} />
         <PillTab label="更新实例" selected={tab === 'update'} onClick={() => setTab('update')} />
         <PillTab label="删除实例" selected={tab === 'delete'} onClick={() => setTab('delete')} />
+        <PillTab label="部署流" selected={tab === 'flow'} onClick={() => setTab('flow')} />
       </div>
 
       <div className="flex-1 min-h-0 animate-card-enter" style={{ animationDelay: '120ms' }}>
@@ -835,6 +1166,7 @@ export default function Deployment() {
             {tab === 'deploy' && <DeployNewTab />}
             {tab === 'update' && <UpdateTab />}
             {tab === 'delete' && <DeleteTab />}
+            {tab === 'flow' && <DeploymentFlowTab />}
           </div>
         </GlassCard>
       </div>

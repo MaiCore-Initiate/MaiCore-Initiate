@@ -9,14 +9,24 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from ..core.config import config_manager
 from ..modules.deployment import deployment_manager
 from ..modules.deployment_mod import deployment_mod_executor, deployment_mod_registry
 from ..modules.deployment_mod.debug_session import DebugMonitorUnavailable, DebugSessionStopped, debug_session_manager
 from .auth_core import require_action
 from . import deploy_api as deploy_api_module
 from .deploy_api import _deploy_tasks, _dispatch_progress, _remember_main_event_loop
+from .published_templates import (
+    PUBLISHED_SOURCE,
+    ensure_instance_publish_active,
+    get_instance_publish_state,
+    get_published_template,
+    list_published_templates,
+    unpublish_template,
+    upsert_published_template,
+)
 
 router = APIRouter()
 
@@ -55,6 +65,15 @@ class WorkbenchDebugStartRequest(BaseModel):
     serial_number: str = ""
 
 
+class PublishedDeployRequest(BaseModel):
+    user_inputs: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PublishedInstanceStageRequest(BaseModel):
+    stage: str
+    user_inputs: Dict[str, Any] = Field(default_factory=dict)
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WORKBENCH_INDEX_PATH = PROJECT_ROOT / "config" / "MOD.json"
 
@@ -68,6 +87,16 @@ def _load_workbench_index() -> Dict[str, Dict[str, Any]]:
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=500, detail=f"读取工作台索引失败: {exc}") from exc
     return data if isinstance(data, dict) else {}
+
+
+def _save_workbench_index(data: Dict[str, Dict[str, Any]]) -> None:
+    try:
+        WORKBENCH_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with WORKBENCH_INDEX_PATH.open("w", encoding="utf-8") as handle:
+            json.dump(data, handle, ensure_ascii=False, indent=4)
+            handle.write("\n")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"保存工作台索引失败: {exc}") from exc
 
 
 def _resolve_workbench_project(sequence: str) -> tuple[Dict[str, Any], Path]:
@@ -110,6 +139,61 @@ def _resolve_workbench_template_path(sequence: str) -> tuple[Dict[str, Any], Pat
         return project, toml_files[0]
 
     raise HTTPException(status_code=404, detail=f"工作台项目未找到可运行的 TOML 模板: {project_dir}")
+
+
+def _published_payload(record: Dict[str, Any], template: Optional[Any] = None) -> Dict[str, Any]:
+    payload = dict(record)
+    if template is not None:
+        payload["metadata"] = template.metadata.to_dict()
+        payload["components"] = [item.to_dict() for item in template.components]
+        payload["deployments"] = [item.to_dict() for item in template.deployments]
+        payload["launches"] = [item.to_dict() for item in template.launches]
+        payload["configs"] = [item.to_dict() for item in template.configs]
+        payload["uninstalls"] = [item.to_dict() for item in template.uninstalls]
+        payload["form"] = _enrich_form_schema(template)
+        payload["builtin_profile"] = template.builtin_profile
+    return payload
+
+
+def _parse_published_template(record: Dict[str, Any]):
+    template_path = Path(str(record.get("template_path") or ""))
+    if not template_path.is_absolute():
+        template_path = PROJECT_ROOT / template_path
+    if not template_path.is_file():
+        raise HTTPException(status_code=404, detail="发布模板文件不存在")
+    template = deployment_mod_executor.planner.parser.parse_file(str(template_path))
+    template.metadata.source = PUBLISHED_SOURCE
+    return template, template_path
+
+
+def _find_config_by_serial(serial_number: str) -> tuple[str, Dict[str, Any]]:
+    for name, config in config_manager.get_all_configurations().items():
+        if str(config.get("serial_number", "") or "") == str(serial_number):
+            return name, config
+    raise HTTPException(status_code=404, detail=f"未找到实例序列号: {serial_number}")
+
+
+def _mark_instance_flow_source(result: Any, sequence: str) -> None:
+    if not result or not getattr(result, "success", False):
+        return
+    config_name = str(getattr(result, "instance_config_name", "") or "")
+    if not config_name:
+        return
+    configs = config_manager.get_all_configurations()
+    config = configs.get(config_name)
+    if not isinstance(config, dict):
+        return
+    mod_binding = dict(config.get("mod_binding", {}) or {})
+    mod_binding["source"] = PUBLISHED_SOURCE
+    mod_binding["workbench_sequence"] = sequence
+    config["mod_binding"] = mod_binding
+    template_inputs = dict(config.get("template_inputs", {}) or {})
+    template_inputs["deployment_flow_sequence"] = sequence
+    template_inputs["__published_sequence"] = sequence
+    config["template_inputs"] = template_inputs
+    config["source"] = "deployment-flow"
+    configs[config_name] = config
+    config_manager.save()
 
 
 def _append_task_log(task_id: str, kwargs: Dict[str, Any]) -> None:
@@ -474,6 +558,232 @@ async def run_workbench_template(sequence: str, request: WorkbenchRunRequest):
 
     threading.Thread(target=_run_workbench, daemon=True).start()
     return {"success": True, "task_id": task_id, "message": "工作台试运行任务已启动"}
+
+
+@router.get("/published", summary="列出已发布部署流")
+async def list_published_deployment_flows(include_inactive: bool = False):
+    templates = []
+    for record in list_published_templates(include_inactive=include_inactive):
+        payload = dict(record)
+        try:
+            template, _ = _parse_published_template(record)
+            payload.update(
+                {
+                    "template_id": template.metadata.mod_id,
+                    "name": template.metadata.mod_name,
+                    "version": template.metadata.version,
+                    "description": template.metadata.description,
+                    "author": template.metadata.author,
+                    "tags": template.metadata.tags,
+                    "builtin_profile": template.builtin_profile,
+                    "component_count": len(template.components),
+                    "deployment_count": len(template.deployments),
+                    "launch_count": len(template.launches),
+                    "config_count": len(template.configs),
+                    "uninstall_count": len(template.uninstalls),
+                }
+            )
+        except Exception as exc:
+            payload["invalid"] = True
+            payload["invalid_reason"] = str(exc)
+        templates.append(payload)
+    return {"success": True, "templates": templates}
+
+
+@router.get("/published/{sequence}", summary="获取已发布部署流详情")
+async def get_published_deployment_flow(sequence: str):
+    record = get_published_template(sequence)
+    if not record:
+        raise HTTPException(status_code=404, detail="部署流未发布")
+    try:
+        template, _ = _parse_published_template(record)
+        return {"success": True, "template": _published_payload(record, template)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/workbench/{sequence}/publish", summary="发布工作台项目", dependencies=[Depends(require_action("deploy.manage"))])
+async def publish_workbench_template(sequence: str):
+    project, template_path = _resolve_workbench_template_path(sequence)
+    try:
+        template = deployment_mod_executor.planner.parser.parse_file(str(template_path))
+        template.metadata.source = PUBLISHED_SOURCE
+        deployment_mod_executor.planner.build_plan(template, {})
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"模板校验失败: {exc}") from exc
+
+    record = upsert_published_template(
+        sequence,
+        {
+            "template_id": template.metadata.mod_id,
+            "name": template.metadata.mod_name,
+            "version": template.metadata.version,
+            "description": template.metadata.description,
+            "author": template.metadata.author,
+            "cover": project.get("cover"),
+            "project_path": str(Path(str(project.get("path", ""))).resolve()),
+            "template_path": str(template_path),
+            "source": "MaiCoreStart",
+            "schema_version": template.metadata.schema_version,
+        },
+    )
+
+    index = _load_workbench_index()
+    item = index.get(sequence)
+    if isinstance(item, dict):
+        item["published"] = True
+        item["published_at"] = record.get("published_at")
+        item["published_version"] = template.metadata.version
+        _save_workbench_index(index)
+
+    return {"success": True, "template": _published_payload(record, template)}
+
+
+@router.post("/workbench/{sequence}/unpublish", summary="取消发布工作台项目", dependencies=[Depends(require_action("deploy.manage"))])
+async def unpublish_workbench_template(sequence: str):
+    record = unpublish_template(sequence)
+    if not record:
+        raise HTTPException(status_code=404, detail="部署流未发布")
+
+    index = _load_workbench_index()
+    item = index.get(sequence)
+    if isinstance(item, dict):
+        item["published"] = False
+        item["unpublished_at"] = record.get("unpublished_at")
+        _save_workbench_index(index)
+
+    return {"success": True, "template": record}
+
+
+@router.post("/published/{sequence}/deploy", summary="执行已发布部署流", dependencies=[Depends(require_action("deploy.manage"))])
+async def deploy_published_flow(sequence: str, request: PublishedDeployRequest):
+    record = get_published_template(sequence)
+    if not record or not record.get("published"):
+        raise HTTPException(status_code=400, detail="部署流未发布或已取消发布")
+
+    try:
+        template, template_path = _parse_published_template(record)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    task_id = f"published_mod_{uuid.uuid4().hex[:8]}"
+    user_inputs = dict(request.user_inputs or {})
+    user_inputs["deployment_flow_sequence"] = sequence
+    user_inputs["__published_sequence"] = sequence
+    serial_number = str(user_inputs.get("serial_number") or task_id)
+    _deploy_tasks[task_id] = {
+        "status": "running",
+        "step": 0,
+        "total_steps": 4,
+        "logs": [],
+        "template_path": str(template_path),
+        "project_sequence": sequence,
+        "mode": "published",
+    }
+    _remember_main_event_loop()
+
+    def _run_published_deploy():
+        def progress_cb(**kwargs):
+            _record_task_progress(task_id, serial_number, kwargs)
+
+        try:
+            progress_cb(step=0, total_steps=4, step_name="准备部署流", status="running", message=f"部署流: {template.metadata.mod_name}", event="detail")
+            plan = deployment_mod_executor.planner.build_plan(template, user_inputs)
+            result = deployment_mod_executor.runtime.execute_deployment_setup(template, plan, progress_callback=progress_cb)
+            _mark_instance_flow_source(result, sequence)
+            _deploy_tasks[task_id]["status"] = "completed" if result.success else "failed"
+            _deploy_tasks[task_id]["result"] = result.to_dict()
+            progress_cb(
+                step=4,
+                total_steps=4,
+                step_name="部署流完成" if result.success else "部署流失败",
+                status="completed" if result.success else "failed",
+                message=result.message,
+            )
+        except Exception as exc:
+            _deploy_tasks[task_id]["status"] = "failed"
+            progress_cb(step=0, total_steps=4, step_name="部署流失败", status="failed", message=str(exc))
+
+    threading.Thread(target=_run_published_deploy, daemon=True).start()
+    return {"success": True, "task_id": task_id, "message": "部署流任务已启动"}
+
+
+@router.post("/instances/{serial_number}/stage", summary="执行已发布实例阶段", dependencies=[Depends(require_action("deploy.manage"))])
+async def run_published_instance_stage(serial_number: str, request: PublishedInstanceStageRequest):
+    _, config = _find_config_by_serial(serial_number)
+    try:
+        publish_state = ensure_instance_publish_active(config)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if not publish_state["is_published_template"]:
+        raise HTTPException(status_code=400, detail="该实例不是发布部署流创建的实例")
+
+    sequence = publish_state["deployment_flow_sequence"]
+    record = get_published_template(sequence)
+    if not record:
+        raise HTTPException(status_code=404, detail="部署流发布记录不存在")
+    try:
+        template, template_path = _parse_published_template(record)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    stage = str(request.stage or "").strip().lower()
+    if stage not in {"launch", "launches", "config", "configs", "uninstall", "uninstalls"}:
+        raise HTTPException(status_code=400, detail="发布实例仅支持启动、配置和卸载阶段")
+
+    task_id = f"published_stage_{uuid.uuid4().hex[:8]}"
+    user_inputs = dict(config.get("template_inputs", {}) or {})
+    user_inputs.update(request.user_inputs or {})
+    user_inputs["serial_number"] = serial_number
+    user_inputs["deployment_flow_sequence"] = sequence
+    user_inputs["__published_sequence"] = sequence
+    _deploy_tasks[task_id] = {
+        "status": "running",
+        "step": 0,
+        "total_steps": 1,
+        "logs": [],
+        "template_path": str(template_path),
+        "project_sequence": sequence,
+        "serial_number": serial_number,
+        "mode": "published-stage",
+        "stage": stage,
+    }
+    _remember_main_event_loop()
+
+    def _run_published_stage():
+        def progress_cb(**kwargs):
+            _record_task_progress(task_id, serial_number, kwargs)
+
+        try:
+            plan = deployment_mod_executor.planner.build_plan(template, user_inputs)
+            result = deployment_mod_executor.runtime.execute_stage(
+                template,
+                plan,
+                stage=stage,
+                progress_callback=progress_cb,
+                serial_number=serial_number,
+            )
+            _deploy_tasks[task_id]["status"] = "completed" if result.success else "failed"
+            _deploy_tasks[task_id]["result"] = result.to_dict()
+            progress_cb(
+                step=1,
+                total_steps=1,
+                step_name=f"{stage} 阶段完成" if result.success else f"{stage} 阶段失败",
+                status="completed" if result.success else "failed",
+                message=result.message,
+            )
+        except Exception as exc:
+            _deploy_tasks[task_id]["status"] = "failed"
+            progress_cb(step=1, total_steps=1, step_name=f"{stage} 阶段失败", status="failed", message=str(exc))
+
+    threading.Thread(target=_run_published_stage, daemon=True).start()
+    return {"success": True, "task_id": task_id, "message": "实例阶段任务已启动"}
 
 
 @router.post("/workbench/{sequence}/debug/start", summary="启动工作台调试", dependencies=[Depends(require_action("deploy.manage"))])

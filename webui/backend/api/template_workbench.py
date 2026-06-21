@@ -60,6 +60,9 @@ class WorkbenchProject(BaseModel):
     files: List[Dict[str, Any]] = []
     force_folder: Optional[bool] = None
     display_mode: str = "card"
+    published: bool = False
+    published_at: Optional[str] = None
+    published_version: Optional[str] = None
 
 
 class CreateWorkbenchProjectPayload(BaseModel):
@@ -465,6 +468,9 @@ def to_project(sequence: str, data: Dict[str, Any]) -> WorkbenchProject:
         files=files if isinstance(files, list) else [],
         force_folder=force_folder,
         display_mode=display_mode,
+        published=bool(data.get("published")),
+        published_at=data.get("published_at") if isinstance(data.get("published_at"), str) else None,
+        published_version=data.get("published_version") if isinstance(data.get("published_version"), str) else None,
     )
 
 

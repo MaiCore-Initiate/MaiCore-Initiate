@@ -87,6 +87,9 @@ export interface TemplateWorkbenchItem {
   templatePath?: string
   sequence?: string
   cover?: string | null
+  published?: boolean
+  publishedAt?: string | null
+  publishedVersion?: string | null
   forceFolder?: boolean | null
   displayMode?: 'folder' | 'card'
   fileCount?: number
@@ -117,6 +120,9 @@ interface WorkbenchProjectIndex {
   } | null
   force_folder?: boolean | null
   display_mode?: 'folder' | 'card'
+  published?: boolean
+  published_at?: string | null
+  published_version?: string | null
 }
 
 export interface TemplateWorkbenchSlots {
@@ -369,6 +375,9 @@ function projectToItem(project: WorkbenchProjectIndex, coverVersion = 0): Templa
     forceFolder: project.force_folder ?? null,
     displayMode,
     fileCount,
+    published: Boolean(project.published),
+    publishedAt: project.published_at ?? null,
+    publishedVersion: project.published_version ?? null,
   }
 }
 
@@ -386,6 +395,9 @@ function createTemplateFileItem(project: WorkbenchProjectIndex, coverVersion = 0
     cover: projectCoverUrl(project, coverVersion),
     templatePath: project.path,
     sizeLabel: '模板文件',
+    published: Boolean(project.published),
+    publishedAt: project.published_at ?? null,
+    publishedVersion: project.published_version ?? null,
   }
 }
 
@@ -574,6 +586,37 @@ function StarToggleButton({
   )
 }
 
+function PublishedBadge({ onDoubleClick, className = '', style }: {
+  onDoubleClick?: () => void
+  className?: string
+  style?: CSSProperties
+}) {
+  return (
+    <button
+      type="button"
+      onClick={event => event.stopPropagation()}
+      onDoubleClick={event => {
+        event.preventDefault()
+        event.stopPropagation()
+        onDoubleClick?.()
+      }}
+      className={`absolute z-20 rounded-[4px] border px-[8px] py-[3px] leading-none transition-colors hover:bg-[var(--twb-hover)] ${className}`}
+      style={{
+        borderColor: 'rgba(34,197,94,0.75)',
+        background: 'color-mix(in srgb, var(--twb-bg) 72%, rgba(34,197,94,0.45))',
+        color: 'var(--twb-text)',
+        fontFamily: font,
+        fontSize: 14,
+        fontWeight: 600,
+        ...style,
+      }}
+      title="双击取消发布"
+    >
+      已发布
+    </button>
+  )
+}
+
 function FileCard({
   item,
   left,
@@ -584,6 +627,7 @@ function FileCard({
   starred = false,
   onToggleStar,
   selected = false,
+  onUnpublish,
 }: {
   item: TemplateWorkbenchItem
   left: number
@@ -594,6 +638,7 @@ function FileCard({
   starred?: boolean
   onToggleStar?: (sequence: string) => void
   selected?: boolean
+  onUnpublish?: (item: TemplateWorkbenchItem) => void
 }) {
   return (
     <div
@@ -645,6 +690,7 @@ function FileCard({
         <div className="leading-none" style={{ fontFamily: font, fontSize: 18, fontWeight: 700 }}>{item.name}</div>
         <div className="mt-[7px] leading-none" style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 15, fontWeight: 300 }}>{item.updatedAt}</div>
       </div>
+      {item.published && item.sequence && <PublishedBadge onDoubleClick={() => onUnpublish?.(item)} style={{ right: 8, top: 8 }} />}
       <StarToggleButton item={item} starred={starred} onToggle={onToggleStar} className="absolute rounded-[4px]" style={{ right: 7, bottom: 14, width: 32, height: 32 }} />
     </div>
   )
@@ -660,6 +706,7 @@ function ImportedFileCard({
   starred = false,
   onToggleStar,
   selected = false,
+  onUnpublish,
 }: {
   item: TemplateWorkbenchItem
   left: number
@@ -670,6 +717,7 @@ function ImportedFileCard({
   starred?: boolean
   onToggleStar?: (sequence: string) => void
   selected?: boolean
+  onUnpublish?: (item: TemplateWorkbenchItem) => void
 }) {
   const Icon = getFileIconByName(item.fileName ?? item.name)
   return (
@@ -717,6 +765,7 @@ function ImportedFileCard({
         <div className="truncate leading-none" style={{ fontFamily: font, fontSize: 18, fontWeight: 700 }}>{item.name}</div>
         <div className="mt-[7px] leading-none" style={{ color: 'var(--twb-muted)', fontFamily: font, fontSize: 15, fontWeight: 300 }}>{item.sizeLabel ?? item.updatedAt}</div>
       </div>
+      {item.published && item.sequence && <PublishedBadge onDoubleClick={() => onUnpublish?.(item)} style={{ right: 8, top: 8 }} />}
       <StarToggleButton item={item} starred={starred} onToggle={onToggleStar} className="absolute rounded-[4px]" style={{ right: 7, bottom: 14, width: 32, height: 32 }} />
     </div>
   )
@@ -881,6 +930,7 @@ function ProjectCard({
   starred = false,
   onToggleStar,
   selected = false,
+  onUnpublish,
 }: {
   item: TemplateWorkbenchItem
   left: number
@@ -891,11 +941,12 @@ function ProjectCard({
   starred?: boolean
   onToggleStar?: (sequence: string) => void
   selected?: boolean
+  onUnpublish?: (item: TemplateWorkbenchItem) => void
 }) {
   if (item.type === 'folder' || item.role === 'imported-folder') return <FolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} />
-  if (item.role === 'imported-file' || item.role === 'template-file') return <ImportedFileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} selected={selected} />
+  if (item.role === 'imported-file' || item.role === 'template-file') return <ImportedFileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} selected={selected} onUnpublish={onUnpublish} />
   if (item.displayMode === 'folder') return <ProjectFolderCard item={item} left={left} top={top} onOpen={onOpen} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} />
-  return <FileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} selected={selected} />
+  return <FileCard item={item} left={left} top={top} onOpen={onOpen} onEditFile={onEditFile} onContextMenu={onContextMenu} starred={starred} onToggleStar={onToggleStar} selected={selected} onUnpublish={onUnpublish} />
 }
 
 function FolderTypeGlyph() {
@@ -981,6 +1032,7 @@ function ProjectList({
   isStarred,
   onToggleStar,
   selectedItemId,
+  onUnpublish,
 }: {
   items: TemplateWorkbenchItem[]
   onOpen?: (item: TemplateWorkbenchItem) => void
@@ -989,6 +1041,7 @@ function ProjectList({
   isStarred?: (sequence?: string) => boolean
   onToggleStar?: (sequence: string) => void
   selectedItemId?: string | null
+  onUnpublish?: (item: TemplateWorkbenchItem) => void
 }) {
   const rowStart = 61
   const rowGap = 80
@@ -1042,9 +1095,15 @@ function ProjectList({
                 style={{ width: 32, height: 32 }}
               />
             )}
+            {isDeploymentFlow && item.published && (
+              <PublishedBadge
+                onDoubleClick={() => onUnpublish?.(item)}
+                style={{ left: 456, top: 15 }}
+              />
+            )}
             <div
               className="pointer-events-none absolute truncate leading-none"
-              style={{ left: isDeploymentFlow ? 112 : 70, top: 18, width: isDeploymentFlow ? 378 : 420, color: 'var(--twb-text)', fontFamily: font, fontSize: 25, fontWeight: 300 }}
+              style={{ left: isDeploymentFlow ? 112 : 70, top: 18, width: isDeploymentFlow ? 330 : 420, color: 'var(--twb-text)', fontFamily: font, fontSize: 25, fontWeight: 300 }}
             >
               {item.name}
             </div>
@@ -1778,6 +1837,8 @@ export default function TemplateWorkbench({
   const [starredSequences, setStarredSequences] = useState<string[]>(() => readStarredFlowsCookie())
   const [selectedPackageTemplateId, setSelectedPackageTemplateId] = useState<string | null>(null)
   const [packagingTemplateId, setPackagingTemplateId] = useState<string | null>(null)
+  const [publishingTemplateId, setPublishingTemplateId] = useState<string | null>(null)
+  const [unpublishTarget, setUnpublishTarget] = useState<TemplateWorkbenchItem | null>(null)
 
   const starredSequenceSet = useMemo(() => new Set(starredSequences), [starredSequences])
   const isPackagePublishPage = activeSection === 'package-publish'
@@ -2055,6 +2116,53 @@ export default function TemplateWorkbench({
     }
   }
 
+  const publishSelectedTemplate = async (item: TemplateWorkbenchItem) => {
+    if (!item.sequence) {
+      setActionError('该模板没有关联工作台项目，无法发布。')
+      return
+    }
+    setPublishingTemplateId(item.id)
+    setActionError(null)
+    try {
+      const response = await fetch(
+        `/api/deployment-mod/workbench/${encodeURIComponent(item.sequence)}/publish`,
+        { method: 'POST', credentials: 'include' },
+      )
+      if (!response.ok) {
+        throw new Error(await resolveApiErrorMessage(response, '发布失败'))
+      }
+      await reloadProjects()
+      notify('项目已发布为部署流', 'success')
+    } catch (err) {
+      const message = (err as Error).message ?? String(err)
+      setActionError(message)
+      notify(message || '发布失败', 'error')
+    } finally {
+      setPublishingTemplateId(null)
+    }
+  }
+
+  const confirmUnpublishTemplate = async () => {
+    if (!unpublishTarget?.sequence) return
+    try {
+      const response = await fetch(
+        `/api/deployment-mod/workbench/${encodeURIComponent(unpublishTarget.sequence)}/unpublish`,
+        { method: 'POST', credentials: 'include' },
+      )
+      if (!response.ok) {
+        throw new Error(await resolveApiErrorMessage(response, '取消发布失败'))
+      }
+      setUnpublishTarget(null)
+      await reloadProjects()
+      notify('已取消发布，相关实例权限已收回', 'success')
+    } catch (err) {
+      const message = (err as Error).message ?? String(err)
+      setActionError(message)
+      notify(message || '取消发布失败', 'error')
+      throw err
+    }
+  }
+
   const handlePackageTemplateAction = (action: 'package' | 'publish') => {
     if (!selectedPackageTemplate) {
       setActionError('请先选择一个模板。')
@@ -2073,8 +2181,7 @@ export default function TemplateWorkbench({
       onPublishTemplate(selectedPackageTemplate)
       return
     }
-    setActionError('发布功能暂未开放。')
-    notify('发布功能暂未开放', 'info')
+    void publishSelectedTemplate(selectedPackageTemplate)
   }
 
   const createDeploymentProject = () => {
@@ -2709,7 +2816,10 @@ export default function TemplateWorkbench({
           <PackageQuickActions
             onPackageProject={() => handlePackageTemplateAction('package')}
             onPublishProject={() => handlePackageTemplateAction('publish')}
-            disabled={Boolean(packagingTemplateId && packagingTemplateId === selectedPackageTemplateId)}
+            disabled={Boolean(
+              (packagingTemplateId && packagingTemplateId === selectedPackageTemplateId)
+              || (publishingTemplateId && publishingTemplateId === selectedPackageTemplateId),
+            )}
           />
         ) : (
           <QuickActions
@@ -2734,6 +2844,7 @@ export default function TemplateWorkbench({
             starred={isStarredSequence(item.sequence)}
             onToggleStar={toggleStarredSequence}
             selected={isPackagePublishPage && item.id === selectedPackageTemplateId}
+            onUnpublish={setUnpublishTarget}
           />
         ))}
 
@@ -2746,6 +2857,7 @@ export default function TemplateWorkbench({
             isStarred={isStarredSequence}
             onToggleStar={toggleStarredSequence}
             selectedItemId={isPackagePublishPage ? selectedPackageTemplateId : null}
+            onUnpublish={setUnpublishTarget}
           />
         )}
 
@@ -2796,6 +2908,18 @@ export default function TemplateWorkbench({
         onChanged={() => {
           void reloadProjects()
         }}
+      />
+
+      <DeleteConfirmDialog
+        open={Boolean(unpublishTarget)}
+        title="取消发布"
+        projectName={unpublishTarget?.name ?? ''}
+        projectPath={unpublishTarget?.templatePath ?? ''}
+        targetLabel={unpublishTarget?.name ?? '该部署流'}
+        description="取消发布后，不能再部署新实例；已部署实例会灰化，并禁止启动、删除和打开配置。"
+        confirmLabel="取消发布"
+        onCancel={() => setUnpublishTarget(null)}
+        onConfirm={confirmUnpublishTemplate}
       />
 
       <FileEditorModal

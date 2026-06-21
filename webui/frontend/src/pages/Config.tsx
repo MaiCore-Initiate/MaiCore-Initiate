@@ -20,6 +20,10 @@ interface Instance {
   webuiPath?: string
   venvPath?: string
   source?: string
+  isPublishedTemplate?: boolean
+  publishedActive?: boolean
+  deploymentFlowName?: string
+  deploymentFlowSequence?: string
 }
 
 interface RegisterForm {
@@ -128,11 +132,33 @@ function SourceBadge({ source }: { source?: string }) {
   )
 }
 
+function FlowStatusBadge({ instance }: { instance: Instance }) {
+  if (!instance.isPublishedTemplate) return null
+  const inactive = instance.publishedActive === false
+  return (
+    <span
+      style={{
+        fontSize: 18,
+        fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
+        background: inactive ? 'rgba(120,120,120,0.18)' : 'rgba(74,222,128,0.22)',
+        border: `1.5px solid ${inactive ? 'rgba(120,120,120,0.45)' : 'rgba(34,197,94,0.6)'}`,
+        borderRadius: 10,
+        padding: '1px 10px',
+        color: 'var(--mc-text-secondary)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {inactive ? '已灰化' : '部署流'}
+    </span>
+  )
+}
+
 /* 实例选择用的小卡片 */
 function InstanceCard({ instance, selected, onClick, index }: {
   instance: Instance; selected: boolean; onClick: () => void; index: number
 }) {
   const title = `${instance.nickname}.${instance.botType}`
+  const inactive = instance.isPublishedTemplate && instance.publishedActive === false
   return (
     <div className="animate-fade-slide-up inline-block" style={{ animationDelay: `${index * 60}ms` }}>
       <GlassCard
@@ -144,17 +170,19 @@ function InstanceCard({ instance, selected, onClick, index }: {
         className="cursor-pointer transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
         onClick={onClick}
       >
-        <div className="px-[24px] py-[18px]">
+        <div className="px-[24px] py-[18px]" style={{ opacity: inactive ? 0.48 : 1 }}>
           <div className="flex items-center gap-[8px] mb-[2px]">
             <div className="text-black truncate" style={{ fontSize: 32, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
               {title}
             </div>
             <SourceBadge source={instance.source} />
+            <FlowStatusBadge instance={instance} />
           </div>
           <div className="mt-[4px] flex flex-col gap-[2px]">
             <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>序列号：{instance.serial}</span>
             <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>版本：{instance.version || '-'}</span>
             <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>QQ账号：{instance.qqAccount || '-'}</span>
+            {inactive && <span style={{ ...valueFont, color: 'var(--mc-text-faint)' }}>部署流已取消发布，操作权限已收回</span>}
           </div>
         </div>
       </GlassCard>
@@ -457,6 +485,10 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
           webuiPath: cfg.webui_path,
           venvPath: cfg.venv_path,
           source: cfg.source || 'register',
+          isPublishedTemplate: Boolean(cfg.is_published_template),
+          publishedActive: cfg.published_active !== false,
+          deploymentFlowName: cfg.deployment_flow_name || '',
+          deploymentFlowSequence: cfg.deployment_flow_sequence || '',
         }))
         setInstances(list)
         if (d?.next_serial != null) setNextSerial(d.next_serial)
@@ -474,12 +506,23 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
   }
 
   const handleSelectInstance = async (inst: Instance) => {
+    if (inst.isPublishedTemplate && inst.publishedActive === false) {
+      notify('该实例所属部署流已取消发布，不能操作', 'error')
+      return
+    }
     setSelected(inst.name)
     if (action === 'open-config') {
       try {
-        const res = await fetch(`/api/webui/instances/${inst.name}/open-config`, { method: 'POST', credentials: 'include' })
+        const res = await fetch(inst.isPublishedTemplate ? `/api/deployment-mod/instances/${encodeURIComponent(inst.serial)}/stage` : `/api/webui/instances/${inst.name}/open-config`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: inst.isPublishedTemplate ? { 'Content-Type': 'application/json' } : undefined,
+          body: inst.isPublishedTemplate ? JSON.stringify({ stage: 'config', user_inputs: {} }) : undefined,
+        })
         const data = await res.json()
-        if (data.success) notify('已打开配置文件', 'success')
+        if (data.task_id) notify('已提交配置打开任务', 'success')
+        else if (data.use_template_stage) notify('该实例需要通过部署流配置阶段打开', 'warning')
+        else if (data.success) notify('已打开配置文件', 'success')
         else notify(data.detail || '打开失败', 'error')
       } catch { notify('请求失败', 'error') }
     } else if (action === 'open-folder') {

@@ -13,6 +13,7 @@ from ..core.webui_config import webui_config
 from ..core.config import config_manager
 from ..core.p_config import p_config_manager
 from .auth_core import require_admin
+from .published_templates import get_instance_publish_state
 
 router = APIRouter()
 
@@ -79,35 +80,38 @@ def get_instances():
     config_manager.reload_if_changed()
     configs = config_manager.get_all_configurations()
     current = config_manager.get("current_config")
+    result_instances = {}
+    for name, cfg in configs.items():
+        publish_state = get_instance_publish_state(cfg)
+        result_instances[name] = {
+            "serial_number": cfg.get("serial_number", ""),
+            "nickname": cfg.get("nickname_path", ""),
+            "absolute_serial": cfg.get("absolute_serial_number", 0),
+            "bot_type": _normalize_bot_type(cfg.get("bot_type", "")),
+            "qq_account": cfg.get("qq_account", ""),
+            "version": cfg.get("version_path", ""),
+            "mai_path": cfg.get("mai_path", ""),
+            "mofox_path": cfg.get("mofox_path", ""),
+            "neo_mofox_path": cfg.get("neo_mofox_path", ""),
+            "adapter_path": cfg.get("adapter_path", ""),
+            "adapter_mode": cfg.get("adapter_mode", cfg.get("install_options", {}).get("adapter_mode", "")),
+            "napcat_path": cfg.get("napcat_path", ""),
+            "mongodb_path": cfg.get("mongodb_path", ""),
+            "webui_path": cfg.get("webui_path", ""),
+            "venv_path": cfg.get("venv_path", ""),
+            "install_options": cfg.get("install_options", {}),
+            "mod_binding": cfg.get("mod_binding", {}),
+            "deployment_profile": cfg.get("deployment_profile", {}),
+            "component_bindings": cfg.get("component_bindings", []),
+            "template_inputs": cfg.get("template_inputs", {}),
+            "source": cfg.get("source", "register"),
+            **{key: value for key, value in publish_state.items() if key != "deployment_flow_record"},
+        }
+
     return {
         "current_config": current,
         "next_serial": config_manager.generate_unique_serial(),
-        "instances": {
-            name: {
-                "serial_number": cfg.get("serial_number", ""),
-                "nickname": cfg.get("nickname_path", ""),
-                "absolute_serial": cfg.get("absolute_serial_number", 0),
-                "bot_type": _normalize_bot_type(cfg.get("bot_type", "")),
-                "qq_account": cfg.get("qq_account", ""),
-                "version": cfg.get("version_path", ""),
-                "mai_path": cfg.get("mai_path", ""),
-                "mofox_path": cfg.get("mofox_path", ""),
-                "neo_mofox_path": cfg.get("neo_mofox_path", ""),
-                "adapter_path": cfg.get("adapter_path", ""),
-                "adapter_mode": cfg.get("adapter_mode", cfg.get("install_options", {}).get("adapter_mode", "")),
-                "napcat_path": cfg.get("napcat_path", ""),
-                "mongodb_path": cfg.get("mongodb_path", ""),
-                "webui_path": cfg.get("webui_path", ""),
-                "venv_path": cfg.get("venv_path", ""),
-                "install_options": cfg.get("install_options", {}),
-                "mod_binding": cfg.get("mod_binding", {}),
-                "deployment_profile": cfg.get("deployment_profile", {}),
-                "component_bindings": cfg.get("component_bindings", []),
-                "template_inputs": cfg.get("template_inputs", {}),
-                "source": cfg.get("source", "register"),
-            }
-            for name, cfg in configs.items()
-        },
+        "instances": result_instances,
     }
 
 
@@ -188,6 +192,11 @@ def open_instance_config(name: str):
     if name not in configs:
         raise HTTPException(404, f"配置集 '{name}' 未找到")
     cfg = configs[name]
+    publish_state = get_instance_publish_state(cfg)
+    if publish_state["is_published_template"] and not publish_state["published_active"]:
+        raise HTTPException(403, "该实例所属部署流已取消发布，不能打开配置")
+    if publish_state["is_published_template"] and publish_state["published_active"]:
+        return {"success": False, "use_template_stage": True, "serial_number": cfg.get("serial_number", "")}
     bot_path = _get_bot_root_path(cfg)
     if not bot_path or not os.path.isdir(bot_path):
         raise HTTPException(400, "Bot路径无效或不是目录")
@@ -234,6 +243,9 @@ def open_instance_folder(name: str):
     if name not in configs:
         raise HTTPException(404, f"配置集 '{name}' 未找到")
     cfg = configs[name]
+    publish_state = get_instance_publish_state(cfg)
+    if publish_state["is_published_template"] and not publish_state["published_active"]:
+        raise HTTPException(403, "该实例所属部署流已取消发布，不能打开目录")
     bot_path = _get_bot_root_path(cfg)
     if not bot_path or not os.path.isdir(bot_path):
         raise HTTPException(400, "Bot路径无效或不是目录")

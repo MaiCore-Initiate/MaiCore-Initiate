@@ -14,6 +14,10 @@ interface Instance {
   qqAccount: string
   adapterMode: string
   installOptions: Record<string, any>
+  isPublishedTemplate?: boolean
+  publishedActive?: boolean
+  deploymentFlowName?: string
+  deploymentFlowSequence?: string
 }
 
 type BotType = 'MaiBot' | 'MoFox-Core' | 'Neo-MoFox'
@@ -23,6 +27,7 @@ const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', 
 const valueFont = { fontSize: 25, ...monoFont, color: 'var(--mc-text-secondary)' }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
+const smallLabel = { fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 
 const PRESETS: Record<BotType, { label: string; components: string[] }[]> = {
   MaiBot: [
@@ -106,6 +111,100 @@ function PillButton({ label, selected, onClick }: { label: string; selected: boo
     >
       <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative', top: 2 }}>{label}</span>
     </button>
+  )
+}
+
+function useTemplateStageProgress(taskId: string | null) {
+  const [progress, setProgress] = useState<any>(null)
+  useEffect(() => {
+    if (!taskId) { setProgress(null); return }
+    const timer = setInterval(() => {
+      fetch(`/api/deployment-mod/progress/${taskId}`, { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => { if (data.success !== false) setProgress(data) })
+        .catch(() => {})
+    }, 1500)
+    return () => clearInterval(timer)
+  }, [taskId])
+  return progress
+}
+
+function PublishedLaunchPanel({ instance }: { instance: Instance }) {
+  const { notify } = useNotification()
+  const [taskId, setTaskId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const progress = useTemplateStageProgress(taskId)
+  const inactive = instance.publishedActive === false
+  const done = progress?.status === 'completed' || progress?.status === 'failed'
+
+  const handleLaunch = async () => {
+    if (inactive) return
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/deployment-mod/instances/${encodeURIComponent(instance.serial)}/stage`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'launch', user_inputs: {} }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data.detail || data.message || '启动失败')
+      setTaskId(data.task_id)
+      notify('启动任务已提交', 'success')
+    } catch (err: any) {
+      notify(err?.message || '启动失败', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <GlassCard key={instance.serial}>
+      <div className="p-[28px] flex flex-col h-full gap-[18px]" style={{ opacity: inactive ? 0.55 : 1 }}>
+        <h2 className="text-black animate-fade-slide-up" style={sectionTitle}>部署流实例</h2>
+        <div className="space-y-[4px]">
+          {[
+            ['部署流', instance.deploymentFlowName || '-'],
+            ['实例昵称', instance.nickname],
+            ['实例序列号', instance.serial],
+            ['实例绝对序列号', String(instance.absoluteSerial)],
+            ['当前版本', instance.version || '-'],
+          ].map(([label, value], index) => (
+            <div key={label} className="flex items-baseline gap-[16px] animate-fade-slide-up" style={{ animationDelay: `${index * 45}ms` }}>
+              <span className="text-black shrink-0" style={labelFont}>{label}</span>
+              <span style={valueFont}>{value}</span>
+            </div>
+          ))}
+        </div>
+        {inactive ? (
+          <div className="rounded-[18px] p-[18px]" style={{ background: 'rgba(120,120,120,0.16)', border: '1px solid var(--mc-border-soft)' }}>
+            <span style={{ ...monoFont, fontSize: 20, color: 'var(--mc-text-secondary)' }}>该部署流已取消发布，实例已灰化，不能启动。</span>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={handleLaunch}
+              disabled={loading}
+              className="self-start h-[58px] px-[36px] rounded-[29px] cursor-pointer transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+              style={{ background: 'rgba(74,222,128,0.35)', border: '2px solid var(--mc-border-strong)' }}
+            >
+              <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>{loading ? '启动中...' : '按部署流启动'}</span>
+            </button>
+            {taskId && (
+              <div className="rounded-[18px] p-[18px] flex flex-col gap-[8px]" style={{ background: 'var(--mc-panel-bg-soft)', border: '1px solid var(--mc-border-soft)' }}>
+                <span style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>{done ? (progress?.status === 'completed' ? '启动完成' : '启动失败') : '启动进行中'}</span>
+                <span style={{ ...monoFont, fontSize: 18, color: 'var(--mc-text-secondary)' }}>{progress?.message || '等待后端返回结果...'}</span>
+                <div className="max-h-[220px] overflow-y-auto custom-scrollbar">
+                  {(progress?.logs || []).slice(-80).map((line: string, index: number) => (
+                    <div key={index} style={{ ...monoFont, fontSize: 14, color: 'var(--mc-text-muted)' }}>{line}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </GlassCard>
   )
 }
 
@@ -397,6 +496,10 @@ export default function Instances() {
           qqAccount: cfg.qq_account || '',
           adapterMode: cfg.adapter_mode || cfg.install_options?.adapter_mode || '',
           installOptions: cfg.install_options || {},
+          isPublishedTemplate: Boolean(cfg.is_published_template),
+          publishedActive: cfg.published_active !== false,
+          deploymentFlowName: cfg.deployment_flow_name || '',
+          deploymentFlowSequence: cfg.deployment_flow_sequence || '',
         }))
         setInstances(list)
       })
@@ -454,6 +557,7 @@ export default function Instances() {
                   filtered.map((inst, i) => {
                     const isSelected = inst.serial === selected
                     const label = `${inst.nickname}|${inst.serial}|${inst.absoluteSerial}`
+                    const inactive = inst.isPublishedTemplate && inst.publishedActive === false
                     return (
                       <div key={inst.serial} className="animate-fade-slide-up" style={{ animationDelay: `${i * 40}ms`, animationFillMode: 'backwards' }}>
                         {isSelected && i > 0 && <div className="h-[6px]" />}
@@ -466,10 +570,16 @@ export default function Instances() {
                             borderRadius: isSelected ? 27 : 6,
                             background: isSelected ? 'var(--mc-choice-selected-bg)' : 'transparent',
                             border: isSelected ? '2px solid var(--mc-choice-selected-border)' : '2px solid transparent',
+                            opacity: inactive ? 0.45 : 1,
                           }}
                         >
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
                           <span className="truncate shrink-0" style={{ ...monoFont, fontSize: 30 }}>{label}</span>
+                          {inst.isPublishedTemplate && (
+                            <span className="ml-[8px] shrink-0 rounded-[8px] px-[8px] py-[2px]" style={{ ...monoFont, fontSize: 14, background: inactive ? 'rgba(120,120,120,0.18)' : 'rgba(34,197,94,0.18)', color: 'var(--mc-text-secondary)' }}>
+                              {inactive ? '已灰化' : '部署流'}
+                            </span>
+                          )}
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
                         </button>
                         {isSelected && i < filtered.length - 1 && <div className="h-[6px]" />}
@@ -491,7 +601,7 @@ export default function Instances() {
             detail="当前账号仅可查看实例列表，不能执行启动、停止与高级启动操作。"
           >
             {selectedInstance ? (
-              <LaunchPanel instance={selectedInstance} />
+              selectedInstance.isPublishedTemplate ? <PublishedLaunchPanel instance={selectedInstance} /> : <LaunchPanel instance={selectedInstance} />
             ) : (
               <div className="flex items-center justify-center h-full">
                 <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>

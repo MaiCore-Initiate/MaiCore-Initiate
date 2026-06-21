@@ -13,6 +13,7 @@ from ..modules.launcher import launcher
 from ..modules.config_manager import config_manager
 from ..utils.version_detector import is_plugin_adapter_version
 from .auth_core import require_action
+from .published_templates import get_instance_publish_state
 
 router = APIRouter()
 
@@ -152,6 +153,11 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
         config = get_instance_config(serial_number)
         if not config:
             raise HTTPException(status_code=404, detail=f"未找到序列号为 {serial_number} 的实例")
+        publish_state = get_instance_publish_state(config)
+        if publish_state["is_published_template"]:
+            if not publish_state["published_active"]:
+                raise HTTPException(status_code=403, detail="该实例所属部署流已取消发布，不能启动")
+            raise HTTPException(status_code=400, detail="该实例由部署流管理，请使用部署流启动逻辑")
         
         # 验证组件列表
         valid_components = ["mai", "adapter", "napcat", "mongodb", "webui"]
