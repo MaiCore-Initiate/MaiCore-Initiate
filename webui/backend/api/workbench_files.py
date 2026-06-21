@@ -15,14 +15,16 @@ import re
 import shutil
 import subprocess
 import tempfile
+import uuid
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 import pycdlib
 
 from .template_workbench import (
@@ -65,6 +67,26 @@ MAX_TEXT_FILE_SIZE = 5 * 1024 * 1024
 MAX_BINARY_FILE_SIZE = 200 * 1024 * 1024
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+WORKBENCH_TEMP_ROOT = PROJECT_ROOT / "Temporary" / "workbench"
+
+
+def _make_temp_dir(prefix: str) -> Path:
+    WORKBENCH_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+    for _ in range(100):
+        candidate = WORKBENCH_TEMP_ROOT / f"{prefix}{uuid.uuid4().hex}"
+        try:
+            candidate.mkdir(parents=False, exist_ok=False)
+            return candidate
+        except FileExistsError:
+            continue
+    raise HTTPException(500, "无法创建临时目录")
+
+
+def _remove_tree_quiet(path: Path) -> None:
+    try:
+        shutil.rmtree(path, ignore_errors=True)
+    except Exception:
+        pass
 
 
 def _normalize_relpath(value: str) -> str:
@@ -929,6 +951,52 @@ def download_file(sequence: str, path: str = Query(...)):
     )
 
 
+@router.post(
+    "/projects/{sequence}/package",
+    summary="打包工作台模板项目为 .mcsmod",
+)
+def package_project(sequence: str, request: Request):
+    project = _ensure_project(sequence)
+    project_dir = _project_dir(sequence)
+    template_path = _find_template_toml_path(project_dir, project)
+    parsed = _parse_template_toml(template_path)
+    if not _is_valid_template_toml(template_path.read_bytes()):
+        raise HTTPException(400, "当前项目主 TOML 未声明合法的 [MCStart] / MCStart=true 模板结构")
+
+    external_files = _resolve_external_imports(project_dir, _collect_file_imports(parsed, project))
+    meta = _create_package_meta(
+        sequence=sequence,
+        project=project,
+        template_path=template_path,
+        parsed=parsed,
+        external_files=external_files,
+        request=request,
+    )
+    meta_bytes = json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8")
+    entries: List[tuple[str, bytes]] = [
+        ("mod.meta.json", meta_bytes),
+        (template_path.name, template_path.read_bytes()),
+    ]
+    for path, relpath in external_files:
+        entries.append((relpath, path.read_bytes()))
+
+    package_bytes = _build_mcsmod_iso_bytes(entries)
+    modinfo = parsed.get("MODINFO") if isinstance(parsed.get("MODINFO"), dict) else {}
+    filename_stem = _safe_filename_stem(str(modinfo.get("mod_id") or project.get("mod_id") or template_path.stem), "template")
+    output_path = _make_temp_dir("package-") / f"{filename_stem}.mcsmod"
+    try:
+        output_path.write_bytes(package_bytes)
+    except OSError as exc:
+        raise HTTPException(500, f"写入临时打包文件失败: {exc}") from exc
+    return FileResponse(
+        str(output_path),
+        filename=f"{filename_stem}.mcsmod",
+        media_type="application/octet-stream",
+        headers={"Cache-Control": "no-store"},
+        background=BackgroundTask(_remove_tree_quiet, output_path.parent),
+    )
+
+
 @router.put(
     "/projects/{sequence}/files",
     summary="写入文件文本内容（path 可包含子目录）",
@@ -1070,6 +1138,501 @@ class ImportArchiveResult(BaseModel):
     files: List[Dict[str, Any]] = []
 
 
+def _json_safe(value: Any, default: Any) -> Any:
+    try:
+        json.dumps(value, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return default
+    return value
+
+
+def _safe_filename_stem(value: str, fallback: str = "template") -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._\- ]+", "_", str(value or "")).strip(" .")
+    return sanitized or fallback
+
+
+def _find_template_toml_path(project_dir: Path, project: Dict[str, Any]) -> Path:
+    mod_id = str(project.get("mod_id") or "").strip()
+    candidates: List[Path] = []
+    if mod_id:
+        candidates.append(project_dir / f"{mod_id}.toml")
+    for path in sorted(project_dir.glob("*.toml"), key=lambda item: item.name.lower()):
+        if path not in candidates:
+            candidates.append(path)
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return path
+    raise HTTPException(404, "项目目录中没有可打包的模板 TOML")
+
+
+def _parse_template_toml(path: Path) -> Dict[str, Any]:
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise HTTPException(415, "模板 TOML 不是有效的 UTF-8 文本") from exc
+    except Exception as exc:
+        raise HTTPException(400, f"模板 TOML 解析失败: {exc}") from exc
+
+
+def _string_list(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    result: List[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def _collect_file_imports(parsed: Dict[str, Any], project: Dict[str, Any]) -> List[str]:
+    modinfo = parsed.get("MODINFO") if isinstance(parsed.get("MODINFO"), dict) else {}
+    enabled = bool(modinfo.get("file_import"))
+    refs = _string_list(modinfo.get("file_import_list")) if enabled else []
+    if refs:
+        return refs
+    workbench_meta = project.get("workbench_meta")
+    if isinstance(workbench_meta, dict) and workbench_meta.get("fileImport") is True:
+        return _string_list(workbench_meta.get("fileImportList"))
+    return []
+
+
+def _resolve_external_imports(project_dir: Path, relpaths: List[str]) -> List[tuple[Path, str]]:
+    resolved: List[tuple[Path, str]] = []
+    seen: Set[str] = set()
+    for raw in relpaths:
+        relpath = _validate_relpath_file(raw)
+        if relpath in seen:
+            continue
+        seen.add(relpath)
+        target = _safe_join(project_dir, relpath)
+        if not target.exists() or not target.is_file():
+            raise HTTPException(404, f"模板引用的外部文件不存在: {relpath}")
+        max_size = _max_size_for_filename(Path(relpath).name)
+        if target.stat().st_size > max_size:
+            raise HTTPException(413, f"外部文件 '{relpath}' 超过 {_max_size_label(max_size)} 上限")
+        resolved.append((target, relpath))
+    return resolved
+
+
+def _blocks_from_workbench_meta(mod_id: str, workbench_meta: Any) -> List[str]:
+    blocks: List[str] = []
+    if mod_id:
+        blocks.append(f"MODINFO.{mod_id}")
+    if not isinstance(workbench_meta, dict):
+        return blocks
+
+    def add_items(section: str, values: Any) -> None:
+        if not isinstance(values, list):
+            return
+        for item in values:
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("id") or "").strip()
+            if item_id:
+                blocks.append(f"{section}.{item_id}")
+
+    add_items("COMPONENTS", workbench_meta.get("components"))
+    add_items("DEPLOY", workbench_meta.get("deployments"))
+    add_items("CONFIG", workbench_meta.get("configItems"))
+    add_items("LAUNCH", workbench_meta.get("launchItems"))
+    add_items("UNINSTALL", workbench_meta.get("uninstallItems"))
+    return blocks
+
+
+def _create_package_meta(
+    *,
+    sequence: str,
+    project: Dict[str, Any],
+    template_path: Path,
+    parsed: Dict[str, Any],
+    external_files: List[tuple[Path, str]],
+    request: Request,
+) -> Dict[str, Any]:
+    modinfo = parsed.get("MODINFO") if isinstance(parsed.get("MODINFO"), dict) else {}
+    workbench_meta = project.get("workbench_meta") if isinstance(project.get("workbench_meta"), dict) else {}
+    mod_id = str(modinfo.get("mod_id") or workbench_meta.get("modId") or project.get("mod_id") or template_path.stem).strip()
+    mod_name = str(modinfo.get("mod_name") or workbench_meta.get("modName") or project.get("mod_name") or mod_id).strip()
+    author = str(modinfo.get("author") or project.get("author") or "").strip()
+    version = str(modinfo.get("version") or workbench_meta.get("version") or "").strip()
+    description = str(modinfo.get("description") or project.get("description") or "").strip()
+
+    user: Dict[str, Any] = {}
+    try:
+        from src.webui_api.auth_core import resolve_request_auth
+        resolved = resolve_request_auth(request)
+        if isinstance(resolved, dict):
+            user = resolved
+    except Exception:
+        user = {}
+
+    mail = str(user.get("email") or project.get("mail") or "").strip()
+    account = str(user.get("github_url") or project.get("account") or "").strip()
+    if not account:
+        login = str(user.get("github_login") or author or "").strip()
+        account = f"https://github.com/{login}" if login else ""
+
+    files_meta = []
+    tracked_by_path = {
+        str(item.get("path") or item.get("name") or "").replace("\\", "/").strip("/"): item
+        for item in project.get("files", [])
+        if isinstance(item, dict)
+    }
+    for _, relpath in external_files:
+        item = tracked_by_path.get(relpath)
+        files_meta.append({
+            "path": relpath,
+            "id": str(item.get("id") or "") if item else "",
+        })
+
+    return {
+        "meta": {
+            "name": mod_name,
+            "id": mod_id,
+            "file": template_path.name,
+            "author": author,
+            "mail": mail,
+            "account": account,
+            "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "version": version,
+            "description": description,
+            "blocks": _blocks_from_workbench_meta(mod_id, workbench_meta),
+            "pack-source": "MaiCoreStart",
+            "workbench_meta": _json_safe(workbench_meta, {}),
+            "visible_blocks": _json_safe(project.get("visible_blocks"), {}),
+            "workbench_canvas_state": _json_safe(project.get("workbench_canvas_state"), {}),
+            "files": files_meta,
+            "directories": _json_safe(project.get("directories"), []),
+            "template_sequence_source": sequence,
+            "format": "mcsmod",
+        }
+    }
+
+
+def _iso_alias_for_file(index: int, suffix: str) -> str:
+    ext = re.sub(r"[^A-Z0-9]", "", suffix.upper().lstrip("."))[:3] or "DAT"
+    stem = f"F{index:07d}"[:8]
+    return f"{stem}.{ext};1"
+
+
+def _iso_alias_for_dir(index: int) -> str:
+    return f"D{index:07d}"[:8]
+
+
+def _iso_path_for_dir(rel_dir: str, aliases: Dict[str, int]) -> str:
+    parts = _directory_chain_for_dir(rel_dir)
+    if not parts:
+        return "/"
+    return "/" + "/".join(_iso_alias_for_dir(aliases[part]) for part in parts)
+
+
+def _add_iso_directory(iso: pycdlib.PyCdlib, joliet_path: str, dirs: Set[str], counter: Dict[str, int]) -> None:
+    normalized = joliet_path.strip("/")
+    if not normalized:
+        return
+    current = ""
+    for part in normalized.split("/"):
+        current = f"{current}/{part}" if current else part
+        if current in dirs:
+            continue
+        parent = "/".join(current.split("/")[:-1])
+        if current not in counter:
+            counter[current] = len(counter) + 1
+        parent_iso = _iso_path_for_dir(parent, counter)
+        current_iso = f"{parent_iso.rstrip('/')}/{_iso_alias_for_dir(counter[current])}"
+        iso.add_directory(iso_path=current_iso, joliet_path=f"/{current}")
+        dirs.add(current)
+
+
+def _build_mcsmod_iso_bytes(entries: List[tuple[str, bytes]]) -> bytes:
+    output = io.BytesIO()
+    iso = pycdlib.PyCdlib()
+    iso.new(joliet=3, sys_ident="MAICORESTART", vol_ident="MCSMOD")
+    dirs: Set[str] = set()
+    dir_alias_counter: Dict[str, int] = {}
+    try:
+        for index, (relpath, data) in enumerate(entries, start=1):
+            normalized = _normalize_relpath(relpath)
+            parent = Path(normalized).parent.as_posix()
+            if parent not in ("", "."):
+                _add_iso_directory(iso, parent, dirs, dir_alias_counter)
+            iso_parent = ""
+            if parent not in ("", "."):
+                iso_parent = _iso_path_for_dir(parent, dir_alias_counter)
+            suffix = Path(normalized).suffix
+            iso_path = f"{iso_parent.rstrip('/')}/{_iso_alias_for_file(index, suffix)}"
+            iso.add_fp(io.BytesIO(data), len(data), iso_path=iso_path, joliet_path=f"/{normalized}")
+        iso.write_fp(output)
+    finally:
+        iso.close()
+    return output.getvalue()
+
+
+def _extract_iso_bytes(raw: bytes, extract_dir: Path) -> None:
+    iso = pycdlib.PyCdlib()
+    try:
+        iso.open_fp(io.BytesIO(raw))
+
+        def walk(joliet_dir: str) -> None:
+            for child in iso.list_children(joliet_path=joliet_dir):
+                if child.is_dot() or child.is_dotdot():
+                    continue
+                full_path = iso.full_path_from_dirrecord(child).replace("\\", "/").strip("/")
+                if not full_path:
+                    continue
+                target = (extract_dir / full_path).resolve()
+                if not str(target).startswith(str(extract_dir.resolve())):
+                    raise HTTPException(400, f"非法 ISO 路径: {full_path}")
+                if child.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    walk(f"/{full_path}")
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with target.open("wb") as fp:
+                        iso.get_file_from_iso_fp(fp, joliet_path=f"/{full_path}")
+
+        walk("/")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(400, f"非法 ISO 文件: {exc}") from exc
+    finally:
+        try:
+            iso.close()
+        except Exception:
+            pass
+
+
+def _find_mod_meta_json(content_root: Path) -> Optional[Path]:
+    direct = content_root / "mod.meta.json"
+    if direct.exists() and direct.is_file():
+        return direct
+    matches = [path for path in content_root.rglob("mod.meta.json") if path.is_file()]
+    if not matches:
+        return None
+    matches.sort(key=lambda path: len(path.relative_to(content_root).parts))
+    return matches[0]
+
+
+def _load_mod_package_meta(meta_path: Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise HTTPException(400, f"mod.meta.json 格式错误: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "mod.meta.json 根节点必须是对象")
+    meta = payload.get("meta", payload)
+    if not isinstance(meta, dict):
+        raise HTTPException(400, "mod.meta.json 缺少 meta 对象")
+    return meta
+
+
+def _normalize_imported_meta_files(meta: Dict[str, Any], content_root: Path) -> List[tuple[Path, str, str]]:
+    result: List[tuple[Path, str, str]] = []
+    seen: Set[str] = set()
+    for item in meta.get("files") if isinstance(meta.get("files"), list) else []:
+        if isinstance(item, dict):
+            raw_path = str(item.get("path") or item.get("name") or "").strip()
+            file_id = str(item.get("id") or "").strip()
+        else:
+            raw_path = str(item or "").strip()
+            file_id = ""
+        if not raw_path:
+            continue
+        relpath = _validate_relpath_file(raw_path)
+        if relpath in seen:
+            continue
+        seen.add(relpath)
+        source = (content_root / relpath).resolve()
+        if not str(source).startswith(str(content_root.resolve())):
+            raise HTTPException(400, f"非法文件路径: {relpath}")
+        if source.exists() and source.is_file():
+            result.append((source, relpath, file_id))
+    return result
+
+
+def _create_project_from_mod_package(content_root: Path, meta_path: Path, target_dir: str) -> Dict[str, Any]:
+    meta = _load_mod_package_meta(meta_path)
+    file_name = str(meta.get("file") or "").strip()
+    if not file_name:
+        raise HTTPException(400, "mod.meta.json 缺少 meta.file")
+    template_relpath = _validate_relpath_file(file_name)
+    template_source = (content_root / template_relpath).resolve()
+    if not str(template_source).startswith(str(content_root.resolve())) or not template_source.exists():
+        raise HTTPException(400, f"包内找不到模板文件: {template_relpath}")
+    if not _is_valid_template_toml(template_source.read_bytes()):
+        raise HTTPException(400, "包内模板 TOML 未声明合法的 [MCStart] / MCStart=true 结构")
+
+    package_mod_id = str(meta.get("id") or Path(template_relpath).stem).strip() or Path(template_relpath).stem
+    package_name = str(meta.get("name") or package_mod_id).strip() or package_mod_id
+    base = _validate_base_path(str(Path(target_dir).resolve()))
+    safe_mod_id = _safe_filename_stem(package_mod_id, "imported-project")
+    actual_mod_id = safe_mod_id if not (base / safe_mod_id).exists() else _suggest_mod_id(base, safe_mod_id)
+    project_dir = base / actual_mod_id
+    project_dir.mkdir(parents=True, exist_ok=False)
+
+    try:
+        template_target = project_dir / Path(template_relpath).name
+        shutil.copyfile(template_source, template_target)
+        imported_files: List[Dict[str, Any]] = []
+        for source, relpath, file_id in _normalize_imported_meta_files(meta, content_root):
+            destination = project_dir / relpath
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+            imported_files.append(_build_meta(file_id or f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}", relpath, destination, project_dir))
+        directories = _normalize_directory_list(
+            _string_list(meta.get("directories"))
+            + [directory for item in imported_files for directory in _directory_chain_for_file(str(item.get("path") or item.get("name") or ""))]
+        )
+
+        workbench_meta = meta.get("workbench_meta") if isinstance(meta.get("workbench_meta"), dict) else {}
+        if isinstance(workbench_meta, dict):
+            workbench_meta = dict(workbench_meta)
+            workbench_meta["modId"] = package_mod_id
+            workbench_meta["modName"] = package_name
+            workbench_meta["files"] = imported_files
+
+        data = load_mod_index()
+        sequence = generate_sequence(data)
+        data[sequence] = {
+            "mod_name": package_name,
+            "path": str(project_dir),
+            "mod_id": package_mod_id,
+            "description": str(meta.get("description") or ""),
+            "author": str(meta.get("author") or ""),
+            "cover": None,
+            "directories": directories,
+            "files": imported_files,
+            "workbench_meta": workbench_meta,
+            "visible_blocks": meta.get("visible_blocks") if isinstance(meta.get("visible_blocks"), dict) else {},
+            "workbench_canvas_state": meta.get("workbench_canvas_state") if isinstance(meta.get("workbench_canvas_state"), dict) else {},
+        }
+        save_mod_index(data)
+        project = to_project(sequence, data[sequence]).model_dump()
+        project["directories"] = directories
+        project["files"] = imported_files
+        return project
+    except Exception:
+        shutil.rmtree(project_dir, ignore_errors=True)
+        raise
+
+
+def _camelize_key(key: str) -> str:
+    parts = str(key).split("_")
+    if not parts:
+        return key
+    return parts[0] + "".join(part[:1].upper() + part[1:] for part in parts[1:])
+
+
+def _camelize_dict(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_camelize_dict(item) for item in value]
+    if isinstance(value, dict):
+        return {_camelize_key(str(key)): _camelize_dict(item) for key, item in value.items()}
+    return value
+
+
+def _template_state_from_toml(parsed: Dict[str, Any], files: List[Dict[str, Any]]) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    modinfo = parsed.get("MODINFO") if isinstance(parsed.get("MODINFO"), dict) else {}
+    components = [_camelize_dict(item) for item in parsed.get("Component", []) if isinstance(item, dict)] if isinstance(parsed.get("Component"), list) else []
+    deployments = [_camelize_dict(item) for item in parsed.get("Deployment", []) if isinstance(item, dict)] if isinstance(parsed.get("Deployment"), list) else []
+    config_items = [_camelize_dict(item) for item in parsed.get("ConfigItem", []) if isinstance(item, dict)] if isinstance(parsed.get("ConfigItem"), list) else []
+    launch_items = [_camelize_dict(item) for item in parsed.get("LaunchItem", []) if isinstance(item, dict)] if isinstance(parsed.get("LaunchItem"), list) else []
+    uninstall_items = [_camelize_dict(item) for item in parsed.get("UninstallItem", []) if isinstance(item, dict)] if isinstance(parsed.get("UninstallItem"), list) else []
+
+    def section_bool(section_name: str, key: str) -> bool:
+        section = parsed.get(section_name)
+        return bool(section.get(key)) if isinstance(section, dict) else False
+
+    def section_list(section_name: str) -> List[str]:
+        section = parsed.get(section_name)
+        return _string_list(section.get("list")) if isinstance(section, dict) else []
+
+    workbench_meta = {
+        "author": str(modinfo.get("author") or ""),
+        "tags": _string_list(modinfo.get("tags")),
+        "description": str(modinfo.get("description") or ""),
+        "modId": str(modinfo.get("mod_id") or ""),
+        "modName": str(modinfo.get("mod_name") or ""),
+        "version": str(modinfo.get("version") or ""),
+        "minVersion": str(modinfo.get("min_version") or ""),
+        "maxVersion": str(modinfo.get("max_version") or ""),
+        "fileImport": bool(modinfo.get("file_import")),
+        "fileImportList": _string_list(modinfo.get("file_import_list")),
+        "runtime": str(modinfo.get("runtime") or "powershell"),
+        "platforms": _string_list(modinfo.get("platforms")) or ["windows"],
+        "schemaVersion": str(modinfo.get("schema_version") or ""),
+        "componentsEnvOutput": section_bool("COMPONENTS", "env_output"),
+        "componentsEnvInput": section_bool("COMPONENTS", "env_input"),
+        "componentsList": section_list("COMPONENTS"),
+        "components": components,
+        "deployEnvOutput": section_bool("DEPLOY", "env_output"),
+        "deployEnvInput": section_bool("DEPLOY", "env_input"),
+        "deployList": section_list("DEPLOY"),
+        "deployments": deployments,
+        "configEnvOutput": section_bool("CONFIG", "env_output"),
+        "configEnvInput": section_bool("CONFIG", "env_input"),
+        "configList": section_list("CONFIG"),
+        "configItems": config_items,
+        "launchEnvOutput": section_bool("LAUNCH", "env_output"),
+        "launchEnvInput": section_bool("LAUNCH", "env_input"),
+        "launchList": section_list("LAUNCH"),
+        "launchItems": launch_items,
+        "uninstallEnvOutput": section_bool("UNINSTALL", "env_output"),
+        "uninstallEnvInput": section_bool("UNINSTALL", "env_input"),
+        "uninstallList": section_list("UNINSTALL"),
+        "uninstallItems": uninstall_items,
+        "files": files,
+    }
+
+    visible_blocks = {
+        "components": bool(parsed.get("COMPONENTS") or components),
+        "deploy": bool(parsed.get("DEPLOY") or deployments),
+        "config": bool(parsed.get("CONFIG") or config_items),
+        "launch": bool(parsed.get("LAUNCH") or launch_items),
+        "uninstall": bool(parsed.get("UNINSTALL") or uninstall_items),
+        "componentCount": len(components),
+        "deploymentCount": len(deployments),
+        "configItemCount": len(config_items),
+        "launchItemCount": len(launch_items),
+        "uninstallItemCount": len(uninstall_items),
+    }
+
+    canvas_state = {
+        "viewport": {"scale": 1, "x": 0, "y": 0},
+        "startEndpointPosition": {"x": 605.289, "y": 469.289},
+        "initBlockPosition": {"x": 829, "y": 359},
+        "componentsBlockPosition": {"x": 1332, "y": 342},
+        "deployBlockPosition": {"x": 1900, "y": 342},
+        "configBlockPosition": {"x": 2468, "y": 342},
+        "launchBlockPosition": {"x": 3036, "y": 342},
+        "uninstallBlockPosition": {"x": 3604, "y": 342},
+        "componentBlockPositions": [{"x": 1348, "y": 650 + index * 220} for index in range(len(components))],
+        "deploymentBlockPositions": [{"x": 1916, "y": 650 + index * 220} for index in range(len(deployments))],
+        "configItemBlockPositions": [{"x": 2484, "y": 650 + index * 190} for index in range(len(config_items))],
+        "launchItemBlockPositions": [{"x": 3052, "y": 650 + index * 190} for index in range(len(launch_items))],
+        "uninstallItemBlockPositions": [{"x": 3620, "y": 650 + index * 220} for index in range(len(uninstall_items))],
+        "componentConnections": [True for _ in components],
+        "deploymentConnections": [True for _ in deployments],
+        "configItemConnections": [True for _ in config_items],
+        "launchItemConnections": [True for _ in launch_items],
+        "uninstallItemConnections": [True for _ in uninstall_items],
+        "fileBlockPositions": {
+            str(file.get("id")): {"x": 460, "y": 650 + index * 140}
+            for index, file in enumerate(files)
+            if file.get("id")
+        },
+        "hiddenFileBlockIds": [],
+        "componentsConnected": visible_blocks["components"],
+        "deployConnected": visible_blocks["deploy"],
+        "configConnected": visible_blocks["config"],
+        "launchConnected": visible_blocks["launch"],
+        "uninstallConnected": visible_blocks["uninstall"],
+        "manualConnections": [],
+    }
+    return workbench_meta, visible_blocks, canvas_state
+
+
 @router.post(
     "/projects/{sequence}/folders/create",
     summary="创建子目录（最多 5 层）",
@@ -1207,13 +1770,15 @@ async def import_archive(
         ".zip", ".iso", ".mcsmod", ".7z", ".rar", ".tar", ".tgz", ".gz", ".gzip",
         ".tar.gz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".bz2", ".xz",
     )
-    temp_dir = Path(tempfile.mkdtemp(prefix="workbench-import-"))
+    temp_dir = _make_temp_dir("import-")
     try:
         matched_suffix = next((suffix for suffix in archive_suffixes if lower.endswith(suffix)), None)
         if not matched_suffix:
             raise HTTPException(400, f"不支持的归档类型: {filename}")
         if matched_suffix == ".zip":
             _safe_extract_zip_bytes(raw, temp_dir, password=password)
+        elif matched_suffix in (".iso", ".mcsmod"):
+            _extract_iso_bytes(raw, temp_dir)
         else:
             _extract_archive_bytes(raw, matched_suffix, temp_dir, password=password)
         content_root = _flatten_single_top_dir(temp_dir)
@@ -1234,6 +1799,10 @@ async def import_archive(
             return {"mode": "files-imported", "directories": _read_project_directories(project_sequence), "files": imported}
         if not target_dir.strip():
             raise HTTPException(400, "首页导入压缩包或镜像包时必须指定导入目标目录")
+        meta_path = _find_mod_meta_json(content_root)
+        if meta_path:
+            project = _create_project_from_mod_package(content_root, meta_path, target_dir)
+            return {"mode": "project-created", "project": project, "directories": project.get("directories", []), "files": project.get("files", [])}
         root_name = normalize_archive_project_name(filename)
         base = _validate_base_path(str(Path(target_dir).resolve()))
         project_dir = base / root_name
@@ -1248,17 +1817,55 @@ async def import_archive(
                 destination = project_dir / rel
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(abs_path, destination)
+            template_candidates = []
+            for abs_path, rel in entries:
+                if Path(rel).suffix.lower() != ".toml":
+                    continue
+                try:
+                    if _is_valid_template_toml(abs_path.read_bytes()):
+                        template_candidates.append((abs_path, rel))
+                except OSError:
+                    continue
+            template_candidates.sort(key=lambda item: (len(Path(item[1]).parts), item[1].lower()))
             toml_target = project_dir / f"{actual_root_name}.toml"
-            if not toml_target.exists():
+            parsed_template: Dict[str, Any] = {}
+            if template_candidates:
+                source, rel = template_candidates[0]
+                source_target = project_dir / rel
+                if source_target.resolve() != toml_target.resolve():
+                    shutil.copyfile(source, toml_target)
+                parsed_template = _parse_template_toml(toml_target)
+            elif not toml_target.exists():
                 toml_target.write_text(
                     _render_mod_info_toml(actual_root_name, actual_root_name, "", "", None),
                     encoding="utf-8",
                 )
+                parsed_template = _parse_template_toml(toml_target)
             project = _register_project_from_directory(project_dir, actual_root_name)
+            data = load_mod_index()
+            sequence = str(project.get("sequence") or "")
+            if sequence and sequence in data:
+                synced = project.get("files", [])
+                workbench_meta, visible_blocks, canvas_state = _template_state_from_toml(parsed_template, synced)
+                actual_mod_id = str(workbench_meta.get("modId") or actual_root_name)
+                actual_mod_name = str(workbench_meta.get("modName") or actual_mod_id)
+                workbench_meta["modId"] = actual_mod_id
+                workbench_meta["modName"] = actual_mod_name
+                data[sequence]["workbench_meta"] = workbench_meta
+                data[sequence]["visible_blocks"] = visible_blocks
+                data[sequence]["workbench_canvas_state"] = canvas_state
+                data[sequence]["mod_id"] = actual_mod_id
+                data[sequence]["mod_name"] = actual_mod_name
+                data[sequence]["description"] = str(workbench_meta.get("description") or "")
+                data[sequence]["author"] = str(workbench_meta.get("author") or "")
+                save_mod_index(data)
+                project = to_project(sequence, data[sequence]).model_dump()
+                project["directories"] = _read_project_directories(sequence)
+                project["files"] = synced
             synced = project.get("files", [])
             return {"mode": "project-created", "project": project, "directories": project.get("directories", []), "files": synced}
         except Exception:
             shutil.rmtree(project_dir, ignore_errors=True)
             raise
     finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        _remove_tree_quiet(temp_dir)

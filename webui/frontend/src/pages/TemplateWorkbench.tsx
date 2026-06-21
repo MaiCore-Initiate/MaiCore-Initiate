@@ -8,6 +8,7 @@ import DeleteConfirmDialog from '../components/DeleteConfirmDialog'
 import ProjectContextMenu, { type ProjectContextAction } from '../components/ProjectContextMenu'
 import WorkbenchImportDialog, { type WorkbenchImportResult, type WorkbenchImportTargetContext } from '../components/WorkbenchImportDialog'
 import FileEditorModal from './FileEditorModal'
+import { useNotification } from '../components/ui/Notification'
 import {
   CirclePlus,
   Clock,
@@ -198,6 +199,50 @@ function formatFileSize(size?: number) {
   if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`
   if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${size} B`
+}
+
+async function resolveApiErrorMessage(response: Response, fallback: string) {
+  const text = await response.text().catch(() => '')
+  if (!text) return fallback
+  try {
+    const payload = JSON.parse(text) as { detail?: unknown; message?: string }
+    if (typeof payload.detail === 'string') return payload.detail
+    if (payload.detail && typeof payload.detail === 'object' && 'message' in payload.detail) {
+      const message = (payload.detail as { message?: unknown }).message
+      if (typeof message === 'string') return message
+    }
+    if (typeof payload.message === 'string') return payload.message
+  } catch {
+    return text
+  }
+  return text || fallback
+}
+
+function filenameFromContentDisposition(value: string | null, fallback: string) {
+  if (!value) return fallback
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1])
+    } catch {
+      return utf8Match[1]
+    }
+  }
+  const quotedMatch = value.match(/filename="([^"]+)"/i)
+  if (quotedMatch?.[1]) return quotedMatch[1]
+  const plainMatch = value.match(/filename=([^;]+)/i)
+  return plainMatch?.[1]?.trim() || fallback
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function extOf(name: string) {
@@ -1516,9 +1561,11 @@ function PublishProjectQuickIcon() {
 function PackageQuickActions({
   onPackageProject,
   onPublishProject,
+  disabled,
 }: {
   onPackageProject?: () => void
   onPublishProject?: () => void
+  disabled?: boolean
 }) {
   return (
     <div className="absolute flex gap-[30px]" style={{ left: 400, top: 196, width: 630, height: 61, color: 'var(--twb-text)' }}>
@@ -1527,12 +1574,14 @@ function PackageQuickActions({
         description="打包模板文件，用于分发它们"
         icon={<PackageProjectQuickIcon />}
         onClick={onPackageProject}
+        disabled={disabled}
       />
       <PackageQuickActionButton
         label="发布项目"
         description="将流程发布到启动器中"
         icon={<PublishProjectQuickIcon />}
         onClick={onPublishProject}
+        disabled={disabled}
       />
     </div>
   )
@@ -1543,18 +1592,21 @@ function PackageQuickActionButton({
   description,
   icon,
   onClick,
+  disabled,
 }: {
   label: string
   description: string
   icon: ReactNode
   onClick?: () => void
+  disabled?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="relative h-[61px] w-[300px] rounded-[10px] border text-left transition-colors hover:bg-[var(--twb-hover)]"
-      style={{ borderColor: 'currentColor', color: 'var(--twb-text)' }}
+      disabled={disabled}
+      className="relative h-[61px] w-[300px] rounded-[10px] border text-left transition-colors enabled:hover:bg-[var(--twb-hover)] disabled:cursor-not-allowed"
+      style={{ borderColor: 'currentColor', color: 'var(--twb-text)', opacity: disabled ? 0.55 : 1 }}
       aria-label={label}
     >
       <span className="absolute left-[5px] top-[10px] flex h-[40px] w-[40px] items-center justify-center" aria-hidden>
@@ -1687,6 +1739,7 @@ export default function TemplateWorkbench({
   onPackageTemplate,
   onPublishTemplate,
 }: TemplateWorkbenchProps) {
+  const { notify } = useNotification()
   const [activeSection, setActiveSection] = useState<TemplateWorkbenchSection>('my-templates')
   const [layoutMode, setLayoutMode] = useState<TemplateWorkbenchLayout>(() => readLayoutCookie())
   const [route, setRoute] = useState<TemplateWorkbenchRoute>({ type: 'home' })
@@ -1724,6 +1777,7 @@ export default function TemplateWorkbench({
   const [exactSearchEnabled, setExactSearchEnabled] = useState(false)
   const [starredSequences, setStarredSequences] = useState<string[]>(() => readStarredFlowsCookie())
   const [selectedPackageTemplateId, setSelectedPackageTemplateId] = useState<string | null>(null)
+  const [packagingTemplateId, setPackagingTemplateId] = useState<string | null>(null)
 
   const starredSequenceSet = useMemo(() => new Set(starredSequences), [starredSequences])
   const isPackagePublishPage = activeSection === 'package-publish'
@@ -1970,6 +2024,37 @@ export default function TemplateWorkbench({
     setSelectedPackageTemplateId(item.id)
   }
 
+  const packageSelectedTemplate = async (item: TemplateWorkbenchItem) => {
+    if (!item.sequence) {
+      setActionError('该模板没有关联工作台项目，无法打包。')
+      return
+    }
+    setPackagingTemplateId(item.id)
+    setActionError(null)
+    try {
+      const response = await fetch(
+        `/api/template-workbench/projects/${encodeURIComponent(item.sequence)}/package`,
+        { method: 'POST', credentials: 'include' },
+      )
+      if (!response.ok) {
+        throw new Error(await resolveApiErrorMessage(response, '打包失败'))
+      }
+      const blob = await response.blob()
+      const filename = filenameFromContentDisposition(
+        response.headers.get('Content-Disposition'),
+        `${item.name || item.fileName || 'template'}.mcsmod`,
+      )
+      downloadBlob(blob, filename)
+      notify('项目打包完成', 'success')
+    } catch (err) {
+      const message = (err as Error).message ?? String(err)
+      setActionError(message)
+      notify(message || '打包失败', 'error')
+    } finally {
+      setPackagingTemplateId(null)
+    }
+  }
+
   const handlePackageTemplateAction = (action: 'package' | 'publish') => {
     if (!selectedPackageTemplate) {
       setActionError('请先选择一个模板。')
@@ -1977,10 +2062,19 @@ export default function TemplateWorkbench({
     }
     setActionError(null)
     if (action === 'package') {
-      onPackageTemplate?.(selectedPackageTemplate)
+      if (onPackageTemplate) {
+        onPackageTemplate(selectedPackageTemplate)
+        return
+      }
+      void packageSelectedTemplate(selectedPackageTemplate)
       return
     }
-    onPublishTemplate?.(selectedPackageTemplate)
+    if (onPublishTemplate) {
+      onPublishTemplate(selectedPackageTemplate)
+      return
+    }
+    setActionError('发布功能暂未开放。')
+    notify('发布功能暂未开放', 'info')
   }
 
   const createDeploymentProject = () => {
@@ -2615,6 +2709,7 @@ export default function TemplateWorkbench({
           <PackageQuickActions
             onPackageProject={() => handlePackageTemplateAction('package')}
             onPublishProject={() => handlePackageTemplateAction('publish')}
+            disabled={Boolean(packagingTemplateId && packagingTemplateId === selectedPackageTemplateId)}
           />
         ) : (
           <QuickActions
