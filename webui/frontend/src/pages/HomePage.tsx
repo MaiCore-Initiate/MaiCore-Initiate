@@ -44,9 +44,9 @@ export default function HomePage({
   const layoutMode: HomeLayoutMode = size.width >= 1360 ? 'wide' : size.width >= 1100 ? 'medium' : 'compact'
   const isShort = size.height > 0 && size.height < 720
   const gap = isShort ? 16 : 24
-  const topMinHeight = isShort ? 214 : 252
-  const quickMinHeight = isShort ? 240 : 292
-  const chartMinHeight = isShort ? 320 : 380
+  const topMinHeight = isShort ? 340 : 320
+  const quickMinHeight = isShort ? 292 : 320
+  const chartMinHeight = isShort ? 340 : 380
 
   const layout = useMemo(() => {
     if (layoutMode === 'wide') {
