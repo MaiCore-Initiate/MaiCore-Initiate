@@ -326,15 +326,22 @@ export default function WorkbenchImportDialog({
   return createPortal(
     <div className="fixed inset-0 z-[1000] flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="workbench-import-title">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[6px]" onClick={onClose} />
-      <div className="relative flex w-[94%] max-w-3xl flex-col rounded-2xl border border-white/20 bg-[var(--dfw-bg)] shadow-2xl">
-        <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-          <h2 id="workbench-import-title" className="text-lg font-semibold text-[var(--dfw-text)]">
+      <div
+        className="relative flex w-[94%] max-w-3xl flex-col rounded-2xl border shadow-2xl"
+        style={{
+          borderColor: 'var(--mc-border-muted)',
+          background: 'var(--mc-panel-solid)',
+          color: 'var(--mc-text-primary)',
+        }}
+      >
+        <header className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--mc-border-soft)' }}>
+          <h2 id="workbench-import-title" className="text-lg font-semibold text-[var(--mc-text-primary)]">
             {title}
           </h2>
           <button
             type="button"
             aria-label="关闭"
-            className="rounded-md p-1 text-[var(--dfw-text)] opacity-70 transition hover:bg-white/10"
+            className="rounded-md p-1 text-[var(--mc-text-primary)] opacity-70 transition hover:bg-[var(--mc-control-hover)]"
             onClick={onClose}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -344,31 +351,47 @@ export default function WorkbenchImportDialog({
         </header>
 
         {errorMessage && (
-          <div className="border-b border-red-400/30 bg-red-500/15 px-6 py-2 text-sm text-red-100">
+          <div
+            className="border-b px-6 py-2 text-sm"
+            style={{
+              borderColor: 'color-mix(in srgb, hsl(var(--destructive)) 42%, transparent)',
+              background: 'color-mix(in srgb, hsl(var(--destructive)) 12%, var(--mc-panel-solid))',
+              color: 'var(--mc-text-primary)',
+            }}
+          >
             {errorMessage}
           </div>
         )}
 
         <div className="space-y-5 px-6 py-5">
-          <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-[var(--dfw-text)]">
+          <div
+            className="rounded-lg border px-4 py-3 text-sm text-[var(--mc-text-primary)]"
+            style={{ borderColor: 'var(--mc-border-soft)', background: 'var(--mc-control-bg-soft)' }}
+          >
             当前导入基准：<code className="font-mono">{context.inProjectFolder ? (context.currentDir || '(项目根目录)') : '(工作台首页)'}</code>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--dfw-text)]">导入目标</label>
+            <label className="block text-sm font-medium text-[var(--mc-text-primary)]">导入目标</label>
             <input
               value={targetDirInput}
               onChange={event => setTargetDirInput(event.target.value)}
               placeholder={context.inProjectFolder ? '留空表示当前目录' : '首页导入时填写目标目录'}
-              className="mt-2 w-full rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
+              className="mt-2 w-full rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 py-2 font-mono text-sm text-[var(--mc-text-primary)] outline-none transition-colors placeholder:text-[var(--mc-placeholder)] focus:border-[#0084ff]"
             />
-            <p className="mt-2 text-xs text-[var(--dfw-text)] opacity-60">
+            <p className="mt-2 text-xs text-[var(--mc-text-muted)]">
               压缩包会按这个目标目录解包导入；位于项目文件夹中时默认自动填充当前目录。
             </p>
           </div>
 
           <div
-            className={`rounded-2xl border border-dashed px-6 py-10 text-center transition ${dragOver ? 'border-[var(--dfw-blue)] bg-white/8' : 'border-white/20 bg-white/4'}`}
+            className="rounded-2xl border border-dashed px-6 py-10 text-center transition"
+            style={{
+              borderColor: dragOver ? '#0084ff' : 'var(--mc-border-muted)',
+              background: dragOver
+                ? 'color-mix(in srgb, #0084ff 12%, var(--mc-panel-solid))'
+                : 'var(--mc-control-bg-soft)',
+            }}
             onDragOver={event => {
               event.preventDefault()
               setDragOver(true)
@@ -379,29 +402,33 @@ export default function WorkbenchImportDialog({
             }}
             onDrop={event => void onDrop(event)}
           >
-            <div className="text-base font-medium text-[var(--dfw-text)]">拖拽文件到这里</div>
-            <div className="mt-2 text-sm text-[var(--dfw-text)] opacity-65">
+            <div className="text-base font-medium text-[var(--mc-text-primary)]">拖拽文件到这里</div>
+            <div className="mt-2 text-sm text-[var(--mc-text-muted)]">
               支持白名单文件、多文件、`.zip`、`.iso`、`.mcsmod`、`.tar`、`.tar.gz`、`.gzip`、`.rar`、`.7z`、模板 `.toml`
             </div>
             <input ref={fileInputRef} type="file" hidden multiple onChange={event => void onInputChange(event)} />
             <button
               type="button"
-              className="mt-5 rounded-lg bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+              className="mt-5 rounded-lg bg-[#0084ff] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
               onClick={() => fileInputRef.current?.click()}
             >
               选择导入文件
             </button>
           </div>
 
-          <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-[var(--dfw-text)]">
+          <div
+            className="rounded-lg border px-4 py-3 text-sm text-[var(--mc-text-primary)]"
+            style={{ borderColor: 'var(--mc-border-soft)', background: 'var(--mc-control-bg-soft)' }}
+          >
             已选内容：{selectionSummary || '暂无'}
           </div>
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-white/10 px-6 py-4">
+        <footer className="flex items-center justify-end gap-2 border-t px-6 py-4" style={{ borderColor: 'var(--mc-border-soft)' }}>
           <button
             type="button"
-            className="rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm text-[var(--dfw-text)] transition hover:bg-white/5"
+            className="rounded-lg border bg-transparent px-4 py-2 text-sm text-[var(--mc-text-primary)] transition hover:bg-[var(--mc-control-hover)]"
+            style={{ borderColor: 'var(--mc-border-muted)' }}
             onClick={onClose}
             disabled={submitting}
           >
@@ -409,7 +436,7 @@ export default function WorkbenchImportDialog({
           </button>
           <button
             type="button"
-            className="rounded-lg bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+            className="rounded-lg bg-[#0084ff] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
             onClick={() => void handleSubmit()}
             disabled={submitting || selectedFiles.length === 0}
           >
@@ -421,29 +448,37 @@ export default function WorkbenchImportDialog({
       {passwordPromptOpen && createPortal(
         <div className="fixed inset-0 z-[1010] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={refreshPasswordAndClose} />
-          <div className="relative w-[92%] max-w-md rounded-2xl border border-white/20 bg-[var(--dfw-bg)] p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-[var(--dfw-text)]">请输入解压密码</h3>
-            <p className="mt-2 text-sm text-[var(--dfw-text)] opacity-70">
+          <div
+            className="relative w-[92%] max-w-md rounded-2xl border p-6 shadow-2xl"
+            style={{
+              borderColor: 'var(--mc-border-muted)',
+              background: 'var(--mc-panel-solid)',
+              color: 'var(--mc-text-primary)',
+            }}
+          >
+            <h3 className="text-lg font-semibold text-[var(--mc-text-primary)]">请输入解压密码</h3>
+            <p className="mt-2 text-sm text-[var(--mc-text-muted)]">
               该归档文件需要密码后才能导入。
             </p>
             <input
               type="password"
               value={passwordValue}
               onChange={event => setPasswordValue(event.target.value)}
-              className="mt-4 w-full rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
+              className="mt-4 w-full rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 py-2 font-mono text-sm text-[var(--mc-text-primary)] outline-none transition-colors focus:border-[#0084ff]"
               autoFocus
             />
             <div className="mt-5 flex items-center justify-end gap-2">
               <button
                 type="button"
-                className="rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm text-[var(--dfw-text)] transition hover:bg-white/5"
+                className="rounded-lg border bg-transparent px-4 py-2 text-sm text-[var(--mc-text-primary)] transition hover:bg-[var(--mc-control-hover)]"
+                style={{ borderColor: 'var(--mc-border-muted)' }}
                 onClick={refreshPasswordAndClose}
               >
                 取消
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
+                className="rounded-lg bg-[#0084ff] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-40"
                 disabled={!passwordValue.trim()}
                 onClick={() => {
                   refreshPasswordAndClose()

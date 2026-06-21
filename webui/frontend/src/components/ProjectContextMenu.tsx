@@ -67,11 +67,14 @@ export default function ProjectContextMenu({
     <div
       ref={menuRef}
       role="menu"
-      className="fixed z-[1100] min-w-[180px] rounded-xl border border-white/15 py-1 shadow-2xl backdrop-blur-md"
+      className="fixed z-[1100] min-w-[180px] rounded-xl border py-1 shadow-2xl backdrop-blur-md"
       style={{
         left: Math.min(x, (typeof window !== 'undefined' ? window.innerWidth : 1024) - 200),
         top: Math.min(y, (typeof window !== 'undefined' ? window.innerHeight : 768) - items.length * 36 - 16),
-        background: 'rgba(20, 20, 28, 0.92)',
+        borderColor: 'var(--mc-border-muted)',
+        background: 'var(--mc-control-solid)',
+        boxShadow: '0 20px 56px var(--mc-shadow-soft)',
+        color: 'var(--mc-text-primary)',
       }}
       onClick={event => event.stopPropagation()}
     >
@@ -81,9 +84,9 @@ export default function ProjectContextMenu({
           type="button"
           role="menuitem"
           onClick={() => onAction(item.key)}
-          className="block w-full whitespace-nowrap px-4 py-2 text-left text-sm transition-colors hover:bg-white/10"
+          className="block w-full whitespace-nowrap px-4 py-2 text-left text-sm transition-colors hover:bg-[var(--mc-control-hover)]"
           style={{
-            color: item.danger ? '#f87171' : 'var(--dfw-text)',
+            color: item.danger ? '#f87171' : 'var(--mc-text-primary)',
             fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
           }}
         >

@@ -52,6 +52,8 @@ ALLOWED_EXTENSIONS = {
     ".json", ".txt", ".jsonl", ".log", ".java", ".jar", ".toml", ".exe",
     ".yaml", ".xml",
 }
+COVER_ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+COVER_MAX_BYTES = 5 * 1024 * 1024
 # 视为二进制的后缀
 BINARY_EXTENSIONS = {".jar", ".exe"}
 CREATION_BLOCKED_EXTENSIONS = {".jar", ".exe"}
@@ -137,7 +139,7 @@ def _validate_relpath(value: str, *, allow_dir: bool = False, require_ext: bool 
     for part in parts:
         if not SEGMENT_PATTERN.match(part):
             raise HTTPException(400, f"路径段包含非法字符: {part!r}")
-    if not allow_dir:
+    if not allow_dir and require_ext:
         # 文件名必须带允许的后缀
         ext = Path(parts[-1]).suffix.lower()
         if not ext or ext not in ALLOWED_EXTENSIONS:
@@ -223,6 +225,14 @@ def _validate_creatable_name(name: str) -> None:
 def _validate_relpath_file(relpath: str) -> str:
     """校验作为文件的相对路径（最多 5 层目录、最后一段是允许的文件名）。"""
     return _validate_relpath(relpath, allow_dir=False, require_ext=True)
+
+
+def _validate_relpath_cover(relpath: str) -> str:
+    normalized = _validate_relpath(relpath, allow_dir=False, require_ext=False)
+    ext = Path(normalized).suffix.lower()
+    if ext not in COVER_ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"不支持的封面文件类型: {ext or '<无后缀>'}")
+    return normalized
 
 
 def _validate_relpath_dir(relpath: str) -> str:
@@ -639,7 +649,11 @@ def _collect_importable_files(root: Path) -> List[tuple[Path, str]]:
         if not file_path.is_file():
             continue
         relative_path = file_path.relative_to(root).as_posix()
-        _validate_relpath_file(relative_path)
+        ext = Path(relative_path).suffix.lower()
+        if ext in COVER_ALLOWED_EXTENSIONS:
+            _validate_relpath_cover(relative_path)
+        else:
+            _validate_relpath_file(relative_path)
         collected.append((file_path, relative_path))
     return collected
 
@@ -964,12 +978,14 @@ def package_project(sequence: str, request: Request):
         raise HTTPException(400, "当前项目主 TOML 未声明合法的 [MCStart] / MCStart=true 模板结构")
 
     external_files = _resolve_external_imports(project_dir, _collect_file_imports(parsed, project))
+    cover_file = _resolve_project_cover(project_dir, project, parsed)
     meta = _create_package_meta(
         sequence=sequence,
         project=project,
         template_path=template_path,
         parsed=parsed,
         external_files=external_files,
+        cover_file=cover_file,
         request=request,
     )
     meta_bytes = json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8")
@@ -977,8 +993,16 @@ def package_project(sequence: str, request: Request):
         ("mod.meta.json", meta_bytes),
         (template_path.name, template_path.read_bytes()),
     ]
+    entry_paths = {"mod.meta.json", template_path.name}
+    if cover_file:
+        path, relpath = cover_file
+        if relpath not in entry_paths:
+            entries.append((relpath, path.read_bytes()))
+            entry_paths.add(relpath)
     for path, relpath in external_files:
-        entries.append((relpath, path.read_bytes()))
+        if relpath not in entry_paths:
+            entries.append((relpath, path.read_bytes()))
+            entry_paths.add(relpath)
 
     package_bytes = _build_mcsmod_iso_bytes(entries)
     modinfo = parsed.get("MODINFO") if isinstance(parsed.get("MODINFO"), dict) else {}
@@ -1215,6 +1239,20 @@ def _resolve_external_imports(project_dir: Path, relpaths: List[str]) -> List[tu
     return resolved
 
 
+def _resolve_project_cover(project_dir: Path, project: Dict[str, Any], parsed: Dict[str, Any]) -> Optional[tuple[Path, str]]:
+    modinfo = parsed.get("MODINFO") if isinstance(parsed.get("MODINFO"), dict) else {}
+    raw_cover = str(project.get("cover") or modinfo.get("cover") or "").strip()
+    if not raw_cover:
+        return None
+    relpath = _validate_relpath_cover(raw_cover)
+    target = _safe_join(project_dir, relpath)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(404, f"模板封面文件不存在: {relpath}")
+    if target.stat().st_size > COVER_MAX_BYTES:
+        raise HTTPException(413, f"封面文件 '{relpath}' 超过 {_max_size_label(COVER_MAX_BYTES)} 上限")
+    return target, relpath
+
+
 def _blocks_from_workbench_meta(mod_id: str, workbench_meta: Any) -> List[str]:
     blocks: List[str] = []
     if mod_id:
@@ -1247,6 +1285,7 @@ def _create_package_meta(
     template_path: Path,
     parsed: Dict[str, Any],
     external_files: List[tuple[Path, str]],
+    cover_file: Optional[tuple[Path, str]],
     request: Request,
 ) -> Dict[str, Any]:
     modinfo = parsed.get("MODINFO") if isinstance(parsed.get("MODINFO"), dict) else {}
@@ -1256,6 +1295,7 @@ def _create_package_meta(
     author = str(modinfo.get("author") or project.get("author") or "").strip()
     version = str(modinfo.get("version") or workbench_meta.get("version") or "").strip()
     description = str(modinfo.get("description") or project.get("description") or "").strip()
+    cover_relpath = cover_file[1] if cover_file else ""
 
     user: Dict[str, Any] = {}
     try:
@@ -1296,6 +1336,7 @@ def _create_package_meta(
             "time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "version": version,
             "description": description,
+            "cover": cover_relpath,
             "blocks": _blocks_from_workbench_meta(mod_id, workbench_meta),
             "pack-source": "MaiCoreStart",
             "workbench_meta": _json_safe(workbench_meta, {}),
@@ -1451,6 +1492,38 @@ def _normalize_imported_meta_files(meta: Dict[str, Any], content_root: Path) -> 
     return result
 
 
+def _resolve_imported_cover_from_meta(meta: Dict[str, Any], content_root: Path) -> Optional[tuple[Path, str]]:
+    raw_cover = str(meta.get("cover") or "").strip()
+    if not raw_cover:
+        return None
+    relpath = _validate_relpath_cover(raw_cover)
+    source = (content_root / relpath).resolve()
+    if not str(source).startswith(str(content_root.resolve())):
+        raise HTTPException(400, f"非法封面路径: {relpath}")
+    if not source.exists() or not source.is_file():
+        return None
+    return source, relpath
+
+
+def _resolve_imported_cover_from_toml(parsed: Dict[str, Any], content_root: Path, copied_root: Path) -> Optional[str]:
+    modinfo = parsed.get("MODINFO") if isinstance(parsed.get("MODINFO"), dict) else {}
+    raw_cover = str(modinfo.get("cover") or "").strip()
+    if not raw_cover:
+        return None
+    relpath = _validate_relpath_cover(raw_cover)
+    source = (content_root / relpath).resolve()
+    destination = (copied_root / relpath).resolve()
+    if not str(source).startswith(str(content_root.resolve())) or not str(destination).startswith(str(copied_root.resolve())):
+        raise HTTPException(400, f"非法封面路径: {relpath}")
+    if destination.exists() and destination.is_file():
+        return relpath
+    if source.exists() and source.is_file():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        return relpath
+    return None
+
+
 def _create_project_from_mod_package(content_root: Path, meta_path: Path, target_dir: str) -> Dict[str, Any]:
     meta = _load_mod_package_meta(meta_path)
     file_name = str(meta.get("file") or "").strip()
@@ -1480,9 +1553,18 @@ def _create_project_from_mod_package(content_root: Path, meta_path: Path, target
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
             imported_files.append(_build_meta(file_id or f"file-{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}", relpath, destination, project_dir))
+        cover_relpath: Optional[str] = None
+        imported_cover = _resolve_imported_cover_from_meta(meta, content_root)
+        if imported_cover:
+            source, relpath = imported_cover
+            destination = project_dir / relpath
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+            cover_relpath = relpath
         directories = _normalize_directory_list(
             _string_list(meta.get("directories"))
             + [directory for item in imported_files for directory in _directory_chain_for_file(str(item.get("path") or item.get("name") or ""))]
+            + (_directory_chain_for_file(cover_relpath) if cover_relpath else [])
         )
 
         workbench_meta = meta.get("workbench_meta") if isinstance(meta.get("workbench_meta"), dict) else {}
@@ -1500,7 +1582,7 @@ def _create_project_from_mod_package(content_root: Path, meta_path: Path, target
             "mod_id": package_mod_id,
             "description": str(meta.get("description") or ""),
             "author": str(meta.get("author") or ""),
-            "cover": None,
+            "cover": cover_relpath,
             "directories": directories,
             "files": imported_files,
             "workbench_meta": workbench_meta,
@@ -1784,16 +1866,21 @@ async def import_archive(
         content_root = _flatten_single_top_dir(temp_dir)
         archive_directories = _collect_importable_directories(content_root)
         entries = _collect_importable_files(content_root)
+        file_entries = [(abs_path, rel) for abs_path, rel in entries if Path(rel).suffix.lower() in ALLOWED_EXTENSIONS]
         if not entries and not archive_directories:
             raise HTTPException(400, "归档中没有可导入的白名单文件")
         if in_project_folder:
             if not project_sequence:
                 raise HTTPException(400, "缺少 project_sequence")
             imported: List[Dict[str, Any]] = []
+            if entries and not file_entries:
+                raise HTTPException(400, "归档中没有可导入的白名单文件")
+            if not file_entries and not archive_directories:
+                raise HTTPException(400, "归档中没有可导入的白名单文件")
             merged_directories = [_join_base_dir(target_dir, directory) for directory in archive_directories]
             if merged_directories:
                 _merge_project_directories(project_sequence, dir_paths=merged_directories)
-            for abs_path, rel in entries:
+            for abs_path, rel in file_entries:
                 joined = _join_base_dir(target_dir, rel)
                 imported.append(_write_uploaded_file(project_sequence, joined, abs_path.read_bytes()))
             return {"mode": "files-imported", "directories": _read_project_directories(project_sequence), "files": imported}
@@ -1803,6 +1890,8 @@ async def import_archive(
         if meta_path:
             project = _create_project_from_mod_package(content_root, meta_path, target_dir)
             return {"mode": "project-created", "project": project, "directories": project.get("directories", []), "files": project.get("files", [])}
+        if entries and not file_entries:
+            raise HTTPException(400, "归档中没有可导入的白名单文件")
         root_name = normalize_archive_project_name(filename)
         base = _validate_base_path(str(Path(target_dir).resolve()))
         project_dir = base / root_name
@@ -1813,12 +1902,12 @@ async def import_archive(
         try:
             for rel in archive_directories:
                 (project_dir / rel).mkdir(parents=True, exist_ok=True)
-            for abs_path, rel in entries:
+            for abs_path, rel in file_entries:
                 destination = project_dir / rel
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(abs_path, destination)
             template_candidates = []
-            for abs_path, rel in entries:
+            for abs_path, rel in file_entries:
                 if Path(rel).suffix.lower() != ".toml":
                     continue
                 try:
@@ -1841,6 +1930,7 @@ async def import_archive(
                     encoding="utf-8",
                 )
                 parsed_template = _parse_template_toml(toml_target)
+            cover_relpath = _resolve_imported_cover_from_toml(parsed_template, content_root, project_dir)
             project = _register_project_from_directory(project_dir, actual_root_name)
             data = load_mod_index()
             sequence = str(project.get("sequence") or "")
@@ -1858,6 +1948,7 @@ async def import_archive(
                 data[sequence]["mod_name"] = actual_mod_name
                 data[sequence]["description"] = str(workbench_meta.get("description") or "")
                 data[sequence]["author"] = str(workbench_meta.get("author") or "")
+                data[sequence]["cover"] = cover_relpath
                 save_mod_index(data)
                 project = to_project(sequence, data[sequence]).model_dump()
                 project["directories"] = _read_project_directories(sequence)
