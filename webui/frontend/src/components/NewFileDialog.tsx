@@ -133,7 +133,7 @@ function TargetLocationDropdown({
         className="flex min-h-[42px] w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         style={{
           borderColor: open ? 'var(--dfw-blue)' : 'rgba(127,127,127,0.32)',
-          background: 'color-mix(in srgb, var(--dfw-bg) 50%, transparent)',
+          background: 'var(--mc-control-bg-soft)',
           backdropFilter: 'blur(50px)',
           WebkitBackdropFilter: 'blur(50px)',
           color: 'var(--dfw-text)',
@@ -170,7 +170,7 @@ function TargetLocationDropdown({
           className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 max-h-64 overflow-y-auto rounded-lg border p-1 shadow-2xl"
           style={{
             borderColor: 'rgba(127,127,127,0.32)',
-            background: 'color-mix(in srgb, var(--dfw-bg) 50%, transparent)',
+            background: 'var(--mc-control-solid)',
             backdropFilter: 'blur(50px)',
             WebkitBackdropFilter: 'blur(50px)',
             color: 'var(--dfw-text)',
@@ -308,15 +308,15 @@ export default function NewFileDialog({
         className="absolute inset-0 bg-black/30 backdrop-blur-[6px]"
         onClick={onClose}
       />
-      <div className="relative flex max-h-[90vh] w-[92%] max-w-2xl flex-col rounded-2xl border border-white/20 bg-[var(--dfw-bg)] shadow-2xl">
-        <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+      <div className="relative flex max-h-[90vh] w-[92%] max-w-2xl flex-col rounded-2xl border border-[var(--mc-border-muted)] bg-[var(--mc-panel-solid)] text-[var(--mc-text-primary)] shadow-2xl">
+        <header className="flex items-center justify-between border-b border-[var(--mc-border-soft)] px-6 py-4">
           <h2 id="new-file-title" className="text-lg font-semibold text-[var(--dfw-text)]">
             新建文件
           </h2>
           <button
             type="button"
             aria-label="关闭"
-            className="rounded-md p-1 text-[var(--dfw-text)] opacity-70 transition hover:bg-white/10"
+            className="rounded-md p-1 text-[var(--dfw-text)] opacity-70 transition hover:bg-[var(--mc-control-hover)]"
             onClick={onClose}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -338,7 +338,7 @@ export default function NewFileDialog({
                 onChange={onTargetChange}
               />
               {!targetReady && (
-                <div className="mt-2 text-xs text-amber-200">⚠ 请选择文件要新建到哪个项目或文件夹</div>
+                <div className="workbench-alert workbench-alert-warning mt-2 rounded-md px-3 py-2 text-xs">⚠ 请选择文件要新建到哪个项目或文件夹</div>
               )}
             </div>
           )}
@@ -356,13 +356,13 @@ export default function NewFileDialog({
               }
             }}
             placeholder="例如 test.py"
-            className="mt-2 w-full rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
+            className="mt-2 w-full rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 py-2 font-mono text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
           />
           {!validation.ok && name.length > 0 && (
-            <div className="mt-2 text-xs text-amber-200">⚠ {validation.reason}</div>
+            <div className="workbench-alert workbench-alert-warning mt-2 rounded-md px-3 py-2 text-xs">⚠ {validation.reason}</div>
           )}
           {errorMessage && (
-            <div className="mt-2 text-xs text-red-300">⚠ {errorMessage}</div>
+            <div className="workbench-alert workbench-alert-error mt-2 rounded-md px-3 py-2 text-xs">⚠ {errorMessage}</div>
           )}
           <div className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">
             可新建后缀：{NEW_FILE_CREATABLE_EXTENSIONS.map(e => e.replace('.', '')).join(' / ')}
@@ -379,14 +379,14 @@ export default function NewFileDialog({
             onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setContent(event.target.value)}
             placeholder="留空则创建空文件"
             rows={10}
-            className="mt-2 w-full resize-y rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-xs text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
+            className="mt-2 w-full resize-y rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 py-2 font-mono text-xs text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)]"
           />
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-white/10 px-6 py-4">
+        <footer className="flex items-center justify-end gap-2 border-t border-[var(--mc-border-soft)] px-6 py-4">
           <button
             type="button"
-            className="rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm text-[var(--dfw-text)] transition hover:bg-white/5"
+            className="rounded-lg border border-[var(--mc-border-muted)] bg-transparent px-4 py-2 text-sm text-[var(--dfw-text)] transition hover:bg-[var(--mc-control-hover)]"
             onClick={onClose}
           >
             取消
@@ -420,7 +420,7 @@ export default function NewFileDialog({
             className="absolute inset-0 bg-black/40 backdrop-blur-[6px]"
             onClick={() => onConflictResolveRef.current('cancel')}
           />
-          <div className="relative w-[92%] max-w-md rounded-2xl border border-white/20 bg-[var(--dfw-bg)] p-6 shadow-2xl">
+          <div className="relative w-[92%] max-w-md rounded-2xl border border-[var(--mc-border-muted)] bg-[var(--mc-panel-solid)] p-6 text-[var(--mc-text-primary)] shadow-2xl">
             <h3 id="new-file-conflict-title" className="text-base font-semibold text-[var(--dfw-text)]">
               文件名冲突
             </h3>
@@ -437,7 +437,7 @@ export default function NewFileDialog({
               </button>
               <button
                 type="button"
-                className="w-full rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] transition hover:bg-white/5"
+                className="w-full rounded-lg border border-[var(--mc-border-muted)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] transition hover:bg-[var(--mc-control-hover)]"
                 onClick={() => onConflictResolveRef.current('overwrite')}
               >
                 覆盖现有文件

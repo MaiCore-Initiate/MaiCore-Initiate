@@ -63,26 +63,26 @@ export default function DeleteConfirmDialog({
       aria-labelledby="delete-project-title"
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[6px]" onClick={onCancel} />
-      <div className="relative w-[92%] max-w-md rounded-2xl border border-white/20 bg-[var(--dfw-bg)] p-6 shadow-2xl">
+      <div className="relative w-[92%] max-w-md rounded-2xl border border-[var(--mc-border-muted)] bg-[var(--mc-panel-solid)] p-6 text-[var(--mc-text-primary)] shadow-2xl">
         <h2
           id="delete-project-title"
-          className="text-lg font-semibold text-red-300"
+          className="text-lg font-semibold text-[var(--workbench-alert-error-text)]"
         >
           ⚠ {title}
         </h2>
         <p className="mt-3 text-sm text-[var(--dfw-text)] opacity-90">
           确定要删除 <span className="font-semibold">{targetLabel || projectName || '该项目'}</span> 吗？<br />
-          <span className="text-red-300">{description || '将移入回收站，30 天内可以恢复。'}</span>
+          <span className="text-[var(--workbench-alert-error-text)]">{description || '将移入回收站，30 天内可以恢复。'}</span>
         </p>
         {projectPath && (
-          <div className="mt-3 rounded-md border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs text-[var(--dfw-text)] opacity-70 break-all">
+          <div className="mt-3 break-all rounded-md border border-[var(--mc-border-soft)] bg-[var(--mc-control-bg-soft)] px-3 py-2 font-mono text-xs text-[var(--dfw-text)] opacity-70">
             {projectPath}
           </div>
         )}
         <div className="mt-6 flex items-center justify-end gap-2">
           <button
             type="button"
-            className="rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm text-[var(--dfw-text)] transition hover:bg-white/5"
+            className="rounded-lg border border-[var(--mc-border-muted)] bg-transparent px-4 py-2 text-sm text-[var(--dfw-text)] transition hover:bg-[var(--mc-control-hover)]"
             onClick={onCancel}
             disabled={deleting}
           >
@@ -90,7 +90,8 @@ export default function DeleteConfirmDialog({
           </button>
           <button
             type="button"
-            className="rounded-lg bg-red-500/90 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-500 disabled:opacity-50"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
+            style={{ background: 'color-mix(in srgb, var(--workbench-alert-error-text) 86%, #ef4444)' }}
             onClick={() => void handleConfirm()}
             disabled={deleting}
           >

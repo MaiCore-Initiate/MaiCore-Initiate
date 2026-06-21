@@ -45,7 +45,7 @@ export default function FileConflictDialog({
         className="absolute inset-0 bg-black/30 backdrop-blur-[6px]"
         onClick={() => onResolve('cancel')}
       />
-      <div className="relative max-w-md w-[90%] rounded-2xl border border-white/20 bg-[var(--dfw-bg)] p-6 shadow-2xl">
+      <div className="relative w-[90%] max-w-md rounded-2xl border border-[var(--mc-border-muted)] bg-[var(--mc-panel-solid)] p-6 text-[var(--mc-text-primary)] shadow-2xl">
         <h2
           id="file-conflict-title"
           className="text-lg font-semibold text-[var(--dfw-text)]"
@@ -65,7 +65,7 @@ export default function FileConflictDialog({
           </button>
           <button
             type="button"
-            className="w-full rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] transition hover:bg-white/5"
+            className="w-full rounded-lg border border-[var(--mc-border-muted)] bg-transparent px-4 py-2 text-sm font-medium text-[var(--dfw-text)] transition hover:bg-[var(--mc-control-hover)]"
             onClick={() => onResolve('overwrite')}
           >
             覆盖现有文件

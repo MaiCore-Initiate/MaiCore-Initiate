@@ -458,15 +458,15 @@ export default function CreateProjectDialog({
       aria-labelledby="create-project-title"
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[6px]" onClick={onClose} />
-      <div className="relative flex max-h-[92vh] w-[94%] max-w-3xl flex-col rounded-2xl border border-white/20 bg-[var(--dfw-bg)] shadow-2xl">
-        <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+      <div className="relative flex max-h-[92vh] w-[94%] max-w-3xl flex-col rounded-2xl border border-[var(--mc-border-muted)] bg-[var(--mc-panel-solid)] text-[var(--mc-text-primary)] shadow-2xl">
+        <header className="flex items-center justify-between border-b border-[var(--mc-border-soft)] px-6 py-4">
           <h2 id="create-project-title" className="text-lg font-semibold text-[var(--dfw-text)]">
             新建工作台项目
           </h2>
           <button
             type="button"
             aria-label="关闭"
-            className="rounded-md p-1 text-[var(--dfw-text)] opacity-70 transition hover:bg-white/10"
+            className="rounded-md p-1 text-[var(--dfw-text)] opacity-70 transition hover:bg-[var(--mc-control-hover)]"
             onClick={onClose}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -476,7 +476,7 @@ export default function CreateProjectDialog({
         </header>
 
         {error && (
-          <div className="border-b border-red-400/30 bg-red-500/15 px-6 py-2 text-sm text-red-100">
+          <div className="workbench-alert workbench-alert-error border-x-0 border-t-0 px-6 py-2 text-sm">
             {error}
             <button
               type="button"
@@ -493,8 +493,8 @@ export default function CreateProjectDialog({
           <div
             className={
               githubReady
-                ? 'rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100'
-                : 'rounded-lg border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100'
+                ? 'workbench-alert workbench-alert-success rounded-lg px-4 py-2 text-sm'
+                : 'workbench-alert workbench-alert-warning rounded-lg px-4 py-3 text-sm'
             }
           >
             {!githubStatus.loaded ? (
@@ -508,7 +508,7 @@ export default function CreateProjectDialog({
                 <div>⚠ {githubStatus.message}</div>
                 <a
                   href="#/settings"
-                  className="inline-block rounded-md border border-current px-3 py-1 text-xs hover:bg-white/10"
+                  className="inline-block rounded-md border border-current px-3 py-1 text-xs hover:bg-[var(--mc-control-hover)]"
                 >
                   前往账户设置
                 </a>
@@ -523,7 +523,7 @@ export default function CreateProjectDialog({
               value={basePath}
               onChange={(event: ChangeEvent<HTMLInputElement>) => setBasePath(event.target.value)}
               placeholder="例如 C:/Users/Me/Projects 或 /home/me/projects"
-              className="mt-2 w-full rounded-lg border border-white/20 bg-transparent px-3 py-2 font-mono text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)] disabled:opacity-50"
+              className="mt-2 w-full rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 py-2 font-mono text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)] disabled:opacity-50"
               disabled={!githubReady}
             />
             <p className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">
@@ -540,7 +540,7 @@ export default function CreateProjectDialog({
               onChange={(event: ChangeEvent<HTMLInputElement>) => setModName(event.target.value)}
               placeholder="例如 我的部署模版"
               maxLength={128}
-              className="mt-2 w-full rounded-lg border border-white/20 bg-transparent px-3 py-2 text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)] disabled:opacity-50"
+              className="mt-2 w-full rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 py-2 text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)] disabled:opacity-50"
               disabled={!githubReady}
             />
           </div>
@@ -552,10 +552,10 @@ export default function CreateProjectDialog({
               value={modId}
               readOnly
               placeholder="格式：GitHubUsername.MODName"
-              className="mt-2 w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 font-mono text-sm text-[var(--dfw-text)] opacity-80"
+              className="mt-2 w-full rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 py-2 font-mono text-sm text-[var(--dfw-text)] opacity-80"
             />
             {!modIdValid && modId.length > 0 && (
-              <p className="mt-1 text-xs text-amber-300">
+              <p className="workbench-alert workbench-alert-warning mt-2 rounded-md px-3 py-2 text-xs">
                 ⚠ 不符合 <code className="font-mono">^[A-Za-z0-9_-]{'{1,64}'}$</code>
               </p>
             )}
@@ -570,7 +570,7 @@ export default function CreateProjectDialog({
               placeholder="可选，最多 2000 字符"
               rows={3}
               maxLength={2000}
-              className="mt-2 w-full resize-y rounded-lg border border-white/20 bg-transparent px-3 py-2 text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)] disabled:opacity-50"
+              className="mt-2 w-full resize-y rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 py-2 text-sm text-[var(--dfw-text)] outline-none focus:border-[var(--dfw-blue)] disabled:opacity-50"
               disabled={!githubReady}
             />
           </div>
@@ -581,7 +581,7 @@ export default function CreateProjectDialog({
             <input
               value={author}
               readOnly
-              className="mt-2 w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 font-mono text-sm text-[var(--dfw-text)] opacity-80"
+              className="mt-2 w-full rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 py-2 font-mono text-sm text-[var(--dfw-text)] opacity-80"
             />
           </div>
 
@@ -589,7 +589,7 @@ export default function CreateProjectDialog({
           <div>
             <label className="block text-sm font-medium text-[var(--dfw-text)]">项目封面（可选，png/jpg/gif/webp，≤ 5MB）</label>
             <div className="mt-2 flex items-start gap-4">
-              <div className="h-28 w-28 shrink-0 overflow-hidden rounded-lg border border-white/20 bg-white/5">
+              <div className="h-28 w-28 shrink-0 overflow-hidden rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)]">
                 {coverDataUrl ? (
                   <img src={coverDataUrl} alt="封面预览" className="h-full w-full object-cover" />
                 ) : (
@@ -608,7 +608,7 @@ export default function CreateProjectDialog({
                 />
                 <button
                   type="button"
-                  className="rounded-md border border-[var(--dfw-text)]/20 bg-transparent px-3 py-1.5 text-sm text-[var(--dfw-text)] transition hover:bg-white/5 disabled:opacity-50"
+                  className="rounded-md border border-[var(--mc-border-muted)] bg-transparent px-3 py-1.5 text-sm text-[var(--dfw-text)] transition hover:bg-[var(--mc-control-hover)] disabled:opacity-50"
                   onClick={() => coverInputRef.current?.click()}
                   disabled={!githubReady}
                 >
@@ -648,7 +648,7 @@ export default function CreateProjectDialog({
               />
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dfw-text)]/20 bg-transparent px-3 py-1.5 text-sm text-[var(--dfw-text)] transition hover:bg-white/5 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--mc-border-muted)] bg-transparent px-3 py-1.5 text-sm text-[var(--dfw-text)] transition hover:bg-[var(--mc-control-hover)] disabled:opacity-50"
                 onClick={() => extraDirInputRef.current?.click()}
                 disabled={!githubReady}
               >
@@ -662,26 +662,26 @@ export default function CreateProjectDialog({
               )}
             </div>
             {extraWarnings.length > 0 && (
-              <div className="mt-2 max-h-24 overflow-y-auto rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              <div className="workbench-alert workbench-alert-warning mt-2 max-h-24 overflow-y-auto rounded-md px-3 py-2 text-xs">
                 {extraWarnings.map((w, idx) => (
                   <div key={`${w}-${idx}`}>⚠ {w}</div>
                 ))}
               </div>
             )}
             {extraEntries.length > 0 && (
-              <div className="mt-2 max-h-40 overflow-y-auto rounded-md border border-white/10 bg-white/5 p-2 font-mono text-xs">
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-md border border-[var(--mc-border-soft)] bg-[var(--mc-control-bg-soft)] p-2 font-mono text-xs">
                 {extraEntries
                   .slice()
                   .sort((a, b) => a.relpath.localeCompare(b.relpath))
                   .map(entry => (
                     <div
                       key={entry.relpath}
-                      className="flex items-center justify-between gap-2 px-1 py-0.5 hover:bg-white/5"
+                      className="flex items-center justify-between gap-2 px-1 py-0.5 hover:bg-[var(--mc-control-hover)]"
                     >
                       <span className="truncate text-[var(--dfw-text)]" title={entry.relpath}>{entry.relpath}</span>
                       <button
                         type="button"
-                        className="rounded p-0.5 text-[var(--dfw-text)] opacity-50 hover:bg-white/10 hover:opacity-100"
+                        className="rounded p-0.5 text-[var(--dfw-text)] opacity-50 hover:bg-[var(--mc-control-hover)] hover:opacity-100"
                         onClick={() => removeExtraEntry(entry.relpath)}
                         aria-label={`移除 ${entry.relpath}`}
                       >
@@ -694,10 +694,10 @@ export default function CreateProjectDialog({
           </div>
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-white/10 px-6 py-4">
+        <footer className="flex items-center justify-end gap-2 border-t border-[var(--mc-border-soft)] px-6 py-4">
           <button
             type="button"
-            className="rounded-lg border border-[var(--dfw-text)]/20 bg-transparent px-4 py-2 text-sm text-[var(--dfw-text)] transition hover:bg-white/5"
+            className="rounded-lg border border-[var(--mc-border-muted)] bg-transparent px-4 py-2 text-sm text-[var(--dfw-text)] transition hover:bg-[var(--mc-control-hover)]"
             onClick={onClose}
           >
             取消

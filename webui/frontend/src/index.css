@@ -90,6 +90,21 @@
     --mc-shadow-soft: rgba(0, 0, 0, 0.16);
     --mc-scroll-thumb: rgba(0, 0, 0, 0.15);
     --mc-scroll-thumb-hover: rgba(0, 0, 0, 0.35);
+    --dfw-bg: #ffffff;
+    --dfw-text: #000000;
+    --dfw-border: rgba(0, 0, 0, 0.28);
+    --dfw-control-bg: rgba(255, 255, 255, 0.76);
+    --dfw-control-hover: rgba(0, 0, 0, 0.06);
+    --dfw-blue: #0084ff;
+    --workbench-alert-error-border: rgba(220, 38, 38, 0.32);
+    --workbench-alert-error-bg: rgba(239, 68, 68, 0.1);
+    --workbench-alert-error-text: #7f1d1d;
+    --workbench-alert-warning-border: rgba(217, 119, 6, 0.34);
+    --workbench-alert-warning-bg: rgba(245, 158, 11, 0.14);
+    --workbench-alert-warning-text: #78350f;
+    --workbench-alert-success-border: rgba(5, 150, 105, 0.34);
+    --workbench-alert-success-bg: rgba(16, 185, 129, 0.12);
+    --workbench-alert-success-text: #064e3b;
   }
 
   .dark {
@@ -151,6 +166,21 @@
     --mc-shadow-soft: rgba(0, 0, 0, 0.26);
     --mc-scroll-thumb: rgba(255, 255, 255, 0.18);
     --mc-scroll-thumb-hover: rgba(255, 255, 255, 0.3);
+    --dfw-bg: #000000;
+    --dfw-text: #ffffff;
+    --dfw-border: rgba(255, 255, 255, 0.28);
+    --dfw-control-bg: rgba(0, 0, 0, 0.68);
+    --dfw-control-hover: rgba(255, 255, 255, 0.08);
+    --dfw-blue: #0084ff;
+    --workbench-alert-error-border: rgba(248, 113, 113, 0.46);
+    --workbench-alert-error-bg: rgba(127, 29, 29, 0.28);
+    --workbench-alert-error-text: #fecaca;
+    --workbench-alert-warning-border: rgba(251, 191, 36, 0.44);
+    --workbench-alert-warning-bg: rgba(120, 53, 15, 0.28);
+    --workbench-alert-warning-text: #fde68a;
+    --workbench-alert-success-border: rgba(52, 211, 153, 0.38);
+    --workbench-alert-success-bg: rgba(6, 78, 59, 0.28);
+    --workbench-alert-success-text: #bbf7d0;
   }
 }
 
@@ -262,6 +292,30 @@ html.theme-animating *::after {
 [data-workbench-ui] :where(input, textarea, select, option, [contenteditable='true'], .monaco-editor, .monaco-editor *) {
   -webkit-user-select: text;
   user-select: text;
+}
+
+.workbench-alert {
+  border: 1px solid var(--workbench-alert-border);
+  background: var(--workbench-alert-bg);
+  color: var(--workbench-alert-text);
+}
+
+.workbench-alert-error {
+  --workbench-alert-border: var(--workbench-alert-error-border);
+  --workbench-alert-bg: var(--workbench-alert-error-bg);
+  --workbench-alert-text: var(--workbench-alert-error-text);
+}
+
+.workbench-alert-warning {
+  --workbench-alert-border: var(--workbench-alert-warning-border);
+  --workbench-alert-bg: var(--workbench-alert-warning-bg);
+  --workbench-alert-text: var(--workbench-alert-warning-text);
+}
+
+.workbench-alert-success {
+  --workbench-alert-border: var(--workbench-alert-success-border);
+  --workbench-alert-bg: var(--workbench-alert-success-bg);
+  --workbench-alert-text: var(--workbench-alert-success-text);
 }
 
 .dark .deployment-flow-workbench,

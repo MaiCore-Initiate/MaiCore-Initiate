@@ -1168,19 +1168,19 @@ function StarredFlowDialog({
   return createPortal(
     <div className="fixed inset-0 z-[1000] flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="starred-flow-dialog-title">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-[6px]" onClick={onClose} />
-      <div className="relative flex max-h-[82vh] w-[92%] max-w-xl flex-col rounded-2xl border border-white/20 bg-[var(--dfw-bg)] shadow-2xl">
-        <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+      <div className="relative flex max-h-[82vh] w-[92%] max-w-xl flex-col rounded-2xl border border-[var(--mc-border-muted)] bg-[var(--mc-panel-solid)] text-[var(--mc-text-primary)] shadow-2xl">
+        <header className="flex items-center justify-between border-b border-[var(--mc-border-soft)] px-6 py-4">
           <h2 id="starred-flow-dialog-title" className="text-lg font-semibold text-[var(--dfw-text)]">
             管理星标部署流程
           </h2>
-          <button type="button" className="rounded-md p-1 text-[var(--dfw-text)] opacity-70 transition hover:bg-white/10" onClick={onClose} aria-label="关闭">
+          <button type="button" className="rounded-md p-1 text-[var(--dfw-text)] opacity-70 transition hover:bg-[var(--mc-control-hover)]" onClick={onClose} aria-label="关闭">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M6 6L18 18M6 18L18 6" strokeLinecap="round" />
             </svg>
           </button>
         </header>
-        <div className="border-b border-white/10 px-6 py-4">
-          <label className="flex h-[40px] items-center rounded-lg border border-white/20 px-3 text-[var(--dfw-text)]">
+        <div className="border-b border-[var(--mc-border-soft)] px-6 py-4">
+          <label className="flex h-[40px] items-center rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3 text-[var(--dfw-text)]">
             <Search size={18} className="mr-2 opacity-70" />
             <input
               value={query}
@@ -1193,7 +1193,7 @@ function StarredFlowDialog({
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {filteredItems.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-white/20 py-10 text-center text-sm text-[var(--dfw-text)] opacity-60">
+            <div className="rounded-lg border border-dashed border-[var(--mc-border-muted)] py-10 text-center text-sm text-[var(--dfw-text)] opacity-60">
               没有匹配的部署流程
             </div>
           ) : (
@@ -1206,8 +1206,8 @@ function StarredFlowDialog({
                     key={item.id}
                     type="button"
                     onClick={() => onToggle(item.sequence!)}
-                    className="flex h-[44px] w-full items-center rounded-lg border px-3 text-left transition hover:bg-white/5"
-                    style={{ borderColor: starred ? starredColor : 'rgba(255,255,255,0.14)', color: 'var(--dfw-text)' }}
+                    className="flex h-[44px] w-full items-center rounded-lg border px-3 text-left transition hover:bg-[var(--mc-control-hover)]"
+                    style={{ borderColor: starred ? starredColor : 'var(--mc-border-soft)', color: 'var(--dfw-text)' }}
                   >
                     <span className="mr-3 flex h-[24px] w-[24px] shrink-0 items-center justify-center" style={{ color: starred ? starredColor : 'currentColor' }}>
                       <StarGlyph filled={starred} />
@@ -1222,7 +1222,7 @@ function StarredFlowDialog({
             </div>
           )}
         </div>
-        <footer className="flex items-center justify-end border-t border-white/10 px-6 py-4">
+        <footer className="flex items-center justify-end border-t border-[var(--mc-border-soft)] px-6 py-4">
           <button type="button" className="rounded-lg bg-[var(--dfw-blue)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90" onClick={onClose}>
             完成
           </button>
@@ -1328,18 +1328,18 @@ function TrashDialog({
   return createPortal(
     <div className="fixed inset-0 z-[1050] flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="trash-dialog-title">
       <div className="absolute inset-0 bg-black/35 backdrop-blur-[8px]" onClick={onClose} />
-      <div className="relative flex h-[72vh] w-[min(920px,92vw)] flex-col overflow-hidden rounded-2xl border border-white/20 bg-[var(--dfw-bg)] shadow-2xl">
-        <header className="flex items-center gap-4 border-b border-white/10 px-6 py-4">
+      <div className="relative flex h-[72vh] w-[min(920px,92vw)] flex-col overflow-hidden rounded-2xl border border-[var(--mc-border-muted)] bg-[var(--mc-panel-solid)] text-[var(--mc-text-primary)] shadow-2xl">
+        <header className="flex items-center gap-4 border-b border-[var(--mc-border-soft)] px-6 py-4">
           <div className="min-w-0 flex-1">
             <h2 id="trash-dialog-title" className="text-lg font-semibold text-[var(--dfw-text)]">回收站</h2>
             <p className="mt-1 text-xs text-[var(--dfw-text)] opacity-60">删除的项目、文件和文件夹默认保留 30 天。</p>
           </div>
-          <button type="button" className="rounded-md px-2 py-1 text-sm text-[var(--dfw-text)] opacity-70 transition hover:bg-white/10" onClick={onClose}>
+          <button type="button" className="rounded-md px-2 py-1 text-sm text-[var(--dfw-text)] opacity-70 transition hover:bg-[var(--mc-control-hover)]" onClick={onClose}>
             关闭
           </button>
         </header>
-        <div className="border-b border-white/10 px-6 py-4">
-          <label className="flex h-[40px] items-center rounded-lg border border-white/15 bg-white/5 px-3">
+        <div className="border-b border-[var(--mc-border-soft)] px-6 py-4">
+          <label className="flex h-[40px] items-center rounded-lg border border-[var(--mc-border-muted)] bg-[var(--mc-control-bg-soft)] px-3">
             <Search size={18} className="mr-2 opacity-60" />
             <input
               value={query}
@@ -1348,13 +1348,13 @@ function TrashDialog({
               className="min-w-0 flex-1 bg-transparent text-sm text-[var(--dfw-text)] outline-none placeholder:text-[var(--dfw-text)]/45"
             />
           </label>
-          {error && <div className="mt-3 rounded-lg border border-red-400/30 bg-red-500/15 px-3 py-2 text-sm text-red-100">{error}</div>}
+          {error && <div className="workbench-alert workbench-alert-error mt-3 rounded-lg px-3 py-2 text-sm">{error}</div>}
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {loading ? (
             <div className="py-12 text-center text-sm text-[var(--dfw-text)] opacity-60">正在加载…</div>
           ) : filteredItems.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-white/20 py-12 text-center text-sm text-[var(--dfw-text)] opacity-60">
+            <div className="rounded-lg border border-dashed border-[var(--mc-border-muted)] py-12 text-center text-sm text-[var(--dfw-text)] opacity-60">
               回收站为空
             </div>
           ) : (
@@ -1366,10 +1366,10 @@ function TrashDialog({
                 const daysLeft = Math.max(0, Math.ceil((new Date(item.expiresAt).getTime() - Date.now()) / 86400000))
                 const busy = workingId === item.id
                 return (
-                  <div key={item.id} className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                  <div key={item.id} className="flex items-center gap-4 rounded-xl border border-[var(--mc-border-soft)] bg-[var(--mc-control-bg-soft)] px-4 py-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="rounded-md border border-white/10 px-2 py-0.5 text-xs text-[var(--dfw-text)] opacity-70">{kindLabel}</span>
+                        <span className="rounded-md border border-[var(--mc-border-soft)] px-2 py-0.5 text-xs text-[var(--dfw-text)] opacity-70">{kindLabel}</span>
                         <span className="truncate text-sm font-medium text-[var(--dfw-text)]">{item.name}</span>
                       </div>
                       <div className="mt-1 truncate text-xs text-[var(--dfw-text)] opacity-55">
@@ -1378,7 +1378,7 @@ function TrashDialog({
                     </div>
                     <button
                       type="button"
-                      className="rounded-lg border border-[var(--dfw-blue)]/40 px-3 py-1.5 text-sm text-[var(--dfw-text)] transition hover:bg-white/10 disabled:opacity-40"
+                      className="rounded-lg border border-[var(--dfw-blue)]/40 px-3 py-1.5 text-sm text-[var(--dfw-text)] transition hover:bg-[var(--mc-control-hover)] disabled:opacity-40"
                       disabled={busy}
                       onClick={() => void restoreItem(item)}
                     >
@@ -1386,7 +1386,7 @@ function TrashDialog({
                     </button>
                     <button
                       type="button"
-                      className="rounded-lg border border-red-400/35 px-3 py-1.5 text-sm text-red-200 transition hover:bg-red-500/10 disabled:opacity-40"
+                      className="rounded-lg border border-[var(--workbench-alert-error-border)] px-3 py-1.5 text-sm text-[var(--workbench-alert-error-text)] transition hover:bg-[var(--workbench-alert-error-bg)] disabled:opacity-40"
                       disabled={busy}
                       onClick={() => void deleteForever(item)}
                     >
@@ -2872,7 +2872,7 @@ export default function TemplateWorkbench({
 
       {actionError && (
         <div
-          className="absolute right-4 top-4 z-[40] max-w-sm rounded-lg border border-red-400/40 bg-red-500/15 px-4 py-2 text-sm text-red-100 shadow-lg"
+          className="workbench-alert workbench-alert-error absolute right-4 top-4 z-[40] max-w-sm rounded-lg px-4 py-2 text-sm shadow-lg"
           role="alert"
         >
           {actionError}
