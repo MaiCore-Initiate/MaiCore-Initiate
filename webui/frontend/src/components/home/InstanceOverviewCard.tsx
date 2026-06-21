@@ -201,10 +201,10 @@ export default function InstanceOverviewCard() {
 
   return (
     <GlassCard bgOpacity={isDark ? 0.7 : 0.45} borderColor={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.5)'}>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden p-[clamp(22px,1.8vw,33px)]">
+      <div className="flex h-full min-h-0 flex-col p-[clamp(22px,1.8vw,33px)]">
         <h2 className="pb-[16px]" style={{ ...titleStyle, color: titleColor }}>实例概览</h2>
 
-        <div className="flex min-h-0 flex-1 flex-wrap gap-y-[14px] overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-wrap gap-y-[14px] overflow-y-auto pr-[4px]">
           {/* 左侧统计 */}
           <div className="min-w-[190px] flex-[0_1_260px] space-y-[4px] pr-[clamp(12px,2vw,24px)]">
             {stats.map(([label, val]) => (

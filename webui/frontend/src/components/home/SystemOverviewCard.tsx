@@ -60,7 +60,7 @@ export default function SystemOverviewCard() {
 
   return (
     <GlassCard bgOpacity={isDark ? 0.72 : 0.45} borderColor={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.5)'}>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden p-[clamp(22px,1.8vw,33px)]">
+      <div className="flex h-full min-h-0 flex-col p-[clamp(22px,1.8vw,33px)]">
         <h2 className="pb-[16px]" style={{ ...titleStyle, color: titleColor }}>系统概览</h2>
 
         <div className="space-y-[10px]">
@@ -81,7 +81,7 @@ export default function SystemOverviewCard() {
 
         <div className="my-[12px]" style={{ borderTop: `1px solid ${dividerColor}` }} />
 
-        <div className="min-h-0 space-y-[5px] overflow-hidden">
+        <div className="min-h-0 flex-1 space-y-[5px] overflow-y-auto pr-[4px]">
           {([
             ['设备名称', info?.hostname],
             ['处理器', info?.processor],

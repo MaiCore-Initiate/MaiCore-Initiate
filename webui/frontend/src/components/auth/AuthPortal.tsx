@@ -448,9 +448,9 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
       className="bg-white/5 border-2 border-black/30 backdrop-blur-[50px] shadow-login-card animate-scale-fade-in"
       style={{
         width: 720,
-        height: isLoginView ? 960 : 'auto',
+        height: 'auto',
         maxHeight: 'calc(100% - 16px)',
-        overflowY: isLoginView ? 'hidden' : 'auto',
+        overflowY: 'auto',
         borderRadius: 30,
         padding: isLoginView ? '20px 30px 16px' : '30px 38px 26px',
         display: 'flex',
@@ -491,7 +491,7 @@ export default function AuthPortal({ onAuthenticated }: { onAuthenticated: () =>
         </p>
 
         {view === 'login' ? (
-          <form className="mt-[20px] flex flex-1 flex-col items-center justify-center gap-[18px]" onSubmit={handleLogin}>
+          <form className="mt-[20px] flex flex-1 flex-col items-center gap-[18px]" onSubmit={handleLogin}>
           <AvatarCircle
             name={previewName || '访客'}
             email={previewEmail}
