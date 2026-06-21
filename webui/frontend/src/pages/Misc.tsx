@@ -1404,14 +1404,18 @@ function ScreenSaverOverlay({ onExit }: { onExit: () => void }) {
         </span>
       </button>
 
-      <div className="absolute inset-0 z-10 flex items-center justify-center px-6">
-        <div className="w-full max-w-[1100px] text-center min-h-[78vh] py-[5vh] flex flex-col justify-between">
-          <div className="-translate-y-[5vh]">
+      <div className="absolute inset-0 z-10 grid place-items-center overflow-y-auto px-[clamp(18px,4vw,64px)] py-[clamp(76px,9vh,120px)]">
+        <div
+          className="grid w-full max-w-[1180px] grid-rows-[auto_minmax(0,1fr)_auto] items-center gap-[clamp(24px,5vh,72px)] text-center"
+          style={{ minHeight: 'min(760px, calc(100vh - 160px))' }}
+        >
+          <div>
             <div
-              className="text-white tracking-[2px] leading-none"
+              className="text-white leading-none"
               style={{
                 fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
-                fontSize: 'clamp(76px, 13.5vw, 180px)',
+                fontSize: 'clamp(64px, min(13vw, 20vh), 180px)',
+                letterSpacing: 0,
                 textShadow: '0 14px 46px rgba(0,0,0,0.68), 0 3px 14px rgba(0,0,0,0.58)',
               }}
             >
@@ -1430,14 +1434,14 @@ function ScreenSaverOverlay({ onExit }: { onExit: () => void }) {
             </div>
           </div>
 
-          <div className="mx-auto w-full max-w-[940px] px-4">
-            <div className="mx-auto mb-10 h-[1px] w-[min(78vw,860px)] bg-white/55" />
+          <div className="mx-auto flex w-full max-w-[960px] flex-col items-center justify-center px-4">
+            <div className="mx-auto mb-[clamp(20px,4vh,40px)] h-[1px] w-[min(78vw,860px)] bg-white/55" />
 
             <p
-              className="text-white/95 leading-relaxed"
+              className="max-h-[32vh] overflow-y-auto text-white/95 leading-relaxed"
               style={{
                 fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
-                fontSize: 'clamp(20px, 2.2vw, 32px)',
+                fontSize: 'clamp(18px, min(2.2vw, 4vh), 32px)',
                 textShadow: '0 8px 30px rgba(0,0,0,0.62), 0 2px 10px rgba(0,0,0,0.48)',
               }}
             >
@@ -1454,7 +1458,7 @@ function ScreenSaverOverlay({ onExit }: { onExit: () => void }) {
               {quote.from}
             </p>
 
-            <div className="mt-9 flex items-center justify-center gap-4">
+            <div className="mt-[clamp(20px,4vh,36px)] flex items-center justify-center gap-4">
               <button
                 onClick={() => void refreshQuote()}
                 disabled={refreshing}
@@ -1469,7 +1473,7 @@ function ScreenSaverOverlay({ onExit }: { onExit: () => void }) {
         </div>
       </div>
 
-      <div className="absolute left-1/2 bottom-6 z-20 -translate-x-1/2 w-[min(460px,88vw)]">
+      <div className="absolute left-1/2 bottom-[clamp(14px,3vh,24px)] z-20 -translate-x-1/2 w-[min(460px,88vw)]">
         <div
           className="text-center text-white/85"
           style={{ fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontSize: 16 }}

@@ -236,10 +236,10 @@ function KnowledgeSettingsModal({ serial, open, onClose }: { serial: string; ope
 
   return (
     <Modal open={open} onClose={onClose} width={1083}>
-      <div className="p-[40px] max-h-[85vh] overflow-y-auto custom-scrollbar">
+      <div className="p-[clamp(24px,2.4vw,40px)] max-h-[85vh] overflow-y-auto custom-scrollbar">
         <h2 className="mb-[20px]" style={{ fontSize: 50, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-primary)' }}>知识库设置</h2>
 
-        <div className="flex gap-[60px]">
+        <div className="grid grid-cols-1 gap-[24px] xl:grid-cols-2 xl:gap-[60px]">
           {/* 左列 */}
           <div className="flex-1 flex flex-col gap-[16px]">
             <SettingRow label="启用知识库">
@@ -451,24 +451,24 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
 
   return (
     <GlassCard key={instance.serial}>
-      <div className="p-[28px] flex flex-col h-full">
+      <div className="p-[clamp(20px,1.8vw,28px)] flex h-full min-h-0 flex-col overflow-y-auto custom-scrollbar">
         {/* 实例概览 */}
         <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...d(0), color: 'var(--mc-text-primary)' }}>实例概览</h2>
-        <div className="flex gap-0 mt-[8px] animate-fade-slide-up" style={d(1)}>
-          <div className="space-y-[2px]">
+        <div className="mt-[8px] grid grid-cols-1 gap-x-[28px] gap-y-[10px] animate-fade-slide-up xl:grid-cols-[minmax(0,1fr)_3px_minmax(0,1fr)]" style={d(1)}>
+          <div className="min-w-0 space-y-[2px]">
             {leftData.map(([label, val], i) => (
-              <div key={label} className="flex items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
+              <div key={label} className="flex min-w-0 items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
                 <span className="shrink-0" style={{ ...labelFont, color: 'var(--mc-text-primary)' }}>{label}</span>
-                <span style={valueFont}>{val}</span>
+                <span className="min-w-0 truncate" style={valueFont}>{val}</span>
               </div>
             ))}
           </div>
-          <div className="w-[3px] self-stretch rounded-full shrink-0 mx-[100px]" style={{ background: 'var(--mc-border-strong)' }} />
-          <div className="space-y-[2px]">
+          <div className="hidden w-[3px] self-stretch rounded-full xl:block" style={{ background: 'var(--mc-border-strong)' }} />
+          <div className="min-w-0 space-y-[2px]">
             {rightData.map(([label, val], i) => (
-              <div key={label} className="flex items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
+              <div key={label} className="flex min-w-0 items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
                 <span className="shrink-0" style={{ ...labelFont, color: 'var(--mc-text-primary)' }}>{label}</span>
-                <span style={valueFont}>{val}</span>
+                <span className="min-w-0 truncate" style={valueFont}>{val}</span>
               </div>
             ))}
           </div>
@@ -479,7 +479,7 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
 
         {/* 拖拽上传区 */}
         <div
-          className="animate-fade-slide-up mt-[10px] min-h-[155px] rounded-[30px] flex flex-col items-center justify-center cursor-pointer transition-all duration-200"
+          className="animate-fade-slide-up mt-[10px] min-h-[140px] rounded-[30px] flex flex-col items-center justify-center cursor-pointer transition-all duration-200"
           style={{
             border: `3px dashed ${dragging ? 'var(--mc-border-strong)' : 'var(--mc-empty-border)'}`,
             background: dragging ? 'var(--mc-control-bg-soft)' : 'transparent',
@@ -513,16 +513,16 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
         </div>
 
         {/* 下半部分：文件列表（左） + 操作（右） */}
-        <div className="flex mt-[16px] flex-1 min-h-0 gap-0">
+        <div className="mt-[16px] grid min-h-[220px] flex-1 grid-cols-1 gap-[18px] xl:grid-cols-[minmax(0,1fr)_auto]">
           {/* 文件列表 */}
           <div className="flex-1 min-w-0 flex flex-col">
             <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...d(8), color: 'var(--mc-text-primary)' }}>文件列表</h2>
-            <div className="flex-1 overflow-y-auto mt-[6px] flex flex-wrap gap-[8px] content-start">
+            <div className="flex-1 overflow-y-auto mt-[6px] flex flex-wrap gap-[8px] content-start custom-scrollbar">
               {/* 服务器已有文件（不在队列中的） */}
               {serverOnly.map((name, i) => (
                 <div
                   key={`s-${name}`}
-                  className="h-[54px] pl-[12px] pr-[24px] rounded-[27px] flex items-center gap-[8px] shrink-0 animate-fade-slide-up relative"
+                  className="h-[54px] min-w-0 max-w-full pl-[12px] pr-[24px] rounded-[27px] flex items-center gap-[8px] animate-fade-slide-up relative"
                   style={d(9 + i)}
                 >
                   <div className={pillShadow} style={pillShadowStyle} />
@@ -549,14 +549,14 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
                       <line x1="12" y1="2" x2="2" y2="12" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round"/>
                     </svg>
                   </button>
-                  <span style={fileFont}>{name}</span>
+                  <span className="min-w-0 truncate" style={fileFont}>{name}</span>
                 </div>
               ))}
               {/* 上传队列文件 */}
               {fileQueue.map((entry, i) => (
                 <div
                   key={`q-${i}-${entry.name}`}
-                  className="h-[54px] pl-[12px] pr-[24px] rounded-[27px] flex items-center gap-[8px] shrink-0 relative overflow-hidden animate-fade-slide-up"
+                  className="h-[54px] min-w-0 max-w-full pl-[12px] pr-[24px] rounded-[27px] flex items-center gap-[8px] relative overflow-hidden animate-fade-slide-up"
                   style={{
                     opacity: entry.status === 'pending' ? 0.4 : 1,
                     ...d(9 + serverOnly.length + i),
@@ -573,7 +573,7 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
                       <line x1="12" y1="2" x2="2" y2="12" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round"/>
                     </svg>
                   </button>
-                  <span style={fileFont}>{entry.name}</span>
+                  <span className="min-w-0 truncate" style={fileFont}>{entry.name}</span>
                   {/* 上传进度条 */}
                   {entry.status === 'uploading' && (
                     <div
@@ -592,9 +592,9 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
           </div>
 
           {/* 操作区 */}
-          <div className="shrink-0 flex flex-col items-start ml-[30px]">
+          <div className="flex shrink-0 flex-col items-start xl:ml-[12px]">
             <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...d(8), color: 'var(--mc-text-primary)' }}>操作</h2>
-            <div className="flex flex-col gap-[12px] mt-[6px]">
+            <div className="flex flex-wrap gap-[12px] mt-[6px] xl:flex-col">
               {/* 开始构建 / 终止构建 */}
               <button
                 onClick={building ? handleStop : handleBuild}
@@ -687,14 +687,14 @@ export default function Knowledge() {
   const selectedBotType = selectedInstance ? normalizeBotType(selectedInstance.botType) : null
 
   return (
-    <div className="flex flex-col p-6 h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-auto p-[clamp(14px,1.25vw,24px)]">
       <h1 className="shrink-0 mb-[16px] animate-card-enter" style={{ ...pageTitleStyle, color: 'var(--mc-text-primary)' }}>知识库构建</h1>
 
-      <div className="flex gap-6 flex-1 min-h-0 overflow-hidden">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-[clamp(16px,1.25vw,24px)] xl:grid-cols-[minmax(300px,425px)_minmax(0,1fr)]">
         {/* 左侧：实例选择卡片 */}
-        <div className="w-[425px] h-full min-h-0 shrink-0 animate-card-enter">
+        <div className="min-h-[320px] min-w-0 animate-card-enter xl:h-full xl:min-h-0">
           <GlassCard bgOpacity={0.62}>
-            <div className="p-[24px] flex flex-col h-full">
+            <div className="p-[24px] flex h-full min-h-0 flex-col">
               <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
 
               <div className="flex items-center h-[71px] px-[22px] gap-[12px] rounded-[35.5px] shrink-0" style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
@@ -750,7 +750,7 @@ export default function Knowledge() {
         </div>
 
         {/* 右侧：操作面板 */}
-        <div className="flex-1 min-w-0 h-full min-h-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
+        <div className="min-h-[420px] min-w-0 animate-card-enter xl:h-full xl:min-h-0" style={{ animationDelay: '80ms' }}>
           {selectedInstance ? (
             selectedBotType !== 'MaiBot' ? (
               <div className="flex items-center justify-center h-full">

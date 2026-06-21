@@ -295,7 +295,7 @@ function ProgressPanel({ taskId, onDone }: { taskId: string; onDone?: () => void
     : (isUpdateTask ? '更新进行中' : '部署进行中')
 
   return (
-    <div className="flex flex-col gap-[16px] animate-fade-slide-up">
+    <div className="flex h-full min-h-0 flex-col gap-[16px] overflow-y-auto custom-scrollbar pr-[4px] animate-fade-slide-up">
       <h2 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>{panelTitle}</h2>
 
       {/* 步骤指示器 */}
@@ -334,7 +334,7 @@ function ProgressPanel({ taskId, onDone }: { taskId: string; onDone?: () => void
         <div className="h-full rounded-full transition-all duration-500"
           style={{ width: `${pct}%`, background: p?.status === 'failed' ? '#ef4444' : '#22c55e' }} />
       </div>
-      <span style={{ ...monoFont, fontSize: 18, color: 'var(--mc-text-secondary)' }}>{p?.message || '等待中...'}</span>
+      <span className="break-words" style={{ ...monoFont, fontSize: 18, color: 'var(--mc-text-secondary)' }}>{p?.message || '等待中...'}</span>
 
       {/* 日志面板 */}
       <button onClick={() => setLogsOpen(!logsOpen)} className="self-start cursor-pointer" style={{ ...smallLabel, color: 'var(--mc-text-secondary)' }}>
@@ -444,7 +444,7 @@ function DeployNewTab() {
   return (
     <div className="flex flex-col gap-[20px] h-full min-h-0 overflow-y-auto custom-scrollbar pr-[4px]">
       {/* 步骤指示 */}
-      <div className="flex gap-[12px] items-center animate-fade-slide-up" style={d(0)}>
+      <div className="flex flex-wrap gap-[12px] items-center animate-fade-slide-up" style={d(0)}>
         {['基础配置', '组件选择', '确认部署'].map((name, i) => (
           <div key={i} className="flex items-center gap-[6px]">
             <div className="w-[36px] h-[36px] rounded-full flex items-center justify-center text-white font-bold"
@@ -452,14 +452,14 @@ function DeployNewTab() {
               {step > i + 1 ? '✓' : i + 1}
             </div>
             <span style={{ ...smallLabel, color: step === i + 1 ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }}>{name}</span>
-            {i < 2 && <div className="w-[30px] h-[2px]" style={{ background: 'var(--mc-border-soft)' }} />}
+            {i < 2 && <div className="hidden w-[30px] h-[2px] sm:block" style={{ background: 'var(--mc-border-soft)' }} />}
           </div>
         ))}
       </div>
 
       {step === 1 && (
         <div className="flex flex-col gap-[16px]">
-          <div className="grid grid-cols-2 gap-[16px] animate-fade-slide-up" style={d(1)}>
+          <div className="grid grid-cols-1 gap-[16px] animate-fade-slide-up lg:grid-cols-2" style={d(1)}>
             <div className="flex flex-col gap-[6px]">
               <span style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>Bot 类型</span>
               <CustomSelect value={botType} onChange={v => { setBotType(v); setSelectedVersion('') }}
@@ -485,7 +485,7 @@ function DeployNewTab() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-[16px] animate-fade-slide-up" style={d(2)}>
+          <div className="grid grid-cols-1 gap-[16px] animate-fade-slide-up lg:grid-cols-2" style={d(2)}>
             <InputField label="实例昵称" value={nickname} onChange={setNickname} placeholder="例如: my_bot" />
             <InputField label="QQ 账号（可选）" value={qqAccount} onChange={setQqAccount} placeholder="留空跳过" />
           </div>
@@ -735,7 +735,7 @@ function DeploymentFlowTab() {
 
   return (
     <div className="flex flex-col gap-[18px] h-full min-h-0 overflow-y-auto custom-scrollbar pr-[4px]">
-      <div className="flex gap-[12px] items-center animate-fade-slide-up">
+      <div className="flex flex-wrap gap-[12px] items-center animate-fade-slide-up">
         {['选择部署流', '信息输入', '组件选择', '执行结果'].map((name, index) => (
           <div key={name} className="flex items-center gap-[6px]">
             <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center text-white font-bold"
@@ -743,13 +743,13 @@ function DeploymentFlowTab() {
               {step > index + 1 ? '✓' : index + 1}
             </div>
             <span style={{ ...smallLabel, color: step === index + 1 ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }}>{name}</span>
-            {index < 3 && <div className="w-[24px] h-[2px]" style={{ background: 'var(--mc-border-soft)' }} />}
+            {index < 3 && <div className="hidden w-[24px] h-[2px] sm:block" style={{ background: 'var(--mc-border-soft)' }} />}
           </div>
         ))}
       </div>
 
       {step === 1 && (
-        <div className="grid grid-cols-2 xl:grid-cols-3 gap-[16px]">
+        <div className="grid grid-cols-1 gap-[16px] lg:grid-cols-2 2xl:grid-cols-3">
           {loading ? (
             <div className="col-span-full flex items-center gap-[10px] h-[100px] justify-center">
               <div className="w-[22px] h-[22px] rounded-full animate-spin" style={{ border: '3px solid var(--mc-loading-ring)', borderTopColor: 'var(--mc-loading-ring-active)' }} />
@@ -789,7 +789,7 @@ function DeploymentFlowTab() {
       {step === 2 && detail && (
         <div className="flex flex-col gap-[16px] animate-fade-slide-up">
           <h3 style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>{detail.name}</h3>
-          <div className="grid grid-cols-2 gap-[16px]">
+          <div className="grid grid-cols-1 gap-[16px] lg:grid-cols-2">
             {infoFields.map(field => (
               <FormFieldInput key={field.key} field={field} value={inputs[field.key]} onChange={value => setInputValue(field.key, value)} />
             ))}
@@ -912,8 +912,8 @@ function UpdateTab() {
   const filtered = instances.filter(i => !search || i.nickname.toLowerCase().includes(search.toLowerCase()) || i.serial_number.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className="flex gap-[24px] flex-1 min-h-0 overflow-hidden">
-      <div className="w-[380px] h-full min-h-0 shrink-0">
+    <div className="grid flex-1 grid-cols-1 gap-[24px] overflow-y-auto custom-scrollbar pr-[4px] xl:min-h-0 xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] xl:overflow-hidden xl:pr-0">
+      <div className="min-h-[300px] min-w-0 xl:h-full xl:min-h-0">
         <GlassCard>
           <div className="p-[24px] flex flex-col h-full">
             <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
@@ -947,16 +947,16 @@ function UpdateTab() {
         </GlassCard>
       </div>
 
-      <div className="flex-1 min-w-0 h-full min-h-0">
+      <div className="min-h-[320px] min-w-0 xl:h-full xl:min-h-0">
         {inst ? (
           <GlassCard key={`update-${inst.serial_number}`}>
-            <div className="p-[28px] flex flex-col gap-[16px]">
+            <div className="p-[28px] flex h-full min-h-0 flex-col gap-[16px] overflow-y-auto custom-scrollbar">
               <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...getTextDriftStyle(0, 'title'), color: 'var(--mc-text-primary)' }}>更新实例</h2>
               <div className="flex flex-col gap-[6px]">
                 {([['实例昵称', inst.nickname], ['序列号', inst.serial_number], ['Bot 类型', inst.bot_type], ['当前版本', inst.version]] as [string, string][]).map(([k, v], idx) => (
-                  <div key={k} className="flex gap-[16px]">
+                  <div key={k} className="flex min-w-0 flex-wrap gap-x-[16px] gap-y-[2px]">
                     <span className="shrink-0 animate-fade-slide-up" style={{ ...labelFont, ...getTextDriftStyle(idx + 1, 'label'), color: 'var(--mc-text-primary)' }}>{k}</span>
-                    <span className="animate-fade-slide-up" style={{ ...valueFont, ...getTextDriftStyle(idx + 1, 'value') }}>{v}</span>
+                    <span className="min-w-0 break-words animate-fade-slide-up" style={{ ...valueFont, ...getTextDriftStyle(idx + 1, 'value') }}>{v}</span>
                   </div>
                 ))}
               </div>
@@ -1059,8 +1059,8 @@ function DeleteTab() {
   if (taskId) return <ProgressPanel taskId={taskId} onDone={() => { setTaskId(null); reload() }} />
 
   return (
-    <div className="flex gap-[24px] flex-1 min-h-0 overflow-hidden">
-      <div className="w-[380px] h-full min-h-0 shrink-0">
+    <div className="grid flex-1 grid-cols-1 gap-[24px] overflow-y-auto custom-scrollbar pr-[4px] xl:min-h-0 xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] xl:overflow-hidden xl:pr-0">
+      <div className="min-h-[300px] min-w-0 xl:h-full xl:min-h-0">
         <GlassCard>
           <div className="p-[24px] flex flex-col h-full">
             <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
@@ -1094,17 +1094,17 @@ function DeleteTab() {
         </GlassCard>
       </div>
 
-      <div className="flex-1 min-w-0 h-full min-h-0">
+      <div className="min-h-[360px] min-w-0 xl:h-full xl:min-h-0">
         {inst ? (
           <GlassCard key={`delete-${inst.serial_number}`}>
-            <div className="p-[28px] flex flex-col gap-[16px]">
+            <div className="p-[28px] flex h-full min-h-0 flex-col gap-[16px] overflow-y-auto custom-scrollbar">
               <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...getTextDriftStyle(0, 'title'), color: 'var(--mc-text-primary)' }}>删除实例</h2>
               <div className="flex flex-col gap-[6px]">
                 {([['实例昵称', inst.nickname], ['序列号', inst.serial_number], ['Bot 类型', inst.bot_type], ['版本', inst.version],
                   ['路径', inst.bot_type === 'MaiBot' ? inst.mai_path : inst.bot_type === 'MoFox-Core' ? inst.mofox_path : inst.neo_mofox_path]] as [string, string][]).map(([k, v], idx) => (
-                  <div key={k} className="flex gap-[16px]">
+                  <div key={k} className="flex min-w-0 flex-wrap gap-x-[16px] gap-y-[2px]">
                     <span className="shrink-0 animate-fade-slide-up" style={{ ...labelFont, ...getTextDriftStyle(idx + 1, 'label'), color: 'var(--mc-text-primary)' }}>{k}</span>
-                    <span className="animate-fade-slide-up" style={{ ...valueFont, ...getTextDriftStyle(idx + 1, 'value') }}>{v || '-'}</span>
+                    <span className="min-w-0 break-words animate-fade-slide-up" style={{ ...valueFont, ...getTextDriftStyle(idx + 1, 'value') }}>{v || '-'}</span>
                   </div>
                 ))}
               </div>
@@ -1150,19 +1150,19 @@ export default function Deployment() {
   const [tab, setTab] = useState<DeployTab>('deploy')
 
   return (
-    <div className="flex flex-col p-6 h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-auto p-[clamp(14px,1.25vw,24px)]">
       <h1 className="shrink-0 mb-[16px] animate-card-enter" style={{ ...pageTitleStyle, color: 'var(--mc-text-primary)' }}>部署管理</h1>
 
-      <div className="flex gap-[10px] mb-[20px] animate-card-enter" style={{ animationDelay: '60ms' }}>
+      <div className="flex flex-wrap gap-[10px] mb-[20px] animate-card-enter" style={{ animationDelay: '60ms' }}>
         <PillTab label="部署新实例" selected={tab === 'deploy'} onClick={() => setTab('deploy')} />
         <PillTab label="更新实例" selected={tab === 'update'} onClick={() => setTab('update')} />
         <PillTab label="删除实例" selected={tab === 'delete'} onClick={() => setTab('delete')} />
         <PillTab label="部署流" selected={tab === 'flow'} onClick={() => setTab('flow')} />
       </div>
 
-      <div className="flex-1 min-h-0 animate-card-enter" style={{ animationDelay: '120ms' }}>
+      <div className="min-h-[460px] flex-1 animate-card-enter" style={{ animationDelay: '120ms' }}>
         <GlassCard>
-          <div className="p-[28px] flex flex-col h-full overflow-hidden">
+          <div className="p-[clamp(20px,1.8vw,28px)] flex h-full min-h-0 flex-col overflow-hidden">
             {tab === 'deploy' && <DeployNewTab />}
             {tab === 'update' && <UpdateTab />}
             {tab === 'delete' && <DeleteTab />}
