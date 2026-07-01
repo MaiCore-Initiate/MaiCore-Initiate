@@ -13,6 +13,7 @@
 #define MAIN_SCRIPT_FILE "main_refactored.py"
 #define DEFAULT_PIP_INDEX "https://pypi.tuna.tsinghua.edu.cn/simple"
 #define DEFAULT_FALLBACK_INDEX "https://pypi.org/simple"
+#define OPEN_PACKAGE_ARG "--open-package"
 
 static const char* VENV_DIRS[] = { "venv", ".venv", "env", ".env" };
 static const int VENV_DIRS_COUNT = 4;
@@ -27,6 +28,46 @@ void trim_line_endings(char* text) {
         text[len - 1] = '\0';
         len--;
     }
+}
+
+int is_supported_package_path(const char* path) {
+    const char* ext;
+
+    if (!path || !path[0]) {
+        return 0;
+    }
+
+    ext = PathFindExtensionA(path);
+    return _stricmp(ext, ".mcsins") == 0 || _stricmp(ext, ".mcsmod") == 0;
+}
+
+void quote_arg(char* dest, size_t dest_size, const char* arg) {
+    size_t used = 0;
+    const char* p;
+
+    if (!dest || dest_size == 0) {
+        return;
+    }
+
+    dest[0] = '\0';
+    if (dest_size < 3) {
+        return;
+    }
+
+    dest[used++] = '"';
+    for (p = arg ? arg : ""; *p && used + 2 < dest_size; ++p) {
+        if (*p == '"') {
+            dest[used++] = '\\';
+            if (used + 2 >= dest_size) {
+                break;
+            }
+        }
+        dest[used++] = *p;
+    }
+    if (used + 1 < dest_size) {
+        dest[used++] = '"';
+    }
+    dest[used] = '\0';
 }
 
 void wait_for_enter(void) {
@@ -524,7 +565,7 @@ void run_in_venv(const char* python_exe, const char* args) {
     }
 }
 
-int main(void) {
+int main(int argc, char* argv[]) {
     char base_dir[MAX_PATH];
     char venv_path[MAX_PATH];
     char python_exe[MAX_PATH];
@@ -532,6 +573,8 @@ int main(void) {
     char fallback_index[256];
     char pip_args[MAX_CMD];
     char main_args[MAX_CMD];
+    char package_arg[MAX_CMD];
+    const char* package_path = NULL;
 
     SetConsoleOutputCP(65001);
     SetConsoleCP(65001);
@@ -540,6 +583,11 @@ int main(void) {
     SetCurrentDirectoryA(base_dir);
 
     printf("[INFO] Working directory: %s\n", base_dir);
+
+    if (argc > 1 && is_supported_package_path(argv[1])) {
+        package_path = argv[1];
+        printf("[INFO] Package file: %s\n", package_path);
+    }
 
     if (!ensure_suitable_python_available()) {
         printf("Press Enter to exit...");
@@ -589,7 +637,12 @@ int main(void) {
     );
     run_in_venv(python_exe, pip_args);
 
-    snprintf(main_args, sizeof(main_args), "\"%s\"", MAIN_SCRIPT_FILE);
+    if (package_path) {
+        quote_arg(package_arg, sizeof(package_arg), package_path);
+        snprintf(main_args, sizeof(main_args), "\"%s\" %s %s", MAIN_SCRIPT_FILE, OPEN_PACKAGE_ARG, package_arg);
+    } else {
+        snprintf(main_args, sizeof(main_args), "\"%s\"", MAIN_SCRIPT_FILE);
+    }
     run_in_venv(python_exe, main_args);
 
     return 0;

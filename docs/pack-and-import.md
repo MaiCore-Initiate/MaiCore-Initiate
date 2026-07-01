@@ -142,6 +142,22 @@ mcsb -in <文件.mcsins> [-s <目标目录>]
 - 从 `meta.json` 还原 napcat_path、adapter_path、venv_path 等相对路径
 - 若 zip 内无虚拟环境，询问是否自动创建 venv 并安装依赖（按 bot 类型分发：Neo-MoFox 用 `uv sync`，其他用 pip）
 
+### 双击导入
+
+安装包会把 `.mcsins` 关联到 MaiCoreStart 主程序；管理员安装时写入机器级关联，低权限安装时写入当前用户关联。用户双击 `.mcsins` 后，Windows 会按以下形式启动程序：
+
+```
+"<安装目录>\MaiCoreStart-v5.1.0-beta.exe" "%1"
+```
+
+启动器会把 `%1` 转发给后端：
+
+```
+python main_refactored.py --open-package "<文件.mcsins>"
+```
+
+随后进入与 CLI 导入一致的交互流程：展示元数据、询问目标目录、确认后导入。
+
 ### WebUI 导入
 
 WebUI 的“杂项 -> 打包实例”页面使用两段式导入：
@@ -233,3 +249,4 @@ WebUI 后端在 `/api/instance-pack` 下暴露实例打包与导入接口：
 | `bin/mcsb.cmd` | Windows CMD 入口脚本 |
 | `bin/mcsb.ps1` | Windows PowerShell 入口脚本 |
 | `bin/mcsb.sh` | Linux/macOS 入口脚本 |
+| `setup/MaiCoreStart.iss` | Inno Setup 文件关联配置 |

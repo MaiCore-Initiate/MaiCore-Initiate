@@ -1479,6 +1479,13 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="执行模板语法检测，可传模板目录或 DeploymentMOD.toml 文件路径。",
     )
+    action_group.add_argument(
+        "--open-package",
+        dest="open_package",
+        default="",
+        metavar="PATH",
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument(
         "command",
         nargs="?",
@@ -1679,7 +1686,85 @@ def _run_login_cli(provider: str) -> int:
     return _run_github_login()
 
 
+def _prompt_text_with_default(prompt: str, default: str) -> str:
+    suffix = f" [{default}]" if default else ""
+    try:
+        value = input(f"{prompt}{suffix}: ").strip().strip('"')
+    except EOFError:
+        value = ""
+    return value or default
+
+
+def _http_detail_to_text(exc: Exception) -> str:
+    detail = getattr(exc, "detail", None)
+    if isinstance(detail, dict):
+        message = detail.get("message")
+        if message:
+            return str(message)
+        return str(detail)
+    if detail:
+        return str(detail)
+    return str(exc)
+
+
+def _run_open_package_cli(package_path: str) -> int:
+    raw_path = str(package_path or "").strip().strip('"')
+    if not raw_path:
+        print("缺少要打开的包文件路径。")
+        return 1
+
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    path = path.resolve()
+    if not path.is_file():
+        print(f"包文件不存在：{path}")
+        return 1
+
+    suffix = path.suffix.lower()
+    default_dest = str(path.parent)
+    print(f"正在打开包文件：{path}")
+
+    if suffix == ".mcsins":
+        from src.cli.pack import import_instance
+
+        dest_dir = _prompt_text_with_default("请输入实例导入目标目录", default_dest)
+        try:
+            extract_dir = import_instance(str(path), dest_dir, confirm=True, setup_venv=None)
+        except RuntimeError as exc:
+            print(str(exc))
+            return 0
+        print(f"实例导入完成：{extract_dir}")
+        return 0
+
+    if suffix == ".mcsmod":
+        from fastapi import HTTPException
+        from webui.backend.api.workbench_files import import_workbench_archive_bytes
+
+        dest_dir = _prompt_text_with_default("请输入工作台模板导入目标目录", default_dest)
+        try:
+            result = import_workbench_archive_bytes(path.name, path.read_bytes(), dest_dir)
+        except HTTPException as exc:
+            print(f"模板包导入失败：{_http_detail_to_text(exc)}")
+            return 1
+
+        project = result.get("project") if isinstance(result, dict) else None
+        if isinstance(project, dict):
+            print(f"模板包导入完成：{project.get('mod_name') or project.get('mod_id') or path.stem}")
+            print(f"项目目录：{project.get('path') or dest_dir}")
+        else:
+            print("模板包导入完成。")
+        return 0
+
+    print(f"不支持的包文件类型：{suffix or '(无扩展名)'}")
+    return 1
+
+
 def _run_cli_mode(args: argparse.Namespace) -> int | None:
+    open_package = str(getattr(args, "open_package", "") or "").strip()
+    if open_package:
+        return _run_open_package_cli(open_package)
+
     cli_actions = [
         ("deploy", str(getattr(args, "deploy_template", "") or "").strip()),
         ("launch", str(getattr(args, "launch_template", "") or "").strip()),

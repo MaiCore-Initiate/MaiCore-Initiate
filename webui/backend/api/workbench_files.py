@@ -1162,6 +1162,129 @@ class ImportArchiveResult(BaseModel):
     files: List[Dict[str, Any]] = []
 
 
+def import_workbench_archive_bytes(
+    filename: str,
+    raw: bytes,
+    target_dir: str,
+    *,
+    in_project_folder: bool = False,
+    project_sequence: Optional[str] = None,
+    password: Optional[str] = None,
+) -> Dict[str, Any]:
+    lower = filename.lower()
+    archive_suffixes = (
+        ".zip", ".iso", ".mcsmod", ".7z", ".rar", ".tar", ".tgz", ".gz", ".gzip",
+        ".tar.gz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".bz2", ".xz",
+    )
+    temp_dir = _make_temp_dir("import-")
+    try:
+        matched_suffix = next((suffix for suffix in archive_suffixes if lower.endswith(suffix)), None)
+        if not matched_suffix:
+            raise HTTPException(400, f"不支持的归档类型: {filename}")
+        if matched_suffix == ".zip":
+            _safe_extract_zip_bytes(raw, temp_dir, password=password)
+        elif matched_suffix in (".iso", ".mcsmod"):
+            _extract_iso_bytes(raw, temp_dir)
+        else:
+            _extract_archive_bytes(raw, matched_suffix, temp_dir, password=password)
+        content_root = _flatten_single_top_dir(temp_dir)
+        archive_directories = _collect_importable_directories(content_root)
+        entries = _collect_importable_files(content_root)
+        file_entries = [(abs_path, rel) for abs_path, rel in entries if Path(rel).suffix.lower() in ALLOWED_EXTENSIONS]
+        if not entries and not archive_directories:
+            raise HTTPException(400, "归档中没有可导入的白名单文件")
+        if in_project_folder:
+            if not project_sequence:
+                raise HTTPException(400, "缺少 project_sequence")
+            imported: List[Dict[str, Any]] = []
+            if entries and not file_entries:
+                raise HTTPException(400, "归档中没有可导入的白名单文件")
+            if not file_entries and not archive_directories:
+                raise HTTPException(400, "归档中没有可导入的白名单文件")
+            merged_directories = [_join_base_dir(target_dir, directory) for directory in archive_directories]
+            if merged_directories:
+                _merge_project_directories(project_sequence, dir_paths=merged_directories)
+            for abs_path, rel in file_entries:
+                joined = _join_base_dir(target_dir, rel)
+                imported.append(_write_uploaded_file(project_sequence, joined, abs_path.read_bytes()))
+            return {"mode": "files-imported", "directories": _read_project_directories(project_sequence), "files": imported}
+        if not target_dir.strip():
+            raise HTTPException(400, "首页导入压缩包或镜像包时必须指定导入目标目录")
+        meta_path = _find_mod_meta_json(content_root)
+        if meta_path:
+            project = _create_project_from_mod_package(content_root, meta_path, target_dir)
+            return {"mode": "project-created", "project": project, "directories": project.get("directories", []), "files": project.get("files", [])}
+        if entries and not file_entries:
+            raise HTTPException(400, "归档中没有可导入的白名单文件")
+        root_name = normalize_archive_project_name(filename)
+        base = _validate_base_path(str(Path(target_dir).resolve()))
+        project_dir = base / root_name
+        actual_root_name = root_name if not project_dir.exists() else _suggest_mod_id(base, root_name)
+        project_dir = base / actual_root_name
+        project_dir.mkdir(parents=True, exist_ok=False)
+        try:
+            for rel in archive_directories:
+                (project_dir / rel).mkdir(parents=True, exist_ok=True)
+            for abs_path, rel in file_entries:
+                destination = project_dir / rel
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(abs_path, destination)
+            template_candidates = []
+            for abs_path, rel in file_entries:
+                if Path(rel).suffix.lower() != ".toml":
+                    continue
+                try:
+                    if _is_valid_template_toml(abs_path.read_bytes()):
+                        template_candidates.append((abs_path, rel))
+                except OSError:
+                    continue
+            template_candidates.sort(key=lambda item: (len(Path(item[1]).parts), item[1].lower()))
+            toml_target = project_dir / f"{actual_root_name}.toml"
+            parsed_template: Dict[str, Any] = {}
+            if template_candidates:
+                source, rel = template_candidates[0]
+                source_target = project_dir / rel
+                if source_target.resolve() != toml_target.resolve():
+                    shutil.copyfile(source, toml_target)
+                parsed_template = _parse_template_toml(toml_target)
+            elif not toml_target.exists():
+                toml_target.write_text(
+                    _render_mod_info_toml(actual_root_name, actual_root_name, "", "", None),
+                    encoding="utf-8",
+                )
+                parsed_template = _parse_template_toml(toml_target)
+            cover_relpath = _resolve_imported_cover_from_toml(parsed_template, content_root, project_dir)
+            project = _register_project_from_directory(project_dir, actual_root_name)
+            data = load_mod_index()
+            sequence = str(project.get("sequence") or "")
+            if sequence and sequence in data:
+                synced = project.get("files", [])
+                workbench_meta, visible_blocks, canvas_state = _template_state_from_toml(parsed_template, synced)
+                actual_mod_id = str(workbench_meta.get("modId") or actual_root_name)
+                actual_mod_name = str(workbench_meta.get("modName") or actual_mod_id)
+                workbench_meta["modId"] = actual_mod_id
+                workbench_meta["modName"] = actual_mod_name
+                data[sequence]["workbench_meta"] = workbench_meta
+                data[sequence]["visible_blocks"] = visible_blocks
+                data[sequence]["workbench_canvas_state"] = canvas_state
+                data[sequence]["mod_id"] = actual_mod_id
+                data[sequence]["mod_name"] = actual_mod_name
+                data[sequence]["description"] = str(workbench_meta.get("description") or "")
+                data[sequence]["author"] = str(workbench_meta.get("author") or "")
+                data[sequence]["cover"] = cover_relpath
+                save_mod_index(data)
+                project = to_project(sequence, data[sequence]).model_dump()
+                project["directories"] = _read_project_directories(sequence)
+                project["files"] = synced
+            synced = project.get("files", [])
+            return {"mode": "project-created", "project": project, "directories": project.get("directories", []), "files": synced}
+        except Exception:
+            shutil.rmtree(project_dir, ignore_errors=True)
+            raise
+    finally:
+        _remove_tree_quiet(temp_dir)
+
+
 def _json_safe(value: Any, default: Any) -> Any:
     try:
         json.dumps(value, ensure_ascii=False)
@@ -1846,117 +1969,12 @@ async def import_archive(
     password: Optional[str] = Form(None),
 ):
     filename = file.filename or ""
-    lower = filename.lower()
     raw = await file.read()
-    archive_suffixes = (
-        ".zip", ".iso", ".mcsmod", ".7z", ".rar", ".tar", ".tgz", ".gz", ".gzip",
-        ".tar.gz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".bz2", ".xz",
+    return import_workbench_archive_bytes(
+        filename,
+        raw,
+        target_dir,
+        in_project_folder=in_project_folder,
+        project_sequence=project_sequence,
+        password=password,
     )
-    temp_dir = _make_temp_dir("import-")
-    try:
-        matched_suffix = next((suffix for suffix in archive_suffixes if lower.endswith(suffix)), None)
-        if not matched_suffix:
-            raise HTTPException(400, f"不支持的归档类型: {filename}")
-        if matched_suffix == ".zip":
-            _safe_extract_zip_bytes(raw, temp_dir, password=password)
-        elif matched_suffix in (".iso", ".mcsmod"):
-            _extract_iso_bytes(raw, temp_dir)
-        else:
-            _extract_archive_bytes(raw, matched_suffix, temp_dir, password=password)
-        content_root = _flatten_single_top_dir(temp_dir)
-        archive_directories = _collect_importable_directories(content_root)
-        entries = _collect_importable_files(content_root)
-        file_entries = [(abs_path, rel) for abs_path, rel in entries if Path(rel).suffix.lower() in ALLOWED_EXTENSIONS]
-        if not entries and not archive_directories:
-            raise HTTPException(400, "归档中没有可导入的白名单文件")
-        if in_project_folder:
-            if not project_sequence:
-                raise HTTPException(400, "缺少 project_sequence")
-            imported: List[Dict[str, Any]] = []
-            if entries and not file_entries:
-                raise HTTPException(400, "归档中没有可导入的白名单文件")
-            if not file_entries and not archive_directories:
-                raise HTTPException(400, "归档中没有可导入的白名单文件")
-            merged_directories = [_join_base_dir(target_dir, directory) for directory in archive_directories]
-            if merged_directories:
-                _merge_project_directories(project_sequence, dir_paths=merged_directories)
-            for abs_path, rel in file_entries:
-                joined = _join_base_dir(target_dir, rel)
-                imported.append(_write_uploaded_file(project_sequence, joined, abs_path.read_bytes()))
-            return {"mode": "files-imported", "directories": _read_project_directories(project_sequence), "files": imported}
-        if not target_dir.strip():
-            raise HTTPException(400, "首页导入压缩包或镜像包时必须指定导入目标目录")
-        meta_path = _find_mod_meta_json(content_root)
-        if meta_path:
-            project = _create_project_from_mod_package(content_root, meta_path, target_dir)
-            return {"mode": "project-created", "project": project, "directories": project.get("directories", []), "files": project.get("files", [])}
-        if entries and not file_entries:
-            raise HTTPException(400, "归档中没有可导入的白名单文件")
-        root_name = normalize_archive_project_name(filename)
-        base = _validate_base_path(str(Path(target_dir).resolve()))
-        project_dir = base / root_name
-        actual_root_name = root_name if not project_dir.exists() else _suggest_mod_id(base, root_name)
-        project_dir = base / actual_root_name
-        project_dir.mkdir(parents=True, exist_ok=False)
-        written_files: List[Dict[str, Any]] = []
-        try:
-            for rel in archive_directories:
-                (project_dir / rel).mkdir(parents=True, exist_ok=True)
-            for abs_path, rel in file_entries:
-                destination = project_dir / rel
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(abs_path, destination)
-            template_candidates = []
-            for abs_path, rel in file_entries:
-                if Path(rel).suffix.lower() != ".toml":
-                    continue
-                try:
-                    if _is_valid_template_toml(abs_path.read_bytes()):
-                        template_candidates.append((abs_path, rel))
-                except OSError:
-                    continue
-            template_candidates.sort(key=lambda item: (len(Path(item[1]).parts), item[1].lower()))
-            toml_target = project_dir / f"{actual_root_name}.toml"
-            parsed_template: Dict[str, Any] = {}
-            if template_candidates:
-                source, rel = template_candidates[0]
-                source_target = project_dir / rel
-                if source_target.resolve() != toml_target.resolve():
-                    shutil.copyfile(source, toml_target)
-                parsed_template = _parse_template_toml(toml_target)
-            elif not toml_target.exists():
-                toml_target.write_text(
-                    _render_mod_info_toml(actual_root_name, actual_root_name, "", "", None),
-                    encoding="utf-8",
-                )
-                parsed_template = _parse_template_toml(toml_target)
-            cover_relpath = _resolve_imported_cover_from_toml(parsed_template, content_root, project_dir)
-            project = _register_project_from_directory(project_dir, actual_root_name)
-            data = load_mod_index()
-            sequence = str(project.get("sequence") or "")
-            if sequence and sequence in data:
-                synced = project.get("files", [])
-                workbench_meta, visible_blocks, canvas_state = _template_state_from_toml(parsed_template, synced)
-                actual_mod_id = str(workbench_meta.get("modId") or actual_root_name)
-                actual_mod_name = str(workbench_meta.get("modName") or actual_mod_id)
-                workbench_meta["modId"] = actual_mod_id
-                workbench_meta["modName"] = actual_mod_name
-                data[sequence]["workbench_meta"] = workbench_meta
-                data[sequence]["visible_blocks"] = visible_blocks
-                data[sequence]["workbench_canvas_state"] = canvas_state
-                data[sequence]["mod_id"] = actual_mod_id
-                data[sequence]["mod_name"] = actual_mod_name
-                data[sequence]["description"] = str(workbench_meta.get("description") or "")
-                data[sequence]["author"] = str(workbench_meta.get("author") or "")
-                data[sequence]["cover"] = cover_relpath
-                save_mod_index(data)
-                project = to_project(sequence, data[sequence]).model_dump()
-                project["directories"] = _read_project_directories(sequence)
-                project["files"] = synced
-            synced = project.get("files", [])
-            return {"mode": "project-created", "project": project, "directories": project.get("directories", []), "files": synced}
-        except Exception:
-            shutil.rmtree(project_dir, ignore_errors=True)
-            raise
-    finally:
-        _remove_tree_quiet(temp_dir)

@@ -18,3 +18,19 @@
 - 如果元数据里声明了封面路径，会从包内复制封面并写回新项目的 `MOD.json`。
 - 不会复用导出机器上的 `MOD.json` 顶层随机序列号；导入时始终重新生成。模板自身的 `mod_id` 保持包内定义。
 - 找不到 `mod.meta.json` 时，按归档内合法模板 TOML 生成项目，并用默认位置/连接生成工作台状态；若模板 `[MODINFO].cover` 指向包内图片，也会复制为项目封面。
+
+## Windows 文件关联
+
+安装包通过 `setup/MaiCoreStart.iss` 把 `.mcsmod` 关联到 MaiCoreStart 主程序，并使用 `mcsmod.ico` 作为文件图标。用户双击 `.mcsmod` 后，启动器会转发为：
+
+```
+python main_refactored.py --open-package "<文件.mcsmod>"
+```
+
+命令行会询问工作台模板导入目标目录，默认使用包文件所在目录，然后复用 WebUI 的归档导入逻辑创建工作台项目。
+
+图标由 PNG 生成：
+
+```
+magick .\mcsmod.png -define icon:auto-resize=256,128,64,48,32,16 .\mcsmod.ico
+```
