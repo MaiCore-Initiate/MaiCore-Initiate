@@ -7,10 +7,11 @@ import os
 import shutil
 import subprocess
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..modules.config_manager import config_manager
+from .auth_core import require_action
 
 router = APIRouter()
 
@@ -91,7 +92,7 @@ async def get_instance(serial_number: str):
         raise HTTPException(status_code=500, detail=f"获取实例详情失败: {str(e)}")
 
 
-@router.post("/multi-instance/clone", summary="克隆实例")
+@router.post("/multi-instance/clone", summary="克隆实例", dependencies=[Depends(require_action("multi-instance.manage"))])
 async def clone_instance(request: CloneInstanceRequest):
     """
     克隆一个已存在的实例
@@ -202,7 +203,7 @@ async def get_instance_ports(serial_number: str):
         raise HTTPException(status_code=500, detail=f"获取端口配置失败: {str(e)}")
 
 
-@router.post("/multi-instance/{serial_number}/adjust-ports", summary="调整实例端口")
+@router.post("/multi-instance/{serial_number}/adjust-ports", summary="调整实例端口", dependencies=[Depends(require_action("multi-instance.manage"))])
 async def adjust_instance_ports(serial_number: str, port_offset: int = 0):
     """
     根据偏移量调整实例端口配置

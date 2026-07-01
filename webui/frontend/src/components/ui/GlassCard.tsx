@@ -1,5 +1,6 @@
 import { type ReactNode, type CSSProperties, useRef, useState, useEffect } from 'react'
-import { useBgContext } from '../background/DynamicBackground'
+import { resolveOverlayStyle, useBgContext } from '../background/DynamicBackground'
+import { useTheme } from '../theme/ThemeProvider'
 
 interface GlassCardProps {
   children: ReactNode
@@ -18,8 +19,8 @@ export default function GlassCard({
   children,
   radius = 30,
   blur = 50,
-  shadow = '6px 6px 4px rgba(0,0,0,0.35)',
-  borderColor = 'rgba(0,0,0,0.5)',
+  shadow = 'var(--mc-glass-shadow)',
+  borderColor = 'var(--mc-glass-border)',
   borderWidth = 2,
   bgOpacity = 0.45,
   className = '',
@@ -28,7 +29,8 @@ export default function GlassCard({
 }: GlassCardProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x: 0, y: 0 })
-  const { currentBgUrl } = useBgContext()
+  const { currentBgUrl, settings } = useBgContext()
+  const { resolvedTheme } = useTheme()
   const [bgA, setBgA] = useState<string | null>(currentBgUrl)
   const [bgB, setBgB] = useState<string | null>(null)
   const [showA, setShowA] = useState(true)
@@ -86,7 +88,12 @@ export default function GlassCard({
           opacity: visible ? 1 : 0,
           transition: 'opacity 3s ease-in-out',
         }}
-      />
+      >
+        <div
+          className="absolute inset-0"
+          style={resolveOverlayStyle(settings, resolvedTheme)}
+        />
+      </div>
     )
   }
 
@@ -96,7 +103,13 @@ export default function GlassCard({
       <div className="absolute inset-0 overflow-hidden" style={{ borderRadius: radius, zIndex: 0 }}>
         {renderBgLayer(bgA, showA, 'bg-a')}
         {renderBgLayer(bgB, !showA, 'bg-b')}
-        <div className="absolute inset-0" style={{ background: `rgba(255,255,255,${bgOpacity})` }} />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundColor: 'var(--mc-glass-fill)',
+            opacity: Math.max(0, Math.min(1, bgOpacity / 0.45)),
+          }}
+        />
       </div>
       {/* 边框层 */}
       <div

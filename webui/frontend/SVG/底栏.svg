@@ -1,0 +1,49 @@
+<svg id="底栏" xmlns="http://www.w3.org/2000/svg" width="589" height="61" viewBox="0 0 589 61">
+  <rect id="底栏总背景" width="588" height="60" rx="30" transform="translate(0.5 0.5)" fill="#fff" stroke="#000" stroke-width="1"/>
+  <g id="展开_收起底栏图标" data-name="展开、收起底栏图标">
+    <rect id="背景" width="40" height="40" rx="20" transform="translate(10.5 10.5)" fill="#fff" stroke="#000" stroke-width="1"/>
+    <g id="TextAlignCenter">
+      <path id="路径_89" data-name="路径 89" d="M19.5,22h22a1,1,0,1,1,0,2h-22a1,1,0,1,1,0-2Zm0,2a1,1,0,1,1,1-1A1,1,0,0,1,19.5,24Zm22,0a1,1,0,1,1,1-1A1,1,0,0,1,41.5,24Z"/>
+      <path id="路径_90" data-name="路径 90" d="M22.5,27h16a1,1,0,1,1,0,2h-16a1,1,0,1,1,0-2Zm0,2a1,1,0,1,1,1-1A1,1,0,0,1,22.5,29Zm16,0a1,1,0,1,1,1-1A1,1,0,0,1,38.5,29Z"/>
+      <path id="路径_91" data-name="路径 91" d="M19.5,32h22a1,1,0,1,1,0,2h-22a1,1,0,1,1,0-2Zm0,2a1,1,0,1,1,1-1A1,1,0,0,1,19.5,34Zm22,0a1,1,0,1,1,1-1A1,1,0,0,1,41.5,34Z"/>
+      <path id="路径_92" data-name="路径 92" d="M22.5,37h16a1,1,0,1,1,0,2h-16a1,1,0,1,1,0-2Zm0,2a1,1,0,1,1,1-1A1,1,0,0,1,22.5,39Zm16,0a1,1,0,1,1,1-1A1,1,0,0,1,38.5,39Z"/>
+    </g>
+  </g>
+  <path id="分割线" d="M70.5,15.5v30" fill="none" stroke="#7f7f7f" stroke-linecap="round" stroke-width="2"/>
+  <g id="放大倍数">
+    <rect id="矩形_3" data-name="矩形 3" width="105" height="40" rx="20" transform="translate(90.5 10.5)" fill="#fff" stroke="#000" stroke-width="1"/>
+    <path id="CaretDown" d="M185.5,26.5l-10,10-10-10" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    <text id="_100_" data-name="100%" transform="translate(98 38)" font-size="20" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">100%</tspan></text>
+  </g>
+  <path id="分割线-2" data-name="分割线" d="M215.5,15.5v30" fill="none" stroke="#7f7f7f" stroke-linecap="round" stroke-width="2"/>
+  <g id="添加节点">
+    <rect id="背景-2" data-name="背景" width="144" height="40" rx="20" transform="translate(235.5 10.5)" fill="#b3daff" stroke="#000" stroke-width="1"/>
+    <g id="Plus">
+      <path id="路径_100" data-name="路径 100" d="M244.5,30.5h22" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      <path id="路径_101" data-name="路径 101" d="M255.5,19.5v22" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    </g>
+    <text id="添加节点-2" data-name="添加节点" transform="translate(278 38)" font-size="20" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">添加节点</tspan></text>
+  </g>
+  <path id="分割线-3" data-name="分割线" d="M399.5,15.5v30" fill="none" stroke="#7f7f7f" stroke-linecap="round" stroke-width="2"/>
+  <g id="试运行_调试" data-name="试运行、调试">
+    <g id="调试">
+      <rect id="调试背景" width="159" height="40" rx="20" transform="translate(419.5 10.5)" fill="#cab3ff" stroke="#000" stroke-width="1"/>
+      <g id="BugBeetle--调试图标">
+        <path id="路径_104" data-name="路径 104" d="M558.5,17.5a10,10,0,0,1,10,10v6a10,10,0,0,1-20,0v-6A10,10,0,0,1,558.5,17.5Zm0,2a8,8,0,0,0-8,8v6a8,8,0,0,0,16,0v-6A8,8,0,0,0,558.5,19.5Z"/>
+        <path id="路径_105" data-name="路径 105" d="M567.5,31.5h3" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <path id="路径_106" data-name="路径 106" d="M546.5,31.5h3" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <path id="路径_107" data-name="路径 107" d="M546.5,35.5h3.225" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <path id="路径_108" data-name="路径 108" d="M546.5,27.5h24" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <path id="路径_109" data-name="路径 109" d="M558.5,31.5v11" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <path id="路径_110" data-name="路径 110" d="M567.275,35.5H570.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <path id="路径_111" data-name="路径 111" d="M549.488,18l2.975,2.825" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <path id="路径_112" data-name="路径 112" d="M567.488,18l-2.963,2.813" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+    </g>
+    <g id="试运行">
+      <rect id="试运行背景" width="120" height="40" rx="20" transform="translate(419.5 10.5)" fill="#b3ffba" stroke="#000" stroke-width="1"/>
+      <text id="试运行-2" data-name="试运行" transform="translate(462 38)" font-size="20" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">试运行</tspan></text>
+      <path id="Play" d="M452.013,29.65l-17.988-11c-.019-.012-.038-.023-.058-.033s-.039-.02-.059-.029l-.062-.025-.063-.021-.064-.017-.065-.012-.066-.008-.066,0h-.066l-.066.005-.066.01-.065.014-.064.018-.062.022-.061.026-.059.03-.057.034-.054.038c-.018.013-.035.027-.052.041s-.033.029-.049.045-.031.031-.046.048-.029.033-.042.051-.027.035-.039.054-.025.037-.036.056-.022.038-.032.058-.019.04-.027.06-.017.041-.024.062-.014.042-.02.063-.011.043-.015.065-.008.043-.011.065-.005.044-.007.066,0,.044,0,.066v22c0,.022,0,.044,0,.066s0,.044.007.066.007.044.011.065.009.043.015.064.013.042.02.063.015.042.024.062.017.04.027.06.021.039.032.058a1.174,1.174,0,0,0,.075.11c.013.017.028.034.042.051s.03.033.046.048.032.03.049.045.034.028.052.041l.054.038.057.034c.019.011.039.021.059.03l.061.026.062.022.064.018.065.014.066.009.066.005h.066l.066,0,.066-.008.065-.013.064-.017q.033-.009.063-.021l.062-.025.059-.029c.02-.01.039-.021.058-.033l17.988-11c.018-.011.036-.022.053-.034s.035-.024.052-.038.033-.027.049-.041.032-.029.047-.044.029-.031.043-.047.027-.033.04-.05.025-.034.037-.052.023-.036.034-.054.02-.037.029-.057.018-.039.027-.058.015-.04.022-.06.013-.041.018-.061.011-.041.015-.062.007-.042.01-.063,0-.042.006-.064,0-.043,0-.064,0-.043,0-.064,0-.043-.006-.064-.006-.042-.01-.063-.009-.042-.015-.062-.011-.041-.018-.061-.014-.04-.022-.06-.017-.039-.027-.058-.019-.038-.029-.056-.022-.037-.034-.055-.024-.035-.037-.052-.026-.034-.04-.05-.028-.032-.043-.047-.031-.03-.047-.044-.032-.028-.049-.041-.034-.026-.052-.038S452.031,29.661,452.013,29.65Z" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    </g>
+  </g>
+</svg>

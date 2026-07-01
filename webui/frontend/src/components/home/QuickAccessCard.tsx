@@ -6,6 +6,9 @@ import {
   PluginsIcon, DeployIcon, StatusIcon, LogsIcon, MiscIcon, SettingsIcon
 } from '../icons/SidebarIcons'
 import type { Page, SubPageParams } from '../../types'
+import { useTheme } from '../theme/ThemeProvider'
+import { useAccountSystem, type ActionPermissionKey } from '../../lib/account-system'
+import { getMiscTabPermission } from '../../lib/misc-permissions'
 
 const titleStyle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.12))' }
 
@@ -29,6 +32,17 @@ interface PageOption {
   label: string
   params?: SubPageParams
   group: string
+}
+
+function isOptionAccessible(
+  page: Page,
+  params: SubPageParams | undefined,
+  canAccessPage: (page: Page) => boolean,
+  can: (action: ActionPermissionKey) => boolean,
+) {
+  if (!canAccessPage(page)) return false
+  const miscPermission = getMiscTabPermission(params?.miscTab)
+  return miscPermission ? can(miscPermission) : true
 }
 
 const PAGE_OPTIONS: PageOption[] = [
@@ -63,6 +77,7 @@ const PAGE_OPTIONS: PageOption[] = [
   { page: 'misc', label: 'WebShell', params: { miscTab: 'webshell' }, group: '杂项' },
   { page: 'misc', label: '屏保', params: { miscTab: 'screensaver' }, group: '杂项' },
   { page: 'misc', label: '桌宠', params: { miscTab: 'desktop-pet' }, group: '杂项' },
+  { page: 'misc', label: '打包实例', params: { miscTab: 'package-instance' }, group: '杂项' },
 
   // 其他组
   { page: 'settings', label: '设置', group: '其他' },
@@ -79,12 +94,14 @@ function ConfigModal({
   open,
   onClose,
   currentItems,
-  onSave
+  onSave,
+  options,
 }: {
   open: boolean
   onClose: () => void
   currentItems: QuickItem[]
   onSave: (items: QuickItem[]) => void
+  options: PageOption[]
 }) {
   const [selectedOptions, setSelectedOptions] = useState<PageOption[]>([])
 
@@ -92,7 +109,7 @@ function ConfigModal({
     if (open) {
       // 根据 currentItems 初始化选中状态
       const selected = currentItems.map(item =>
-        PAGE_OPTIONS.find(opt =>
+        options.find(opt =>
           opt.page === item.page &&
           JSON.stringify(opt.params) === JSON.stringify(item.params)
         )
@@ -131,7 +148,7 @@ function ConfigModal({
   }
 
   // 按分组整理选项
-  const groupedOptions = PAGE_OPTIONS.reduce((acc, opt) => {
+  const groupedOptions = options.reduce((acc, opt) => {
     if (!acc[opt.group]) acc[opt.group] = []
     acc[opt.group].push(opt)
     return acc
@@ -206,6 +223,8 @@ export default function QuickAccessCard({
 }: {
   onNavigate?: (page: Page, params?: SubPageParams) => void
 }) {
+  const { isDark } = useTheme()
+  const { can, canAccessPage } = useAccountSystem()
   const [items, setItems] = useState<QuickItem[]>(defaultItems)
   const [configOpen, setConfigOpen] = useState(false)
 
@@ -227,50 +246,57 @@ export default function QuickAccessCard({
   const handleItemClick = (item: QuickItem) => {
     onNavigate?.(item.page, item.params)
   }
+  const titleColor = isDark ? 'rgba(255,255,255,0.96)' : 'rgba(0,0,0,0.92)'
+  const itemBorder = isDark ? 'rgba(255,255,255,0.26)' : 'rgba(112,112,112,0.45)'
+  const itemText = isDark ? 'rgba(255,255,255,0.82)' : '#707070'
+  const canCustomize = can('quick-access.customize')
+  const availableOptions = PAGE_OPTIONS.filter(option => isOptionAccessible(option.page, option.params, canAccessPage, can))
+  const displayItems = items.filter(item => isOptionAccessible(item.page, item.params, canAccessPage, can))
 
   return (
     <>
-      <GlassCard>
+      <GlassCard bgOpacity={isDark ? 0.72 : 0.45} borderColor={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.5)'}>
         <div className="p-[33px] flex flex-col">
           <div className="flex items-center justify-between pb-[16px]">
-            <h2 className="text-black" style={titleStyle}>快捷访问</h2>
+            <h2 style={{ ...titleStyle, color: titleColor }}>快捷访问</h2>
             <button
-              onClick={() => setConfigOpen(true)}
-              className="w-[40px] h-[40px] rounded-[9px] border-3 border-black/50 flex items-center justify-center cursor-pointer hover:border-black/70 transition-colors"
-              style={{ filter: 'drop-shadow(5px 3px 3px rgba(0,0,0,0.16))' }}
+              onClick={() => canCustomize && setConfigOpen(true)}
+              className="w-[40px] h-[40px] rounded-[9px] flex items-center justify-center transition-colors"
+              style={{ filter: 'drop-shadow(5px 3px 3px rgba(0,0,0,0.16))', border: `3px solid ${isDark ? 'rgba(255,255,255,0.34)' : 'rgba(0,0,0,0.5)'}`, color: isDark ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.5)', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'transparent', opacity: canCustomize ? 1 : 0.45, cursor: canCustomize ? 'pointer' : 'not-allowed' }}
+              title={canCustomize ? '配置快捷访问' : '当前账号无权自定义快捷访问'}
             >
               <svg width="30" height="30" viewBox="0 0 20 20" fill="none">
-                <line x1="3" y1="4" x2="17" y2="4" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" strokeLinecap="round" />
-                <line x1="3" y1="10" x2="17" y2="10" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" strokeLinecap="round" />
-                <line x1="3" y1="16" x2="17" y2="16" stroke="rgba(0,0,0,0.5)" strokeWidth="2.5" strokeLinecap="round" />
-                <circle cx="7" cy="4" r="2" fill="rgba(0,0,0,0.5)" />
-                <circle cx="13" cy="10" r="2" fill="rgba(0,0,0,0.5)" />
-                <circle cx="9" cy="16" r="2" fill="rgba(0,0,0,0.5)" />
+                <line x1="3" y1="4" x2="17" y2="4" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="3" y1="16" x2="17" y2="16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                <circle cx="7" cy="4" r="2" fill="currentColor" />
+                <circle cx="13" cy="10" r="2" fill="currentColor" />
+                <circle cx="9" cy="16" r="2" fill="currentColor" />
               </svg>
             </button>
           </div>
 
-          <div className="flex flex-col items-center gap-[7px]">
-            {items.length === 0 ? (
-              <div className="flex items-center justify-center rounded-[30px] border-3 border-dashed border-[#9e9e9e]" style={{ width: 316, height: 60 }}>
-                <span className="text-[#9e9e9e] font-semibold text-base" style={{ fontFamily: "'Segoe UI', 'HarmonyOS Sans SC', sans-serif" }}>no items</span>
+          <div className="flex w-full flex-col items-center gap-[7px]">
+            {displayItems.length === 0 ? (
+              <div className="flex h-[60px] w-full max-w-[340px] items-center justify-center rounded-[30px] border-3 border-dashed border-[#9e9e9e]">
+                <span className="text-[#9e9e9e] font-semibold text-base" style={{ fontFamily: "'Segoe UI', 'HarmonyOS Sans SC', sans-serif" }}>no accessible items</span>
               </div>
-            ) : items.map(item => {
+            ) : displayItems.map(item => {
               const Icon = iconMap[item.page]
               return (
                 <button
                   key={item.id}
                   onClick={() => handleItemClick(item)}
-                  className="flex items-center gap-3 cursor-pointer transition-all backdrop-blur-[4px] hover:border-[rgba(112,112,112,0.65)]"
+                  className="flex h-[60px] w-full max-w-[340px] items-center gap-3 cursor-pointer transition-all backdrop-blur-[4px] hover:border-[rgba(112,112,112,0.65)]"
                   style={{
-                    width: 316, height: 60, borderRadius: 30, paddingLeft: 16,
-                    border: '3px solid rgba(112,112,112,0.45)', background: 'transparent',
+                    borderRadius: 30, padding: '0 16px',
+                    border: `3px solid ${itemBorder}`, background: isDark ? 'rgba(255,255,255,0.04)' : 'transparent',
                   }}
                 >
-                  {Icon && <Icon className="text-[#707070]" />}
+                  {Icon && <Icon className="shrink-0" style={{ color: itemText }} />}
                   <span
-                    className="text-[#707070]"
-                    style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 400, marginTop: 4 }}
+                    className="min-w-0 truncate"
+                    style={{ color: itemText, fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: isDark ? 500 : 400, marginTop: 4 }}
                   >
                     {item.label}
                   </span>
@@ -286,6 +312,7 @@ export default function QuickAccessCard({
         onClose={() => setConfigOpen(false)}
         currentItems={items}
         onSave={saveItems}
+        options={availableOptions}
       />
     </>
   )

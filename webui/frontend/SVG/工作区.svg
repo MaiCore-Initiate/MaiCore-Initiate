@@ -1,0 +1,39 @@
+<svg id="工作区" xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <rect id="工作区-2" data-name="工作区" width="1920" height="1080" fill="none"/>
+  <g id="示例积木">
+    <g id="起始端点" transform="translate(605.289 469.289)">
+      <path id="路径_1" data-name="路径 1" d="M109.6,109.6a55.047,55.047,0,1,1-.218-78q.087.086.17.177t.162.185q.078.094.152.193t.142.2q.069.1.132.207t.123.213q.058.108.111.219t.1.224q.047.113.089.229t.079.233q.036.117.066.236t.055.239q.025.12.044.242t.031.243q.013.122.019.245t.008.245q0,.123,0,.245t-.017.245q-.011.122-.028.244t-.041.242q-.023.121-.052.24t-.065.237q-.035.118-.075.233t-.087.229q-.047.114-.1.225t-.109.22q-.057.109-.119.214t-.131.208q-.067.1-.14.2t-.15.194q-.077.1-.159.187t-.168.179q-.087.087-.177.17t-.185.161q-.094.078-.193.152t-.2.142q-.1.069-.206.132t-.213.122q-.108.058-.219.112t-.223.1q-.114.048-.229.09t-.233.078q-.117.036-.236.067t-.239.055q-.12.025-.241.043t-.244.031q-.122.013-.244.019t-.246.007q-.122,0-.245,0t-.245-.017q-.122-.011-.244-.029t-.242-.041q-.12-.023-.239-.053t-.237-.064q-.118-.035-.234-.076t-.229-.087q-.114-.046-.225-.1t-.22-.109q-.108-.057-.214-.12t-.208-.13q-.1-.068-.2-.14t-.194-.15q-.095-.077-.187-.159t-.178-.168A45.129,45.129,0,0,0,95.29,33a44.732,44.732,0,0,0-16.124-6.5,45.145,45.145,0,0,0-25.446,2.52,44.53,44.53,0,0,0-7.791,4.11,45,45,0,1,0,56.6,69.392q.087-.086.178-.169t.186-.16q.095-.078.194-.151t.2-.141q.1-.069.208-.132t.213-.121q.108-.057.219-.11t.225-.1q.113-.047.229-.089t.233-.077q.117-.035.236-.065t.24-.054q.12-.024.241-.042t.244-.03q.122-.012.245-.018t.245-.006q.123,0,.245.006t.245.018q.122.012.244.03t.241.042q.121.024.24.054t.236.065q.118.036.233.077t.229.089q.114.047.225.1t.219.11q.108.058.214.121t.207.132q.1.068.2.141t.193.151q.095.078.186.16t.178.169q.086.087.169.178t.16.186q.078.095.151.194t.141.2q.069.1.132.207t.121.214q.057.108.11.219t.1.225q.047.113.089.229t.077.233q.035.117.065.236t.054.24q.024.12.042.241t.03.244q.012.122.018.245t.006.245q0,.123-.006.245t-.018.245q-.012.122-.03.244t-.042.241q-.024.121-.054.24t-.065.236q-.036.118-.077.233t-.089.229q-.047.114-.1.225t-.11.219q-.058.108-.121.214t-.132.207q-.068.1-.141.2t-.151.193q-.078.095-.16.186T109.6,109.6Z"/>
+      <path id="路径_2" data-name="路径 2" d="M95.711,71.066a25,25,0,1,1-25-25A25,25,0,0,1,95.711,71.066Z" fill="none" stroke="#000" stroke-width="10"/>
+    </g>
+    <g id="初始化积木" transform="translate(829 359)">
+      <rect id="初始化积木-2" data-name="初始化积木" width="301" height="221" rx="30" transform="translate(5 5)" fill="#fff" stroke="#000" stroke-width="2"/>
+      <path id="选中状态框" d="M36,0H276a36,36,0,0,1,36,36V195a36,36,0,0,1-36,36H36A36,36,0,0,1,0,195V36A36,36,0,0,1,36,0Zm0,2A34,34,0,0,0,2,36V195a34,34,0,0,0,34,34H276a34,34,0,0,0,34-34V36A34,34,0,0,0,276,2Z" fill="#0084ff"/>
+      <g id="模板元信息">
+        <path id="初始化积木-3" data-name="初始化积木" d="M30,0H271a30,30,0,0,1,30,30V53a0,0,0,0,1,0,0H0a0,0,0,0,1,0,0V30A30,30,0,0,1,30,0Z" transform="translate(5 5)" fill="#fff" stroke="#000" stroke-width="2"/>
+        <text id="初始化块" transform="translate(20 42)" font-size="25" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">初始化块</tspan></text>
+        <text id="作者_MCStartTeam" data-name="作者：MCStartTeam" transform="translate(15 89)" font-size="20" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">作者：</tspan><tspan y="0" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC">MCStartTeam</tspan></text>
+        <text id="标签_test" data-name="标签 ： test" transform="translate(15 115)" font-size="20" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">标签 ：</tspan><tspan y="0" xml:space="preserve" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"> test</tspan></text>
+        <text id="描述_这是一个基于MCStart..." data-name="描述 ： 这是一个基于MCStart..." transform="translate(15 141)" font-size="20" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">描述 ：</tspan><tspan y="0" xml:space="preserve" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"> 这是一个基于MCStart...</tspan></text>
+        <text id="模板ID_MaiCore-Start.Deplo..." data-name="模板ID ： MaiCore-Start.Deplo..." transform="translate(15 167)" font-size="20" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">模板ID ： </tspan><tspan y="0" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC">MaiCore-Start.Deplo...</tspan></text>
+        <text id="模板名_示例部署模组" data-name="模板名 ： 示例部署模组" transform="translate(15 193)" font-size="20" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">模板名 ： </tspan><tspan y="0" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC">示例部署模组</tspan></text>
+        <text id="省略更多信息" transform="translate(21 211)" font-size="20" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">......</tspan></text>
+      </g>
+      <g id="添加并链接新的块">
+        <circle id="椭圆_1" data-name="椭圆 1" cx="12" cy="12" r="12" transform="translate(294 104)" fill="#fff" stroke="#000" stroke-width="2"/>
+        <path id="路径_13" data-name="路径 13" d="M301,116h10" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+        <path id="路径_14" data-name="路径 14" d="M306,111v10" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      </g>
+    </g>
+    <g id="起始端点与初始化积木的连接线">
+      <path id="贝塞尔曲线连接线" d="M834.11,474.2c-62.1-.438-74.347,64.646-133.11,65.5" transform="translate(0 0.297)" fill="none" stroke="#000" stroke-linecap="round" stroke-width="4"/>
+      <g id="初始化块接入点" transform="translate(831.5 472)" fill="#fff" stroke="#000" stroke-width="2">
+        <circle cx="2.5" cy="2.5" r="2.5" stroke="none"/>
+        <circle cx="2.5" cy="2.5" r="3.5" fill="none"/>
+      </g>
+      <g id="起始端点输出点" transform="translate(698.5 537.5)" fill="#fff" stroke="#000" stroke-width="2">
+        <circle cx="2.5" cy="2.5" r="2.5" stroke="none"/>
+        <circle cx="2.5" cy="2.5" r="3.5" fill="none"/>
+      </g>
+    </g>
+  </g>
+</svg>

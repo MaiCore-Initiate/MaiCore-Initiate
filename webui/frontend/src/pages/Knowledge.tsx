@@ -27,9 +27,15 @@ interface FileEntry {
   progress: number // 0~1，仅用于上传中的视觉效果
 }
 
+const normalizeBotType = (botType: string) => {
+  if (botType === 'Neo-MoFox') return 'Neo-MoFox'
+  if (botType === 'MoFox-Core' || botType === 'MoFox_bot') return 'MoFox-Core'
+  return 'MaiBot'
+}
+
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-const valueFont = { fontSize: 25, ...monoFont, color: '#707070' }
+const valueFont = { fontSize: 25, ...monoFont, color: 'var(--mc-text-secondary)' }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
 const btnFont = { fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative' as const, top: 2 }
@@ -37,7 +43,7 @@ const fileFont = { fontSize: 30, fontFamily: "'Ubuntu','HarmonyOS Sans SC', mono
 
 /* 边框阴影容器：绝对定位的边框层带阴影，不影响子元素 */
 const pillShadow = "absolute inset-0 rounded-[27px] pointer-events-none"
-const pillShadowStyle = { border: '2px solid rgba(0,0,0,0.5)', boxShadow: '2px 3px 6px rgba(0,0,0,0.15)' }
+const pillShadowStyle = { border: '2px solid var(--mc-border-strong)', boxShadow: '2px 3px 6px var(--mc-shadow-soft)' }
 
 /* 设置弹窗样式 */
 const settingLabel = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
@@ -90,14 +96,14 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
     <button
       className="w-[74px] h-[40px] rounded-[20px] relative cursor-pointer transition-colors duration-200 shrink-0"
       style={{
-        background: value ? 'rgba(0,144,255,0.41)' : 'rgba(0,0,0,0.41)',
-        border: '1px solid rgba(0,0,0,0.5)',
+        background: value ? 'rgba(0,144,255,0.41)' : 'var(--mc-control-bg-soft)',
+        border: '1px solid var(--mc-border-strong)',
       }}
       onClick={() => onChange(!value)}
     >
       <div
-        className="w-[32px] h-[32px] rounded-full bg-white absolute top-[3px] transition-all duration-200"
-        style={{ left: value ? 38 : 4 }}
+        className="w-[32px] h-[32px] rounded-full absolute top-[3px] transition-all duration-200"
+        style={{ left: value ? 38 : 4, background: 'var(--mc-control-solid)' }}
       />
     </button>
   )
@@ -107,12 +113,12 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 function SettingInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="relative shrink-0" style={{ width: 221 }}>
-      <div className="absolute inset-0 rounded-[20px] pointer-events-none" style={{ border: '2px solid rgba(0,0,0,0.5)', boxShadow: '3px 3px 4.5px rgba(0,0,0,0.16)' }} />
+      <div className="absolute inset-0 rounded-[20px] pointer-events-none" style={{ border: '2px solid var(--mc-border-strong)', boxShadow: '3px 3px 4.5px var(--mc-shadow-soft)' }} />
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full h-[40px] px-[20px] rounded-[20px] bg-transparent outline-none text-black"
-        style={settingInput}
+        className="w-full h-[40px] px-[20px] rounded-[20px] bg-transparent outline-none"
+        style={{ ...settingInput, color: 'var(--mc-text-primary)' }}
       />
     </div>
   )
@@ -123,15 +129,16 @@ function ModeSelector({ value, onChange }: { value: string; onChange: (v: string
   const isAgent = value === 'agent'
   return (
     <div className="relative shrink-0 flex items-center" style={{ width: 221, height: 50 }}>
-      <div className="absolute inset-0 rounded-[25px] pointer-events-none" style={{ border: '2px solid rgba(0,0,0,0.5)', boxShadow: '3px 3px 4.5px rgba(0,0,0,0.16)' }} />
+      <div className="absolute inset-0 rounded-[25px] pointer-events-none" style={{ border: '2px solid var(--mc-border-strong)', boxShadow: '3px 3px 4.5px var(--mc-shadow-soft)' }} />
       {/* 滑块 */}
       <div
-        className="absolute top-[5px] rounded-[20px] bg-white transition-all duration-300 ease-in-out"
+        className="absolute top-[5px] rounded-[20px] transition-all duration-300 ease-in-out"
         style={{
           height: 40,
           width: isAgent ? 95 : 118,
           left: isAgent ? 4 : 99,
-          border: '1px solid rgba(0,0,0,0.5)', boxShadow: '3px 3px 4.5px rgba(0,0,0,0.16)',
+          background: 'var(--mc-control-solid)',
+          border: '1px solid var(--mc-border-strong)', boxShadow: '3px 3px 4.5px var(--mc-shadow-soft)',
         }}
       />
       <button
@@ -159,8 +166,8 @@ function SettingRow({ label, desc, children }: { label: string; desc?: string; c
   return (
     <div className="flex items-center justify-between gap-[16px]">
       <div className="min-w-0">
-        {desc && <p className="text-black m-0 leading-tight" style={settingDesc}>{desc}</p>}
-        <p className="text-black m-0" style={settingLabel}>{label}</p>
+        {desc && <p className="m-0 leading-tight" style={{ ...settingDesc, color: 'var(--mc-text-secondary)' }}>{desc}</p>}
+        <p className="m-0" style={{ ...settingLabel, color: 'var(--mc-text-primary)' }}>{label}</p>
       </div>
       {children}
     </div>
@@ -215,7 +222,7 @@ function KnowledgeSettingsModal({ serial, open, onClose }: { serial: string; ope
     setSaving(false)
   }
 
-  if (!settings) return <Modal open={open} onClose={onClose} width={1083}><div className="p-[40px] text-center text-black/30" style={settingLabel}>加载中...</div></Modal>
+  if (!settings) return <Modal open={open} onClose={onClose} width={1083}><div className="p-[40px] text-center" style={{ ...settingLabel, color: 'var(--mc-text-faint)' }}>加载中...</div></Modal>
 
   const numField = (key: keyof LpmmSettings) => (
     <SettingInput
@@ -229,10 +236,10 @@ function KnowledgeSettingsModal({ serial, open, onClose }: { serial: string; ope
 
   return (
     <Modal open={open} onClose={onClose} width={1083}>
-      <div className="p-[40px] max-h-[85vh] overflow-y-auto custom-scrollbar">
-        <h2 className="text-black mb-[20px]" style={{ fontSize: 50, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>知识库设置</h2>
+      <div className="p-[clamp(24px,2.4vw,40px)] max-h-[85vh] overflow-y-auto custom-scrollbar">
+        <h2 className="mb-[20px]" style={{ fontSize: 50, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-primary)' }}>知识库设置</h2>
 
-        <div className="flex gap-[60px]">
+        <div className="grid grid-cols-1 gap-[24px] xl:grid-cols-2 xl:gap-[60px]">
           {/* 左列 */}
           <div className="flex-1 flex flex-col gap-[16px]">
             <SettingRow label="启用知识库">
@@ -444,38 +451,38 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
 
   return (
     <GlassCard key={instance.serial}>
-      <div className="p-[28px] flex flex-col h-full">
+      <div className="p-[clamp(20px,1.8vw,28px)] flex h-full min-h-0 flex-col overflow-y-auto custom-scrollbar">
         {/* 实例概览 */}
-        <h2 className="text-black animate-fade-slide-up" style={{ ...sectionTitle, ...d(0) }}>实例概览</h2>
-        <div className="flex gap-0 mt-[8px] animate-fade-slide-up" style={d(1)}>
-          <div className="space-y-[2px]">
+        <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...d(0), color: 'var(--mc-text-primary)' }}>实例概览</h2>
+        <div className="mt-[8px] grid grid-cols-1 gap-x-[28px] gap-y-[10px] animate-fade-slide-up xl:grid-cols-[minmax(0,1fr)_3px_minmax(0,1fr)]" style={d(1)}>
+          <div className="min-w-0 space-y-[2px]">
             {leftData.map(([label, val], i) => (
-              <div key={label} className="flex items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
-                <span className="text-black shrink-0" style={labelFont}>{label}</span>
-                <span style={valueFont}>{val}</span>
+              <div key={label} className="flex min-w-0 items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
+                <span className="shrink-0" style={{ ...labelFont, color: 'var(--mc-text-primary)' }}>{label}</span>
+                <span className="min-w-0 truncate" style={valueFont}>{val}</span>
               </div>
             ))}
           </div>
-          <div className="w-[3px] self-stretch bg-black/50 rounded-full shrink-0 mx-[100px]" />
-          <div className="space-y-[2px]">
+          <div className="hidden w-[3px] self-stretch rounded-full xl:block" style={{ background: 'var(--mc-border-strong)' }} />
+          <div className="min-w-0 space-y-[2px]">
             {rightData.map(([label, val], i) => (
-              <div key={label} className="flex items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
-                <span className="text-black shrink-0" style={labelFont}>{label}</span>
-                <span style={valueFont}>{val}</span>
+              <div key={label} className="flex min-w-0 items-baseline gap-[16px] animate-fade-slide-up" style={d(2 + i)}>
+                <span className="shrink-0" style={{ ...labelFont, color: 'var(--mc-text-primary)' }}>{label}</span>
+                <span className="min-w-0 truncate" style={valueFont}>{val}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* 上传知识库 */}
-        <h2 className="text-black mt-[24px] animate-fade-slide-up" style={{ ...sectionTitle, ...d(6) }}>上传知识库</h2>
+        <h2 className="mt-[24px] animate-fade-slide-up" style={{ ...sectionTitle, ...d(6), color: 'var(--mc-text-primary)' }}>上传知识库</h2>
 
         {/* 拖拽上传区 */}
         <div
-          className="animate-fade-slide-up mt-[10px] min-h-[155px] rounded-[30px] flex flex-col items-center justify-center cursor-pointer transition-all duration-200"
+          className="animate-fade-slide-up mt-[10px] min-h-[140px] rounded-[30px] flex flex-col items-center justify-center cursor-pointer transition-all duration-200"
           style={{
-            border: `3px dashed ${dragging ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)'}`,
-            background: dragging ? 'rgba(0,0,0,0.04)' : 'transparent',
+            border: `3px dashed ${dragging ? 'var(--mc-border-strong)' : 'var(--mc-empty-border)'}`,
+            background: dragging ? 'var(--mc-control-bg-soft)' : 'transparent',
             ...d(7),
           }}
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
@@ -485,10 +492,10 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
         >
           {/* 上传图标 */}
           <svg width="118" height="72" viewBox="0 0 118 72" fill="none" className="mb-[12px]">
-            <rect x="2.5" y="2.5" width="113" height="67" rx="17.5" stroke="rgba(0,0,0,0.2)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="210 190" fill="none" />
-            <path d="M59 15 L39 42 M59 15 L78 42" stroke="rgba(0,0,0,0.2)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <rect x="2.5" y="2.5" width="113" height="67" rx="17.5" stroke="var(--mc-empty-border)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="210 190" fill="none" />
+            <path d="M59 15 L39 42 M59 15 L78 42" stroke="var(--mc-empty-border)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
           </svg>
-          <span className="text-black/20" style={{ fontSize: 25, fontFamily: "'问藏书房','HarmonyOS Sans SC', sans-serif" }}>
+          <span style={{ fontSize: 25, fontFamily: "'问藏书房','HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
             点击或拖拽上传{'  '}
             <span style={{ ...monoFont, fontStyle: 'italic' }}>|  *.txt</span>
             、
@@ -506,22 +513,22 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
         </div>
 
         {/* 下半部分：文件列表（左） + 操作（右） */}
-        <div className="flex mt-[16px] flex-1 min-h-0 gap-0">
+        <div className="mt-[16px] grid min-h-[220px] flex-1 grid-cols-1 gap-[18px] xl:grid-cols-[minmax(0,1fr)_auto]">
           {/* 文件列表 */}
           <div className="flex-1 min-w-0 flex flex-col">
-            <h2 className="text-black animate-fade-slide-up" style={{ ...sectionTitle, ...d(8) }}>文件列表</h2>
-            <div className="flex-1 overflow-y-auto mt-[6px] flex flex-wrap gap-[8px] content-start">
+            <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...d(8), color: 'var(--mc-text-primary)' }}>文件列表</h2>
+            <div className="flex-1 overflow-y-auto mt-[6px] flex flex-wrap gap-[8px] content-start custom-scrollbar">
               {/* 服务器已有文件（不在队列中的） */}
               {serverOnly.map((name, i) => (
                 <div
                   key={`s-${name}`}
-                  className="h-[54px] pl-[12px] pr-[24px] rounded-[27px] flex items-center gap-[8px] shrink-0 animate-fade-slide-up relative"
+                  className="h-[54px] min-w-0 max-w-full pl-[12px] pr-[24px] rounded-[27px] flex items-center gap-[8px] animate-fade-slide-up relative"
                   style={d(9 + i)}
                 >
                   <div className={pillShadow} style={pillShadowStyle} />
                   <button
                     title="移除文件"
-                    className="w-[28px] h-[28px] rounded-full flex items-center justify-center cursor-pointer hover:bg-black/10 transition-colors shrink-0"
+                    className="w-[28px] h-[28px] rounded-full flex items-center justify-center cursor-pointer transition-colors shrink-0"
                     onClick={async () => {
                       const isTxt = name.toLowerCase().endsWith('.txt')
                       const folder = isTxt ? 'raw_data' : 'openie'
@@ -538,18 +545,18 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
                     }}
                   >
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <line x1="2" y1="2" x2="12" y2="12" stroke="black" strokeWidth="2" strokeLinecap="round"/>
-                      <line x1="12" y1="2" x2="2" y2="12" stroke="black" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="2" y1="2" x2="12" y2="12" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="12" y1="2" x2="2" y2="12" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round"/>
                     </svg>
                   </button>
-                  <span style={fileFont}>{name}</span>
+                  <span className="min-w-0 truncate" style={fileFont}>{name}</span>
                 </div>
               ))}
               {/* 上传队列文件 */}
               {fileQueue.map((entry, i) => (
                 <div
                   key={`q-${i}-${entry.name}`}
-                  className="h-[54px] pl-[12px] pr-[24px] rounded-[27px] flex items-center gap-[8px] shrink-0 relative overflow-hidden animate-fade-slide-up"
+                  className="h-[54px] min-w-0 max-w-full pl-[12px] pr-[24px] rounded-[27px] flex items-center gap-[8px] relative overflow-hidden animate-fade-slide-up"
                   style={{
                     opacity: entry.status === 'pending' ? 0.4 : 1,
                     ...d(9 + serverOnly.length + i),
@@ -558,15 +565,15 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
                   <div className={pillShadow} style={pillShadowStyle} />
                   <button
                     title="移除文件"
-                    className="w-[28px] h-[28px] rounded-full flex items-center justify-center cursor-pointer hover:bg-black/10 transition-colors shrink-0"
+                    className="w-[28px] h-[28px] rounded-full flex items-center justify-center cursor-pointer transition-colors shrink-0"
                     onClick={() => setFileQueue(prev => prev.filter((_, j) => j !== i))}
                   >
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <line x1="2" y1="2" x2="12" y2="12" stroke="black" strokeWidth="2" strokeLinecap="round"/>
-                      <line x1="12" y1="2" x2="2" y2="12" stroke="black" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="2" y1="2" x2="12" y2="12" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="12" y1="2" x2="2" y2="12" stroke="var(--mc-text-primary)" strokeWidth="2" strokeLinecap="round"/>
                     </svg>
                   </button>
-                  <span style={fileFont}>{entry.name}</span>
+                  <span className="min-w-0 truncate" style={fileFont}>{entry.name}</span>
                   {/* 上传进度条 */}
                   {entry.status === 'uploading' && (
                     <div
@@ -585,9 +592,9 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
           </div>
 
           {/* 操作区 */}
-          <div className="shrink-0 flex flex-col items-start ml-[30px]">
-            <h2 className="text-black animate-fade-slide-up" style={{ ...sectionTitle, ...d(8) }}>操作</h2>
-            <div className="flex flex-col gap-[12px] mt-[6px]">
+          <div className="flex shrink-0 flex-col items-start xl:ml-[12px]">
+            <h2 className="animate-fade-slide-up" style={{ ...sectionTitle, ...d(8), color: 'var(--mc-text-primary)' }}>操作</h2>
+            <div className="flex flex-wrap gap-[12px] mt-[6px] xl:flex-col">
               {/* 开始构建 / 终止构建 */}
               <button
                 onClick={building ? handleStop : handleBuild}
@@ -600,22 +607,22 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
                   <svg width="34" height="34" viewBox="0 0 28 28" fill="none">
                     <g fill="none">
                       <path d="M14,0A14,14,0,1,1,0,14,14,14,0,0,1,14,0Z" stroke="none"/>
-                      <path d="M 14 3 C 11.06179046630859 3 8.299449920654297 4.144199371337891 6.221820831298828 6.221820831298828 C 4.144199371337891 8.299449920654297 3 11.06179046630859 3 14 C 3 16.93819999694824 4.144199371337891 19.7005500793457 6.221820831298828 21.77816963195801 C 8.299449920654297 23.85580062866211 11.06179046630859 25 14 25 C 16.93819999694824 25 19.70053863525391 23.85580062866211 21.77816963195801 21.77816963195801 C 23.85580062866211 19.70053863525391 25 16.93819999694824 25 14 C 25 11.06179046630859 23.85580062866211 8.299449920654297 21.77816963195801 6.221820831298828 C 19.7005500793457 4.144199371337891 16.93819999694824 3 14 3 M 14 0 C 21.73197937011719 0 28 6.268009185791016 28 14 C 28 21.73197937011719 21.73197937011719 28 14 28 C 6.268009185791016 28 0 21.73197937011719 0 14 C 0 6.268009185791016 6.268009185791016 0 14 0 Z" stroke="none" fill="black"/>
+                      <path d="M 14 3 C 11.06179046630859 3 8.299449920654297 4.144199371337891 6.221820831298828 6.221820831298828 C 4.144199371337891 8.299449920654297 3 11.06179046630859 3 14 C 3 16.93819999694824 4.144199371337891 19.7005500793457 6.221820831298828 21.77816963195801 C 8.299449920654297 23.85580062866211 11.06179046630859 25 14 25 C 16.93819999694824 25 19.70053863525391 23.85580062866211 21.77816963195801 21.77816963195801 C 23.85580062866211 19.70053863525391 25 16.93819999694824 25 14 C 25 11.06179046630859 23.85580062866211 8.299449920654297 21.77816963195801 6.221820831298828 C 19.7005500793457 4.144199371337891 16.93819999694824 3 14 3 M 14 0 C 21.73197937011719 0 28 6.268009185791016 28 14 C 28 21.73197937011719 21.73197937011719 28 14 28 C 6.268009185791016 28 0 21.73197937011719 0 14 C 0 6.268009185791016 6.268009185791016 0 14 0 Z" stroke="none" fill="var(--mc-text-primary)"/>
                     </g>
                     <g transform="translate(14 -5.799) rotate(45)">
-                      <path d="M0,12.9V0" transform="translate(14 7.548)" fill="none" stroke="black" strokeLinecap="round" strokeWidth="3"/>
-                      <path d="M0,12.9V0" transform="translate(20.452 14) rotate(90)" fill="none" stroke="black" strokeLinecap="round" strokeWidth="3"/>
+                      <path d="M0,12.9V0" transform="translate(14 7.548)" fill="none" stroke="var(--mc-text-primary)" strokeLinecap="round" strokeWidth="3"/>
+                      <path d="M0,12.9V0" transform="translate(20.452 14) rotate(90)" fill="none" stroke="var(--mc-text-primary)" strokeLinecap="round" strokeWidth="3"/>
                     </g>
                   </svg>
                 ) : (
                   /* 开始图标：圆弧+箭头 */
                   <svg width="34" height="34" viewBox="0 0 43.841 43.841" fill="none">
                     <g transform="translate(5.702 5.702)">
-                      <path d="M14,0A14,14,0,1,1,0,14,14,14,0,0,1,14,0Z" transform="translate(16.218 36.017) rotate(-135)" fill="none" stroke="black" strokeLinecap="round" strokeWidth="3" strokeDasharray="40 30"/>
+                      <path d="M14,0A14,14,0,1,1,0,14,14,14,0,0,1,14,0Z" transform="translate(16.218 36.017) rotate(-135)" fill="none" stroke="var(--mc-text-primary)" strokeLinecap="round" strokeWidth="3" strokeDasharray="40 30"/>
                       <g transform="translate(12.611 32.437) rotate(-90)">
-                        <line y2="22" transform="translate(16.218 1.406)" fill="none" stroke="black" strokeLinecap="round" strokeWidth="3"/>
-                        <line x2="7.5" y2="7.688" transform="translate(8.718 15.718)" fill="none" stroke="black" strokeLinecap="round" strokeWidth="3"/>
-                        <line x1="7.5" y2="7.688" transform="translate(16.218 15.718)" fill="none" stroke="black" strokeLinecap="round" strokeWidth="3"/>
+                        <line y2="22" transform="translate(16.218 1.406)" fill="none" stroke="var(--mc-text-primary)" strokeLinecap="round" strokeWidth="3"/>
+                        <line x2="7.5" y2="7.688" transform="translate(8.718 15.718)" fill="none" stroke="var(--mc-text-primary)" strokeLinecap="round" strokeWidth="3"/>
+                        <line x1="7.5" y2="7.688" transform="translate(16.218 15.718)" fill="none" stroke="var(--mc-text-primary)" strokeLinecap="round" strokeWidth="3"/>
                       </g>
                     </g>
                   </svg>
@@ -632,8 +639,8 @@ function KnowledgePanel({ instance }: { instance: Instance }) {
                 {/* 齿轮图标 */}
                 <svg width="30" height="30" viewBox="0 0 30.995 30.996" fill="none" className="shrink-0">
                   <g transform="translate(-25.342 -51.187)">
-                    <circle cx="4.25" cy="4.25" r="4.25" transform="translate(36.593 62.437)" fill="none" stroke="black" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"/>
-                    <path d="M24.418,18.818a2.1,2.1,0,0,0,.42,2.316l.076.076a2.547,2.547,0,1,1-3.6,3.6l-.076-.076a2.117,2.117,0,0,0-3.589,1.5v.216a2.545,2.545,0,1,1-5.091,0v-.11a2.1,2.1,0,0,0-1.375-1.922,2.1,2.1,0,0,0-2.316.42l-.076.076a2.547,2.547,0,1,1-3.6-3.6l.076-.076a2.117,2.117,0,0,0-1.5-3.589H3.545a2.545,2.545,0,0,1,0-5.091H3.66a2.1,2.1,0,0,0,1.922-1.375,2.1,2.1,0,0,0-.42-2.316l-.076-.076a2.547,2.547,0,1,1,3.6-3.6l.076.076a2.1,2.1,0,0,0,2.316.42h.1a2.1,2.1,0,0,0,1.273-1.922v-.22a2.545,2.545,0,1,1,5.091,0V3.66a2.117,2.117,0,0,0,3.589,1.5l.076-.076a2.547,2.547,0,1,1,3.6,3.6l-.076.076a2.1,2.1,0,0,0-.42,2.316v.1a2.1,2.1,0,0,0,1.922,1.273h.216a2.546,2.546,0,0,1,0,5.091H26.34a2.1,2.1,0,0,0-1.922,1.278Z" transform="translate(25.843 51.687)" fill="none" stroke="black" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"/>
+                    <circle cx="4.25" cy="4.25" r="4.25" transform="translate(36.593 62.437)" fill="none" stroke="var(--mc-text-primary)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"/>
+                    <path d="M24.418,18.818a2.1,2.1,0,0,0,.42,2.316l.076.076a2.547,2.547,0,1,1-3.6,3.6l-.076-.076a2.117,2.117,0,0,0-3.589,1.5v.216a2.545,2.545,0,1,1-5.091,0v-.11a2.1,2.1,0,0,0-1.375-1.922,2.1,2.1,0,0,0-2.316.42l-.076.076a2.547,2.547,0,1,1-3.6-3.6l.076-.076a2.117,2.117,0,0,0-1.5-3.589H3.545a2.545,2.545,0,0,1,0-5.091H3.66a2.1,2.1,0,0,0,1.922-1.375,2.1,2.1,0,0,0-.42-2.316l-.076-.076a2.547,2.547,0,1,1,3.6-3.6l.076.076a2.1,2.1,0,0,0,2.316.42h.1a2.1,2.1,0,0,0,1.273-1.922v-.22a2.545,2.545,0,1,1,5.091,0V3.66a2.117,2.117,0,0,0,3.589,1.5l.076-.076a2.547,2.547,0,1,1,3.6,3.6l-.076.076a2.1,2.1,0,0,0-.42,2.316v.1a2.1,2.1,0,0,0,1.922,1.273h.216a2.546,2.546,0,0,1,0,5.091H26.34a2.1,2.1,0,0,0-1.922,1.278Z" transform="translate(25.843 51.687)" fill="none" stroke="var(--mc-text-primary)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3"/>
                   </g>
                 </svg>
                 <span style={btnFont}>知识库设置</span>
@@ -677,36 +684,37 @@ export default function Knowledge() {
   })
 
   const selectedInstance = instances.find(i => i.serial === selected)
+  const selectedBotType = selectedInstance ? normalizeBotType(selectedInstance.botType) : null
 
   return (
-    <div className="flex flex-col p-6 h-full">
-      <h1 className="text-black shrink-0 mb-[16px] animate-card-enter" style={pageTitleStyle}>知识库构建</h1>
+    <div className="flex h-full flex-col overflow-auto p-[clamp(14px,1.25vw,24px)]">
+      <h1 className="shrink-0 mb-[16px] animate-card-enter" style={{ ...pageTitleStyle, color: 'var(--mc-text-primary)' }}>知识库构建</h1>
 
-      <div className="flex gap-6 flex-1 min-h-0">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-[clamp(16px,1.25vw,24px)] xl:grid-cols-[minmax(300px,425px)_minmax(0,1fr)]">
         {/* 左侧：实例选择卡片 */}
-        <div className="w-[425px] shrink-0 animate-card-enter">
-          <GlassCard>
-            <div className="p-[24px] flex flex-col h-full">
-              <h2 className="text-black pb-[12px]" style={sectionTitle}>选择实例</h2>
+        <div className="min-h-[320px] min-w-0 animate-card-enter xl:h-full xl:min-h-0">
+          <GlassCard bgOpacity={0.62}>
+            <div className="p-[24px] flex h-full min-h-0 flex-col">
+              <h2 className="pb-[12px]" style={{ ...sectionTitle, color: 'var(--mc-text-primary)' }}>选择实例</h2>
 
-              <div className="flex items-center h-[71px] px-[22px] gap-[12px] rounded-[35.5px] bg-white/60 border-2 border-black/50 shrink-0">
+              <div className="flex items-center h-[71px] px-[22px] gap-[12px] rounded-[35.5px] shrink-0" style={{ background: 'var(--mc-control-bg)', border: '2px solid var(--mc-border-strong)' }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                  <circle cx="9.5" cy="9.5" r="7.5" stroke="rgba(0,0,0,0.5)" strokeWidth="3" />
-                  <line x1="15" y1="15.5" x2="22" y2="23" stroke="rgba(0,0,0,0.5)" strokeWidth="3" strokeLinecap="round" />
+                  <circle cx="9.5" cy="9.5" r="7.5" stroke="var(--mc-icon-stroke)" strokeWidth="3" />
+                  <line x1="15" y1="15.5" x2="22" y2="23" stroke="var(--mc-icon-stroke)" strokeWidth="3" strokeLinecap="round" />
                 </svg>
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search instance"
-                  className="flex-1 bg-transparent outline-none text-black placeholder:text-black/20"
-                  style={{ ...monoFont, fontSize: 25 }}
+                  className="flex-1 bg-transparent outline-none"
+                  style={{ ...monoFont, fontSize: 25, color: 'var(--mc-text-primary)' }}
                 />
               </div>
 
               <div className="flex-1 overflow-y-auto mt-[12px] px-[4px]">
                 {filtered.length === 0 ? (
-                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed border-[#9e9e9e]">
-                    <span className="text-[#9e9e9e] font-semibold text-base" style={monoFont}>no instance</span>
+                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed" style={{ borderColor: 'var(--mc-empty-border)' }}>
+                    <span className="font-semibold text-base" style={{ ...monoFont, color: 'var(--mc-empty-text)' }}>no instance</span>
                   </div>
                 ) : (
                   filtered.map((inst, i) => {
@@ -722,8 +730,8 @@ export default function Knowledge() {
                             height: 54,
                             padding: isSelected ? '0 20px' : '0 4px',
                             borderRadius: isSelected ? 27 : 6,
-                            background: isSelected ? 'rgba(255,255,255,0.6)' : 'transparent',
-                            border: isSelected ? '2px solid rgba(0,0,0,0.5)' : '2px solid transparent',
+                            background: isSelected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+                            border: isSelected ? '2px solid var(--mc-choice-selected-border)' : '2px solid transparent',
                           }}
                         >
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
@@ -731,7 +739,7 @@ export default function Knowledge() {
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
                         </button>
                         {isSelected && i < filtered.length - 1 && <div className="h-[6px]" />}
-                        {!isSelected && i < filtered.length - 1 && <hr className="border-[#707070]" />}
+                        {!isSelected && i < filtered.length - 1 && <hr style={{ borderColor: 'var(--mc-divider-strong)' }} />}
                       </div>
                     )
                   })
@@ -742,12 +750,14 @@ export default function Knowledge() {
         </div>
 
         {/* 右侧：操作面板 */}
-        <div className="flex-1 min-w-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
+        <div className="min-h-[420px] min-w-0 animate-card-enter xl:h-full xl:min-h-0" style={{ animationDelay: '80ms' }}>
           {selectedInstance ? (
-            selectedInstance.botType === 'MoFox_bot' ? (
+            selectedBotType !== 'MaiBot' ? (
               <div className="flex items-center justify-center h-full">
-                <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
-                  MoFox_bot 暂不支持 LPMM 知识库功能
+                <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
+                  {selectedBotType === 'Neo-MoFox'
+                    ? 'Neo-MoFox 暂不支持知识库构建功能，仅 MaiBot 可用'
+                    : '当前实例类型暂不支持知识库构建功能，仅 MaiBot 可用'}
                 </span>
               </div>
             ) : (
@@ -755,7 +765,7 @@ export default function Knowledge() {
             )
           ) : (
             <div className="flex items-center justify-center h-full">
-              <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+              <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: 'var(--mc-text-faint)' }}>
                 请选择一个实例
               </span>
             </div>

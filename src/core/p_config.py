@@ -19,6 +19,10 @@ class PConfig:
     # 定义默认配置，特别是UI主题
     DEFAULT_CONFIG = {
         "first_run": True,  # 新增首次运行标志
+        "launcher": {
+            "name": "MaiCoreStart",
+            "version": "5.1.0"
+        },
         "theme": {
             "primary": "#BADFFA",
             "success": "#4AF933",
@@ -93,7 +97,13 @@ class PConfig:
             "webui_token": "",
             "token_max_attempts": 5,
             "host": "0.0.0.0",
-            "port": 10086
+            "port": 10086,
+            "github_oauth": {
+                "enabled": True,
+                "client_id": "Ov23liLTqa4d2ihNDRBK",
+                "redirect_uri": "",
+                "scope": "user:email"
+            }
         }
     }
 

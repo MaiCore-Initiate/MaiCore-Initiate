@@ -13,7 +13,7 @@ import structlog
 from .base_deployer import BaseDeployer
 from .version_manager import VersionManager
 from ...ui.interface import ui
-from ...utils.version_detector import get_version_requirements, compare_versions
+from ...utils.version_detector import get_version_requirements, compare_versions, is_plugin_adapter_version
 
 logger = structlog.get_logger(__name__)
 
@@ -106,13 +106,19 @@ class MaiBotDeployer(BaseDeployer):
         
         ui.print_info("适配器选择规则：")
         ui.console.print("  • 0.5.x及以下：无需适配器")
-        ui.console.print("  • 其他所有版本：统一使用最新版启动器（main分支）")
+        ui.console.print("  • 低于1.0.0：使用0.7.0外置适配器")
+        ui.console.print("  • 1.0.0及以上：使用main分支插件适配器，安装到MaiBot/plugins")
         ui.console.print("  • 部署方式：优先使用git clone，失败时回退到下载压缩包")
+
+        deploy_config["adapter_mode"] = (
+            "plugin" if is_plugin_adapter_version(version_to_check, "MaiBot") else "external"
+        )
         
         # 判断是否需要适配器
         adapter_path = self._determine_adapter_requirements(version_to_check, bot_path)
         
         if adapter_path == "无需适配器":
+            deploy_config["adapter_mode"] = "none"
             ui.print_success("✅ 当前版本无需适配器")
             return adapter_path
         elif "版本较低" in adapter_path or "未定义" in adapter_path or "失败" in adapter_path:
@@ -129,7 +135,8 @@ class MaiBotDeployer(BaseDeployer):
             potential_adapter_paths = [
                 os.path.join(maibot_path, "adapter"),
                 os.path.join(maibot_path, "MaiBot-Napcat-Adapter"),
-                os.path.join(maibot_path, "napcat-adapter")
+                os.path.join(maibot_path, "napcat-adapter"),
+                os.path.join(maibot_path, "plugins", "MaiBot-Napcat-Adapter"),
             ]
             
             for path in potential_adapter_paths:
@@ -145,6 +152,7 @@ class MaiBotDeployer(BaseDeployer):
             ui.print_info(f"  是否旧版本：{version_reqs['is_legacy']}")
             ui.print_info(f"  需要适配器：{version_reqs['needs_adapter']}")
             ui.print_info(f"  适配器版本：{version_reqs['adapter_version']}")
+            ui.print_info(f"  适配器模式：{version_reqs.get('adapter_mode', 'external')}")
             
             # 检查是否需要适配器
             if not version_reqs["needs_adapter"]:
@@ -153,18 +161,27 @@ class MaiBotDeployer(BaseDeployer):
             adapter_version = version_reqs["adapter_version"]
             
             # 根据适配器版本下载
-            return self._download_specific_adapter_version(adapter_version, maibot_path)
+            return self._download_specific_adapter_version(
+                adapter_version,
+                maibot_path,
+                version_reqs.get("adapter_mode", "external")
+            )
                 
         except Exception as e:
             ui.print_error(f"适配器处理失败：{str(e)}")
             logger.error("适配器处理异常", error=str(e))
             return "适配器处理失败"
     
-    def _download_specific_adapter_version(self, adapter_version: str, maibot_path: str) -> str:
+    def _download_specific_adapter_version(self, adapter_version: str, maibot_path: str, adapter_mode: str = "external") -> str:
         """下载特定版本的适配器"""
-        # 修改：适配器安装到主程序的同父级目录下，而非主程序目录下
-        maibot_parent_dir = os.path.dirname(maibot_path)
-        adapter_extract_path = os.path.join(maibot_parent_dir, "MaiBot-Napcat-Adapter")
+        if adapter_mode == "plugin":
+            adapter_parent_dir = os.path.join(maibot_path, "plugins")
+            os.makedirs(adapter_parent_dir, exist_ok=True)
+            adapter_extract_path = os.path.join(adapter_parent_dir, "MaiBot-Napcat-Adapter")
+        else:
+            # 旧版外置适配器安装到主程序同父级目录下。
+            adapter_parent_dir = os.path.dirname(maibot_path)
+            adapter_extract_path = os.path.join(adapter_parent_dir, "MaiBot-Napcat-Adapter")
         
         # 如果目标目录已存在，先删除
         if os.path.exists(adapter_extract_path):
@@ -177,19 +194,21 @@ class MaiBotDeployer(BaseDeployer):
         if adapter_version in ["main", "dev"]:
             branch = adapter_version
         else:
-            # 对于版本号，使用main分支
-            branch = "main"
+            branch = adapter_version
         
         # 优先使用Git clone，失败时回退到下载压缩包
         fallback_url = None
         if adapter_version in ["main", "dev"]:
             fallback_url = f"https://codeload.github.com/{self.adapter_repo}/zip/refs/heads/{adapter_version}"
         else:
-            fallback_url = f"https://codeload.github.com/{self.adapter_repo}/zip/refs/tags/{adapter_version}"
+            fallback_url = f"https://codeload.github.com/{self.adapter_repo}/zip/refs/heads/{adapter_version}"
         
+        ui.print_info(f"适配器安装模式: {'插件' if adapter_mode == 'plugin' else '外置进程'}")
+        ui.print_info(f"适配器目标路径: {adapter_extract_path}")
+
         if self.download_with_git_fallback(self.adapter_repo, adapter_extract_path, branch, fallback_url):
             ui.print_success(f"适配器安装完成")
-            logger.info("适配器安装成功", version=adapter_version, path=adapter_extract_path)
+            logger.info("适配器安装成功", version=adapter_version, mode=adapter_mode, path=adapter_extract_path)
             return adapter_extract_path
         else:
             ui.print_warning("适配器安装失败")

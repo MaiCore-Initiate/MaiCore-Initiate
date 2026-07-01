@@ -33,6 +33,10 @@ interface Component {
   description: string
   icon: string
   status: string
+  version?: string | null
+  download_url?: string | null
+  installed?: boolean | null
+  message?: string | null
 }
 
 interface ProgressInfo {
@@ -305,22 +309,64 @@ function ComponentCard({ component, downloading, progress, onDownload, onCancel 
   const status = progress?.status
   const phaseLabel = getPhaseLabel(progress?.phase, status)
   const isRunning = downloading || status === 'running'
+  const downloadHost = getDownloadHostLabel(component.download_url)
+  const installStateLabel = component.installed == null ? null : component.installed ? '已安装' : '未安装'
+  const resolvedVersion = component.version?.trim() || '未提供'
 
   return (
     <GlassCard>
       <div className="p-[30px] flex flex-col h-full">
         {/* 标题 */}
-        <div className="mb-[20px]">
-          <h3 className="text-black/80 truncate" style={{ ...labelFont, fontSize: 28 }}>
-            {component.name}
-          </h3>
-          <p className="text-black/50 mt-2" style={textFont}>
-            {component.description}
-          </p>
+        <div className="mb-[20px] space-y-[12px]">
+          <div className="flex items-start justify-between gap-[12px]">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-black/80 truncate" style={{ ...labelFont, fontSize: 28 }}>
+                {component.name}
+              </h3>
+              <p className="text-black/50 mt-2" style={textFont}>
+                {component.description}
+              </p>
+            </div>
+            <div
+              className="shrink-0 rounded-[18px] border border-black/10 bg-white/40 px-[14px] py-[10px] text-right"
+              style={{ minWidth: 112 }}
+            >
+              <div className="text-black/40" style={{ ...textFont, fontSize: 13 }}>
+                将下载版本
+              </div>
+              <div className="text-black/75 mt-1" style={{ fontSize: 18, fontFamily: "'Ubuntu Mono', 'Cascadia Code', monospace" }}>
+                {resolvedVersion}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-[8px]">
+            {installStateLabel && (
+              <span
+                className={cn(
+                  'inline-flex items-center rounded-full border px-[12px] py-[4px]',
+                  component.installed
+                    ? 'bg-emerald-100/60 border-emerald-300/60 text-emerald-700'
+                    : 'bg-slate-100/60 border-slate-300/60 text-slate-600'
+                )}
+                style={{ ...textFont, fontSize: 14 }}
+              >
+                {installStateLabel}
+              </span>
+            )}
+            {downloadHost && (
+              <span
+                className="inline-flex items-center rounded-full border border-sky-300/60 bg-sky-100/60 px-[12px] py-[4px] text-sky-700"
+                style={{ ...textFont, fontSize: 14 }}
+              >
+                来源：{downloadHost}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* 状态标签 */}
-        <div className="mb-[12px]">
+        <div className="mb-[12px] flex flex-wrap gap-[10px]">
           <span
             className={cn(
               'inline-block px-[16px] py-[6px] rounded-[12px] text-sm border flex items-center gap-[6px] w-fit',
@@ -342,7 +388,29 @@ function ComponentCard({ component, downloading, progress, onDownload, onCancel 
               </>
             )}
           </span>
+          {component.message && (
+            <span
+              className="inline-flex max-w-full items-center rounded-[12px] border border-black/10 bg-white/35 px-[14px] py-[6px] text-black/55"
+              style={{ ...textFont, fontSize: 14 }}
+            >
+              {component.message}
+            </span>
+          )}
         </div>
+
+        {component.download_url && (
+          <div className="mb-[16px] rounded-[16px] border border-black/10 bg-black/[0.03] px-[14px] py-[12px]">
+            <div className="text-black/40" style={{ ...textFont, fontSize: 13 }}>
+              下载地址
+            </div>
+            <div
+              className="mt-1 break-all text-black/60"
+              style={{ fontSize: 13, lineHeight: 1.5, fontFamily: "'Ubuntu Mono', 'Cascadia Code', monospace" }}
+            >
+              {component.download_url}
+            </div>
+          </div>
+        )}
 
         {/* 下载按钮 */}
         <button
@@ -425,5 +493,19 @@ function getPhaseLabel(phase?: string, status?: string) {
       return '已取消'
     default:
       return '等待中'
+  }
+}
+
+function getDownloadHostLabel(downloadUrl?: string | null) {
+  if (!downloadUrl) return null
+
+  try {
+    const { hostname } = new URL(downloadUrl)
+    if (hostname.includes('github.com')) return 'GitHub'
+    if (hostname.includes('api.github.com')) return 'GitHub API'
+    if (hostname.includes('codeload.github.com')) return 'GitHub Codeload'
+    return hostname.replace(/^www\./, '')
+  } catch {
+    return null
   }
 }

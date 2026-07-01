@@ -1,0 +1,175 @@
+<svg id="左侧边栏" xmlns="http://www.w3.org/2000/svg" width="305" height="1080" viewBox="0 0 305 1080">
+  <g id="左侧边栏总背景--边框固定右上下30px圆角_右边框可在鼠标悬停时左右拖拽调整_大纲内容放不下就换成省略点_最低_包括大纲_150px_继续向左拖拽视为收起左侧边栏" data-name="左侧边栏总背景--边框固定右上下30px圆角，右边框可在鼠标悬停时左右拖拽调整。大纲内容放不下就换成省略点。最低（包括大纲）150px，继续向左拖拽视为收起左侧边栏" fill="#fff" stroke="#000" stroke-width="1">
+    <path d="M0,0H275a30,30,0,0,1,30,30V1050a30,30,0,0,1-30,30H0a0,0,0,0,1,0,0V0A0,0,0,0,1,0,0Z" stroke="none"/>
+    <path d="M.5.5H275A29.5,29.5,0,0,1,304.5,30V1050a29.5,29.5,0,0,1-29.5,29.5H.5a0,0,0,0,1,0,0V.5A0,0,0,0,1,.5.5Z" fill="none"/>
+  </g>
+  <g id="大纲" transform="translate(13.16 128.32)">
+    <g id="_COMPONENTS_" data-name="[COMPONENTS]">
+      <g id="大纲体">
+        <path id="本层大纲展开线" d="M16,244v72" fill="none" stroke="#000" stroke-width="1"/>
+        <g id="本层大纲头部">
+          <path id="CaretDown" d="M22.25,226.5,16,232.75,9.75,226.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <text id="_COMPONENTS_2" data-name="[COMPONENTS]" transform="translate(25.84 235.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">[COMPONENTS]</tspan></text>
+        </g>
+      </g>
+      <g id="值">
+        <g id="ArrowsLeftRight--布尔值图标">
+          <path id="路径_52" data-name="路径 52" d="M49.75,257.25l2.5,2.5-2.5,2.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_53" data-name="路径 53" d="M39.75,259.75h12.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_54" data-name="路径 54" d="M42.25,254.75l-2.5-2.5,2.5-2.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_55" data-name="路径 55" d="M52.25,252.25H39.75" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        </g>
+        <text id="env_output_false" data-name="env_output = false" transform="translate(55.84 262.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">env_output = false</tspan></text>
+      </g>
+      <g id="值-2" data-name="值">
+        <g id="ArrowsLeftRight--布尔值图标-2" data-name="ArrowsLeftRight--布尔值图标">
+          <path id="路径_57" data-name="路径 57" d="M49.75,281.25l2.5,2.5-2.5,2.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_58" data-name="路径 58" d="M39.75,283.75h12.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_59" data-name="路径 59" d="M42.25,278.75l-2.5-2.5,2.5-2.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_60" data-name="路径 60" d="M52.25,276.25H39.75" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        </g>
+        <text id="env_input_false" data-name="env_input = false" transform="translate(55.84 286.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">env_input = false</tspan></text>
+      </g>
+      <g id="值1">
+        <g id="大纲体-2" data-name="大纲体">
+          <g id="本层大纲头部-2" data-name="本层大纲头部">
+            <path id="CaretRight" d="M23.5,297.75,29.75,304l-6.25,6.25" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            <text id="list" transform="translate(55.84 310.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">list</tspan></text>
+            <g id="BracketsSquare--数组图标">
+              <path id="路径_63" data-name="路径 63" d="M42.25,297.125H39.125v13.75H42.25" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+              <path id="路径_64" data-name="路径 64" d="M49.75,297.125h3.125v13.75H49.75" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+    <g id="_Component_" data-name="[[Component]]">
+      <g id="大纲体-3" data-name="大纲体">
+        <g id="本层大纲头部-3" data-name="本层大纲头部">
+          <path id="CaretDown-2" data-name="CaretDown" d="M22.25,325.5,16,331.75,9.75,325.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <text id="_Component_2" data-name="[[Component]]" transform="translate(25.84 334.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">[[Component]]</tspan></text>
+        </g>
+        <path id="_本层大纲展开线" data-name=" 本层大纲展开线" d="M16,343v45" fill="none" stroke="#000" stroke-width="1"/>
+      </g>
+      <g id="_1" data-name="1">
+        <g id="大纲体-4" data-name="大纲体">
+          <g id="本层大纲头部-4" data-name="本层大纲头部">
+            <path id="CaretRight-2" data-name="CaretRight" d="M23.5,369.75,29.75,376l-6.25,6.25" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            <g id="BracketsCurly--对象图标">
+              <path id="路径_74" data-name="路径 74" d="M42.25,369.125c-5,0,0,6.875-5,6.875,5,0,0,6.875,5,6.875" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+              <path id="路径_75" data-name="路径 75" d="M49.75,369.125c5,0,0,6.875,5,6.875-5,0,0,6.875-5,6.875" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            </g>
+            <text id="_1-2" data-name="1" transform="translate(55.84 382.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">1</tspan></text>
+          </g>
+        </g>
+      </g>
+      <g id="_0" data-name="0">
+        <g id="大纲体-5" data-name="大纲体">
+          <g id="本层大纲头部-5" data-name="本层大纲头部">
+            <path id="CaretRight-3" data-name="CaretRight" d="M23.5,345.75,29.75,352l-6.25,6.25" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            <g id="BracketsCurly--对象图标-2" data-name="BracketsCurly--对象图标">
+              <path id="路径_70" data-name="路径 70" d="M42.25,345.125c-5,0,0,6.875-5,6.875,5,0,0,6.875,5,6.875" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+              <path id="路径_71" data-name="路径 71" d="M49.75,345.125c5,0,0,6.875,5,6.875-5,0,0,6.875-5,6.875" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            </g>
+            <text id="_0-2" data-name="0" transform="translate(55.84 358.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">0</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+    <g id="_MODINFO_" data-name="[MODINFO]">
+      <text id="省略剩下的" transform="translate(15.84 211.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">......</tspan></text>
+      <g id="值1-2" data-name="值1">
+        <g id="值-3" data-name="值">
+          <rect id="选中状态" width="265" height="24" transform="translate(6 168)" fill="rgba(0,132,255,0.3)" stroke="#0084ff" stroke-width="1"/>
+          <g id="Article--字符串图标">
+            <path id="路径_43" data-name="路径 43" d="M49.5,173.25h13a1.5,1.5,0,0,1,1.5,1.5v10.5a1.5,1.5,0,0,1-1.5,1.5h-13a1.5,1.5,0,0,1-1.5-1.5v-10.5A1.5,1.5,0,0,1,49.5,173.25Zm0,1a.5.5,0,0,0-.5.5v10.5a.5.5,0,0,0,.5.5h13a.5.5,0,0,0,.5-.5v-10.5a.5.5,0,0,0-.5-.5Z"/>
+            <path id="路径_44" data-name="路径 44" d="M51.938,177.5h8.125" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            <path id="路径_45" data-name="路径 45" d="M51.938,180h8.125" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            <path id="路径_46" data-name="路径 46" d="M51.938,182.5h8.125" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          </g>
+          <text id="_0_test_" data-name="0 = &quot;test&quot;" transform="translate(65.84 186.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">0 = &quot;test&quot;</tspan></text>
+        </g>
+        <g id="大纲体-6" data-name="大纲体">
+          <path id="本层大纲展开线-2" data-name="本层大纲展开线" d="M26,171v21" fill="none" stroke="#000" stroke-width="1"/>
+          <g id="本层大纲头部-6" data-name="本层大纲头部">
+            <path id="CaretDown-3" data-name="CaretDown" d="M32.25,153.5,26,159.75l-6.25-6.25" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            <g id="BracketsSquare--数组图标-2" data-name="BracketsSquare--数组图标">
+              <path id="路径_40" data-name="路径 40" d="M42.25,149.125H39.125v13.75H42.25" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+              <path id="路径_41" data-name="路径 41" d="M49.75,149.125h3.125v13.75H49.75" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+            </g>
+            <text id="tags" transform="translate(55.84 162.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">tags</tspan></text>
+          </g>
+        </g>
+      </g>
+      <g id="值-4" data-name="值">
+        <g id="Article--字符串图标-2" data-name="Article--字符串图标">
+          <path id="路径_33" data-name="路径 33" d="M39.5,125.25h13a1.5,1.5,0,0,1,1.5,1.5v10.5a1.5,1.5,0,0,1-1.5,1.5h-13a1.5,1.5,0,0,1-1.5-1.5v-10.5A1.5,1.5,0,0,1,39.5,125.25Zm0,1a.5.5,0,0,0-.5.5v10.5a.5.5,0,0,0,.5.5h13a.5.5,0,0,0,.5-.5v-10.5a.5.5,0,0,0-.5-.5Z"/>
+          <path id="路径_34" data-name="路径 34" d="M41.938,129.5h8.125" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_35" data-name="路径 35" d="M41.938,132h8.125" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_36" data-name="路径 36" d="M41.938,134.5h8.125" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        </g>
+        <text id="author_MCStartTeam_" data-name="author = &quot;MCStartTeam&quot;" transform="translate(55.84 138.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">author = &quot;MCStartTeam&quot;</tspan></text>
+      </g>
+      <g id="大纲体-7" data-name="大纲体">
+        <path id="本层大纲展开线-3" data-name="本层大纲展开线" d="M16,120v72" fill="none" stroke="#000" stroke-width="1"/>
+        <g id="本层大纲头部-7" data-name="本层大纲头部">
+          <path id="CaretDown-4" data-name="CaretDown" d="M22.25,102.5,16,108.75,9.75,102.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <text id="_MODINFO_2" data-name="[MODINFO]" transform="translate(25.84 111.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">[MODINFO]</tspan></text>
+        </g>
+      </g>
+    </g>
+    <g id="_MCStart_--灰色意为锁定不可编辑状态" data-name="[MCStart]--灰色意为锁定不可编辑状态">
+      <g id="值-5" data-name="值">
+        <g id="ArrowsLeftRight--布尔值图标-3" data-name="ArrowsLeftRight--布尔值图标">
+          <path id="路径_26" data-name="路径 26" d="M49.75,82.25l2.5,2.5-2.5,2.5" fill="none" stroke="#7f7f7f" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_27" data-name="路径 27" d="M39.75,84.75h12.5" fill="none" stroke="#7f7f7f" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_28" data-name="路径 28" d="M42.25,79.75l-2.5-2.5,2.5-2.5" fill="none" stroke="#7f7f7f" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <path id="路径_29" data-name="路径 29" d="M52.25,77.25H39.75" fill="none" stroke="#7f7f7f" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        </g>
+        <text id="MCStart_true" data-name="MCStart = true" transform="translate(55.84 87.68)" fill="#7f7f7f" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">MCStart = true</tspan></text>
+      </g>
+      <g id="大纲体-8" data-name="大纲体">
+        <path id="本层大纲展开线-4" data-name="本层大纲展开线" d="M16,69V91" fill="none" stroke="#000" stroke-width="1"/>
+        <g id="本层大纲头部-8" data-name="本层大纲头部">
+          <path id="路径_22" data-name="路径 22" d="M22.25,51.5,16,57.75,9.75,51.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+          <text id="_MCStart_" data-name="[MCStart]" transform="translate(25.84 60.68)" fill="#7f7f7f" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">[MCStart]</tspan></text>
+        </g>
+      </g>
+    </g>
+    <text id="大纲-2" data-name="大纲" transform="translate(5.84 17.68)" font-size="20" font-family="YuGothicUI-Regular, Yu Gothic UI"><tspan x="0" y="0">大</tspan><tspan y="0" font-family="MicrosoftJhengHeiUIRegular, Microsoft JhengHei UI">纲</tspan></text>
+    <text id="_......" data-name="......" transform="translate(11.84 411.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">......</tspan></text>
+    <g id="特殊说明">
+      <g id="HashStraight--数字图标">
+        <path id="路径_15" data-name="路径 15" d="M244.125,442.5h13.75" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <path id="路径_16" data-name="路径 16" d="M244.125,447.5h13.75" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <path id="路径_17" data-name="路径 17" d="M253.5,438.125v13.75" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <path id="路径_18" data-name="路径 18" d="M248.5,438.125v13.75" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <text id="特殊说明_数字键的图标是" data-name="特殊说明，数字键的图标是" transform="translate(-4.16 450.68)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">特殊说明，数字键的图标是</tspan></text>
+    </g>
+  </g>
+  <path id="分割线_根据左侧边栏宽度调整_左右始终与边框保持20px距离" data-name="分割线，根据左侧边栏宽度调整，左右始终与边框保持20px距离" d="M0,.5H265" transform="translate(20 109.5)" fill="none" stroke="#000" stroke-width="1"/>
+  <g id="返回主界面图标" transform="translate(19.5 19.5)">
+    <rect id="返回背景_返回到杂项界面" data-name="返回背景，返回到杂项界面" width="40" height="40" rx="9" transform="translate(0.5 0.5)" fill="#fff" stroke="#000" stroke-width="1"/>
+    <g id="ArrowLeft">
+      <path id="路径_77" data-name="路径 77" d="M31.5,20.5H9.5" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      <path id="路径_78" data-name="路径 78" d="M18.5,11.5l-9,9,9,9" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    </g>
+  </g>
+  <g id="展开_收起左侧边栏图标" data-name="展开、收起左侧边栏图标" transform="translate(70 20)">
+    <rect id="背景" width="40" height="40" rx="9" fill="#fff" stroke="#000" stroke-width="1"/>
+    <g id="TextAlignLeft" transform="translate(-0.5 -0.5)">
+      <path id="路径_80" data-name="路径 80" d="M9.5,13h22" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      <path id="路径_81" data-name="路径 81" d="M9.5,18h16" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      <path id="路径_82" data-name="路径 82" d="M9.5,23h22" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      <path id="路径_83" data-name="路径 83" d="M9.5,28h16" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    </g>
+  </g>
+  <g id="新建工作区" transform="translate(120 20)">
+    <rect id="背景-2" data-name="背景" width="40" height="40" rx="9" fill="#fff" stroke="#000" stroke-width="1"/>
+    <g id="Plus" transform="translate(-0.5 -0.5)">
+      <path id="路径_85" data-name="路径 85" d="M9.5,20.5h22" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      <path id="路径_86" data-name="路径 86" d="M20.5,9.5v22" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    </g>
+  </g>
+</svg>

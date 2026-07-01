@@ -5,8 +5,9 @@
 """
 import socket
 from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from .auth_core import require_action
 
 router = APIRouter()
 
@@ -266,7 +267,7 @@ async def get_instance_ports(serial_number: str):
         raise HTTPException(status_code=500, detail=f"获取实例端口失败: {str(e)}")
 
 
-@router.post("/port/reserve", summary="预留端口")
+@router.post("/port/reserve", summary="预留端口", dependencies=[Depends(require_action("ports.manage"))])
 async def reserve_port(request: PortReserveRequest):
     """
     预留端口（记录端口用途）

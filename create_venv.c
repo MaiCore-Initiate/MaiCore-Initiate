@@ -31,6 +31,35 @@ void wait_for_enter() {
     while ((c = getchar()) != '\n' && c != EOF);
 }
 
+void trim_line_endings(char* text) {
+    size_t len = strlen(text);
+    while (len > 0 && (text[len - 1] == '\r' || text[len - 1] == '\n' || text[len - 1] == ' ' || text[len - 1] == '\t')) {
+        text[len - 1] = '\0';
+        len--;
+    }
+}
+
+int prompt_yes_no(const char* message) {
+    char answer[32];
+
+    for (;;) {
+        printf("%s [Y/n]: ", message);
+        if (!fgets(answer, sizeof(answer), stdin)) {
+            return 0;
+        }
+
+        trim_line_endings(answer);
+        if (answer[0] == '\0' || answer[0] == 'y' || answer[0] == 'Y') {
+            return 1;
+        }
+        if (answer[0] == 'n' || answer[0] == 'N') {
+            return 0;
+        }
+
+        printf("Please answer with Y or N.\n");
+    }
+}
+
 // 检查管理员权限
 BOOL is_admin() {
     BOOL fIsRunAsAdmin = FALSE;
@@ -337,6 +366,99 @@ void find_system_python(char paths[][MAX_PATH], int* count, int max_paths) {
     }
 }
 
+void choose_newer_file(char* best_path, FILETIME* best_time, const char* install_dir, const WIN32_FIND_DATAA* file_data) {
+    char candidate_path[MAX_PATH];
+    PathCombineA(candidate_path, install_dir, file_data->cFileName);
+
+    if (!best_path[0] || CompareFileTime(&file_data->ftLastWriteTime, best_time) > 0) {
+        strcpy(best_path, candidate_path);
+        *best_time = file_data->ftLastWriteTime;
+    }
+}
+
+void search_python_installer_in_dir(const char* install_dir, char* best_path, FILETIME* best_time) {
+    WIN32_FIND_DATAA fd;
+    HANDLE hFind;
+    char pattern[MAX_PATH];
+
+    if (!PathFileExistsA(install_dir)) {
+        return;
+    }
+
+    PathCombineA(pattern, install_dir, "python*.exe");
+    hFind = FindFirstFileA(pattern, &fd);
+    if (hFind == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            choose_newer_file(best_path, best_time, install_dir, &fd);
+        }
+    } while (FindNextFileA(hFind, &fd));
+
+    FindClose(hFind);
+}
+
+void find_python_installer(char* out_path) {
+    char exe_path[MAX_PATH];
+    char exe_dir[MAX_PATH];
+    char cwd[MAX_PATH];
+    char parent_dir[MAX_PATH];
+    char install_dir[MAX_PATH];
+    FILETIME best_time;
+
+    ZeroMemory(&best_time, sizeof(best_time));
+    out_path[0] = '\0';
+
+    get_current_exe_path(exe_path);
+    strcpy(exe_dir, exe_path);
+    PathRemoveFileSpecA(exe_dir);
+
+    GetCurrentDirectoryA(MAX_PATH, cwd);
+
+    strcpy(parent_dir, exe_dir);
+    PathRemoveFileSpecA(parent_dir);
+
+    PathCombineA(install_dir, exe_dir, "install");
+    search_python_installer_in_dir(install_dir, out_path, &best_time);
+
+    PathCombineA(install_dir, cwd, "install");
+    search_python_installer_in_dir(install_dir, out_path, &best_time);
+
+    PathCombineA(install_dir, parent_dir, "install");
+    search_python_installer_in_dir(install_dir, out_path, &best_time);
+}
+
+int install_bundled_python() {
+    char installer_path[MAX_PATH];
+    char cmd[MAX_CMD];
+    int exit_code;
+
+    find_python_installer(installer_path);
+    if (!installer_path[0]) {
+        printf("未找到 install 目录中的 Python 安装包。\n");
+        return 0;
+    }
+
+    printf("检测到内置 Python 安装包: %s\n", installer_path);
+    if (!prompt_yes_no("当前环境没有可用的 Python，是否现在安装？")) {
+        printf("用户取消了 Python 安装。\n");
+        return 0;
+    }
+
+    snprintf(cmd, sizeof(cmd), "\"%s\"", installer_path);
+    printf("正在启动 Python 安装程序...\n");
+    exit_code = run_command_capture(cmd, NULL, 0);
+    if (exit_code != 0) {
+        printf("Python 安装程序执行失败，返回码: %d\n", exit_code);
+        return 0;
+    }
+
+    Sleep(1500);
+    return 1;
+}
+
 // 检查写入权限
 int check_write_permission(const char* dir) {
     char test_file[MAX_PATH];
@@ -441,6 +563,19 @@ int main(int argc, char* argv[]) {
     find_system_python(python_paths, &path_count, 50);
 
     if (path_count == 0) {
+        if (!install_bundled_python()) {
+            printf("鎸夊洖杞﹂敭閫€鍑?..");
+            wait_for_enter();
+            return 1;
+        }
+
+        find_system_python(python_paths, &path_count, 50);
+        if (path_count == 0) {
+            printf("Python 安装完成后仍未检测到可用解释器，请确认安装是否成功。\n");
+        }
+    }
+
+    if (path_count == 0) {
         printf("未找到Python安装，请确保Python已安装\n");
         printf("按回车键退出...");
         wait_for_enter();
@@ -467,6 +602,19 @@ int main(int argc, char* argv[]) {
             }
         } else {
             printf("Python版本不符合要求: %s (版本 %s)\n", python_paths[i], version_str);
+        }
+    }
+
+    if (strlen(suitable_python) == 0) {
+        if (install_bundled_python()) {
+            find_system_python(python_paths, &path_count, 50);
+            for (int i = 0; i < path_count; i++) {
+                if (check_python_version(python_paths[i], version_str)) {
+                    strcpy(suitable_python, python_paths[i]);
+                    printf("安装后检测到可用 Python: %s (版本 %s)\n", python_paths[i], version_str);
+                    break;
+                }
+            }
         }
     }
 

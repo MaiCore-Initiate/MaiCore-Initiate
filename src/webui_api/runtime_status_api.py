@@ -9,10 +9,11 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 import psutil
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..modules.launcher import launcher
 from ..modules.config_manager import config_manager
+from .auth_core import require_action
 
 router = APIRouter()
 
@@ -352,7 +353,7 @@ async def runtime_process_detail(pid: int):
     return {"success": True, "timestamp": _iso_now(), "process": detail}
 
 
-@router.post("/processes/{pid}/stop", summary="停止托管进程")
+@router.post("/processes/{pid}/stop", summary="停止托管进程", dependencies=[Depends(require_action("instances.control"))])
 async def runtime_stop_process(pid: int):
     success = launcher.stop_process(pid)
     if not success:
@@ -360,7 +361,7 @@ async def runtime_stop_process(pid: int):
     return {"success": True, "message": f"进程 {pid} 已停止"}
 
 
-@router.post("/processes/{pid}/restart", summary="重启托管进程")
+@router.post("/processes/{pid}/restart", summary="重启托管进程", dependencies=[Depends(require_action("instances.control"))])
 async def runtime_restart_process(pid: int):
     success = launcher.restart_process(pid)
     if not success:

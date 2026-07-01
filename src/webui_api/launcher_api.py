@@ -5,12 +5,15 @@
 """
 import os
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
 
 from ..modules.launcher import launcher
 from ..modules.config_manager import config_manager
+from ..utils.version_detector import is_plugin_adapter_version
+from .auth_core import require_action
+from .published_templates import get_instance_publish_state
 
 router = APIRouter()
 
@@ -63,6 +66,13 @@ def get_instance_launcher(serial_number: str):
 
     _instance_launchers[serial_number] = instance_launcher
     return instance_launcher
+
+
+def _is_plugin_adapter_config(config: Dict[str, Any]) -> bool:
+    install_options = config.get("install_options", {})
+    if install_options.get("adapter_mode") == "plugin" or config.get("adapter_mode") == "plugin":
+        return True
+    return is_plugin_adapter_version(config.get("version_path", ""), config.get("bot_type", "MaiBot"))
 
 
 # --- API端点 ---
@@ -126,7 +136,7 @@ async def get_instance_status(serial_number: str):
         raise HTTPException(status_code=500, detail=f"获取实例状态失败: {str(e)}")
 
 
-@router.post("/instances/{serial_number}/start", summary="启动实例")
+@router.post("/instances/{serial_number}/start", summary="启动实例", dependencies=[Depends(require_action("instances.control"))])
 async def start_instance(serial_number: str, request: StartInstanceRequest):
     """
     启动指定实例的组件
@@ -143,12 +153,20 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
         config = get_instance_config(serial_number)
         if not config:
             raise HTTPException(status_code=404, detail=f"未找到序列号为 {serial_number} 的实例")
+        publish_state = get_instance_publish_state(config)
+        if publish_state["is_published_template"]:
+            if not publish_state["published_active"]:
+                raise HTTPException(status_code=403, detail="该实例所属部署流已取消发布，不能启动")
+            raise HTTPException(status_code=400, detail="该实例由部署流管理，请使用部署流启动逻辑")
         
         # 验证组件列表
         valid_components = ["mai", "adapter", "napcat", "mongodb", "webui"]
         for comp in request.components:
             if comp not in valid_components:
                 raise HTTPException(status_code=400, detail=f"无效的组件: {comp}")
+
+        if "adapter" in request.components and _is_plugin_adapter_config(config):
+            raise HTTPException(status_code=400, detail="当前适配器以插件形式加载，不能单独启动")
         
         # 创建启动器实例并启动
         instance_launcher = get_instance_launcher(serial_number)
@@ -156,7 +174,7 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
             raise HTTPException(status_code=500, detail="创建启动器失败")
         
         # 验证配置
-        errors = instance_launcher.validate_configuration(config)
+        errors = instance_launcher.validate_configuration(config, request.components)
         if errors:
             return {
                 "success": False,
@@ -185,7 +203,7 @@ async def start_instance(serial_number: str, request: StartInstanceRequest):
         raise HTTPException(status_code=500, detail=f"启动实例失败: {str(e)}")
 
 
-@router.post("/instances/{serial_number}/stop", summary="停止实例")
+@router.post("/instances/{serial_number}/stop", summary="停止实例", dependencies=[Depends(require_action("instances.control"))])
 async def stop_instance(serial_number: str):
     """
     停止指定实例的所有进程
@@ -299,7 +317,7 @@ async def get_process_detail(pid: int):
         raise HTTPException(status_code=500, detail=f"获取进程详情失败: {str(e)}")
 
 
-@router.post("/processes/{pid}/stop", summary="停止指定进程")
+@router.post("/processes/{pid}/stop", summary="停止指定进程", dependencies=[Depends(require_action("instances.control"))])
 async def stop_process(pid: int):
     """
     停止指定PID的进程
@@ -323,7 +341,7 @@ async def stop_process(pid: int):
         raise HTTPException(status_code=500, detail=f"停止进程失败: {str(e)}")
 
 
-@router.post("/processes/{pid}/restart", summary="重启指定进程")
+@router.post("/processes/{pid}/restart", summary="重启指定进程", dependencies=[Depends(require_action("instances.control"))])
 async def restart_process(pid: int):
     """
     重启指定PID的进程

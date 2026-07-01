@@ -22,8 +22,7 @@ from ..utils.version_detector import compare_versions
 from ..utils.notifier import windows_notifier, NotificationLogHandler
 from .mongodb_installer import mongodb_installer
 from .webui_installer import webui_installer
-
-# 导入模块化的部署器
+from .deployment_mod import deployment_mod_executor
 from .deployment_core import (
     MaiBotDeployer,
     MoFoxBotDeployer,
@@ -74,7 +73,19 @@ class DeploymentManager:
                     time.sleep(base_delay * (attempt + 1))
                     continue
                 raise last_error
-        
+
+    def _get_builtin_adapter_path(self, bot_type: str, install_dir: str, nickname: str) -> str:
+        instance_dir = os.path.join(install_dir, nickname)
+        if bot_type == "MoFox-Core":
+            return os.path.join(instance_dir, "MoFox-Core", "config", "plugins", "napcat_adapter")
+        if bot_type == "Neo-MoFox":
+            return os.path.join(instance_dir, "Neo-MoFox", "config", "plugins", "napcat_adapter")
+        return ""
+
+    def deploy_instance_from_template_webui(self, template_id: str, user_inputs: Dict[str, Any], progress_callback: Optional[Callable] = None) -> bool:
+        """基于 MOD 模板执行 WebUI 部署。"""
+        return deployment_mod_executor.deploy(self, template_id, user_inputs, progress_callback=progress_callback)
+
     def deploy_instance(self) -> bool:
         """部署新实例 - 重构版本"""
         set_console_log_level("WARNING")
@@ -118,7 +129,12 @@ class DeploymentManager:
             
             # 定义bot_path_key以传递给后续函数
             bot_type = deploy_config.get("bot_type", "MaiBot")
-            bot_path_key = "mai_path" if bot_type == "MaiBot" else "mofox_path"
+            if bot_type == "MaiBot":
+                bot_path_key = "mai_path"
+            elif bot_type == "MoFox-Core":
+                bot_path_key = "mofox_path"
+            else:
+                bot_path_key = "neo_mofox_path"
             self._show_post_deployment_info(paths.get(bot_path_key, ""), deploy_config, paths.get("adapter_path", ""))
 
             logger.info("实例部署完成", serial=deploy_config['serial_number'])
@@ -233,7 +249,7 @@ class DeploymentManager:
                 ui.console.print("\n[🌐 WebUI配置]", style=ui.colors["info"])
                 ui.console.print(f"当前版本 {version_name} 已内置WebUI，无需单独安装", style="green")
                 ui.console.print("启动时主程序将自动代理WebUI，默认访问地址：http://localhost:8001", style="cyan")
-                install_webui = False  # 不需要单独安装
+                install_webui = True
             else:
                 # 版本未内置WebUI，引导到组件下载页
                 ui.console.print("\n[🌐 WebUI配置]", style=ui.colors["info"])
@@ -244,13 +260,15 @@ class DeploymentManager:
             install_mofox_admin_ui = False
             install_mofox_webui = False
         elif bot_type == "MoFox-Core":
-            # MoFox-Core: 永远不要询问是否安装麦麦的webui
-            install_webui = False
+            ui.console.print("\n[🌐 WebUI配置]", style=ui.colors["info"])
+            ui.console.print("MoFox-Core 已内置 WebUI，无需单独安装", style="green")
+            install_webui = True
             install_mofox_admin_ui = False
-            install_mofox_webui = ui.confirm("是否需要安装MoFox WebUI？")
+            install_mofox_webui = False
         else:  # Neo-MoFox
-            # Neo-MoFox: 不需要 WebUI
-            install_webui = False
+            ui.console.print("\n[🌐 WebUI配置]", style=ui.colors["info"])
+            ui.console.print("Neo-MoFox 已内置 WebUI，无需单独安装", style="green")
+            install_webui = True
             install_mofox_admin_ui = False
             install_mofox_webui = False
 
@@ -393,16 +411,14 @@ class DeploymentManager:
         table.add_row("安装MongoDB", "✅" if deploy_config.get("install_mongodb") else "❌")
         
         webui_text = ""
-        if bot_type == "MaiBot":
-            webui_text = "✅" if deploy_config.get("install_webui") else "❌"
+        if bot_type in {"MaiBot", "MoFox-Core", "Neo-MoFox"} and deploy_config.get("install_webui"):
+            webui_text = "✅ (内置)"
+        elif deploy_config.get("install_mofox_admin_ui"):
+            webui_text = "✅ (后台管理WebUI)"
+        elif deploy_config.get("install_mofox_webui"):
+            webui_text = "✅ (MoFox WebUI)"
         else:
-            # MoFox_bot显示不同的WebUI选项
-            if deploy_config.get("install_mofox_admin_ui"):
-                webui_text = "✅ (后台管理WebUI)"
-            elif deploy_config.get("install_mofox_webui"):
-                webui_text = "✅ (MoFox WebUI)"
-            else:
-                webui_text = "❌"
+            webui_text = "❌"
         table.add_row("安装WebUI", webui_text)
         
         ui.console.print(table)
@@ -429,6 +445,7 @@ class DeploymentManager:
         paths = {
             bot_path_key: "",
             "adapter_path": "",
+            "adapter_mode": "",
             "napcat_path": "",
             "venv_path": "",
             "webui_path": "",
@@ -453,28 +470,33 @@ class DeploymentManager:
         _notify(1, f"安装{bot_type}本体", "completed", f"{bot_type}安装完成，路径: {paths[bot_path_key]}")
 
         # 步骤2：处理适配器路径
-        if deploy_config.get("install_adapter"):
+        if deploy_config.get("install_adapter") and bot_type == "MaiBot":
             _notify(2, "安装适配器", "running", f"正在为 {bot_type} 安装适配器...")
+        elif bot_type in ["MoFox-Core", "Neo-MoFox"]:
+            _notify(2, "安装适配器", "running", f"{bot_type} 使用内置适配器，正在记录适配器路径...")
         else:
-            _notify(2, "安装适配器", "running", "跳过适配器安装（未勾选）")
+            _notify(2, "安装适配器", "warning", "跳过适配器安装（未勾选）")
         if deploy_config.get("install_adapter"):
             if bot_type == "MaiBot":
                 paths["adapter_path"] = self.maibot_deployer.install_adapter(deploy_config, paths[bot_path_key])
+                paths["adapter_mode"] = deploy_config.get("adapter_mode", "external")
                 _notify(2, "安装适配器", "completed", f"适配器安装完成，路径: {paths['adapter_path']}")
             else:
                 ui.console.print("\n[🔌 第二步：适配器配置]", style=ui.colors["primary"])
                 ui.print_info(f"{bot_type}已内置适配器，跳过外置适配器安装")
-                paths["adapter_path"] = "内置适配器"
-                _notify(2, "安装适配器", "running", f"{bot_type} 使用内置适配器，无需额外下载")
+                paths["adapter_path"] = self._get_builtin_adapter_path(bot_type, deploy_config["install_dir"], deploy_config.get("nickname", ""))
+                paths["adapter_mode"] = "builtin"
+                _notify(2, "安装适配器", "completed", f"{bot_type} 使用内置适配器，路径: {paths['adapter_path']}")
         elif bot_type in ["MoFox-Core", "Neo-MoFox"]:
             ui.print_info(f"检测到{bot_type}，将记录内置适配器路径")
-            nickname = deploy_config.get("nickname", f"{bot_type}_instance")
-            instance_dir = os.path.join(deploy_config["install_dir"], nickname)
-            if bot_type == "MoFox-Core":
-                paths["adapter_path"] = os.path.join(instance_dir, "MoFox-Core", "MoFox_bot-Adapter")
-            else:  # Neo-MoFox
-                paths["adapter_path"] = os.path.join(instance_dir, "Neo-MoFox", "config", "plugins", "napcat_adapter")
-        _notify(2, "安装适配器", "completed", "适配器处理完成")
+            paths["adapter_path"] = self._get_builtin_adapter_path(bot_type, deploy_config["install_dir"], deploy_config.get("nickname", ""))
+            paths["adapter_mode"] = "builtin"
+            _notify(2, "安装适配器", "completed", f"已记录内置适配器路径: {paths['adapter_path']}")
+        elif not deploy_config.get("install_adapter"):
+            paths["adapter_mode"] = "none"
+            _notify(2, "安装适配器", "warning", "未安装外置适配器")
+        else:
+            _notify(2, "安装适配器", "completed", "适配器处理完成")
 
         # 步骤3：安装NapCat
         if deploy_config.get("install_napcat") and deploy_config.get("napcat_version"):
@@ -485,9 +507,9 @@ class DeploymentManager:
             if paths["napcat_path"]:
                 _notify(3, "安装NapCat", "completed", f"NapCat安装完成，路径: {paths['napcat_path']}")
             else:
-                _notify(3, "安装NapCat", "completed", "NapCat安装未成功，可稍后手动配置")
+                _notify(3, "安装NapCat", "warning", "NapCat安装未成功，可稍后手动配置")
         else:
-            _notify(3, "安装NapCat", "completed", "跳过NapCat安装（未勾选）")
+            _notify(3, "安装NapCat", "warning", "跳过NapCat安装（未勾选）")
 
         # 步骤4：WebUI处理
         _notify(4, "WebUI配置", "running", f"正在处理 {bot_type} 的WebUI配置...")
@@ -495,7 +517,12 @@ class DeploymentManager:
             version_name = deploy_config["selected_version"].get("name", "")
             from ..utils.version_detector import has_builtin_webui
 
-            if has_builtin_webui(version_name):
+            if not deploy_config.get("install_webui", False):
+                ui.console.print("\n[🌐 第四步：WebUI配置]", style=ui.colors["primary"])
+                ui.print_info("未选择部署WebUI，跳过WebUI配置")
+                paths["webui_path"] = ""
+                _notify(4, "WebUI配置", "completed", "未选择部署WebUI，已跳过")
+            elif has_builtin_webui(version_name):
                 ui.console.print("\n[🌐 第四步：WebUI配置]", style=ui.colors["primary"])
                 ui.print_info(f"版本 {version_name} 内置WebUI，启动时将自动代理")
                 paths["webui_path"] = "builtin"
@@ -505,18 +532,11 @@ class DeploymentManager:
                 ui.print_info("当前版本未内置WebUI，如需WebUI功能请从组件下载页获取")
                 paths["webui_path"] = ""
                 _notify(4, "WebUI配置", "completed", "当前版本未内置WebUI，跳过")
-        elif bot_type == "MoFox-Core" and deploy_config.get("install_mofox_admin_ui"):
-            success, paths["webui_path"] = self._install_mofox_admin_ui(deploy_config)
-            if not success:
-                ui.print_warning("MoFox-Core后台管理WebUI安装失败，但部署将继续...")
-            _notify(4, "WebUI配置", "completed", f"MoFox后台WebUI: {'安装成功' if success else '安装失败，已跳过'}")
-        elif bot_type == "MoFox-Core" and deploy_config.get("install_mofox_webui"):
-            success, paths["webui_path"] = self.mofox_deployer.install_webui(deploy_config, paths[bot_path_key])
-            if not success:
-                ui.print_warning("MoFox WebUI安装失败，但部署将继续...")
-            _notify(4, "WebUI配置", "completed", f"MoFox WebUI: {'安装成功' if success else '安装失败，已跳过'}")
+        elif bot_type in {"MoFox-Core", "Neo-MoFox"}:
+            paths["webui_path"] = "builtin"
+            _notify(4, "WebUI配置", "completed", f"{bot_type} 内置 WebUI，无需单独安装")
         else:
-            _notify(4, "WebUI配置", "completed", "跳过WebUI安装")
+            _notify(4, "WebUI配置", "warning", "跳过WebUI安装")
 
         # 步骤5：设置Python环境
         _notify(5, "Python环境", "running", f"正在为 {bot_type} 创建Python虚拟环境...")
@@ -547,23 +567,30 @@ class DeploymentManager:
                     if not os.path.exists(config_dir):
                         _notify(5, "Python环境", "running", "检测到首次部署，正在初始化配置文件...")
                         ui.print_info("\n检测到首次部署，需要初始化配置文件")
-                        if ui.confirm("是否现在运行初始化（推荐）？"):
-                            init_success = self.neo_mofox_deployer.initialize_first_run(paths[bot_path_key], venv_path)
+                        auto_init = bool(deploy_config.get("from_webui", False))
+                        should_initialize = auto_init or ui.confirm("是否现在运行初始化（推荐）？")
+                        if should_initialize:
+                            init_success = self.neo_mofox_deployer.initialize_first_run(
+                                paths[bot_path_key],
+                                venv_path,
+                                auto_confirm=True
+                            )
                             if init_success:
-                                _notify(5, "Python环境", "running", "配置文件初始化成功")
+                                _notify(5, "Python环境", "completed", "配置文件初始化成功")
                             else:
-                                _notify(5, "Python环境", "running", "配置文件初始化失败，请稍后手动启动一次程序")
+                                _notify(5, "Python环境", "warning", "配置文件初始化失败，请稍后手动启动一次程序")
                         else:
                             ui.print_info("已跳过初始化，请在首次启动时注意配置文件生成")
+                            _notify(5, "Python环境", "warning", "已跳过首次初始化，需稍后手动启动一次")
                 else:
                     ui.print_warning("⚠️ 依赖安装失败，但继续部署过程")
-                    _notify(5, "Python环境", "completed", "虚拟环境已创建，但依赖安装失败")
+                    _notify(5, "Python环境", "warning", "虚拟环境已创建，但依赖安装失败")
 
                 paths["venv_path"] = venv_path
             else:
                 ui.print_warning("⚠️ 虚拟环境创建失败")
                 paths["venv_path"] = ""
-                _notify(5, "Python环境", "completed", "虚拟环境创建失败")
+                _notify(5, "Python环境", "warning", "虚拟环境创建失败")
         else:
             # MaiBot 和 MoFox-Core 使用传统方式
             ui.print_info("正在创建Python虚拟环境...")
@@ -596,15 +623,20 @@ class DeploymentManager:
                     _notify(5, "Python环境", "completed", "Python虚拟环境创建成功，所有依赖安装完成")
                 else:
                     ui.print_warning("⚠️ 依赖安装失败，但继续部署过程")
-                    _notify(5, "Python环境", "completed", "虚拟环境已创建，但部分依赖安装失败")
+                    _notify(5, "Python环境", "warning", "虚拟环境已创建，但部分依赖安装失败")
 
                 paths["venv_path"] = venv_path
             else:
                 ui.print_warning("⚠️ 虚拟环境创建失败，将使用系统Python")
                 paths["venv_path"] = ""
-                _notify(5, "Python环境", "completed", "虚拟环境创建失败，将使用系统Python")
+                _notify(5, "Python环境", "warning", "虚拟环境创建失败，将使用系统Python")
 
-            if bot_type == "MaiBot" and paths.get("webui_path") and paths.get("venv_path"):
+            if (
+                bot_type == "MaiBot"
+                and paths.get("webui_path")
+                and paths.get("webui_path") != "builtin"
+                and paths.get("venv_path")
+            ):
                 _notify(5, "Python环境", "running", "正在安装WebUI后端依赖...")
                 ui.console.print("\n[🔄 在虚拟环境中安装WebUI后端依赖]", style=ui.colors["primary"])
                 webui_installer.install_webui_backend_dependencies(paths["webui_path"], paths["venv_path"])
@@ -627,7 +659,7 @@ class DeploymentManager:
                 paths.get("adapter_path", ""),
                 paths.get("napcat_path", "")
             ):
-                _notify(6, "配置文件", "running", "⚠️ 配置文件设置失败，但部署将继续")
+                _notify(6, "配置文件", "warning", "配置文件设置失败，但部署将继续")
                 ui.print_warning("配置文件设置失败，但部署将继续...")
         elif bot_type == "MaiBot":
             if not self.maibot_deployer.setup_config_files(
@@ -638,7 +670,7 @@ class DeploymentManager:
                 paths.get("mongodb_path", ""),
                 paths.get("webui_path", "")
             ):
-                _notify(6, "配置文件", "running", "⚠️ 配置文件设置失败，但部署将继续")
+                _notify(6, "配置文件", "warning", "配置文件设置失败，但部署将继续")
                 ui.print_warning("配置文件设置失败，但部署将继续...")
         else:  # MoFox-Core
             if not self.mofox_deployer.setup_config_files(
@@ -649,7 +681,7 @@ class DeploymentManager:
                 paths.get("mongodb_path", ""),
                 paths.get("webui_path", "")
             ):
-                _notify(6, "配置文件", "running", "⚠️ 配置文件设置失败，但部署将继续")
+                _notify(6, "配置文件", "warning", "配置文件设置失败，但部署将继续")
                 ui.print_warning("配置文件设置失败，但部署将继续...")
         _notify(6, "配置文件", "completed", f"{bot_type} 配置文件设置完成")
 
@@ -668,6 +700,7 @@ class DeploymentManager:
         
         ui.console.print("\n[⚙️ 第七步：完成部署配置]", style=ui.colors["primary"])
         adapter_path = paths["adapter_path"]
+        adapter_mode = paths.get("adapter_mode") or deploy_config.get("adapter_mode", "")
         napcat_path = paths["napcat_path"]
         venv_path = paths["venv_path"]
         webui_path = paths["webui_path"]
@@ -679,13 +712,19 @@ class DeploymentManager:
         # 根据部署选项创建安装选项配置
         install_options = {
             "install_adapter": bool(adapter_path and adapter_path not in ["无需适配器", "跳过适配器安装"]),
+            "adapter_mode": adapter_mode or "none",
             "install_napcat": deploy_config.get("install_napcat", False),
             "install_mongodb": bool(deploy_config.get("mongodb_path", "")),
-            "install_webui": deploy_config.get("install_webui", False),
+            "install_webui": bool(webui_path and webui_path != ""),
             "install_mofox_admin_ui": deploy_config.get("install_mofox_admin_ui", False),
             "install_mofox_webui": deploy_config.get("install_mofox_webui", False)
         }
-        
+        mod_plan = deploy_config.get("mod_plan", {}) or {}
+        mod_binding = mod_plan.get("mod_binding", {})
+        deployment_profile = mod_plan.get("deployment_profile", {})
+        component_bindings = mod_plan.get("component_bindings", [])
+        template_inputs = mod_plan.get("template_inputs", {})
+
         new_config = {
             "serial_number": deploy_config["serial_number"],
             "absolute_serial_number": config_manager.generate_unique_serial(),
@@ -695,11 +734,16 @@ class DeploymentManager:
             "qq_account": deploy_config.get("qq_account", ""),
             bot_path_key: bot_path,
             "adapter_path": adapter_path,
+            "adapter_mode": adapter_mode or "none",
             "napcat_path": napcat_path,
             "venv_path": venv_path,
             "mongodb_path": mongodb_path,
             "webui_path": webui_path,
-            "install_options": install_options
+            "install_options": install_options,
+            "mod_binding": mod_binding,
+            "deployment_profile": deployment_profile,
+            "component_bindings": component_bindings,
+            "template_inputs": template_inputs,
         }
         
         # 保存配置
@@ -730,16 +774,9 @@ class DeploymentManager:
         if bot_type == "MaiBot":
             webui_name = "WebUI"
             webui_installed = install_options.get('install_webui', False)
-        elif bot_type == "MoFox_bot":
-            if install_options.get('install_mofox_admin_ui', False):
-                webui_name = "MoFox_bot后台管理WebUI"
-                webui_installed = True
-            elif install_options.get('install_mofox_webui', False):
-                webui_name = "MoFox WebUI"
-                webui_installed = True
-            else:
-                webui_name = "WebUI"
-                webui_installed = False
+        elif bot_type in {"MoFox-Core", "Neo-MoFox"}:
+            webui_name = "WebUI"
+            webui_installed = True
         else:
             webui_name = "WebUI"
             webui_installed = False

@@ -19,6 +19,11 @@ interface Instance {
   mongodbPath?: string
   webuiPath?: string
   venvPath?: string
+  source?: string
+  isPublishedTemplate?: boolean
+  publishedActive?: boolean
+  deploymentFlowName?: string
+  deploymentFlowSequence?: string
 }
 
 interface RegisterForm {
@@ -90,12 +95,61 @@ function PillButton({ label, selected, onClick }: { label: string; selected?: bo
       onClick={onClick}
       className="h-[54px] px-[24px] rounded-[27px] cursor-pointer transition-all duration-300 shrink-0"
       style={{
-        background: selected ? 'rgba(255,255,255,0.6)' : 'transparent',
-        border: '2px solid rgba(0,0,0,0.5)',
+        background: selected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+        border: `2px solid ${selected ? 'var(--mc-choice-selected-border)' : 'var(--mc-border-strong)'}`,
       }}
     >
       <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative', top: 2 }}>{label}</span>
     </button>
+  )
+}
+
+const SOURCE_BADGE: Record<string, { label: string; bg: string; border: string }> = {
+  register: { label: '本地注册', bg: 'rgba(179,220,255,0.55)', border: 'rgba(80,160,240,0.6)' },
+  deploy:   { label: '联网部署', bg: 'rgba(179,255,195,0.55)', border: 'rgba(60,190,100,0.6)' },
+  import:   { label: '导入',     bg: 'rgba(255,230,150,0.55)', border: 'rgba(210,160,40,0.6)' },
+  onekey:   { label: '一键部署', bg: 'rgba(220,179,255,0.55)', border: 'rgba(150,80,240,0.6)' },
+}
+
+function SourceBadge({ source }: { source?: string }) {
+  const s = source || 'register'
+  const badge = SOURCE_BADGE[s] ?? SOURCE_BADGE.register
+  return (
+    <span
+      style={{
+        fontSize: 18,
+        fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
+        background: badge.bg,
+        border: `1.5px solid ${badge.border}`,
+        borderRadius: 10,
+        padding: '1px 10px',
+        color: 'var(--mc-text-secondary)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {badge.label}
+    </span>
+  )
+}
+
+function FlowStatusBadge({ instance }: { instance: Instance }) {
+  if (!instance.isPublishedTemplate) return null
+  const inactive = instance.publishedActive === false
+  return (
+    <span
+      style={{
+        fontSize: 18,
+        fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
+        background: inactive ? 'rgba(120,120,120,0.18)' : 'rgba(74,222,128,0.22)',
+        border: `1.5px solid ${inactive ? 'rgba(120,120,120,0.45)' : 'rgba(34,197,94,0.6)'}`,
+        borderRadius: 10,
+        padding: '1px 10px',
+        color: 'var(--mc-text-secondary)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {inactive ? '已灰化' : '部署流'}
+    </span>
   )
 }
 
@@ -104,24 +158,31 @@ function InstanceCard({ instance, selected, onClick, index }: {
   instance: Instance; selected: boolean; onClick: () => void; index: number
 }) {
   const title = `${instance.nickname}.${instance.botType}`
+  const inactive = instance.isPublishedTemplate && instance.publishedActive === false
   return (
     <div className="animate-fade-slide-up inline-block" style={{ animationDelay: `${index * 60}ms` }}>
       <GlassCard
         radius={24}
         shadow={selected ? '6px 6px 8px rgba(0,0,0,0.45)' : '4px 4px 4px rgba(0,0,0,0.25)'}
-        borderColor={selected ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.4)'}
+        borderColor={selected ? 'var(--mc-choice-selected-border)' : 'var(--mc-border-muted)'}
         borderWidth={selected ? 3 : 2}
+        bgOpacity={0.62}
         className="cursor-pointer transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]"
         onClick={onClick}
       >
-        <div className="px-[24px] py-[18px]">
-          <div className="text-black truncate" style={{ fontSize: 32, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
-            {title}
+        <div className="px-[24px] py-[18px]" style={{ opacity: inactive ? 0.48 : 1 }}>
+          <div className="flex items-center gap-[8px] mb-[2px]">
+            <div className="text-black truncate" style={{ fontSize: 32, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+              {title}
+            </div>
+            <SourceBadge source={instance.source} />
+            <FlowStatusBadge instance={instance} />
           </div>
           <div className="mt-[4px] flex flex-col gap-[2px]">
-            <span style={{ ...valueFont, color: '#707070' }}>序列号：{instance.serial}</span>
-            <span style={{ ...valueFont, color: '#707070' }}>版本：{instance.version || '-'}</span>
-            <span style={{ ...valueFont, color: '#707070' }}>QQ账号：{instance.qqAccount || '-'}</span>
+            <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>序列号：{instance.serial}</span>
+            <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>版本：{instance.version || '-'}</span>
+            <span style={{ ...valueFont, color: 'var(--mc-text-secondary)' }}>QQ账号：{instance.qqAccount || '-'}</span>
+            {inactive && <span style={{ ...valueFont, color: 'var(--mc-text-faint)' }}>部署流已取消发布，操作权限已收回</span>}
           </div>
         </div>
       </GlassCard>
@@ -149,15 +210,18 @@ function TypeToggle({ options, value, onChange }: {
   return (
     <div
       ref={containerRef}
-      className="relative inline-flex items-center h-[50px] rounded-[25px] border-2 border-black/50 p-[5px]"
+      className="relative inline-flex items-center h-[50px] rounded-[25px] p-[5px]"
       style={{ filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))' }}
     >
+      <div className="absolute inset-0 rounded-[25px] pointer-events-none" style={{ border: '2px solid var(--mc-border-strong)' }} />
       <div
-        className="absolute h-[40px] rounded-[20px] bg-white border border-black/50 transition-all duration-300 ease-out"
+        className="absolute h-[40px] rounded-[20px] transition-all duration-300 ease-out"
         style={{
           width: sliderStyle.width,
           left: sliderStyle.left,
           top: 3,
+          background: 'var(--mc-control-solid)',
+          border: '1px solid var(--mc-border-strong)',
           filter: 'drop-shadow(3px 3px 3px rgba(0,0,0,0.16))',
         }}
       />
@@ -166,7 +230,7 @@ function TypeToggle({ options, value, onChange }: {
           key={opt}
           onClick={() => onChange(opt)}
           className="relative z-10 h-[40px] px-[20px] cursor-pointer bg-transparent border-none transition-colors duration-200"
-          style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: value === opt ? '#000' : 'rgba(0,0,0,0.4)' }}
+          style={{ fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: value === opt ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }}
         >
           {opt}
         </button>
@@ -194,7 +258,8 @@ function FieldRow({ label, value, onChange, disabled, wide, index, children, pla
             style={{
               ...valueFont,
               width: wide ? 595 : 221,
-              color: disabled ? 'rgba(0,0,0,0.5)' : 'inherit',
+              color: disabled ? 'var(--mc-text-faint)' : 'var(--mc-text-secondary)',
+              borderColor: 'var(--mc-border-strong)',
             }}
           />
         </div>
@@ -274,19 +339,20 @@ function EditPanel({ instance, onSaved, onClose }: { instance: Instance; onSaved
           {/* 短字段 */}
           <FieldRow label="实例序列号" value={form.serial_number} onChange={v => setForm(p => ({ ...p, serial_number: v }))} index={0} />
           <FieldRow label="实例绝对序列号" value={String(instance.absoluteSerial)} disabled index={1} />
-          <FieldRow label="实例昵称" value={form.nickname_path} onChange={v => setForm(p => ({ ...p, nickname_path: v }))} index={2} />
-          <FieldRow label="实例版本" value={form.version_path} onChange={v => setForm(p => ({ ...p, version_path: v }))} index={3} />
-          <FieldRow label="实例类型" index={4}>
+          <FieldRow label="来源" value={SOURCE_BADGE[instance.source || 'register']?.label ?? instance.source} disabled index={2} />
+          <FieldRow label="实例昵称" value={form.nickname_path} onChange={v => setForm(p => ({ ...p, nickname_path: v }))} index={3} />
+          <FieldRow label="实例版本" value={form.version_path} onChange={v => setForm(p => ({ ...p, version_path: v }))} index={4} />
+          <FieldRow label="实例类型" index={5}>
             <TypeToggle options={BOT_TYPE_OPTIONS} value={form.bot_type} onChange={v => setForm(p => switchBotTypeWithMainPath(p, v))} />
           </FieldRow>
-          <FieldRow label="QQ账号" value={form.qq_account} onChange={v => setForm(p => ({ ...p, qq_account: v }))} index={5} />
+          <FieldRow label="QQ账号" value={form.qq_account} onChange={v => setForm(p => ({ ...p, qq_account: v }))} index={6} />
 
           {/* 长路径字段 */}
-          <FieldRow label="主程序路径" value={mainPath} onChange={setMainPath} wide index={6} placeholder="bot.py 所在根目录" />
-          <FieldRow label="适配器目录" value={form.adapter_path} onChange={v => setForm(p => ({ ...p, adapter_path: v }))} wide index={7} placeholder="main.py 所在根目录" />
-          <FieldRow label="NapCat路径" value={form.napcat_path} onChange={v => setForm(p => ({ ...p, napcat_path: v }))} wide index={8} placeholder="NapCatWinBootMain.exe 文件路径" />
-          <FieldRow label="虚拟环境路径" value={form.venv_path} onChange={v => setForm(p => ({ ...p, venv_path: v }))} wide index={9} />
-          <FieldRow label="WebUI路径" value={form.webui_path} onChange={v => setForm(p => ({ ...p, webui_path: v }))} wide index={10} />
+          <FieldRow label="主程序路径" value={mainPath} onChange={setMainPath} wide index={7} placeholder="bot.py 所在根目录" />
+          <FieldRow label="适配器目录" value={form.adapter_path} onChange={v => setForm(p => ({ ...p, adapter_path: v }))} wide index={8} placeholder="main.py 所在根目录" />
+          <FieldRow label="NapCat路径" value={form.napcat_path} onChange={v => setForm(p => ({ ...p, napcat_path: v }))} wide index={9} placeholder="NapCatWinBootMain.exe 文件路径" />
+          <FieldRow label="虚拟环境路径" value={form.venv_path} onChange={v => setForm(p => ({ ...p, venv_path: v }))} wide index={10} />
+          <FieldRow label="WebUI路径" value={form.webui_path} onChange={v => setForm(p => ({ ...p, webui_path: v }))} wide index={11} placeholder='若您部署的实例自带WebUI，则无需填写此字段' />
         </div>
 
         <div className="mt-auto pt-[16px] flex justify-end animate-fade-slide-up" style={{ animationDelay: '400ms' }}>
@@ -418,6 +484,11 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
           mongodbPath: cfg.mongodb_path,
           webuiPath: cfg.webui_path,
           venvPath: cfg.venv_path,
+          source: cfg.source || 'register',
+          isPublishedTemplate: Boolean(cfg.is_published_template),
+          publishedActive: cfg.published_active !== false,
+          deploymentFlowName: cfg.deployment_flow_name || '',
+          deploymentFlowSequence: cfg.deployment_flow_sequence || '',
         }))
         setInstances(list)
         if (d?.next_serial != null) setNextSerial(d.next_serial)
@@ -435,12 +506,23 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
   }
 
   const handleSelectInstance = async (inst: Instance) => {
+    if (inst.isPublishedTemplate && inst.publishedActive === false) {
+      notify('该实例所属部署流已取消发布，不能操作', 'error')
+      return
+    }
     setSelected(inst.name)
     if (action === 'open-config') {
       try {
-        const res = await fetch(`/api/webui/instances/${inst.name}/open-config`, { method: 'POST', credentials: 'include' })
+        const res = await fetch(inst.isPublishedTemplate ? `/api/deployment-mod/instances/${encodeURIComponent(inst.serial)}/stage` : `/api/webui/instances/${inst.name}/open-config`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: inst.isPublishedTemplate ? { 'Content-Type': 'application/json' } : undefined,
+          body: inst.isPublishedTemplate ? JSON.stringify({ stage: 'config', user_inputs: {} }) : undefined,
+        })
         const data = await res.json()
-        if (data.success) notify('已打开配置文件', 'success')
+        if (data.task_id) notify('已提交配置打开任务', 'success')
+        else if (data.use_template_stage) notify('该实例需要通过部署流配置阶段打开', 'warning')
+        else if (data.success) notify('已打开配置文件', 'success')
         else notify(data.detail || '打开失败', 'error')
       } catch { notify('请求失败', 'error') }
     } else if (action === 'open-folder') {
@@ -458,12 +540,12 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
   const showEditPanel = action === 'edit' && selectedInstance
 
   return (
-    <div className="flex flex-col p-6 h-full">
+    <div className="flex flex-col p-6 h-full overflow-hidden">
       <h1 className="text-black shrink-0 mb-[16px] animate-card-enter" style={pageTitleStyle}>配置管理</h1>
 
-      <div className="flex gap-6 flex-1 min-h-0">
+      <div className="flex gap-6 flex-1 min-h-0 overflow-hidden">
         {/* 左侧：功能按钮 */}
-        <div className="shrink-0 animate-card-enter">
+        <div className="h-full min-h-0 shrink-0 animate-card-enter">
           <GlassCard>
             <div className="p-[24px] flex flex-col gap-[10px]">
               <h2 className="text-black pb-[8px]" style={sectionTitle}>操作</h2>
@@ -476,7 +558,7 @@ export default function Config({ initialAction }: { initialAction?: Action }) {
         </div>
 
         {/* 右侧 */}
-        <div className="flex-1 min-w-0 flex flex-col gap-6 overflow-y-auto px-[12px]">
+        <div className="flex-1 min-w-0 h-full min-h-0 flex flex-col gap-6 overflow-y-auto px-[12px]">
           {/* 编辑面板：选中实例后替换卡片 */}
           {showEditPanel ? (
             <div className="flex-1 min-h-0 animate-card-enter">

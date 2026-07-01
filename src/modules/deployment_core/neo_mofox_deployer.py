@@ -262,7 +262,7 @@ class NeoMoFoxDeployer(BaseDeployer):
             logger.error("配置文件设置失败", error=str(e))
             return False
 
-    def initialize_first_run(self, bot_path: str, venv_path: str) -> bool:
+    def initialize_first_run(self, bot_path: str, venv_path: str, auto_confirm: bool = True) -> bool:
         """
         首次运行初始化，生成配置文件
 
@@ -284,37 +284,44 @@ class NeoMoFoxDeployer(BaseDeployer):
             ui.print_info("检测到首次启动，正在初始化配置文件...")
             ui.print_info("这将运行一次 Neo-MoFox 以生成必要的配置文件")
 
-            # 激活虚拟环境并运行 main.py
-            if os.name == 'nt':  # Windows
-                activate_script = os.path.join(venv_path, "Scripts", "activate.bat")
-                python_exe = os.path.join(venv_path, "Scripts", "python.exe")
-            else:  # Unix-like
-                activate_script = os.path.join(venv_path, "bin", "activate")
-                python_exe = os.path.join(venv_path, "bin", "python")
-
-            # 使用 uv run 运行初始化
+            # 使用 uv run 运行初始化，并在 WebUI 模式下自动确认首启提示。
             ui.print_info("正在运行初始化命令...")
             process = subprocess.Popen(
                 ["uv", "run", "main.py"],
                 cwd=bot_path,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                shell=True,
                 encoding='utf-8',
                 errors='replace'
             )
 
-            # 等待几秒让配置文件生成
             import time
-            time.sleep(3)
+
+            if auto_confirm and process.stdin:
+                try:
+                    process.stdin.write("y\n")
+                    process.stdin.flush()
+                    ui.print_info("已自动确认首启初始化")
+                except Exception:
+                    pass
+
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                if os.path.exists(config_dir):
+                    break
+                if process.poll() is not None:
+                    break
+                time.sleep(1)
 
             # 终止进程
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
 
             # 检查config目录是否生成
             if os.path.exists(config_dir):

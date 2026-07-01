@@ -1,0 +1,49 @@
+<svg id="右侧边栏" xmlns="http://www.w3.org/2000/svg" width="600" height="1080" viewBox="0 0 600 1080">
+  <g id="右侧边栏总背景" fill="#fff" stroke="#000" stroke-width="1">
+    <path d="M30,0H600a0,0,0,0,1,0,0V1080a0,0,0,0,1,0,0H30a30,30,0,0,1-30-30V30A30,30,0,0,1,30,0Z" stroke="none"/>
+    <path d="M30,.5H599.5a0,0,0,0,1,0,0v1079a0,0,0,0,1,0,0H30A29.5,29.5,0,0,1,.5,1050V30A29.5,29.5,0,0,1,30,.5Z" fill="none"/>
+  </g>
+  <rect id="块内容限制区_与右侧边框各边距20px" data-name="块内容限制区，与右侧边框各边距20px" width="560" height="954" transform="translate(19.5 102)" fill="none"/>
+  <text id="省略其他条目......" transform="translate(26 460)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="21">省略其他条目......</tspan></text>
+  <g id="展开_收起右侧边栏图标" data-name="展开、收起右侧边栏图标">
+    <rect id="背景" width="40" height="40" rx="9" transform="translate(537 23)" fill="#fff" stroke="#000" stroke-width="1"/>
+    <g id="TextAlignRight">
+      <path id="路径_133" data-name="路径 133" d="M546,35.5h22" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      <path id="路径_134" data-name="路径 134" d="M552,40.5h16" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      <path id="路径_135" data-name="路径 135" d="M546,45.5h22" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+      <path id="路径_136" data-name="路径 136" d="M552,50.5h16" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+    </g>
+  </g>
+  <g id="模板描述">
+    <g id="_模板描述_输入框" data-name="“模板描述”输入框">
+      <path id="输入框背景_固定除左上角以外各22px圆角_默认单行_太长则截断换为..._用户可以下拉以增加框高以换行" data-name="输入框背景，固定除左上角以外各22px圆角，默认单行，太长则截断换为...   用户可以下拉以增加框高以换行" d="M0,0H531a22,22,0,0,1,22,22v0a22,22,0,0,1-22,22H22A22,22,0,0,1,0,22V0A0,0,0,0,1,0,0Z" transform="translate(20 377)" fill="#fff" stroke="#000" stroke-width="1"/>
+      <text id="这是一个基于MCStart模块化部署功能的理念编写的概念模版" transform="translate(30 407)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">这是一个基于MCStart模块化部署功能的理念编写的概念模版</tspan></text>
+    </g>
+    <text id="模板描述-2" data-name="模板描述" transform="translate(20 369)" font-size="30" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">模板描述</tspan></text>
+  </g>
+  <g id="标签">
+    <g id="_test" data-name="#test">
+      <rect id="背景-2" data-name="背景" width="46" height="30" rx="5" transform="translate(20 291)" fill="#fff" stroke="#000" stroke-width="1"/>
+      <text id="test" transform="translate(26 314)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">test</tspan></text>
+    </g>
+    <g id="_标签_输入框_一个_后面的全部算作一个标签_直到遇到新的_或结束_空格忽视_输入完成后_标签直接显示在下边" data-name="“标签”输入框，一个#后面的全部算作一个标签，直到遇到新的#或结束。空格忽视。输入完成后，标签直接显示在下边">
+      <path id="输入框背景--选中状态" d="M0,0H120a22,22,0,0,1,22,22v0a22,22,0,0,1-22,22H22A22,22,0,0,1,0,22V0A0,0,0,0,1,0,0Z" transform="translate(20 227)" fill="rgba(0,132,255,0.3)" stroke="#0084ff" stroke-width="1"/>
+      <text id="_test-2" data-name="#test" transform="translate(30 256)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">#test</tspan></text>
+    </g>
+    <text id="标签-2" data-name="标签" transform="translate(20 219)" font-size="30" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">标签</tspan></text>
+  </g>
+  <g id="作者">
+    <g id="_作者_输入框" data-name="“作者”输入框">
+      <path id="输入框背景_固定除左上角以外各22px圆角_默认单行_太长则截断换为..._用户可以下拉以增加框高以换行-2" data-name="输入框背景，固定除左上角以外各22px圆角，默认单行，太长则截断换为...   用户可以下拉以增加框高以换行" d="M0,0H120a22,22,0,0,1,22,22v0a22,22,0,0,1-22,22H22A22,22,0,0,1,0,22V0A0,0,0,0,1,0,0Z" transform="translate(20 142)" fill="#fff" stroke="#000" stroke-width="1"/>
+      <text id="MCStartTeam" transform="translate(30 171)" font-size="20" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC"><tspan x="0" y="0">MCStartTeam</tspan></text>
+    </g>
+    <text id="作者-2" data-name="作者" transform="translate(20 134)" font-size="30" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">作者</tspan></text>
+  </g>
+  <g id="块头">
+    <g id="块头_显示被选中的块名字" data-name="块头，显示被选中的块名字" fill="#fff" stroke="#000" stroke-width="1">
+      <path d="M30,0H600a0,0,0,0,1,0,0V86a0,0,0,0,1,0,0H0a0,0,0,0,1,0,0V30A30,30,0,0,1,30,0Z" stroke="none"/>
+      <path d="M30,.5H599.5a0,0,0,0,1,0,0v85a0,0,0,0,1,0,0H.5a0,0,0,0,1,0,0V30A29.5,29.5,0,0,1,30,.5Z" fill="none"/>
+    </g>
+    <text id="当前选中_初始化块" data-name="当前选中：初始化块" transform="translate(25 55)" font-size="30" font-family="HarmonyOS_Sans_SC_Medium, HarmonyOS Sans SC"><tspan x="0" y="0">当前选中：</tspan><tspan y="0" font-family="HarmonyOS_Sans_SC_Light, HarmonyOS Sans SC">初始化块</tspan></text>
+  </g>
+</svg>

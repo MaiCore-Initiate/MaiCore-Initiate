@@ -6,12 +6,14 @@ WebUI 配置 API 模块
 import os
 import subprocess
 from typing import Any, Dict
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..core.webui_config import webui_config
 from ..core.config import config_manager
 from ..core.p_config import p_config_manager
+from .auth_core import require_admin
+from .published_templates import get_instance_publish_state
 
 router = APIRouter()
 
@@ -39,6 +41,16 @@ def _get_bot_root_path(cfg: Dict[str, Any]) -> str:
     return os.path.realpath(cfg.get(_get_bot_path_key(cfg.get("bot_type", "MaiBot")), ""))
 
 
+def _get_adapter_config_path(cfg: Dict[str, Any], bot_path: str) -> str:
+    normalized = _normalize_bot_type(cfg.get("bot_type", "MaiBot"))
+    if normalized in {"MoFox-Core", "Neo-MoFox"}:
+        return os.path.realpath(os.path.join(bot_path, "config", "plugins", "napcat_adapter", "config.toml"))
+    adapter_path = cfg.get("adapter_path", "")
+    if not adapter_path:
+        return ""
+    return os.path.realpath(os.path.join(adapter_path, "config.toml"))
+
+
 class UpdateConfigRequest(BaseModel):
     key: str
     value: Any
@@ -55,7 +67,7 @@ def get_config():
     return webui_config.config
 
 
-@router.post("/config")
+@router.post("/config", dependencies=[Depends(require_admin)])
 def update_config(req: UpdateConfigRequest):
     webui_config.set(req.key, req.value)
     webui_config.save()
@@ -68,29 +80,38 @@ def get_instances():
     config_manager.reload_if_changed()
     configs = config_manager.get_all_configurations()
     current = config_manager.get("current_config")
+    result_instances = {}
+    for name, cfg in configs.items():
+        publish_state = get_instance_publish_state(cfg)
+        result_instances[name] = {
+            "serial_number": cfg.get("serial_number", ""),
+            "nickname": cfg.get("nickname_path", ""),
+            "absolute_serial": cfg.get("absolute_serial_number", 0),
+            "bot_type": _normalize_bot_type(cfg.get("bot_type", "")),
+            "qq_account": cfg.get("qq_account", ""),
+            "version": cfg.get("version_path", ""),
+            "mai_path": cfg.get("mai_path", ""),
+            "mofox_path": cfg.get("mofox_path", ""),
+            "neo_mofox_path": cfg.get("neo_mofox_path", ""),
+            "adapter_path": cfg.get("adapter_path", ""),
+            "adapter_mode": cfg.get("adapter_mode", cfg.get("install_options", {}).get("adapter_mode", "")),
+            "napcat_path": cfg.get("napcat_path", ""),
+            "mongodb_path": cfg.get("mongodb_path", ""),
+            "webui_path": cfg.get("webui_path", ""),
+            "venv_path": cfg.get("venv_path", ""),
+            "install_options": cfg.get("install_options", {}),
+            "mod_binding": cfg.get("mod_binding", {}),
+            "deployment_profile": cfg.get("deployment_profile", {}),
+            "component_bindings": cfg.get("component_bindings", []),
+            "template_inputs": cfg.get("template_inputs", {}),
+            "source": cfg.get("source", "register"),
+            **{key: value for key, value in publish_state.items() if key != "deployment_flow_record"},
+        }
+
     return {
         "current_config": current,
         "next_serial": config_manager.generate_unique_serial(),
-        "instances": {
-            name: {
-                "serial_number": cfg.get("serial_number", ""),
-                "nickname": cfg.get("nickname_path", ""),
-                "absolute_serial": cfg.get("absolute_serial_number", 0),
-                "bot_type": _normalize_bot_type(cfg.get("bot_type", "")),
-                "qq_account": cfg.get("qq_account", ""),
-                "version": cfg.get("version_path", ""),
-                "mai_path": cfg.get("mai_path", ""),
-                "mofox_path": cfg.get("mofox_path", ""),
-                "neo_mofox_path": cfg.get("neo_mofox_path", ""),
-                "adapter_path": cfg.get("adapter_path", ""),
-                "napcat_path": cfg.get("napcat_path", ""),
-                "mongodb_path": cfg.get("mongodb_path", ""),
-                "webui_path": cfg.get("webui_path", ""),
-                "venv_path": cfg.get("venv_path", ""),
-                "install_options": cfg.get("install_options", {}),
-            }
-            for name, cfg in configs.items()
-        },
+        "instances": result_instances,
     }
 
 
@@ -100,7 +121,7 @@ def get_next_serial():
     return {"next_serial": config_manager.generate_unique_serial()}
 
 
-@router.post("/instances")
+@router.post("/instances", dependencies=[Depends(require_admin)])
 def create_instance(req: CreateInstanceRequest):
     """创建新实例配置，含校验"""
     config_manager.reload_if_changed()
@@ -143,11 +164,12 @@ def create_instance(req: CreateInstanceRequest):
 _UPDATABLE_FIELDS = {
     "serial_number", "nickname_path", "version_path", "bot_type",
     "qq_account", "mai_path", "mofox_path", "neo_mofox_path",
-    "adapter_path", "napcat_path", "venv_path", "mongodb_path", "webui_path",
+    "adapter_path", "adapter_mode", "napcat_path", "venv_path", "mongodb_path", "webui_path",
+    "mod_binding", "deployment_profile", "component_bindings", "template_inputs",
 }
 
 
-@router.post("/instances/{name}")
+@router.post("/instances/{name}", dependencies=[Depends(require_admin)])
 def update_instance(name: str, updates: Dict[str, Any]):
     """更新实例配置（仅允许白名单字段）"""
     config_manager.reload_if_changed()
@@ -162,7 +184,7 @@ def update_instance(name: str, updates: Dict[str, Any]):
     return {"status": "success", "message": f"实例 '{name}' 更新成功"}
 
 
-@router.post("/instances/{name}/open-config")
+@router.post("/instances/{name}/open-config", dependencies=[Depends(require_admin)])
 def open_instance_config(name: str):
     """打开实例的配置文件"""
     config_manager.reload_if_changed()
@@ -170,17 +192,37 @@ def open_instance_config(name: str):
     if name not in configs:
         raise HTTPException(404, f"配置集 '{name}' 未找到")
     cfg = configs[name]
+    publish_state = get_instance_publish_state(cfg)
+    if publish_state["is_published_template"] and not publish_state["published_active"]:
+        raise HTTPException(403, "该实例所属部署流已取消发布，不能打开配置")
+    if publish_state["is_published_template"] and publish_state["published_active"]:
+        return {"success": False, "use_template_stage": True, "serial_number": cfg.get("serial_number", "")}
     bot_path = _get_bot_root_path(cfg)
     if not bot_path or not os.path.isdir(bot_path):
         raise HTTPException(400, "Bot路径无效或不是目录")
 
     files_to_open = []
-    for f in [".env", os.path.join("config", "bot_config.toml"),
-              os.path.join("config", "model_config.toml")]:
+    normalized_bot_type = _normalize_bot_type(cfg.get("bot_type", "MaiBot"))
+    default_files = [
+        ".env",
+        os.path.join("config", "bot_config.toml"),
+        os.path.join("config", "model_config.toml"),
+    ]
+    if normalized_bot_type == "Neo-MoFox":
+        default_files = [
+            os.path.join("config", "core.toml"),
+            os.path.join("config", "model.toml"),
+        ]
+
+    for f in default_files:
         fp = os.path.realpath(os.path.join(bot_path, f))
         # 确保文件在 bot_path 内，防止路径遍历
         if fp.startswith(bot_path) and os.path.isfile(fp):
             files_to_open.append(fp)
+
+    adapter_config = _get_adapter_config_path(cfg, bot_path)
+    if adapter_config and adapter_config.startswith(bot_path) and os.path.isfile(adapter_config):
+        files_to_open.append(adapter_config)
 
     if not files_to_open:
         raise HTTPException(404, "未找到可打开的配置文件")
@@ -193,7 +235,7 @@ def open_instance_config(name: str):
     return {"success": True, "opened": len(files_to_open)}
 
 
-@router.post("/instances/{name}/open-folder")
+@router.post("/instances/{name}/open-folder", dependencies=[Depends(require_admin)])
 def open_instance_folder(name: str):
     """打开实例所在目录"""
     config_manager.reload_if_changed()
@@ -201,6 +243,9 @@ def open_instance_folder(name: str):
     if name not in configs:
         raise HTTPException(404, f"配置集 '{name}' 未找到")
     cfg = configs[name]
+    publish_state = get_instance_publish_state(cfg)
+    if publish_state["is_published_template"] and not publish_state["published_active"]:
+        raise HTTPException(403, "该实例所属部署流已取消发布，不能打开目录")
     bot_path = _get_bot_root_path(cfg)
     if not bot_path or not os.path.isdir(bot_path):
         raise HTTPException(400, "Bot路径无效或不是目录")
@@ -215,7 +260,7 @@ def get_p_config():
     return p_config_manager.config
 
 
-@router.post("/reload")
+@router.post("/reload", dependencies=[Depends(require_admin)])
 def reload_all():
     """强制重载所有配置文件"""
     config_manager.load()

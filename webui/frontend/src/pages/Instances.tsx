@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import GlassCard from '../components/ui/GlassCard'
+import AccessGuard from '../components/ui/AccessGuard'
 import Modal from '../components/ui/Modal'
 import { useNotification } from '../components/ui/Notification'
+import { useAccountSystem } from '../lib/account-system'
 
 interface Instance {
   serial: string
@@ -10,38 +12,58 @@ interface Instance {
   botType: string
   version: string
   qqAccount: string
+  adapterMode: string
+  installOptions: Record<string, any>
+  isPublishedTemplate?: boolean
+  publishedActive?: boolean
+  deploymentFlowName?: string
+  deploymentFlowSequence?: string
 }
+
+type BotType = 'MaiBot' | 'MoFox-Core' | 'Neo-MoFox'
 
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', 'Cascadia Code', monospace" }
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
-const valueFont = { fontSize: 25, ...monoFont, color: '#707070' }
+const valueFont = { fontSize: 25, ...monoFont, color: 'var(--mc-text-secondary)' }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
+const smallLabel = { fontSize: 22, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 
-const PRESETS: Record<string, { label: string; components: string[] }[]> = {
-  MoFox_bot: [
-    { label: '主程序（内置适配器）+WebUI', components: ['mai', 'webui'] },
-    { label: '主程序（内置适配器）+NapCatQQ+WebUI', components: ['mai', 'napcat', 'webui'] },
-    { label: '主程序+适配器+WebUI', components: ['mai', 'adapter', 'webui'] },
-    { label: '主程序+适配器+NapCatQQ+WebUI', components: ['mai', 'adapter', 'napcat', 'webui'] },
-  ],
+const PRESETS: Record<BotType, { label: string; components: string[] }[]> = {
   MaiBot: [
     { label: '主程序+适配器+控制面板', components: ['mai','adapter', 'webui'] },
     { label: '主程序+适配器+NapCat+控制面板', components: ['mai', 'adapter', 'napcat', 'webui'] },
-    ],
+  ],
+  'MoFox-Core': [
+    { label: '主程序（内置适配器）+WebUI', components: ['mai'] },
+    { label: '主程序（内置适配器）+NapCatQQ+WebUI', components: ['mai', 'napcat'] },
+  ],
+  'Neo-MoFox': [
+    { label: '主程序（内置适配器）+WebUI', components: ['mai'] },
+    { label: '主程序（内置适配器）+NapCatQQ+WebUI', components: ['mai', 'napcat'] },
+  ],
 }
 
-const ADVANCED_ITEMS: Record<string, { label: string; components: string[] }[]> = {
-  MoFox_bot: [
-    { label: '主程序+WebUI', components: ['mai', 'webui'] },
-    { label: '适配器', components: ['adapter'] },
-    { label: 'NapCatQQ', components: ['napcat'] },
-  ],
+const ADVANCED_ITEMS: Record<BotType, { label: string; components: string[] }[]> = {
   MaiBot: [
     { label: '主程序+WebUI', components: ['mai', 'webui'] },
     { label: '适配器', components: ['adapter'] },
     { label: 'NapCatQQ', components: ['napcat'] },
   ],
+  'MoFox-Core': [
+    { label: '主程序（内置适配器）+WebUI', components: ['mai'] },
+    { label: 'NapCatQQ', components: ['napcat'] },
+  ],
+  'Neo-MoFox': [
+    { label: '主程序（内置适配器）+WebUI', components: ['mai'] },
+    { label: 'NapCatQQ', components: ['napcat'] },
+  ],
+}
+
+function normalizeBotType(botType: string): BotType {
+  if (botType === 'MoFox_bot' || botType === 'MoFox-Core') return 'MoFox-Core'
+  if (botType === 'Neo-MoFox') return 'Neo-MoFox'
+  return 'MaiBot'
 }
 
 function formatUptime(seconds: number): string {
@@ -51,18 +73,138 @@ function formatUptime(seconds: number): string {
   return h > 0 ? `${h}h${m}m` : `${m}m`
 }
 
+function isVersionAtLeast(version: string, target: string): boolean {
+  const parse = (value: string) => {
+    const clean = value.trim().toLowerCase().replace(/^v/, '').split('-')[0]
+    const parts = clean.split('.').map(part => Number.parseInt(part, 10))
+    return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
+  }
+  const left = parse(version)
+  const right = parse(target)
+  for (let i = 0; i < 3; i += 1) {
+    if (left[i] > right[i]) return true
+    if (left[i] < right[i]) return false
+  }
+  return true
+}
+
+function isPluginAdapter(instance: Instance): boolean {
+  if (instance.adapterMode === 'plugin' || instance.installOptions?.adapter_mode === 'plugin') return true
+  const version = instance.version.trim().toLowerCase()
+  return normalizeBotType(instance.botType) === 'MaiBot' && (
+    version === 'main' ||
+    version === 'dev' ||
+    version === 'master' ||
+    isVersionAtLeast(version, '1.0.0')
+  )
+}
+
 function PillButton({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       className="h-[54px] px-[24px] rounded-[27px] cursor-pointer transition-all duration-300 shrink-0"
       style={{
-        background: selected ? 'rgba(255,255,255,0.6)' : 'transparent',
-        border: '2px solid rgba(0,0,0,0.5)',
+        background: selected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+        border: '2px solid var(--mc-choice-selected-border)',
       }}
     >
       <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative', top: 2 }}>{label}</span>
     </button>
+  )
+}
+
+function useTemplateStageProgress(taskId: string | null) {
+  const [progress, setProgress] = useState<any>(null)
+  useEffect(() => {
+    if (!taskId) { setProgress(null); return }
+    const timer = setInterval(() => {
+      fetch(`/api/deployment-mod/progress/${taskId}`, { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => { if (data.success !== false) setProgress(data) })
+        .catch(() => {})
+    }, 1500)
+    return () => clearInterval(timer)
+  }, [taskId])
+  return progress
+}
+
+function PublishedLaunchPanel({ instance }: { instance: Instance }) {
+  const { notify } = useNotification()
+  const [taskId, setTaskId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const progress = useTemplateStageProgress(taskId)
+  const inactive = instance.publishedActive === false
+  const done = progress?.status === 'completed' || progress?.status === 'failed'
+
+  const handleLaunch = async () => {
+    if (inactive) return
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/deployment-mod/instances/${encodeURIComponent(instance.serial)}/stage`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage: 'launch', user_inputs: {} }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) throw new Error(data.detail || data.message || '启动失败')
+      setTaskId(data.task_id)
+      notify('启动任务已提交', 'success')
+    } catch (err: any) {
+      notify(err?.message || '启动失败', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <GlassCard key={instance.serial}>
+      <div className="p-[28px] flex flex-col h-full gap-[18px]" style={{ opacity: inactive ? 0.55 : 1 }}>
+        <h2 className="text-black animate-fade-slide-up" style={sectionTitle}>部署流实例</h2>
+        <div className="space-y-[4px]">
+          {[
+            ['部署流', instance.deploymentFlowName || '-'],
+            ['实例昵称', instance.nickname],
+            ['实例序列号', instance.serial],
+            ['实例绝对序列号', String(instance.absoluteSerial)],
+            ['当前版本', instance.version || '-'],
+          ].map(([label, value], index) => (
+            <div key={label} className="flex items-baseline gap-[16px] animate-fade-slide-up" style={{ animationDelay: `${index * 45}ms` }}>
+              <span className="text-black shrink-0" style={labelFont}>{label}</span>
+              <span style={valueFont}>{value}</span>
+            </div>
+          ))}
+        </div>
+        {inactive ? (
+          <div className="rounded-[18px] p-[18px]" style={{ background: 'rgba(120,120,120,0.16)', border: '1px solid var(--mc-border-soft)' }}>
+            <span style={{ ...monoFont, fontSize: 20, color: 'var(--mc-text-secondary)' }}>该部署流已取消发布，实例已灰化，不能启动。</span>
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={handleLaunch}
+              disabled={loading}
+              className="self-start h-[58px] px-[36px] rounded-[29px] cursor-pointer transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+              style={{ background: 'rgba(74,222,128,0.35)', border: '2px solid var(--mc-border-strong)' }}
+            >
+              <span style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>{loading ? '启动中...' : '按部署流启动'}</span>
+            </button>
+            {taskId && (
+              <div className="rounded-[18px] p-[18px] flex flex-col gap-[8px]" style={{ background: 'var(--mc-panel-bg-soft)', border: '1px solid var(--mc-border-soft)' }}>
+                <span style={{ ...smallLabel, color: 'var(--mc-text-primary)' }}>{done ? (progress?.status === 'completed' ? '启动完成' : '启动失败') : '启动进行中'}</span>
+                <span style={{ ...monoFont, fontSize: 18, color: 'var(--mc-text-secondary)' }}>{progress?.message || '等待后端返回结果...'}</span>
+                <div className="max-h-[220px] overflow-y-auto custom-scrollbar">
+                  {(progress?.logs || []).slice(-80).map((line: string, index: number) => (
+                    <div key={index} style={{ ...monoFont, fontSize: 14, color: 'var(--mc-text-muted)' }}>{line}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </GlassCard>
   )
 }
 
@@ -78,8 +220,16 @@ function LaunchPanel({ instance }: { instance: Instance }) {
   const [pendingComponents, setPendingComponents] = useState<string[]>([])
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const presets = PRESETS[instance.botType] ?? PRESETS.MaiBot
-  const advancedItems = ADVANCED_ITEMS[instance.botType] ?? ADVANCED_ITEMS.MaiBot
+  const normalizedBotType = normalizeBotType(instance.botType)
+  const adapterIsPlugin = isPluginAdapter(instance)
+  const presets = PRESETS[normalizedBotType].map(p => ({
+    ...p,
+    label: adapterIsPlugin ? p.label.replace('+适配器', '') : p.label,
+    components: adapterIsPlugin ? p.components.filter(c => c !== 'adapter') : p.components,
+  }))
+  const advancedItems = ADVANCED_ITEMS[normalizedBotType].filter(item => (
+    !adapterIsPlugin || !item.components.includes('adapter')
+  ))
 
   useEffect(() => {
     setPresetIdx(null)
@@ -194,7 +344,7 @@ function LaunchPanel({ instance }: { instance: Instance }) {
   }
 
   const leftData = [
-    ['实例类型', instance.botType],
+    ['实例类型', normalizedBotType],
     ['实例昵称', instance.nickname],
     ['实例序列号', instance.serial],
     ['实例绝对序列号', String(instance.absoluteSerial)],
@@ -325,6 +475,7 @@ function LaunchPanel({ instance }: { instance: Instance }) {
 }
 
 export default function Instances() {
+  const { can } = useAccountSystem()
   const [instances, setInstances] = useState<Instance[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -340,9 +491,15 @@ export default function Instances() {
           serial: cfg.serial_number,
           nickname: cfg.nickname || cfg.serial_number,
           absoluteSerial: cfg.absolute_serial ?? 0,
-          botType: cfg.bot_type || 'MaiBot',
+          botType: normalizeBotType(cfg.bot_type || 'MaiBot'),
           version: cfg.version || '',
           qqAccount: cfg.qq_account || '',
+          adapterMode: cfg.adapter_mode || cfg.install_options?.adapter_mode || '',
+          installOptions: cfg.install_options || {},
+          isPublishedTemplate: Boolean(cfg.is_published_template),
+          publishedActive: cfg.published_active !== false,
+          deploymentFlowName: cfg.deployment_flow_name || '',
+          deploymentFlowSequence: cfg.deployment_flow_sequence || '',
         }))
         setInstances(list)
       })
@@ -357,17 +514,18 @@ export default function Instances() {
   })
 
   const selectedInstance = instances.find(i => i.serial === selected)
+  const canControlInstances = can('instances.control')
 
   return (
-    <div className="flex flex-col p-6 h-full">
+    <div className="flex flex-col p-6 h-full overflow-hidden">
       {/* 页面标题 */}
       <h1 className="text-black shrink-0 mb-[16px] animate-card-enter" style={pageTitleStyle}>实例启动/多开</h1>
 
       {/* 卡片区域 */}
-      <div className="flex gap-6 flex-1 min-h-0">
+      <div className="flex gap-6 flex-1 min-h-0 overflow-hidden">
         {/* 左侧：实例选择卡片 */}
-        <div className="w-[425px] shrink-0 animate-card-enter">
-          <GlassCard>
+        <div className="w-[425px] h-full min-h-0 shrink-0 animate-card-enter">
+          <GlassCard bgOpacity={0.62}>
             <div className="p-[24px] flex flex-col h-full">
               <h2 className="text-black pb-[12px]" style={sectionTitle}>选择实例</h2>
 
@@ -388,17 +546,18 @@ export default function Instances() {
               <div className="flex-1 overflow-y-auto mt-[12px] px-[4px]">
                 {loading ? (
                   <div className="flex items-center justify-center h-[120px] gap-[10px] animate-fade-in">
-                    <div className="rounded-full animate-spin" style={{ width: 20, height: 20, border: '3px solid rgba(0,0,0,0.15)', borderTopColor: 'rgba(0,0,0,0.5)' }} />
+                  <div className="rounded-full animate-spin" style={{ width: 20, height: 20, border: '3px solid var(--mc-loading-ring)', borderTopColor: 'var(--mc-loading-ring-active)' }} />
                     <span className="text-black/40" style={monoFont}>正在加载实例列表...</span>
                   </div>
                 ) : filtered.length === 0 ? (
-                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed border-[#9e9e9e] animate-fade-in">
-                    <span className="text-[#9e9e9e] font-semibold text-base" style={monoFont}>no instance</span>
+                  <div className="flex items-center justify-center h-[120px] rounded-[20px] border-3 border-dashed animate-fade-in" style={{ borderColor: 'var(--mc-empty-border)' }}>
+                    <span className="font-semibold text-base" style={{ ...monoFont, color: 'var(--mc-empty-text)' }}>no instance</span>
                   </div>
                 ) : (
                   filtered.map((inst, i) => {
                     const isSelected = inst.serial === selected
                     const label = `${inst.nickname}|${inst.serial}|${inst.absoluteSerial}`
+                    const inactive = inst.isPublishedTemplate && inst.publishedActive === false
                     return (
                       <div key={inst.serial} className="animate-fade-slide-up" style={{ animationDelay: `${i * 40}ms`, animationFillMode: 'backwards' }}>
                         {isSelected && i > 0 && <div className="h-[6px]" />}
@@ -409,16 +568,22 @@ export default function Instances() {
                             height: 54,
                             padding: isSelected ? '0 20px' : '0 4px',
                             borderRadius: isSelected ? 27 : 6,
-                            background: isSelected ? 'rgba(255,255,255,0.6)' : 'transparent',
-                            border: isSelected ? '2px solid rgba(0,0,0,0.5)' : '2px solid transparent',
+                            background: isSelected ? 'var(--mc-choice-selected-bg)' : 'transparent',
+                            border: isSelected ? '2px solid var(--mc-choice-selected-border)' : '2px solid transparent',
+                            opacity: inactive ? 0.45 : 1,
                           }}
                         >
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
                           <span className="truncate shrink-0" style={{ ...monoFont, fontSize: 30 }}>{label}</span>
+                          {inst.isPublishedTemplate && (
+                            <span className="ml-[8px] shrink-0 rounded-[8px] px-[8px] py-[2px]" style={{ ...monoFont, fontSize: 14, background: inactive ? 'rgba(120,120,120,0.18)' : 'rgba(34,197,94,0.18)', color: 'var(--mc-text-secondary)' }}>
+                              {inactive ? '已灰化' : '部署流'}
+                            </span>
+                          )}
                           <div className="transition-all duration-300" style={{ flex: isSelected ? 1 : 0 }} />
                         </button>
                         {isSelected && i < filtered.length - 1 && <div className="h-[6px]" />}
-                        {!isSelected && i < filtered.length - 1 && <hr className="border-[#707070]" />}
+                        {!isSelected && i < filtered.length - 1 && <hr style={{ borderColor: 'var(--mc-divider-strong)' }} />}
                       </div>
                     )
                   })
@@ -429,16 +594,22 @@ export default function Instances() {
         </div>
 
         {/* 右侧：操作面板 */}
-        <div className="flex-1 min-w-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
-          {selectedInstance ? (
-            <LaunchPanel instance={selectedInstance} />
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
-                请选择一个实例
-              </span>
-            </div>
-          )}
+        <div className="flex-1 min-w-0 h-full min-h-0 animate-card-enter" style={{ animationDelay: '80ms' }}>
+          <AccessGuard
+            allowed={canControlInstances}
+            className="h-full"
+            detail="当前账号仅可查看实例列表，不能执行启动、停止与高级启动操作。"
+          >
+            {selectedInstance ? (
+              selectedInstance.isPublishedTemplate ? <PublishedLaunchPanel instance={selectedInstance} /> : <LaunchPanel instance={selectedInstance} />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <span className="text-black/20" style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+                  请选择一个实例
+                </span>
+              </div>
+            )}
+          </AccessGuard>
         </div>
       </div>
     </div>

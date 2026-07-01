@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Tab, Page } from '../../types'
+import type { AccountUser } from '../../lib/account-system'
+import { getAvatarFallback, ROLE_LABELS } from '../../lib/account-system'
 import {
   HomeIcon, InstancesIcon, ConfigIcon, KnowledgeIcon, DbMigrationIcon,
   PluginsIcon, DeployIcon, StatusIcon, LogsIcon, MiscIcon, SettingsIcon
@@ -12,6 +14,8 @@ const pageIcons: Record<Page, React.FC<React.SVGProps<SVGSVGElement>>> = {
   'db-migration': DbMigrationIcon, plugins: PluginsIcon, deploy: DeployIcon,
   status: StatusIcon, logs: LogsIcon, misc: MiscIcon, settings: SettingsIcon,
   'component-download': MiscIcon, // 使用 MiscIcon 作为临时图标
+  'template-workbench': DeployIcon,
+  'workbench-canvas': DeployIcon,
 }
 
 interface HeaderProps {
@@ -24,6 +28,7 @@ interface HeaderProps {
   onReorderTabs: (from: number, to: number) => void
   onAddTab: () => void
   onLogout: () => void
+  currentUser: AccountUser
 }
 
 function CloseIcon({ className }: { className?: string }) {
@@ -40,7 +45,8 @@ function ScrollArrow({ direction, onClick }: { direction: 'left' | 'right'; onCl
     <button
       onClick={onClick}
       title={direction === 'left' ? '向左滚动' : '向右滚动'}
-      className="flex items-center justify-center w-[28px] h-[28px] text-black/40 hover:text-black/70 transition-colors cursor-pointer shrink-0 z-20"
+      className="flex items-center justify-center w-[28px] h-[28px] transition-colors cursor-pointer shrink-0 z-20"
+      style={{ color: 'var(--mc-text-muted)' }}
     >
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
         <path
@@ -52,7 +58,7 @@ function ScrollArrow({ direction, onClick }: { direction: 'left' | 'right'; onCl
   )
 }
 
-export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onCloseOtherTabs, onCloseRightTabs, onReorderTabs, onAddTab, onLogout }: HeaderProps) {
+export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onCloseOtherTabs, onCloseRightTabs, onReorderTabs, onAddTab, onLogout, currentUser }: HeaderProps) {
   const [closingId, setClosingId] = useState<string | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -137,13 +143,14 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
   }
 
   const atLimit = tabs.length >= MAX_TABS
+  const avatarFallback = getAvatarFallback(currentUser.name, currentUser.email)
 
   return (
-    <header className="h-[87px] flex items-center px-[8px] border-b border-[#707070] shrink-0 gap-[10px]">
+    <header className="h-[87px] flex items-center px-[8px] shrink-0 gap-[10px]" style={{ borderBottom: '1px solid var(--mc-divider)' }}>
       {/* 标签栏主胶囊容器：添加 overflow-hidden 以修复子元素溢出圆角的问题 */}
       <div
-        className="relative flex items-center h-[71px] min-w-0 overflow-hidden bg-white/5"
-        style={{ borderRadius: 35.5, border: '2px solid #000', boxShadow: '5px 5px 4px rgba(0,0,0,0.161)' }}
+        className="relative flex items-center h-[71px] min-w-0 overflow-hidden"
+        style={{ borderRadius: 35.5, border: '2px solid var(--mc-border-strong)', boxShadow: '5px 5px 4px var(--mc-shadow-soft)', backgroundColor: 'var(--mc-panel-bg-soft)' }}
       >
         {/* 左侧：滚动区域 Wrapper (占据剩余空间) */}
         <div className="relative h-full min-w-0 overflow-hidden flex items-center">
@@ -151,7 +158,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
           {/* 左滚动箭头遮罩 */}
           <div 
             className={`absolute left-0 z-10 flex items-center h-full pl-[4px] pr-[12px] transition-opacity duration-200 pointer-events-none ${canScrollLeft ? 'opacity-100' : 'opacity-0'}`}
-            style={{ background: 'linear-gradient(to right, rgba(255,255,255,0.95) 40%, transparent)' }}
+            style={{ background: 'linear-gradient(to right, var(--mc-header-fade) 40%, transparent)' }}
           >
             <div className="pointer-events-auto">
               <ScrollArrow direction="left" onClick={() => scroll(-1)} />
@@ -174,7 +181,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
               return (
                 <div key={tab.id} className="flex items-center shrink-0">
                   {/* 分隔线：除了第一个元素，或者当前是激活态，或者前一个是激活态时需要考虑隐藏逻辑，这里简化保留原逻辑 */}
-                  {i > 0 && <div className="w-[3px] h-[34px] bg-black/60 rounded-full mx-[4px] shrink-0" />}
+                  {i > 0 && <div className="w-[3px] h-[34px] rounded-full mx-[4px] shrink-0" style={{ backgroundColor: 'var(--mc-divider-strong)' }} />}
                   
                   {/* 拖拽指示器 */}
                   {showDropLeft && <div className="w-[3px] h-[40px] bg-blue-500 rounded-full mx-[2px] shrink-0 transition-all" />}
@@ -190,8 +197,8 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
                     className={`group flex items-center gap-[8px] h-[61px] px-[16px] cursor-pointer select-none shrink-0 transition-all duration-200 backdrop-blur-[4px] ${closing ? '' : 'animate-tab-enter'}`}
                     style={{
                       borderRadius: 30.5,
-                      border: active ? '5px solid rgba(0,0,0,0.5)' : `1px solid ${dragging ? 'transparent' : '#000'}`,
-                      background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
+                      border: active ? '5px solid var(--mc-border-strong)' : `1px solid ${dragging ? 'transparent' : 'var(--mc-border-strong)'}`,
+                      background: active ? 'var(--mc-sidebar-active-bg)' : 'transparent',
                       overflow: 'hidden',
                       opacity: dragging ? 0.4 : 1,
                       maxWidth: 220, 
@@ -200,10 +207,10 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
                       ...(closing ? { maxWidth: 0, padding: 0, minWidth: 0, opacity: 0, margin: 0, border: 0 } : {}),
                     }}
                   >
-                    <Icon className="text-black shrink-0" style={{ width: 28, height: 28 }} />
+                    <Icon className="shrink-0" style={{ width: 28, height: 28, color: 'var(--mc-text-primary)' }} />
                     <span
-                      className="text-black whitespace-nowrap overflow-hidden text-ellipsis"
-                      style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 600, marginTop: 4 }}
+                      className="whitespace-nowrap overflow-hidden text-ellipsis"
+                      style={{ color: 'var(--mc-text-primary)', fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 600, marginTop: 4 }}
                     >
                       {tab.label}
                     </span>
@@ -211,7 +218,8 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
                       <button
                         onClick={(e) => { e.stopPropagation(); handleClose(tab.id) }}
                         title="关闭标签页"
-                        className={`ml-[2px] w-[20px] h-[20px] flex items-center justify-center text-black/40 hover:text-black/70 transition-all cursor-pointer shrink-0 ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                        className={`ml-[2px] w-[20px] h-[20px] flex items-center justify-center transition-all cursor-pointer shrink-0 ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                        style={{ color: 'var(--mc-text-muted)' }}
                       >
                         <CloseIcon />
                       </button>
@@ -227,7 +235,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
           {/* 右滚动箭头遮罩 (在滚动区域内部，但在内容之上) */}
           <div 
             className={`absolute right-0 z-10 flex items-center h-full pr-[4px] pl-[12px] transition-opacity duration-200 pointer-events-none ${canScrollRight ? 'opacity-100' : 'opacity-0'}`}
-            style={{ background: 'linear-gradient(to left, rgba(255,255,255,0.95) 40%, transparent)' }}
+            style={{ background: 'linear-gradient(to left, var(--mc-header-fade) 40%, transparent)' }}
           >
             <div className="pointer-events-auto">
               <ScrollArrow direction="right" onClick={() => scroll(1)} />
@@ -237,7 +245,7 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
 
         {/* 右侧：固定区域（分隔线 + 新增按钮）- 不随标签滚动 */}
         <div className="flex items-center shrink-0 pr-[16px] pl-[4px] bg-transparent z-20 relative">
-          <div className="w-[3px] h-[34px] bg-black/60 rounded-full mx-[4px]" />
+          <div className="w-[3px] h-[34px] rounded-full mx-[4px]" style={{ backgroundColor: 'var(--mc-divider-strong)' }} />
           <button
             onClick={atLimit ? undefined : onAddTab}
             className={`mx-[4px] w-[22px] h-[22px] flex items-center justify-center transition-opacity cursor-pointer ${atLimit ? 'opacity-20 cursor-not-allowed' : 'opacity-60 hover:opacity-80'}`}
@@ -249,25 +257,63 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
         </div>
       </div>
 
-      {/* 退出按钮 */}
-      <button
-        onClick={onLogout}
-        className="ml-auto shrink-0 cursor-pointer text-black/50 hover:text-black/80 hover:bg-black/5 transition-all select-none"
+      <div
+        className="ml-auto shrink-0 flex items-center gap-[12px] px-[14px] py-[8px]"
         style={{
-          fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
-          border: '2px solid #000', borderRadius: 30, padding: '8px 20px',
-          boxShadow: '5px 5px 4px rgba(0,0,0,0.161)',
+          border: '2px solid var(--mc-border-strong)',
+          borderRadius: 30,
+          boxShadow: '5px 5px 4px var(--mc-shadow-soft)',
+          backgroundColor: 'var(--mc-panel-bg-soft)',
         }}
       >
-        退出
-      </button>
+        <div
+          className="rounded-full overflow-hidden flex items-center justify-center shrink-0"
+          style={{
+            width: 46,
+            height: 46,
+            border: '2px solid var(--mc-border-strong)',
+            backgroundColor: 'rgba(255,255,255,0.18)',
+          }}
+        >
+          {currentUser.avatar ? (
+            <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+          ) : (
+            <span style={{ fontSize: 18, fontFamily: "'Ubuntu', 'HarmonyOS Sans SC', monospace", color: 'var(--mc-text-primary)' }}>
+              {avatarFallback}
+            </span>
+          )}
+        </div>
+        <div className="leading-tight min-w-0">
+          <div className="truncate" style={{ color: 'var(--mc-text-primary)', fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
+            {currentUser.name}
+          </div>
+          <div className="truncate" style={{ color: 'var(--mc-text-muted)', fontSize: 13, fontFamily: "'Ubuntu', 'HarmonyOS Sans SC', monospace" }}>
+            {ROLE_LABELS[currentUser.role]} · {currentUser.email}
+          </div>
+        </div>
+        <button
+          onClick={onLogout}
+          className="shrink-0 cursor-pointer transition-all select-none"
+          style={{
+            color: 'var(--mc-text-muted)',
+            fontSize: 18,
+            fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
+            border: '2px solid var(--mc-border-strong)',
+            borderRadius: 24,
+            padding: '8px 18px',
+            backgroundColor: 'rgba(255,255,255,0.08)',
+          }}
+        >
+          退出
+        </button>
+      </div>
 
       {/* 右键菜单 */}
       {contextMenu && (
         <div
           ref={menuRef}
-          className="fixed z-50 backdrop-blur-[20px] bg-white/90 border-2 border-black/10 rounded-[16px] py-[6px] shadow-xl min-w-[160px]"
-          style={{ left: Math.min(contextMenu.x, window.innerWidth - 180), top: Math.min(contextMenu.y, window.innerHeight - 130) }}
+          className="fixed z-50 backdrop-blur-[20px] rounded-[16px] py-[6px] shadow-xl min-w-[160px]"
+          style={{ left: Math.min(contextMenu.x, window.innerWidth - 180), top: Math.min(contextMenu.y, window.innerHeight - 130), backgroundColor: 'var(--mc-panel-solid)', border: '2px solid var(--mc-border-soft)' }}
         >
           {[
             { label: '关闭当前标签', action: () => { handleClose(contextMenu.tabId); setContextMenu(null) }, disabled: tabs.length <= 1 },
@@ -277,8 +323,8 @@ export default function Header({ tabs, activeTabId, onSelectTab, onCloseTab, onC
             <button
               key={item.label}
               onClick={item.disabled ? undefined : item.action}
-              className={`block w-full text-left px-[16px] py-[8px] whitespace-nowrap transition-colors ${item.disabled ? 'text-black/30 cursor-not-allowed' : 'text-black/80 hover:bg-black/10 cursor-pointer'}`}
-              style={{ fontSize: 16, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
+              className={`block w-full text-left px-[16px] py-[8px] whitespace-nowrap transition-colors ${item.disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+              style={{ color: item.disabled ? 'var(--mc-text-faint)' : 'var(--mc-text-secondary)', fontSize: 16, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
             >
               {item.label}
             </button>

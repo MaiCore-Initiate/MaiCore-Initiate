@@ -1,16 +1,20 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import GlassCard from '../components/ui/GlassCard'
+import AccessGuard from '../components/ui/AccessGuard'
+import AccountManagementPanel from '../components/auth/AccountManagementPanel'
 import { useNotification } from '../components/ui/Notification'
-import { useBgContext } from '../components/background/DynamicBackground'
+import { resolveOverlayColor, useBgContext } from '../components/background/DynamicBackground'
 import type { BgSettings } from '../components/background/DynamicBackground'
+import { useTheme, type ThemeMode } from '../components/theme/ThemeProvider'
+import { useAccountSystem } from '../lib/account-system'
 
 const labelFont = { fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const pageTitleStyle = { fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.37))' }
 const sectionTitle = { fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
 const btnFont = { fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", position: 'relative' as const, top: 2 }
 const pillShadow = "absolute inset-0 rounded-[27px] pointer-events-none"
-const pillShadowStyle = { border: '2px solid rgba(0,0,0,0.5)', boxShadow: '2px 3px 6px rgba(0,0,0,0.15)' }
+const pillShadowStyle = { border: '2px solid var(--mc-border-strong)', boxShadow: '2px 3px 6px var(--mc-shadow-soft)' }
 const monoFont = { fontFamily: "'Ubuntu','HarmonyOS Sans SC', monospace" }
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -85,7 +89,7 @@ function ColorPickerPopup({ color, onChange, onClose, anchorRef }: { color: stri
 
   return createPortal(
     <div ref={popupRef} className="fixed z-[9999] rounded-[20px] p-[20px] space-y-[12px]"
-      style={{ background: 'rgba(255,255,255,0.95)', border: '2px solid rgba(0,0,0,0.3)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', width: 240, top: pos.top, left: pos.left }}>
+      style={{ backgroundColor: 'var(--mc-panel-solid)', border: '2px solid var(--mc-border-soft)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', width: 240, top: pos.top, left: pos.left }}>
       {/* Color preview + native picker trigger */}
       <div className="flex items-center gap-[12px]">
         <label className="relative cursor-pointer shrink-0 block overflow-hidden rounded-[12px] border-2 border-black/20" style={{ width: 60, height: 60 }}>
@@ -108,7 +112,7 @@ function ColorPickerPopup({ color, onChange, onClose, anchorRef }: { color: stri
         </div>
       </div>
       {/* Preview bar */}
-      <div className="rounded-[8px] h-[24px]" style={{ background: `rgb(${rgb})`, border: '1px solid rgba(0,0,0,0.15)' }} />
+      <div className="rounded-[8px] h-[24px]" style={{ background: `rgb(${rgb})`, border: '1px solid var(--mc-border-soft)' }} />
     </div>,
     document.body
   )
@@ -498,11 +502,10 @@ function LLMConfigSection() {
         <button
           onClick={saveLLMConfig}
           disabled={saving}
-          className="relative rounded-[27px] px-[40px] py-[12px] bg-gradient-to-br from-blue-400 to-blue-600 text-white hover:from-blue-500 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          style={btnFont}
+          className="relative rounded-[27px] px-[30px] py-[10px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <div className={pillShadow} style={pillShadowStyle} />
-          {saving ? '保存中...' : '保存配置'}
+          <span style={btnFont} className="text-black/70">{saving ? '保存中...' : '保存配置'}</span>
         </button>
       </div>
     </div>
@@ -512,6 +515,8 @@ function LLMConfigSection() {
 export default function Settings() {
   const { notify } = useNotification()
   const { settings: bgSettings, refreshFiles, refreshSettings } = useBgContext()
+  const { mode, setMode, resolvedTheme } = useTheme()
+  const { currentUser, appearancePolicy } = useAccountSystem()
 
   const [pConfig, setPConfig] = useState<Record<string, any>>({})
   const [pDirty, setPDirty] = useState<Record<string, any>>({})
@@ -672,6 +677,17 @@ export default function Settings() {
     '一律关闭': 'terminate',
     '一律保留': 'keep',
   }
+  const THEME_MODE_OPTIONS = ['跟随系统', '浅色', '暗色']
+  const THEME_MODE_MAP: Record<ThemeMode, string> = {
+    system: '跟随系统',
+    light: '浅色',
+    dark: '暗色',
+  }
+  const THEME_MODE_REVERSE_MAP: Record<string, ThemeMode> = {
+    '跟随系统': 'system',
+    '浅色': 'light',
+    '暗色': 'dark',
+  }
   const getExitActionDisplay = () => {
     const val = getVal('on_exit.process_action') || 'none'
     return EXIT_ACTION_MAP[val] || '无操作'
@@ -679,6 +695,12 @@ export default function Settings() {
   const handleExitActionChange = (display: string) => {
     setVal('on_exit.process_action', EXIT_ACTION_REVERSE_MAP[display])
   }
+  const handleThemeModeChange = (display: string) => {
+    const next = THEME_MODE_REVERSE_MAP[display]
+    if (next) setMode(next)
+  }
+  const isAdmin = currentUser?.role === 'admin'
+  const canCustomizeAppearance = isAdmin || appearancePolicy.allowCustomAppearance
 
   // 滑块选择器组件
   const ActionSlider = ({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) => {
@@ -696,10 +718,10 @@ export default function Settings() {
     }, [value, options])
 
     return (
-      <div ref={containerRef} className="relative inline-flex items-center h-[40px] rounded-[20px] border-2 border-black/50 p-[4px]" style={{ filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.1))' }}>
-        <div className="absolute h-[32px] rounded-[16px] bg-white border border-black/50 transition-all duration-300 ease-out" style={{ width: sliderStyle.width, left: sliderStyle.left, top: 2, filter: 'drop-shadow(2px 2px 2px rgba(0,0,0,0.1))' }} />
+      <div ref={containerRef} className="relative inline-flex items-center h-[40px] rounded-[20px] p-[4px]" style={{ border: '2px solid var(--mc-border-strong)', filter: 'drop-shadow(2px 2px 2px var(--mc-shadow-soft))' }}>
+        <div className="absolute h-[32px] rounded-[16px] transition-all duration-300 ease-out" style={{ width: sliderStyle.width, left: sliderStyle.left, top: 2, backgroundColor: 'var(--mc-panel-solid)', border: '1px solid var(--mc-border-strong)', filter: 'drop-shadow(2px 2px 2px var(--mc-shadow-soft))' }} />
         {options.map(opt => (
-          <button key={opt} onClick={() => onChange(opt)} className="relative z-10 h-[32px] px-[12px] cursor-pointer bg-transparent border-none transition-colors duration-200" style={{ fontSize: 16, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: value === opt ? '#000' : 'rgba(0,0,0,0.4)' }}>
+          <button key={opt} onClick={() => onChange(opt)} className="relative z-10 h-[32px] px-[12px] cursor-pointer bg-transparent border-none transition-colors duration-200" style={{ fontSize: 16, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", color: value === opt ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }}>
             {opt}
           </button>
         ))}
@@ -723,6 +745,8 @@ export default function Settings() {
     </div>
   )
 
+  const resolvedOverlayColor = resolveOverlayColor(localBg, resolvedTheme)
+
 // ── Render ──
   return (
     <div className="p-[40px] space-y-[30px]">
@@ -731,80 +755,98 @@ export default function Settings() {
       {/* 板块1：主程序配置 */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '60ms' }}>
       <GlassCard>
-        <div className="p-[30px]">
-          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>主程序配置</h2>
-          <div className="space-y-[4px]">
-            <ConfigRow label="日志保留天数" configKey="logging.log_rotation_days" type="number" />
-            <ConfigRow label="最大版本显示数" configKey="display.max_versions_display" type="number" />
-            <ConfigRow label="退出时进程处理" configKey="on_exit.process_action" type="exit_action" />
-            <ConfigRow label="Windows通知中心" configKey="notifications.windows_center_enabled" type="toggle" />
-            <ConfigRow label="最小化到托盘" configKey="ui.minimize_to_tray" type="toggle" />
-            <div className="flex items-center justify-between py-[10px]">
-              <span style={labelFont} className="text-black/70">WebShell 使用 PowerShell Profile（Oh-My-Posh）</span>
-              <Toggle
-                checked={webshellUseProfile}
-                onChange={v => {
-                  setWebshellUseProfile(v)
-                  setWebuiDirty(true)
-                }}
-              />
+        <AccessGuard allowed={!!isAdmin} detail="主程序配置属于系统级控制面板，仅管理员可修改。">
+          <div className="p-[30px]">
+            <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>主程序配置</h2>
+            <div className="space-y-[4px]">
+              <ConfigRow label="日志保留天数" configKey="logging.log_rotation_days" type="number" />
+              <ConfigRow label="最大版本显示数" configKey="display.max_versions_display" type="number" />
+              <ConfigRow label="退出时进程处理" configKey="on_exit.process_action" type="exit_action" />
+              <ConfigRow label="Windows通知中心" configKey="notifications.windows_center_enabled" type="toggle" />
+              <ConfigRow label="最小化到托盘" configKey="ui.minimize_to_tray" type="toggle" />
+              <div className="flex items-center justify-between py-[10px]">
+                <span style={labelFont} className="text-black/70">WebShell 使用 PowerShell Profile（Oh-My-Posh）</span>
+                <Toggle
+                  checked={webshellUseProfile}
+                  onChange={v => {
+                    setWebshellUseProfile(v)
+                    setWebuiDirty(true)
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end mt-[20px]">
+              <button onClick={savePConfig} disabled={pSaving || (Object.keys(pDirty).length === 0 && !webuiDirty)}
+                className="relative rounded-[27px] px-[30px] py-[10px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                <div className={pillShadow} style={pillShadowStyle} />
+                <span style={btnFont} className="text-black/70">{pSaving ? '保存中...' : '保存配置'}</span>
+              </button>
             </div>
           </div>
-          <div className="flex justify-end mt-[20px]">
-            <button onClick={savePConfig} disabled={pSaving || (Object.keys(pDirty).length === 0 && !webuiDirty)}
-              className="relative rounded-[27px] px-[30px] py-[10px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-              <div className={pillShadow} style={pillShadowStyle} />
-              <span style={btnFont} className="text-black/70">{pSaving ? '保存中...' : '保存配置'}</span>
-            </button>
-          </div>
-        </div>
+        </AccessGuard>
       </GlassCard>
       </div>
 
       {/* 板块2：安全配置 */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '120ms' }}>
       <GlassCard>
-        <div className="p-[30px]">
-          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>安全配置</h2>
-          <div className="space-y-[16px]">
-            <div>
-              <span style={labelFont} className="text-black/70">当前Token</span>
-              <div className="flex items-center gap-[12px] mt-[8px]">
-                <div className="flex-1 bg-white/30 border-2 border-black/30 rounded-[15px] px-4 py-[6px] text-black/70 cursor-pointer select-all"
-                  style={{ ...monoFont, fontSize: 22, minHeight: 40 }} onClick={() => setShowToken(!showToken)}>
-                  {showToken ? currentToken : '••••••••••••••••'}
+        <AccessGuard allowed={!!isAdmin} detail="系统 Token 与安全配置属于管理员专属能力。">
+          <div className="p-[30px]">
+            <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>安全配置</h2>
+            <div className="space-y-[16px]">
+              <div>
+                <span style={labelFont} className="text-black/70">当前Token</span>
+                <div className="flex items-center gap-[12px] mt-[8px]">
+                  <div className="flex-1 bg-white/30 border-2 border-black/30 rounded-[15px] px-4 py-[6px] text-black/70 cursor-pointer select-all"
+                    style={{ ...monoFont, fontSize: 22, minHeight: 40 }} onClick={() => setShowToken(!showToken)}>
+                    {showToken ? currentToken : '••••••••••••••••'}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <span style={labelFont} className="text-black/70">更改Token</span>
+                <div className="flex items-center gap-[12px] mt-[8px]">
+                  <input type="text" value={newToken} onChange={e => setNewToken(e.target.value)}
+                    placeholder="输入新Token（留空自动生成）"
+                    className="flex-1 bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 placeholder-black/30 focus:outline-none focus:border-black/50"
+                    style={{ ...monoFont, fontSize: 22, height: 40 }} />
+                  <button onClick={() => setNewToken(crypto.randomUUID().replace(/-/g, ''))}
+                    className="relative rounded-[27px] px-[20px] py-[6px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer">
+                    <div className={pillShadow} style={pillShadowStyle} />
+                    <span style={{ ...btnFont, fontSize: 22 }} className="text-black/70">随机生成</span>
+                  </button>
+                  <button onClick={saveToken}
+                    className="relative rounded-[27px] px-[20px] py-[6px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer">
+                    <div className={pillShadow} style={pillShadowStyle} />
+                    <span style={{ ...btnFont, fontSize: 22 }} className="text-black/70">保存</span>
+                  </button>
                 </div>
               </div>
             </div>
-            <div>
-              <span style={labelFont} className="text-black/70">更改Token</span>
-              <div className="flex items-center gap-[12px] mt-[8px]">
-                <input type="text" value={newToken} onChange={e => setNewToken(e.target.value)}
-                  placeholder="输入新Token（留空自动生成）"
-                  className="flex-1 bg-white/30 border-2 border-black/30 rounded-[15px] px-4 text-black/70 placeholder-black/30 focus:outline-none focus:border-black/50"
-                  style={{ ...monoFont, fontSize: 22, height: 40 }} />
-                <button onClick={() => setNewToken(crypto.randomUUID().replace(/-/g, ''))}
-                  className="relative rounded-[27px] px-[20px] py-[6px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer">
-                  <div className={pillShadow} style={pillShadowStyle} />
-                  <span style={{ ...btnFont, fontSize: 22 }} className="text-black/70">随机生成</span>
-                </button>
-                <button onClick={saveToken}
-                  className="relative rounded-[27px] px-[20px] py-[6px] bg-white/30 hover:bg-white/50 transition-colors cursor-pointer">
-                  <div className={pillShadow} style={pillShadowStyle} />
-                  <span style={{ ...btnFont, fontSize: 22 }} className="text-black/70">保存</span>
-                </button>
-              </div>
-            </div>
           </div>
-        </div>
+        </AccessGuard>
       </GlassCard>
       </div>
 
       {/* 板块3：页面配置（背景管理） */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '180ms' }}>
       <GlassCard>
+        <AccessGuard
+          allowed={canCustomizeAppearance}
+          detail={appearancePolicy.syncAdminAppearance
+            ? '管理员已开启外观同步，当前账号将跟随管理员主题与背景。'
+            : '管理员当前未开放个性化主题与背景自定义。'}
+        >
         <div className="p-[30px]">
           <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>页面配置</h2>
+
+          <div className="flex items-center justify-between mb-[10px]">
+            <span style={labelFont} className="text-black/70">界面主题</span>
+            <ActionSlider value={THEME_MODE_MAP[mode]} onChange={handleThemeModeChange} options={THEME_MODE_OPTIONS} />
+          </div>
+          <p className="mb-[20px] text-black/45" style={{ ...monoFont, fontSize: 16 }}>
+            当前生效主题：{resolvedTheme === 'dark' ? '暗色' : '浅色'}。选择“跟随系统”时会实时响应系统主题变化。
+          </p>
 
           {/* 自定义背景开关 */}
           <div className="flex items-center justify-between mb-[20px]">
@@ -894,22 +936,39 @@ export default function Settings() {
                 <span style={{ ...monoFont, fontSize: 20, width: 50 }} className="text-black/50 text-right">{localBg.overlay_blur}px</span>
               </div>
             </div>
+            <div className="flex items-center justify-between">
+              <span style={labelFont} className="text-black/70">盖层颜色跟随主题</span>
+              <Toggle
+                checked={localBg.overlay_color_auto !== false}
+                onChange={v => saveBgSettings(v
+                  ? { ...localBg, overlay_color_auto: true }
+                  : { ...localBg, overlay_color_auto: false, overlay_color: resolvedOverlayColor })}
+              />
+            </div>
             <div className="flex items-center justify-between relative">
               <span style={labelFont} className="text-black/70">盖层颜色</span>
               <div className="flex items-center gap-[12px]">
                 <div ref={colorAnchorRef} className="rounded-[10px] cursor-pointer border-2 border-black/20"
-                  style={{ width: 40, height: 40, background: `rgb(${localBg.overlay_color})` }}
-                  onClick={() => setColorPickerOpen(!colorPickerOpen)} />
-                <span style={{ ...monoFont, fontSize: 20 }} className="text-black/50">{rgbToHex(localBg.overlay_color)}</span>
+                  style={{ width: 40, height: 40, background: `rgb(${resolvedOverlayColor})`, opacity: localBg.overlay_color_auto !== false ? 0.85 : 1 }}
+                  onClick={() => {
+                    if (localBg.overlay_color_auto !== false) {
+                      void saveBgSettings({ ...localBg, overlay_color_auto: false, overlay_color: resolvedOverlayColor })
+                    }
+                    setColorPickerOpen(!colorPickerOpen)
+                  }} />
+                <span style={{ ...monoFont, fontSize: 20 }} className="text-black/50">
+                  {localBg.overlay_color_auto !== false ? `自动 · ${rgbToHex(resolvedOverlayColor)}` : rgbToHex(resolvedOverlayColor)}
+                </span>
                 {colorPickerOpen && (
-                  <ColorPickerPopup color={localBg.overlay_color} anchorRef={colorAnchorRef}
-                    onChange={c => saveBgSettings({ ...localBg, overlay_color: c })}
+                  <ColorPickerPopup color={resolvedOverlayColor} anchorRef={colorAnchorRef}
+                    onChange={c => saveBgSettings({ ...localBg, overlay_color_auto: false, overlay_color: c })}
                     onClose={() => setColorPickerOpen(false)} />
                 )}
               </div>
             </div>
           </div>
         </div>
+        </AccessGuard>
       </GlassCard>
       </div>
 
@@ -931,18 +990,21 @@ export default function Settings() {
       {/* 板块4.5：LLM配置 */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '270ms' }}>
       <GlassCard>
-        <div className="p-[30px]">
-          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>AI配置</h2>
-          <LLMConfigSection />
-        </div>
+        <AccessGuard allowed={!!isAdmin} detail="AI 服务提供商、密钥与模型参数只允许管理员维护。">
+          <div className="p-[30px]">
+            <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>AI配置</h2>
+            <LLMConfigSection />
+          </div>
+        </AccessGuard>
       </GlassCard>
       </div>
 
-      {/* 板块5：成员管理（预留） */}
+      {/* 板块5：账号与成员管理 */}
       <div className="animate-fade-slide-up" style={{ animationDelay: '300ms' }}>
       <GlassCard>
-        <div className="p-[30px] flex items-center justify-center" style={{ minHeight: 120 }}>
-          <span className="text-black/30" style={sectionTitle}>成员管理 — 开发中</span>
+        <div className="p-[30px]">
+          <h2 className="text-black/80 mb-[20px]" style={sectionTitle}>账号与成员管理</h2>
+          <AccountManagementPanel />
         </div>
       </GlassCard>
       </div>

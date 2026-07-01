@@ -8,7 +8,7 @@ import asyncio
 import threading
 import uuid
 from typing import Dict, Any, Optional, List
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -20,6 +20,8 @@ from ..modules.deployment_core import (
     NapCatDeployer
 )
 from ..core.config import config_manager
+from .auth_core import require_action
+from .published_templates import get_instance_publish_state
 
 router = APIRouter()
 
@@ -149,7 +151,7 @@ async def get_napcat_versions(force_refresh: bool = False):
         raise HTTPException(status_code=500, detail=f"获取NapCat版本列表失败: {str(e)}")
 
 
-@router.post("/instances", summary="部署新实例")
+@router.post("/instances", summary="部署新实例", dependencies=[Depends(require_action("deploy.manage"))])
 async def deploy_instance(
     request: DeployInstanceRequest,
     background_tasks: BackgroundTasks
@@ -237,7 +239,7 @@ async def deploy_instance(
         raise HTTPException(status_code=500, detail=f"部署失败: {str(e)}")
 
 
-@router.post("/execute-update", summary="执行实例更新")
+@router.post("/execute-update", summary="执行实例更新", dependencies=[Depends(require_action("deploy.manage"))])
 async def execute_update(request: UpdateInstanceRequest):
     """后台线程执行实例更新，通过WebSocket推送进度"""
     try:
@@ -302,6 +304,7 @@ async def get_all_instances():
         
         instances = []
         for name, config in configs.items():
+            publish_state = get_instance_publish_state(config)
             instances.append({
                 "id": name,
                 "serial_number": config.get("serial_number", ""),
@@ -313,11 +316,17 @@ async def get_all_instances():
                 "mofox_path": config.get("mofox_path", ""),
                 "neo_mofox_path": config.get("neo_mofox_path", ""),
                 "adapter_path": config.get("adapter_path", ""),
+                "adapter_mode": config.get("adapter_mode", config.get("install_options", {}).get("adapter_mode", "")),
                 "napcat_path": config.get("napcat_path", ""),
                 "venv_path": config.get("venv_path", ""),
                 "mongodb_path": config.get("mongodb_path", ""),
                 "webui_path": config.get("webui_path", ""),
-                "install_options": config.get("install_options", {})
+                "install_options": config.get("install_options", {}),
+                "mod_binding": config.get("mod_binding", {}),
+                "deployment_profile": config.get("deployment_profile", {}),
+                "component_bindings": config.get("component_bindings", []),
+                "template_inputs": config.get("template_inputs", {}),
+                **{key: value for key, value in publish_state.items() if key != "deployment_flow_record"},
             })
         
         return {
@@ -337,6 +346,7 @@ async def get_instance_detail(serial_number: str):
         
         for name, config in configs.items():
             if config.get("serial_number") == serial_number:
+                publish_state = get_instance_publish_state(config)
                 return {
                     "success": True,
                     "instance": {
@@ -351,11 +361,17 @@ async def get_instance_detail(serial_number: str):
                         "mofox_path": config.get("mofox_path", ""),
                         "neo_mofox_path": config.get("neo_mofox_path", ""),
                         "adapter_path": config.get("adapter_path", ""),
+                        "adapter_mode": config.get("adapter_mode", config.get("install_options", {}).get("adapter_mode", "")),
                         "napcat_path": config.get("napcat_path", ""),
                         "venv_path": config.get("venv_path", ""),
                         "mongodb_path": config.get("mongodb_path", ""),
                         "webui_path": config.get("webui_path", ""),
-                        "install_options": config.get("install_options", {})
+                        "install_options": config.get("install_options", {}),
+                        "mod_binding": config.get("mod_binding", {}),
+                        "deployment_profile": config.get("deployment_profile", {}),
+                        "component_bindings": config.get("component_bindings", []),
+                        "template_inputs": config.get("template_inputs", {}),
+                        **{key: value for key, value in publish_state.items() if key != "deployment_flow_record"},
                     }
                 }
         
@@ -366,7 +382,7 @@ async def get_instance_detail(serial_number: str):
         raise HTTPException(status_code=500, detail=f"获取实例详情失败: {str(e)}")
 
 
-@router.put("/instances/{serial_number}", summary="更新实例配置")
+@router.put("/instances/{serial_number}", summary="更新实例配置", dependencies=[Depends(require_action("deploy.manage"))])
 async def update_instance(serial_number: str, updates: Dict[str, Any]):
     """更新指定实例的配置"""
     try:
@@ -385,7 +401,7 @@ async def update_instance(serial_number: str, updates: Dict[str, Any]):
         _UPDATABLE_FIELDS = {
             "serial_number", "nickname_path", "version_path", "bot_type",
             "qq_account", "mai_path", "mofox_path", "adapter_path",
-            "napcat_path", "venv_path", "webui_path",
+            "adapter_mode", "napcat_path", "venv_path", "webui_path",
         }
         current_config = configs[config_key]
         filtered = {k: v for k, v in updates.items() if k in _UPDATABLE_FIELDS}
@@ -407,7 +423,7 @@ async def update_instance(serial_number: str, updates: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=f"更新实例失败: {str(e)}")
 
 
-@router.delete("/instances/{serial_number}", summary="删除实例")
+@router.delete("/instances/{serial_number}", summary="删除实例", dependencies=[Depends(require_action("deploy.manage"))])
 async def delete_instance(serial_number: str):
     """
     删除指定实例
@@ -428,6 +444,11 @@ async def delete_instance(serial_number: str):
         
         # 返回实例信息供确认
         config = configs[config_key]
+        publish_state = get_instance_publish_state(config)
+        if publish_state["is_published_template"]:
+            if not publish_state["published_active"]:
+                raise HTTPException(status_code=403, detail="该实例所属部署流已取消发布，不能删除")
+            raise HTTPException(status_code=400, detail="该实例由部署流管理，请通过部署流卸载逻辑删除")
         return {
             "success": True,
             "confirm_required": True,
@@ -445,12 +466,22 @@ async def delete_instance(serial_number: str):
         raise HTTPException(status_code=500, detail=f"删除实例失败: {str(e)}")
 
 
-@router.post("/instances/{serial_number}/confirm-delete", summary="确认删除实例")
+@router.post("/instances/{serial_number}/confirm-delete", summary="确认删除实例", dependencies=[Depends(require_action("deploy.manage"))])
 async def confirm_delete_instance(serial_number: str, request: DeleteInstanceRequest):
     """确认删除实例 — 调用非交互式删除"""
     try:
         if request.serial_number != serial_number:
             raise HTTPException(status_code=400, detail="序列号不匹配")
+
+        configs = config_manager.get_all_configurations()
+        for config in configs.values():
+            if config.get("serial_number") == serial_number:
+                publish_state = get_instance_publish_state(config)
+                if publish_state["is_published_template"]:
+                    if not publish_state["published_active"]:
+                        raise HTTPException(status_code=403, detail="该实例所属部署流已取消发布，不能删除")
+                    raise HTTPException(status_code=400, detail="该实例由部署流管理，请通过部署流卸载逻辑删除")
+                break
 
         result = deployment_manager.delete_instance_webui(
             serial_number, request.confirm_nickname, request.backup

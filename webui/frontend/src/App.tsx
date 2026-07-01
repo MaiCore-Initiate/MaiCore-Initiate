@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import Sidebar from './components/layout/Sidebar'
 import Header from './components/layout/Header'
 import HomePage from './pages/HomePage'
@@ -12,15 +12,94 @@ import Logs from './pages/Logs'
 import Settings from './pages/Settings'
 import Misc from './pages/Misc'
 import ComponentDownload from './pages/ComponentDownload'
+import TemplateWorkbench from './pages/TemplateWorkbench'
+import DeploymentFlowWorkbench from './pages/DeploymentFlowWorkbench'
+import AuthPortal from './components/auth/AuthPortal'
+import AccessGuard from './components/ui/AccessGuard'
 import { NotificationProvider, useNotification } from './components/ui/Notification'
-import DynamicBackground, { BgProvider, useBaseBgUrl, useBgContext } from './components/background/DynamicBackground'
-import type { Page, Tab } from './types'
+import DynamicBackground, { BgProvider, resolveOverlayStyle, useBaseBgUrl, useBgContext, useCachedBgSettings } from './components/background/DynamicBackground'
+import { useTheme } from './components/theme/ThemeProvider'
+import { AccountSystemProvider, PAGE_PERMISSION_LABELS, useAccountSystem } from './lib/account-system'
+import type { Page, SubPageParams, Tab } from './types'
+import {
+  RouterProvider,
+  createHashHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  useNavigate,
+  useRouterState,
+} from '@tanstack/react-router'
 
-const pageLabels: Record<Page, string> = {
-  home: '首页', instances: '实例启动/多开', config: '配置管理', knowledge: '知识库构建',
-  'db-migration': '数据库迁移', plugins: '插件管理', deploy: '实例部署辅助系统',
-  status: '查看运行状态', logs: '日志查看器', misc: '杂项', settings: '设置',
-  'component-download': '组件下载'
+const pageLabels: Record<Page, string> = PAGE_PERMISSION_LABELS
+const titleFont = { fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }
+const monoFont = { fontFamily: "'Ubuntu', 'HarmonyOS Sans SC', monospace" }
+
+const miscTabs = ['about', 'author', 'tech', 'libs', 'license', 'components', 'webshell', 'screensaver', 'desktop-pet', 'package-instance'] as const
+const configActions = ['edit', 'open-config', 'open-folder'] as const
+const logSources = ['main', 'webui', 'desktop_pet'] as const
+
+export const pageRoutes = {
+  home: '/',
+  instances: '/instances',
+  config: '/config',
+  knowledge: '/knowledge',
+  'db-migration': '/db-migration',
+  plugins: '/plugins',
+  deploy: '/deploy',
+  status: '/status',
+  logs: '/logs',
+  misc: '/misc',
+  settings: '/settings',
+  'component-download': '/component-download',
+  'template-workbench': '/template-workbench',
+  'workbench-canvas': '/workbench-canvas',
+} as const satisfies Record<Page, `/${string}`>
+
+const pageByRoute = Object.fromEntries(
+  Object.entries(pageRoutes).map(([page, route]) => [route, page])
+) as Record<string, Page>
+
+function isOneOf<T extends string>(value: unknown, options: readonly T[]): value is T {
+  return typeof value === 'string' && options.includes(value as T)
+}
+
+function normalizeRouteSearch(search: Record<string, unknown>): SubPageParams | undefined {
+  const params: SubPageParams = {}
+  if (search.miscTab === 'custom-console') {
+    params.miscTab = 'package-instance'
+  } else if (isOneOf(search.miscTab, miscTabs)) {
+    params.miscTab = search.miscTab
+  }
+  if (isOneOf(search.configAction, configActions)) params.configAction = search.configAction
+  if (isOneOf(search.logSource, logSources)) params.logSource = search.logSource
+  if (typeof search.sequence === 'string') params.sequence = search.sequence
+  return Object.keys(params).length ? params : undefined
+}
+
+function paramsKey(params?: SubPageParams) {
+  return `${params?.miscTab ?? ''}|${params?.configAction ?? ''}|${params?.logSource ?? ''}|${params?.sequence ?? ''}`
+}
+
+function routeSearch(params?: SubPageParams) {
+  return {
+    ...(params?.miscTab ? { miscTab: params.miscTab } : {}),
+    ...(params?.configAction ? { configAction: params.configAction } : {}),
+    ...(params?.logSource ? { logSource: params.logSource } : {}),
+    ...(params?.sequence ? { sequence: params.sequence } : {}),
+  }
+}
+
+function resolveRoutePage(pathname: string): Page {
+  const normalized = pathname === '/' ? '/' : `/${pathname.replace(/^\/+|\/+$/g, '')}`
+  if (normalized.startsWith('/workbench-canvas/')) return 'workbench-canvas'
+  return pageByRoute[normalized] ?? 'home'
+}
+
+function resolveWorkbenchCanvasSequence(pathname: string, search: Record<string, unknown>): string | undefined {
+  const match = pathname.match(/^\/?workbench-canvas\/([^/?#]+)/)
+  if (match?.[1]) return decodeURIComponent(match[1])
+  return typeof search.sequence === 'string' ? search.sequence : undefined
 }
 
 let tabCounter = 1
@@ -28,55 +107,59 @@ function makeTab(page: Page): Tab {
   return { id: `tab-${tabCounter++}`, page, label: pageLabels[page] }
 }
 
-function PageTransition({ tabId, children }: { tabId: string; children: React.ReactNode }) {
-  const [layers, setLayers] = useState<{ id: string; content: React.ReactNode; phase: 'in' | 'out' }[]>(
-    [{ id: tabId, content: children, phase: 'in' }]
-  )
+function PageTransition({ tabId, children }: { tabId: string; children: ReactNode }) {
+  const [layers, setLayers] = useState<{ id: string; content: ReactNode; phase: 'in' | 'out' }[]>([
+    { id: tabId, content: children, phase: 'in' },
+  ])
   const prevTabId = useRef(tabId)
   const latestChildren = useRef(children)
-  const pendingRef = useRef<{ id: string; content: React.ReactNode } | null>(null)
+  const pendingRef = useRef<{ id: string; content: ReactNode } | null>(null)
   latestChildren.current = children
 
   useEffect(() => {
     if (tabId === prevTabId.current) {
-      setLayers(prev => prev.map(l => l.id === tabId ? { ...l, content: latestChildren.current } : l))
+      setLayers(prev => prev.map(layer => layer.id === tabId ? { ...layer, content: latestChildren.current } : layer))
       return
     }
     prevTabId.current = tabId
     pendingRef.current = { id: tabId, content: latestChildren.current }
-    // 先标记旧层退场
-    setLayers(prev => prev.map(l => ({ ...l, phase: 'out' as const })))
-    // 退场结束后，移除旧层，添加新层入场
-    const t = setTimeout(() => {
-      const pending = pendingRef.current!
+    setLayers(prev => prev.map(layer => ({ ...layer, phase: 'out' as const })))
+    const timer = window.setTimeout(() => {
+      const pending = pendingRef.current
+      if (!pending) return
       setLayers([{ id: pending.id, content: pending.content, phase: 'in' }])
       pendingRef.current = null
     }, 200)
-    return () => clearTimeout(t)
+    return () => window.clearTimeout(timer)
   }, [tabId])
 
   return (
     <>
-      {layers.map(l => (
+      {layers.map(layer => (
         <div
-          key={l.id}
+          key={layer.id}
           className="absolute inset-0 overflow-auto"
-          style={l.phase === 'in'
+          style={layer.phase === 'in'
             ? { animation: 'page-enter 0.35s cubic-bezier(0.16,1,0.3,1) both' }
-            : { animation: 'page-exit 0.2s ease-in forwards', pointerEvents: 'none' }
-          }
+            : { animation: 'page-exit 0.2s ease-in forwards', pointerEvents: 'none' }}
         >
-          {l.content}
+          {layer.content}
         </div>
       ))}
     </>
   )
 }
 
-function PageContent({ page, params, onNavigate }: {
-  page: Page;
-  params?: import('./types').SubPageParams;
-  onNavigate?: (page: Page, params?: import('./types').SubPageParams) => void;
+function PageContent({
+  page,
+  params,
+  onNavigate,
+  onReturnFromWorkbench,
+}: {
+  page: Page
+  params?: SubPageParams
+  onNavigate?: (page: Page, params?: SubPageParams) => void
+  onReturnFromWorkbench?: () => void
 }) {
   switch (page) {
     case 'home': return <HomePage onNavigate={onNavigate} />
@@ -88,8 +171,10 @@ function PageContent({ page, params, onNavigate }: {
     case 'status': return <Status />
     case 'logs': return <Logs initialSource={params?.logSource} />
     case 'settings': return <Settings />
-    case 'misc': return <Misc initialTab={params?.miscTab} />
+    case 'misc': return <Misc initialTab={params?.miscTab} onNavigate={onNavigate} />
     case 'component-download': return <ComponentDownload />
+    case 'template-workbench': return <TemplateWorkbench onReturnToSource={onReturnFromWorkbench} />
+    case 'workbench-canvas': return <DeploymentFlowWorkbench projectSequence={params?.sequence} onBackToLibrary={() => onNavigate?.('template-workbench')} />
     default:
       return (
         <div className="flex items-center justify-center h-full">
@@ -126,74 +211,328 @@ function BaseBackgroundLayer({ url, className = 'absolute inset-0' }: { url: str
   )
 }
 
-function App() {
-  const zoom = useZoom()
-  const baseBgUrl = useBaseBgUrl()
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
-  const [tabs, setTabs] = useState<Tab[]>([makeTab('home')])
-  const [activeTabId, setActiveTabId] = useState(tabs[0].id)
+function LoginTransitionOverlay({ loginTransition }: { loginTransition: 'cover-in' | 'cover-out' }) {
+  const { currentBgUrl, settings } = useBgContext()
+  const { resolvedTheme } = useTheme()
+  return (
+    <div className={`absolute inset-0 z-30 pointer-events-none ${loginTransition === 'cover-in' ? 'animate-login-fade-in' : 'animate-login-fade-out'}`}>
+      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${currentBgUrl}')` }} />
+      <div className="absolute inset-0" style={resolveOverlayStyle(settings, resolvedTheme)} />
+    </div>
+  )
+}
 
-  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0]
+function GithubAdminTransferPrompt({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { replaceGithubAdmin } = useAccountSystem()
+  const { notify } = useNotification()
+  const [mode, setMode] = useState<'confirm' | 'token'>('confirm')
+  const [token, setToken] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch('/api/auth/status', { credentials: 'include' })
-        const data = await res.json()
-        if (data.logged_in) setIsAuthenticated(true)
-      } catch {}
-      setIsLoading(false)
+    if (open) {
+      setMode('confirm')
+      setToken('')
+      setSubmitting(false)
     }
-    checkAuth()
-  }, [])
+  }, [open])
 
-  const handleLogout = async () => {
-    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }) } catch {}
-    setIsAuthenticated(false)
+  if (!open) return null
+
+  const handleDecline = async () => {
+    setSubmitting(true)
+    try {
+      const result = await replaceGithubAdmin('', false)
+      notify(result.message, result.success ? 'info' : 'warning')
+      onClose()
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const handleNavigate = (page: Page, params?: import('./types').SubPageParams) => {
-    const existing = tabs.find(t => t.page === page)
-    if (existing) {
-      setActiveTabId(existing.id)
-      // 如果有参数，需要更新该标签页的参数
-      if (params) {
-        setTabs(prev => prev.map(t =>
-          t.id === existing.id ? { ...t, params } : t
-        ))
-      }
-    } else {
-      if (tabs.length >= 12) return
-      const tab = { ...makeTab(page), params }
-      setTabs(prev => [...prev, tab])
-      setActiveTabId(tab.id)
+  const handleSubmit = async () => {
+    if (!token.trim()) {
+      notify('请输入系统初始化时生成的 Token。', 'warning')
+      return
     }
+    setSubmitting(true)
+    try {
+      const result = await replaceGithubAdmin(token.trim())
+      notify(result.message, result.success ? 'success' : 'error')
+      if (result.success) onClose()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center px-[20px]">
+      <div className="absolute inset-0 backdrop-blur-[6px]" style={{ background: 'rgba(0,0,0,0.38)' }} onClick={onClose} />
+      <div
+        className="relative w-full max-w-[560px] rounded-[24px] border-2 p-[26px] backdrop-blur-[34px]"
+        style={{
+          borderColor: 'var(--mc-border-muted)',
+          background: 'var(--mc-panel-solid)',
+          boxShadow: '0 24px 70px var(--mc-shadow-soft)',
+          color: 'var(--mc-text-primary)',
+        }}
+        onClick={event => event.stopPropagation()}
+      >
+        <h2 style={{ ...titleFont, fontSize: 32, color: 'var(--mc-text-primary)' }}>移交管理员权限</h2>
+        {mode === 'confirm' ? (
+          <p className="mt-[12px]" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55, color: 'var(--mc-text-muted)' }}>
+            当前 GitHub 账号是除系统管理员外第一个注册的账号，是否将管理员权限移交至该账户？
+          </p>
+        ) : (
+          <>
+            <p className="mt-[12px]" style={{ ...titleFont, fontSize: 21, lineHeight: 1.55, color: 'var(--mc-text-muted)' }}>
+              请输入系统初始化时生成的 Token。验证通过后，系统管理员会降为成员，当前 GitHub 账号会成为新的管理员。
+            </p>
+            <input
+              value={token}
+              onChange={event => setToken(event.target.value)}
+              type="password"
+              placeholder="系统初始化 Token"
+              className="mt-[20px] w-full rounded-[18px] border-2 px-[18px] outline-none"
+              style={{
+                height: 54,
+                borderColor: 'var(--mc-border-soft)',
+                background: 'var(--mc-control-bg)',
+                color: 'var(--mc-text-primary)',
+                ...monoFont,
+                fontSize: 18,
+              }}
+              autoFocus
+            />
+          </>
+        )}
+        <div className="mt-[22px] flex flex-wrap justify-end gap-[12px]">
+          <button
+            type="button"
+            onClick={() => {
+              if (mode === 'token') {
+                setMode('confirm')
+                setToken('')
+              } else {
+                void handleDecline()
+              }
+            }}
+            disabled={submitting}
+            className="cursor-pointer rounded-[18px] border-2 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              borderColor: 'var(--mc-border-soft)',
+              background: 'var(--mc-control-bg-soft)',
+              color: 'var(--mc-text-secondary)',
+              ...titleFont,
+              fontSize: 20,
+            }}
+          >
+            {mode === 'token' ? '返回' : '不同意'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (mode === 'confirm') {
+                setMode('token')
+                return
+              }
+              void handleSubmit()
+            }}
+            disabled={submitting}
+            className="cursor-pointer rounded-[18px] border-2 px-[20px] py-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              borderColor: 'var(--mc-border-muted)',
+              background: 'var(--mc-control-bg)',
+              color: 'var(--mc-text-primary)',
+              ...titleFont,
+              fontSize: 20,
+            }}
+          >
+            {submitting ? '处理中...' : mode === 'confirm' ? '同意' : '验证并移交'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AppRootRoute() {
+  return (
+    <AccountSystemProvider>
+      <RoutedAppShell />
+    </AccountSystemProvider>
+  )
+}
+
+function RoutedAppShell() {
+  const location = useRouterState({ select: state => state.location })
+  const routePage = resolveRoutePage(location.pathname)
+  const routeSearchParams = location.search as Record<string, unknown>
+  const routeParams = normalizeRouteSearch(routeSearchParams)
+  if (routePage === 'workbench-canvas') {
+    const sequence = resolveWorkbenchCanvasSequence(location.pathname, routeSearchParams)
+    return <AppShell routePage={routePage} routeParams={{ ...routeParams, sequence }} />
+  }
+  return <AppShell routePage={routePage} routeParams={routeParams} />
+}
+
+const rootRoute = createRootRoute({ component: AppRootRoute })
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+})
+const appPageRoutes = Object.entries(pageRoutes)
+  .filter(([page]) => page !== 'home')
+  .map(([, routePath]) => createRoute({
+    getParentRoute: () => rootRoute,
+    path: routePath.slice(1),
+  }))
+const workbenchCanvasSequenceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'workbench-canvas/$sequence',
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, ...appPageRoutes, workbenchCanvasSequenceRoute])
+
+export const router = createRouter({
+  routeTree,
+  history: createHashHistory(),
+})
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
+  }
+}
+
+function AppShell({ routePage, routeParams }: { routePage: Page; routeParams?: SubPageParams }) {
+  const zoom = useZoom()
+  const baseBgUrl = useBaseBgUrl()
+  const cachedBgSettings = useCachedBgSettings()
+  const { resolvedTheme } = useTheme()
+  const { ready, currentUser, canAccessPage, logout } = useAccountSystem()
+  const [loginTransition, setLoginTransition] = useState<'none' | 'cover-in' | 'cover-out'>('none')
+  const [dismissedGithubTransferUserId, setDismissedGithubTransferUserId] = useState<string | null>(null)
+  const [tabs, setTabs] = useState<Tab[]>([makeTab('home')])
+  const [activeTabId, setActiveTabId] = useState(tabs[0].id)
+  const workbenchReturnTarget = useRef<{ page: Page; params?: SubPageParams }>({ page: 'misc' })
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (routePage !== 'workbench-canvas') return
+
+    const bodyStyle = document.body.style
+    const rootStyle = document.documentElement.style
+    const previousBodyOverflow = bodyStyle.overflow
+    const previousRootOverflow = rootStyle.overflow
+    const previousBodyOverscroll = bodyStyle.getPropertyValue('overscroll-behavior')
+    const previousRootOverscroll = rootStyle.getPropertyValue('overscroll-behavior')
+
+    window.scrollTo(0, 0)
+    bodyStyle.overflow = 'hidden'
+    rootStyle.overflow = 'hidden'
+    bodyStyle.setProperty('overscroll-behavior', 'none')
+    rootStyle.setProperty('overscroll-behavior', 'none')
+
+    return () => {
+      bodyStyle.overflow = previousBodyOverflow
+      rootStyle.overflow = previousRootOverflow
+      bodyStyle.setProperty('overscroll-behavior', previousBodyOverscroll)
+      rootStyle.setProperty('overscroll-behavior', previousRootOverscroll)
+    }
+  }, [routePage])
+
+  const activeTab = tabs.find(tab => tab.id === activeTabId) || tabs[0]
+  const routeParamsKey = paramsKey(routeParams)
+
+  const navigateToPage = useCallback((page: Page, params?: SubPageParams) => {
+    void navigate({
+      to: pageRoutes[page],
+      search: routeSearch(params),
+    } as never)
+  }, [navigate])
+
+  const navigateToTab = useCallback((tab: Tab) => {
+    navigateToPage(tab.page, tab.params)
+  }, [navigateToPage])
+
+  const handleReturnFromWorkbench = useCallback(() => {
+    const target = workbenchReturnTarget.current
+    navigateToPage(target.page, target.params)
+  }, [navigateToPage])
+
+  const navigateToWorkbenchCanvas = useCallback((sequence: string) => {
+    void navigate({ to: '/workbench-canvas/$sequence', params: { sequence } } as never)
+  }, [navigate])
+
+  useEffect(() => {
+    if (routePage !== 'template-workbench' && routePage !== 'workbench-canvas') {
+      workbenchReturnTarget.current = { page: routePage, params: routeParams }
+    }
+  }, [routePage, routeParams, routeParamsKey])
+
+  useEffect(() => {
+    setTabs(prev => {
+      const existing = prev.find(tab => tab.page === routePage)
+      if (existing) {
+        setActiveTabId(existing.id)
+        return prev.map(tab => tab.id === existing.id ? { ...tab, params: routeParams } : tab)
+      }
+      const tab = { ...makeTab(routePage), params: routeParams }
+      setActiveTabId(tab.id)
+      if (prev.length >= 12) {
+        return [...prev.slice(1), tab]
+      }
+      return [...prev, tab]
+    })
+  }, [routePage, routeParams, routeParamsKey])
+
+  const handleNavigate = (page: Page, params?: SubPageParams) => {
+    const existing = tabs.find(tab => tab.page === page)
+    if (!existing && tabs.length >= 12) return
+    navigateToPage(page, params)
+  }
+
+  const handleSelectTab = (id: string) => {
+    const tab = tabs.find(item => item.id === id)
+    if (!tab) return
+    setActiveTabId(id)
+    navigateToTab(tab)
   }
 
   const handleCloseTab = (id: string) => {
     setTabs(prev => {
-      const next = prev.filter(t => t.id !== id)
+      const next = prev.filter(tab => tab.id !== id)
       if (next.length === 0) return prev
       if (activeTabId === id) {
-        const idx = prev.findIndex(t => t.id === id)
-        setActiveTabId(next[Math.min(idx, next.length - 1)].id)
+        const idx = prev.findIndex(tab => tab.id === id)
+        const nextActive = next[Math.min(idx, next.length - 1)]
+        setActiveTabId(nextActive.id)
+        navigateToTab(nextActive)
       }
       return next
     })
   }
 
   const handleCloseOtherTabs = (id: string) => {
-    setTabs(prev => prev.filter(t => t.id === id))
+    const tab = tabs.find(item => item.id === id)
+    if (!tab) return
+    setTabs(prev => prev.filter(item => item.id === id))
     setActiveTabId(id)
+    navigateToTab(tab)
   }
 
   const handleCloseRightTabs = (id: string) => {
     setTabs(prev => {
-      const idx = prev.findIndex(t => t.id === id)
+      const idx = prev.findIndex(tab => tab.id === id)
       const next = prev.slice(0, idx + 1)
-      if (!next.find(t => t.id === activeTabId)) setActiveTabId(id)
+      if (!next.find(tab => tab.id === activeTabId)) {
+        const nextActive = next.find(tab => tab.id === id)
+        if (nextActive) {
+          setActiveTabId(id)
+          navigateToTab(nextActive)
+        }
+      }
       return next
     })
   }
@@ -208,313 +547,142 @@ function App() {
   }
 
   const handleAddTab = () => {
-    const tab = makeTab('home')
-    setTabs(prev => [...prev, tab])
-    setActiveTabId(tab.id)
+    handleNavigate('home')
   }
 
-  if (isLoading) {
+  const handleAuthenticated = () => {
+    setTabs(prev => {
+      const homeTab = prev.find(tab => tab.page === 'home') ?? makeTab('home')
+      setActiveTabId(homeTab.id)
+      return prev.some(tab => tab.id === homeTab.id) ? prev : [homeTab, ...prev]
+    })
+    navigateToPage('home')
+    setLoginTransition('cover-in')
+    window.setTimeout(() => {
+      setLoginTransition('cover-out')
+      window.setTimeout(() => setLoginTransition('none'), 900)
+    }, 560)
+  }
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    } catch {
+      // ignore logout failures
+    }
+    logout()
+  }
+
+  if (!ready) {
     return (
       <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
         <BaseBackgroundLayer url={baseBgUrl} />
         <div className="absolute inset-0 z-10 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
         </div>
       </div>
     )
   }
 
-  const showLogin = !isAuthenticated
-  const showMain = isAuthenticated
+  const showLogin = !currentUser
+  const shouldPromptGithubAdminTransfer = Boolean(
+    currentUser &&
+    currentUser.githubAdminTransferPending &&
+    currentUser.role !== 'admin' &&
+    currentUser.id !== dismissedGithubTransferUserId,
+  )
+  const pageDetail = currentUser
+    ? `${pageLabels[activeTab.page]} 对当前 ${currentUser.role === 'guest' ? '访客' : '成员'} 模板未开放。`
+    : '请先登录后再访问该页面。'
 
   return (
-    <div className="relative overflow-hidden" style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
-      {/* 基层背景（常驻），用于避免切换阶段出现白屏 */}
+    <div className={`relative overflow-hidden theme-shell theme-${resolvedTheme}`} style={{ zoom, width: `${100 / zoom}vw`, height: `${100 / zoom}vh` }}>
       <BaseBackgroundLayer url={baseBgUrl} />
 
-      <BgProvider key={isAuthenticated ? 'auth' : 'guest'}>
-      <NotificationProvider>
-      {/* 动态背景 */}
-      <DynamicBackground />
-
-      {/* 通知挂载点 — 在背景图上方，z-index 最高 */}
-      <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
-
-      {/* 登录卡片层 */}
-      {showLogin && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center">
-          <LoginCard
-            onLogin={() => {
-              setLoginTransition('cover-in')
-              setTimeout(() => {
-                setIsAuthenticated(true)
-                setLoginTransition('cover-out')
-                setTimeout(() => setLoginTransition('none'), 1000)
-              }, 1000)
-            }}
-          />
-        </div>
-      )}
-
-      {/* 主页内容层 */}
-      {showMain && (
-        <div className="relative z-10 flex h-full">
-          <Sidebar currentPage={activeTab.page} onNavigate={handleNavigate} />
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <Header
-              tabs={tabs}
-              activeTabId={activeTabId}
-              onSelectTab={setActiveTabId}
-              onCloseTab={handleCloseTab}
-              onCloseOtherTabs={handleCloseOtherTabs}
-              onCloseRightTabs={handleCloseRightTabs}
-              onReorderTabs={handleReorderTabs}
-              onAddTab={handleAddTab}
-              onLogout={handleLogout}
+      {showLogin ? (
+        <NotificationProvider>
+          <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
+          <div className="absolute inset-0 z-10" style={resolveOverlayStyle(cachedBgSettings, resolvedTheme)} />
+          <div className="absolute inset-0 z-20 flex items-center justify-center">
+            <AuthPortal
+              onAuthenticated={handleAuthenticated}
             />
-            <main className="flex-1 overflow-auto relative">
-              <PageTransition tabId={activeTabId}>
-                <PageContent page={activeTab.page} params={activeTab.params} onNavigate={handleNavigate} />
-              </PageTransition>
-            </main>
           </div>
-        </div>
+        </NotificationProvider>
+      ) : (
+        <BgProvider key={currentUser?.id ?? 'auth-guest'}>
+          <NotificationProvider>
+            <DynamicBackground />
+            <div id="notification-root" className="absolute inset-0 z-[60] pointer-events-none" />
+
+            {currentUser && (routePage === 'template-workbench' || routePage === 'workbench-canvas') ? (
+              <div className="relative z-10 h-full">
+                <AccessGuard
+                  allowed={canAccessPage('template-workbench')}
+                  className="h-full min-h-full"
+                  detail={`${pageLabels['template-workbench']} 对当前 ${currentUser.role === 'guest' ? '访客' : '成员'} 模板未开放。`}
+                >
+                  {routePage === 'workbench-canvas' ? (
+                    <DeploymentFlowWorkbench
+                      projectSequence={routeParams?.sequence}
+                      onBackToLibrary={() => navigateToPage('template-workbench')}
+                    />
+                  ) : (
+                    <TemplateWorkbench
+                      onReturnToSource={handleReturnFromWorkbench}
+                      onOpenWorkbenchCanvas={navigateToWorkbenchCanvas}
+                    />
+                  )}
+                </AccessGuard>
+              </div>
+            ) : currentUser && (
+              <div className="relative z-10 flex h-full">
+                <Sidebar currentPage={activeTab.page} onNavigate={handleNavigate} isPageAccessible={canAccessPage} />
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <Header
+                    tabs={tabs}
+                    activeTabId={activeTabId}
+                    onSelectTab={handleSelectTab}
+                    onCloseTab={handleCloseTab}
+                    onCloseOtherTabs={handleCloseOtherTabs}
+                    onCloseRightTabs={handleCloseRightTabs}
+                    onReorderTabs={handleReorderTabs}
+                    onAddTab={handleAddTab}
+                    onLogout={handleLogout}
+                    currentUser={currentUser}
+                  />
+                  <main className="flex-1 overflow-auto relative">
+                    <PageTransition tabId={activeTabId}>
+                      <AccessGuard
+                        allowed={canAccessPage(activeTab.page)}
+                        className="h-full min-h-full"
+                        detail={pageDetail}
+                      >
+                        <PageContent
+                          page={activeTab.page}
+                          params={activeTab.params}
+                          onNavigate={handleNavigate}
+                          onReturnFromWorkbench={handleReturnFromWorkbench}
+                        />
+                      </AccessGuard>
+                    </PageTransition>
+                  </main>
+                </div>
+              </div>
+            )}
+
+            {loginTransition !== 'none' && <LoginTransitionOverlay loginTransition={loginTransition} />}
+            <GithubAdminTransferPrompt
+              open={shouldPromptGithubAdminTransfer}
+              onClose={() => setDismissedGithubTransferUserId(currentUser?.id ?? null)}
+            />
+          </NotificationProvider>
+        </BgProvider>
       )}
-
-      {/* 过渡遮罩层 — 最顶层 */}
-      {loginTransition !== 'none' && (
-        <LoginTransitionOverlay loginTransition={loginTransition} />
-      )}
-      </NotificationProvider>
-      </BgProvider>
     </div>
   )
 }
 
-/**
- * 登录过渡遮罩 - 使用动态背景
- */
-function LoginTransitionOverlay({ loginTransition }: { loginTransition: 'cover-in' | 'cover-out' }) {
-  const { currentBgUrl, settings } = useBgContext()
-  return (
-    <div className={`absolute inset-0 z-30 pointer-events-none ${loginTransition === 'cover-in' ? 'animate-login-fade-in' : 'animate-login-fade-out'}`}>
-      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${currentBgUrl}')` }} />
-      <div className="absolute inset-0" style={{ background: `rgba(${settings.overlay_color},${settings.overlay_opacity})` }} />
-    </div>
-  )
+export default function App() {
+  return <RouterProvider router={router} />
 }
-
-/**
- * 登录卡片 - 只渲染卡片本身，背景由 App 统一管理
- */
-function LoginCard({ onLogin }: { onLogin: () => void }) {
-  const { notify } = useNotification()
-  const [token, setToken] = useState('')
-  const [error, setError] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [lockSeconds, setLockSeconds] = useState(0)
-  const [viewSize, setViewSize] = useState({ w: window.innerWidth, h: window.innerHeight })
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  useEffect(() => {
-    const onResize = () => setViewSize({ w: window.innerWidth, h: window.innerHeight })
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
-  const startCountdown = useCallback((seconds: number) => {
-    if (timerRef.current) clearInterval(timerRef.current)
-    setLockSeconds(seconds)
-    timerRef.current = setInterval(() => {
-      setLockSeconds(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!)
-          timerRef.current = null
-          setError('')
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-  }, [])
-
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
-
-  const cardScale = useMemo(() => {
-    return Math.min(1, viewSize.h * 0.92 / 833, viewSize.w * 0.92 / 764)
-  }, [viewSize])
-
-  const isLocked = lockSeconds > 0
-  const lockDisplay = isLocked ? `${Math.floor(lockSeconds / 60)}:${String(lockSeconds % 60).padStart(2, '0')}` : ''
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (isLocked || isLoading) return
-    if (!token.trim()) {
-      setError('请输入Token')
-      return
-    }
-
-    setIsLoading(true)
-    setError('')
-
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ token }),
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        if (data.session_id) {
-          document.cookie = `webui_session=${data.session_id}; path=/; max-age=86400`
-        }
-        onLogin()
-      } else {
-        if (data.locked && data.lock_seconds > 0) {
-          setError(`尝试次数过多，请等待 ${lockDisplay || '...'}`)
-          startCountdown(data.lock_seconds)
-        } else {
-          const msg = data.message || 'Token验证失败，请检查后重试'
-          setError(msg)
-          notify(msg, 'warning')
-        }
-      }
-    } catch {
-      setError('连接失败，请确保服务器正在运行')
-      notify('连接失败，请确保服务器正在运行', 'error')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  return (
-    <div
-      className="bg-white/1 border-2 border-black/30 flex flex-col items-center origin-center backdrop-blur-[50px] shadow-login-card animate-scale-fade-in"
-      style={{
-        width: 764,
-        height: 833,
-        borderRadius: 30,
-        padding: '0 54px',
-        transform: `scale(${cardScale})`,
-      }}
-    >
-      <h1
-        className="mt-[60px] text-black/80 text-center select-none whitespace-nowrap"
-        style={{ fontSize: 60, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
-      >
-        欢迎使用MCStart
-      </h1>
-
-      <p
-        className="mt-[16px] text-black/50 text-center select-none whitespace-nowrap"
-        style={{ fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
-      >
-        输入账户令牌继续使用系统
-      </p>
-
-      <div
-        className="mt-[32px] border-[3px] border-black/50 flex flex-col items-center justify-center gap-[18px] py-[26px] shadow-shadow-light rounded-[30px]"
-        style={{ borderRadius: 30, width: 658 }}
-      >
-        <input
-          type="password"
-          value={token}
-          onChange={(e) => { setToken(e.target.value); if (!isLocked) setError('') }}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(e) }}
-          placeholder="Account Token"
-          disabled={isLoading || isLocked}
-          className="bg-white/10 border-[3px] border-black/50 text-black/80 placeholder-black/30 focus:outline-none focus:border-black/70 transition-colors disabled:opacity-50"
-          style={{
-            width: 583, height: 80, borderRadius: 40,
-            paddingLeft: 32, paddingRight: 32,
-            fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
-            boxShadow: '5px 5px 9px rgba(0, 0, 0, 0.16)',
-          }}
-        />
-
-        <button
-          onClick={handleSubmit}
-          disabled={isLoading || isLocked}
-          className="bg-white/50 border-[3px] border-black/50 text-black/70 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer select-none"
-          style={{
-            width: 583, height: 80, borderRadius: 40,
-            fontSize: 30, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif",
-            boxShadow: '5px 5px 9px rgba(0, 0, 0, 0.16)',
-          }}
-        >
-          {isLocked ? `已锁定 ${lockDisplay}` : isLoading ? '验证中...' : '登录'}
-        </button>
-      </div>
-
-      <p
-        className="mt-3 text-red-500 text-center"
-        style={{ fontSize: 20, minHeight: 28, visibility: (error || isLocked) ? 'visible' : 'hidden' }}
-      >
-        {isLocked ? `尝试次数过多，请等待 ${lockDisplay}` : error || ' '}
-      </p>
-
-      <div
-        className="mt-2 border-[3px] border-black/50 px-[28px] py-[20px] shadow-shadow-light"
-        style={{ borderRadius: 30, width: 658 }}
-      >
-        <div className="flex items-center gap-[8px] mb-[10px]">
-          <div
-            className="flex items-center justify-center border-[3px] border-black/70 rounded-full shrink-0"
-            style={{ width: 28, height: 28 }}
-          >
-            <span
-              className="text-black/70 leading-none"
-              style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace", marginTop: 1 }}
-            >
-              i
-            </span>
-          </div>
-          <span
-            className="text-black/70"
-            style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}
-          >
-            我该去哪里找Token？
-          </span>
-        </div>
-
-        <div className="space-y-[4px] ml-[36px]">
-          <p style={{ fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
-            <span className="text-black/70">1.</span>
-            <span className="text-black/50"> 在主程序终端中，输入 </span>
-            <span className="text-black/70">H</span>
-            <span className="text-black/50"> 进入杂项，再输入 </span>
-            <span className="text-black/70">E</span>
-            <span className="text-black/50"> 查看Token</span>
-          </p>
-          <div style={{ fontSize: 20, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif" }}>
-            <p>
-              <span className="text-black/70">2.</span>
-              <span className="text-black/50"> 进入</span>
-              <span className="text-black/70">&lt;程序根目录&gt;\config</span>
-              <span className="text-black/50">文件夹，打开</span>
-              <span className="text-black/70">P-config.toml</span>
-              <span className="text-black/50">文件，</span>
-            </p>
-            <p className="">
-              <span className="text-black/70">webui_token</span>
-              <span className="text-black/50">一栏的值即为Token</span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <p
-        className="mt-auto mb-[24px] pt-[12px] text-black/50 select-none"
-        style={{ fontSize: 20, fontFamily: "'Cascadia Code', monospace" }}
-      >
-        © 2026 xiaoCZX
-      </p>
-    </div>
-  )
-}
-
-export default App

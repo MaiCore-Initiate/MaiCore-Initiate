@@ -7,6 +7,16 @@ import {
 interface SidebarProps {
   currentPage: Page
   onNavigate: (page: Page) => void
+  isPageAccessible: (page: Page) => boolean
+}
+
+function LockIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="6" y="11" width="12" height="9" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8.5 11V8.7a3.5 3.5 0 0 1 7 0V11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
 }
 
 const sections = [
@@ -38,16 +48,16 @@ const sections = [
   },
 ]
 
-export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+export default function Sidebar({ currentPage, onNavigate, isPageAccessible }: SidebarProps) {
   return (
-    <aside className="w-[340px] h-full flex flex-col shrink-0 border-r border-black/10">
+    <aside className="w-[340px] h-full flex flex-col shrink-0" style={{ borderRight: '1px solid var(--mc-border-soft)' }}>
       {/* 品牌区 */}
       <div className="h-[87px] flex flex-col justify-center px-[11px] shrink-0">
-        <span className="text-[#707070] select-none leading-none" style={{ fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 700 }}>
+        <span className="select-none leading-none" style={{ color: 'var(--mc-text-muted)', fontSize: 40, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 700 }}>
           MaiCoreStart
         </span>
-        <span className="text-[#707070] select-none mt-[3px]" style={{ fontSize: 20, fontFamily: "'Segoe', 'HarmonyOS Sans SC', sans-serif" }}>
-          v4.2.1-beta
+        <span className="select-none mt-[3px]" style={{ color: 'var(--mc-text-muted)', fontSize: 20, fontFamily: "'Segoe', 'HarmonyOS Sans SC', sans-serif" }}>
+          v5.1.0-beta
         </span>
       </div>
 
@@ -55,13 +65,14 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto px-3 pb-4">
         {sections.map((section, si) => (
           <div key={section.title}>
-            {si > 0 && <div className="mx-0 my-2 border-t border-[#707070]" />}
-            <div className="px-[3px] py-1 text-[#707070] select-none" style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 300 }}>
+            {si > 0 && <div className="mx-0 my-2" style={{ borderTop: '1px solid var(--mc-divider)' }} />}
+            <div className="px-[3px] py-1 select-none" style={{ color: 'var(--mc-text-muted)', fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: 300 }}>
               {section.title}
             </div>
             {section.items.map((item) => {
               const active = currentPage === item.id
               const Icon = item.icon
+              const accessible = isPageAccessible(item.id)
               return (
                 <button
                   key={item.id}
@@ -73,18 +84,23 @@ export default function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                     borderRadius: 30,
                     margin: '2px auto',
                     paddingLeft: 16,
-                    border: active ? '5px solid rgba(112,112,112,0.8)' : '3px solid rgba(112,112,112,0.45)',
-                    background: active ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    border: active ? '5px solid var(--mc-border-strong)' : '3px solid var(--mc-divider)',
+                    background: active ? 'var(--mc-sidebar-active-bg)' : 'transparent',
+                    opacity: accessible ? 1 : 0.76,
                     transition: 'border 0.25s ease, background 0.25s ease',
                   }}
                 >
-                  <Icon className={active ? 'text-black' : 'text-[#707070]'} />
+                  <Icon style={{ color: active ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)' }} />
                   <span
-                    className={active ? 'text-black' : 'text-[#707070]'}
-                    style={{ fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: active ? 600 : 400, marginTop: 4 }}
+                    style={{ color: active ? 'var(--mc-text-primary)' : 'var(--mc-text-muted)', fontSize: 25, fontFamily: "'HYWenHei', 'HarmonyOS Sans SC', sans-serif", fontWeight: active ? 600 : 400, marginTop: 4 }}
                   >
                     {item.label}
                   </span>
+                  {!accessible && (
+                    <span className="ml-auto pr-[10px]" style={{ color: 'var(--mc-text-muted)' }}>
+                      <LockIcon />
+                    </span>
+                  )}
                 </button>
               )
             })}

@@ -3,7 +3,7 @@
 终端管理 API
 提供 WebShell 终端创建、管理和通信功能
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 import structlog
@@ -13,6 +13,8 @@ import platform
 from datetime import datetime
 import asyncio
 import sys
+
+from .auth_core import account_store, require_action
 
 logger = structlog.get_logger(__name__)
 
@@ -47,6 +49,8 @@ _sessions_lock = threading.Lock()
 # 默认 Shell 配置（可修改）
 DEFAULT_WINDOWS_SHELL = "powershell"  # 可选: "cmd", "powershell"
 DEFAULT_LINUX_SHELL = "bash"
+MAX_TERMINALS_PER_USER = 3
+TERMINAL_IDLE_TIMEOUT_SECONDS = 30 * 60
 
 
 def _is_expected_terminal_close_error(error: Exception) -> bool:
@@ -116,6 +120,75 @@ def _broadcast_terminal_message(terminal_id: str, payload: Dict[str, Any]):
         logger.warning("主事件循环未就绪，跳过终端消息广播", terminal_id=terminal_id)
     except Exception as e:
         logger.error("终端消息广播失败", terminal_id=terminal_id, error=str(e))
+
+
+def _audit(action: str, detail: str):
+    try:
+        account_store.record_audit_event(action, detail)
+    except Exception as exc:
+        logger.warning("记录终端审计失败", action=action, error=str(exc))
+
+
+def _is_terminal_idle(session: Dict[str, Any]) -> bool:
+    last_active = session.get("last_active")
+    if not last_active:
+        return False
+    try:
+        delta = datetime.now() - datetime.fromisoformat(last_active)
+    except Exception:
+        return False
+    return delta.total_seconds() > TERMINAL_IDLE_TIMEOUT_SECONDS
+
+
+def _close_session_locked(terminal_id: str, reason: str = "closed") -> bool:
+    session = _terminal_sessions.get(terminal_id)
+    if not session:
+        return False
+
+    proc = session["process"]
+    session["closing"] = True
+    try:
+        system = platform.system().lower()
+        if system == "windows":
+            proc.close()
+        else:
+            import os
+            import signal
+            os.kill(proc["pid"], signal.SIGTERM)
+            os.close(proc["fd"])
+    except Exception as exc:
+        logger.warning("关闭终端会话时出现异常", terminal_id=terminal_id, reason=reason, error=str(exc))
+    finally:
+        _terminal_sessions.pop(terminal_id, None)
+    return True
+
+
+def _cleanup_idle_sessions() -> None:
+    with _sessions_lock:
+        idle_ids = [terminal_id for terminal_id, session in _terminal_sessions.items() if _is_terminal_idle(session)]
+        for terminal_id in idle_ids:
+            owner_id = _terminal_sessions.get(terminal_id, {}).get("owner_id", "unknown")
+            _close_session_locked(terminal_id, reason="idle-timeout")
+            _audit("webshell-idle-close", f"终端 {terminal_id} 因空闲超时被关闭，owner={owner_id}")
+
+
+def _can_access_terminal_session(user: Optional[Dict[str, Any]], session: Dict[str, Any]) -> bool:
+    """检查当前用户是否可以访问指定终端会话。"""
+    if not user:
+        return False
+    if user.get("role") == "admin":
+        return True
+    return session.get("owner_id") == user.get("id")
+
+
+def can_access_terminal_session(terminal_id: str, user: Optional[Dict[str, Any]]) -> bool:
+    """检查用户是否有权访问某个终端会话。"""
+    _cleanup_idle_sessions()
+    with _sessions_lock:
+        session = _terminal_sessions.get(terminal_id)
+        if not session:
+            return False
+        return _can_access_terminal_session(user, session)
 
 
 def _create_pty_process(shell: str, rows: int = 24, cols: int = 80):
@@ -330,9 +403,13 @@ def _start_output_reader(terminal_id: str, proc):
 
 
 @router.post("/create", response_model=CreateTerminalResponse, summary="创建新终端")
-def create_terminal(request: CreateTerminalRequest):
+def create_terminal(
+    request: CreateTerminalRequest,
+    user: Dict[str, Any] = Depends(require_action("misc.webshell.access")),
+):
     """创建新的终端会话"""
     try:
+        _cleanup_idle_sessions()
         shell = request.shell or _get_default_shell()
         terminal_id = str(uuid.uuid4())[:8]
 
@@ -347,6 +424,12 @@ def create_terminal(request: CreateTerminalRequest):
 
         # 保存会话
         with _sessions_lock:
+            owned_sessions = [
+                session for session in _terminal_sessions.values()
+                if session.get("owner_id") == user.get("id")
+            ]
+            if len(owned_sessions) >= MAX_TERMINALS_PER_USER:
+                raise HTTPException(status_code=429, detail=f"单个账号最多同时保留 {MAX_TERMINALS_PER_USER} 个终端")
             _terminal_sessions[terminal_id] = {
                 "process": proc,
                 "shell": shell,
@@ -355,6 +438,7 @@ def create_terminal(request: CreateTerminalRequest):
                 "last_active": datetime.now().isoformat(),
                 "reader_thread": None,
                 "closing": False,
+                "owner_id": user.get("id"),
             }
 
         # 启动输出读取线程
@@ -363,6 +447,7 @@ def create_terminal(request: CreateTerminalRequest):
             _terminal_sessions[terminal_id]["reader_thread"] = reader_thread
 
         logger.info("终端会话创建成功", terminal_id=terminal_id)
+        _audit("webshell-create", f"{user.get('email', user.get('id', 'unknown'))} 创建终端 {terminal_id} ({shell})")
 
         return CreateTerminalResponse(
             terminal_id=terminal_id,
@@ -377,12 +462,17 @@ def create_terminal(request: CreateTerminalRequest):
 
 
 @router.get("/list", response_model=List[TerminalInfo], summary="列出所有终端")
-def list_terminals():
+def list_terminals(
+    user: Dict[str, Any] = Depends(require_action("misc.webshell.access")),
+):
     """列出所有活动的终端会话"""
     try:
+        _cleanup_idle_sessions()
         with _sessions_lock:
             terminals = []
             for terminal_id, session in _terminal_sessions.items():
+                if not _can_access_terminal_session(user, session):
+                    continue
                 terminals.append(TerminalInfo(
                     terminal_id=terminal_id,
                     shell=session["shell"],
@@ -397,7 +487,10 @@ def list_terminals():
 
 
 @router.delete("/{terminal_id}", summary="关闭终端")
-def close_terminal(terminal_id: str):
+def close_terminal(
+    terminal_id: str,
+    user: Dict[str, Any] = Depends(require_action("misc.webshell.access")),
+):
     """关闭指定的终端会话"""
     try:
         with _sessions_lock:
@@ -405,23 +498,13 @@ def close_terminal(terminal_id: str):
                 raise HTTPException(status_code=404, detail="终端不存在")
 
             session = _terminal_sessions[terminal_id]
-            proc = session["process"]
-            session["closing"] = True
-
-            # 关闭进程
-            system = platform.system().lower()
-            if system == "windows":
-                proc.close()
-            else:
-                import os
-                import signal
-                os.kill(proc["pid"], signal.SIGTERM)
-                os.close(proc["fd"])
-
-            # 移除会话
-            del _terminal_sessions[terminal_id]
+            if not _can_access_terminal_session(user, session):
+                _audit("webshell-close-denied", f"{user.get('email', user.get('id', 'unknown'))} 尝试关闭未授权终端 {terminal_id}")
+                raise HTTPException(status_code=403, detail="当前账号无权操作该终端")
+            _close_session_locked(terminal_id)
 
         logger.info("终端会话已关闭", terminal_id=terminal_id)
+        _audit("webshell-close", f"{user.get('email', user.get('id', 'unknown'))} 关闭终端 {terminal_id}")
         return {"success": True, "message": "终端已关闭"}
     except HTTPException:
         raise
@@ -430,15 +513,24 @@ def close_terminal(terminal_id: str):
         raise HTTPException(status_code=500, detail=f"关闭终端失败: {str(e)}")
 
 
-def write_to_terminal(terminal_id: str, data: str):
+def write_to_terminal(terminal_id: str, data: str, user: Optional[Dict[str, Any]] = None):
     """写入数据到终端（由 WebSocket 调用）"""
     try:
+        _cleanup_idle_sessions()
         with _sessions_lock:
             if terminal_id not in _terminal_sessions:
                 logger.warning("终端不存在", terminal_id=terminal_id)
                 return False
 
             session = _terminal_sessions[terminal_id]
+            if user is not None and not _can_access_terminal_session(user, session):
+                _audit("webshell-write-denied", f"{user.get('email', user.get('id', 'unknown'))} 尝试写入未授权终端 {terminal_id}")
+                logger.warning(
+                    "拒绝未授权的终端写入",
+                    terminal_id=terminal_id,
+                    user_id=user.get("id"),
+                )
+                return False
             proc = session["process"]
 
             # 写入数据
@@ -457,15 +549,24 @@ def write_to_terminal(terminal_id: str, data: str):
         return False
 
 
-def resize_terminal(terminal_id: str, rows: int, cols: int):
+def resize_terminal(terminal_id: str, rows: int, cols: int, user: Optional[Dict[str, Any]] = None):
     """调整终端大小（由 WebSocket 调用）"""
     try:
+        _cleanup_idle_sessions()
         with _sessions_lock:
             if terminal_id not in _terminal_sessions:
                 logger.warning("终端不存在", terminal_id=terminal_id)
                 return False
 
             session = _terminal_sessions[terminal_id]
+            if user is not None and not _can_access_terminal_session(user, session):
+                _audit("webshell-resize-denied", f"{user.get('email', user.get('id', 'unknown'))} 尝试调整未授权终端 {terminal_id}")
+                logger.warning(
+                    "拒绝未授权的终端尺寸调整",
+                    terminal_id=terminal_id,
+                    user_id=user.get("id"),
+                )
+                return False
             proc = session["process"]
 
             # 调整大小
@@ -486,11 +587,11 @@ def resize_terminal(terminal_id: str, rows: int, cols: int):
         return False
 
 
-def handle_terminal_input(terminal_id: str, data: str):
+def handle_terminal_input(terminal_id: str, data: str, user: Optional[Dict[str, Any]] = None):
     """处理终端输入（WebSocket 消息处理器调用）"""
-    write_to_terminal(terminal_id, data)
+    return write_to_terminal(terminal_id, data, user)
 
 
-def handle_terminal_resize(terminal_id: str, rows: int, cols: int):
+def handle_terminal_resize(terminal_id: str, rows: int, cols: int, user: Optional[Dict[str, Any]] = None):
     """处理终端大小调整（WebSocket 消息处理器调用）"""
-    resize_terminal(terminal_id, rows, cols)
+    return resize_terminal(terminal_id, rows, cols, user)

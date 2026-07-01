@@ -16,10 +16,12 @@ from pathlib import Path
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from PIL import Image, ImageOps
+
+from .auth_core import require_action, require_admin
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -870,7 +872,7 @@ def _build_widget_tips_payload(settings: Dict[str, Any] | None = None, models: L
 
 # ── P-config 读写 ──
 
-@router.get("/p-config")
+@router.get("/p-config", dependencies=[Depends(require_admin)])
 async def get_p_config():
     mgr = _get_p_config()
     mgr.reload_if_changed()
@@ -881,7 +883,7 @@ class PConfigUpdateRequest(BaseModel):
     updates: Dict[str, Any]  # {"logging.log_rotation_days": 30, ...}
 
 
-@router.post("/p-config")
+@router.post("/p-config", dependencies=[Depends(require_admin)])
 async def update_p_config(req: PConfigUpdateRequest):
     mgr = _get_p_config()
     mgr.reload_if_changed()
@@ -899,7 +901,7 @@ async def update_p_config(req: PConfigUpdateRequest):
 
 # ── Token 管理 ──
 
-@router.get("/token/current")
+@router.get("/token/current", dependencies=[Depends(require_admin)])
 async def get_current_token():
     mgr = _get_p_config()
     mgr.reload_if_changed()
@@ -912,7 +914,7 @@ class TokenChangeRequest(BaseModel):
     new_token: str = ""
 
 
-@router.post("/token/change")
+@router.post("/token/change", dependencies=[Depends(require_admin)])
 async def change_token(req: TokenChangeRequest):
     token = req.new_token.strip()
     if not token:
@@ -971,7 +973,7 @@ async def list_backgrounds():
     return {"success": True, "files": files}
 
 
-@router.post("/backgrounds/upload")
+@router.post("/backgrounds/upload", dependencies=[Depends(require_admin)])
 async def upload_background(file: UploadFile = File(...)):
     safe_name = _safe_filename(file.filename or "upload")
     if not safe_name:
@@ -1077,7 +1079,7 @@ async def get_background_thumbnail(
     return FileResponse(thumb_path, media_type="image/jpeg" if is_video else "image/webp")
 
 
-@router.delete("/backgrounds/{filename}")
+@router.delete("/backgrounds/{filename}", dependencies=[Depends(require_admin)])
 async def delete_background(filename: str):
     safe_name = _safe_filename(filename)
     if not safe_name:
@@ -1109,13 +1111,13 @@ async def get_live2d_widget_tips():
     return _build_widget_tips_payload(settings, models)
 
 
-@router.get("/live2d/models")
+@router.get("/live2d/models", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def list_live2d_models():
     models = _refresh_desktop_pet_models_cache()
     return {"success": True, "models": models}
 
 
-@router.post("/live2d/import")
+@router.post("/live2d/import", dependencies=[Depends(require_admin)])
 async def import_live2d_model(
     files: List[UploadFile] = File(...),
     folder_name: str = Form(""),
@@ -1199,7 +1201,7 @@ async def import_live2d_model(
         shutil.rmtree(temp_root, ignore_errors=True)
 
 
-@router.post("/live2d/models/{model_id}/cover")
+@router.post("/live2d/models/{model_id}/cover", dependencies=[Depends(require_admin)])
 async def upload_live2d_cover(model_id: str, file: UploadFile = File(...)):
     model_dir = _resolve_live2d_model_dir(model_id)
     safe_name = _safe_filename(file.filename or "cover.png")
@@ -1227,7 +1229,7 @@ async def upload_live2d_cover(model_id: str, file: UploadFile = File(...)):
     return {"success": True, "cover_url": _to_live2d_public_url(target)}
 
 
-@router.delete("/live2d/models/{model_id}")
+@router.delete("/live2d/models/{model_id}", dependencies=[Depends(require_admin)])
 async def delete_live2d_model(model_id: str):
     model_dir = _resolve_live2d_model_dir(model_id)
     try:
@@ -1242,12 +1244,12 @@ class DesktopPetSettingsBody(BaseModel):
     value: Dict[str, Any]
 
 
-@router.get("/live2d/settings")
+@router.get("/live2d/settings", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def get_desktop_pet_settings():
     return {"success": True, "value": _read_desktop_pet_settings()}
 
 
-@router.put("/live2d/settings")
+@router.put("/live2d/settings", dependencies=[Depends(require_admin)])
 async def update_desktop_pet_settings(body: DesktopPetSettingsBody):
     if _desktop_pet_settings_owned_by_electron():
         raise HTTPException(409, "桌宠运行中，请在桌宠内置面板中修改配置")
@@ -1264,7 +1266,7 @@ class DesktopPetOverlaySettingsBody(BaseModel):
     scale: float | None = None
 
 
-@router.post("/live2d/overlay/settings")
+@router.post("/live2d/overlay/settings", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def update_desktop_pet_overlay_settings(body: DesktopPetOverlaySettingsBody):
     if _desktop_pet_settings_owned_by_electron():
         raise HTTPException(409, "桌宠运行中，请在桌宠内置面板中修改配置")
@@ -1321,7 +1323,7 @@ def _build_persona_reply(message: str, settings: Dict[str, Any]) -> str:
     return f"{prefix}：我收到了\u300c{msg}\u300d。如果你愿意，我可以把它拆成可执行步骤。"
 
 
-@router.post("/live2d/chat")
+@router.post("/live2d/chat", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def desktop_pet_chat(body: DesktopPetChatBody):
     settings = _read_desktop_pet_settings()
     if not settings.get("ai_enabled", True):
@@ -1360,7 +1362,7 @@ class FaceCaptureFrameBody(BaseModel):
     mouth_open: float = 0.0
 
 
-@router.post("/live2d/face-capture/frame")
+@router.post("/live2d/face-capture/frame", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def push_face_capture_frame(body: FaceCaptureFrameBody):
     _face_capture_state.update(
         {
@@ -1376,7 +1378,7 @@ async def push_face_capture_frame(body: FaceCaptureFrameBody):
     return {"success": True}
 
 
-@router.get("/live2d/face-capture/state")
+@router.get("/live2d/face-capture/state", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def get_face_capture_state():
     return {"success": True, "state": _face_capture_state}
 
@@ -1386,7 +1388,7 @@ class RuntimePositionBody(BaseModel):
     y: int
 
 
-@router.post("/live2d/runtime/position")
+@router.post("/live2d/runtime/position", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def update_runtime_position(body: RuntimePositionBody):
     settings = _read_stored_desktop_pet_settings()
     settings["position"]["x"] = int(body.x)
@@ -1395,13 +1397,13 @@ async def update_runtime_position(body: RuntimePositionBody):
     return {"success": True, "position": normalized["position"]}
 
 
-@router.get("/live2d/runtime/status")
+@router.get("/live2d/runtime/status", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def desktop_pet_runtime_status():
     runtime = _refresh_desktop_pet_runtime()
     return {"success": True, **runtime}
 
 
-@router.post("/live2d/runtime/start")
+@router.post("/live2d/runtime/start", dependencies=[Depends(require_admin)])
 async def start_desktop_pet_runtime():
     global _desktop_pet_process, _desktop_pet_started_at
     if _desktop_pet_process_running():
@@ -1502,7 +1504,7 @@ async def start_desktop_pet_runtime():
     return {"success": True, **_desktop_pet_status()}
 
 
-@router.post("/live2d/runtime/stop")
+@router.post("/live2d/runtime/stop", dependencies=[Depends(require_admin)])
 async def stop_desktop_pet_runtime():
     global _desktop_pet_process
     if not _desktop_pet_process_running():
@@ -1527,7 +1529,7 @@ async def stop_desktop_pet_runtime():
     return {"success": True}
 
 
-@router.get("/live2d/electron/status")
+@router.get("/live2d/electron/status", dependencies=[Depends(require_admin)])
 async def get_electron_build_status():
     """检查Electron应用是否已构建（兼容旧端点）"""
     exe = _find_electron_exe()
@@ -1539,7 +1541,7 @@ async def get_electron_build_status():
     }
 
 
-@router.get("/live2d/electron/find")
+@router.get("/live2d/electron/find", dependencies=[Depends(require_admin)])
 async def find_electron_exe_endpoint():
     """智能查找 Electron exe 路径"""
     exe = _find_electron_exe()
@@ -1554,7 +1556,7 @@ class ElectronExePathBody(BaseModel):
     path: str
 
 
-@router.post("/live2d/electron/set-path")
+@router.post("/live2d/electron/set-path", dependencies=[Depends(require_admin)])
 async def set_electron_exe_path(body: ElectronExePathBody):
     """手动设置 Electron exe 路径"""
     p = Path(body.path.strip())
@@ -1566,7 +1568,7 @@ async def set_electron_exe_path(body: ElectronExePathBody):
     return {"success": True, "path": str(p)}
 
 
-@router.get("/live2d/usage-stats")
+@router.get("/live2d/usage-stats", dependencies=[Depends(require_action("misc.desktop-pet.access"))])
 async def get_usage_stats():
     """获取桌宠使用时长统计"""
     from datetime import datetime, timezone, timedelta
@@ -1659,7 +1661,7 @@ class LLMConfigBody(BaseModel):
     value: Dict[str, Any]
 
 
-@router.get("/llm-config")
+@router.get("/llm-config", dependencies=[Depends(require_admin)])
 async def get_llm_config():
     """获取LLM配置"""
     from src.core.p_config import p_config_manager
@@ -1672,7 +1674,7 @@ async def get_llm_config():
     return {"success": True, "value": config}
 
 
-@router.put("/llm-config")
+@router.put("/llm-config", dependencies=[Depends(require_admin)])
 async def update_llm_config(body: LLMConfigBody):
     """更新LLM配置"""
     from src.core.p_config import p_config_manager

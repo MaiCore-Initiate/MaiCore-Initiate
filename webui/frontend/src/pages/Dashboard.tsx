@@ -35,14 +35,9 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem('webui_token')
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-      }
-
       const [statsRes, instancesRes] = await Promise.all([
-        fetch('/api/statistics/summary', { headers }),
-        fetch('/api/instances', { headers }),
+        fetch('/api/statistics/summary', { credentials: 'include' }),
+        fetch('/api/instances', { credentials: 'include' }),
       ])
 
       if (statsRes.ok) {

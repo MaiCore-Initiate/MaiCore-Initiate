@@ -1,8 +1,11 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useTheme, type ResolvedTheme } from '../theme/ThemeProvider'
 
-const FALLBACK_BG_URL = '/default_backgrounds/default.jpg'
+const FALLBACK_BG_URL = '/default_backgrounds/default.png'
 const BASE_BG_STORAGE_KEY = 'mcstart.base_bg_url'
 const BASE_BG_CHANGE_EVENT = 'mcstart:base-bg-change'
+const BG_SETTINGS_STORAGE_KEY = 'mcstart.bg_settings'
+const BG_SETTINGS_CHANGE_EVENT = 'mcstart:bg-settings-change'
 
 let baseBgUrlCache = FALLBACK_BG_URL
 
@@ -58,6 +61,7 @@ export interface BgSettings {
   overlay_opacity: number
   overlay_blur: number
   overlay_color: string
+  overlay_color_auto?: boolean
   use_custom_background: boolean
 }
 
@@ -67,8 +71,102 @@ const DEFAULT_SETTINGS: BgSettings = {
   overlay_opacity: 0.5,
   overlay_blur: 0,
   overlay_color: '255,255,255',
+  overlay_color_auto: true,
   use_custom_background: false,
 }
+
+let bgSettingsCache = DEFAULT_SETTINGS
+
+function mergeBgSettings(patch?: Partial<BgSettings> | null): BgSettings {
+  const merged = { ...DEFAULT_SETTINGS, ...(patch || {}) }
+  if (patch && !Object.prototype.hasOwnProperty.call(patch, 'overlay_color_auto')) {
+    merged.overlay_color_auto = !patch.overlay_color || patch.overlay_color === DEFAULT_SETTINGS.overlay_color
+  }
+  return merged
+}
+
+function writeBgSettings(settings: BgSettings) {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(BG_SETTINGS_STORAGE_KEY, JSON.stringify(settings)) } catch {}
+}
+
+function readBgSettings() {
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS
+  try {
+    const raw = window.localStorage.getItem(BG_SETTINGS_STORAGE_KEY)
+    return mergeBgSettings(raw ? JSON.parse(raw) : null)
+  } catch {
+    return DEFAULT_SETTINGS
+  }
+}
+
+function setCachedBgSettings(settings?: Partial<BgSettings> | null) {
+  const next = mergeBgSettings(settings)
+  bgSettingsCache = next
+  writeBgSettings(next)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<BgSettings>(BG_SETTINGS_CHANGE_EVENT, { detail: next }))
+  }
+}
+
+export function getCachedBgSettings() {
+  return bgSettingsCache
+}
+
+export function useCachedBgSettings() {
+  const [settings, setSettings] = useState(() => getCachedBgSettings())
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onChange = (event: Event) => {
+      const customEvent = event as CustomEvent<BgSettings>
+      setSettings(mergeBgSettings(customEvent.detail))
+    }
+    window.addEventListener(BG_SETTINGS_CHANGE_EVENT, onChange as EventListener)
+    return () => window.removeEventListener(BG_SETTINGS_CHANGE_EVENT, onChange as EventListener)
+  }, [])
+  return settings
+}
+
+function extractBackgroundFileName(url: string | null | undefined) {
+  if (!url || !url.startsWith('/backgrounds/')) return ''
+  return decodeURIComponent(url.slice('/backgrounds/'.length))
+}
+
+function isValidBackgroundUrl(url: string | null | undefined, settings: BgSettings, files: string[]) {
+  const normalized = normalizeBgUrl(url)
+  if (!settings.use_custom_background) {
+    return normalized === FALLBACK_BG_URL
+  }
+  if (settings.pinned_file && files.includes(settings.pinned_file)) {
+    return normalized === `/backgrounds/${settings.pinned_file}`
+  }
+  if (files.length === 0) {
+    return normalized === FALLBACK_BG_URL
+  }
+  const currentFile = extractBackgroundFileName(normalized)
+  return currentFile !== '' && files.includes(currentFile)
+}
+
+export function getThemeDefaultOverlayColor(theme: ResolvedTheme) {
+  return theme === 'dark' ? '0,0,0' : '255,255,255'
+}
+
+export function resolveOverlayColor(settings: BgSettings, theme: ResolvedTheme) {
+  if (settings.overlay_color_auto !== false) {
+    return getThemeDefaultOverlayColor(theme)
+  }
+  return settings.overlay_color
+}
+
+export function resolveOverlayStyle(settings: BgSettings, theme: ResolvedTheme) {
+  return {
+    backgroundColor: `rgba(${resolveOverlayColor(settings, theme)},${settings.overlay_opacity})`,
+    backdropFilter: settings.overlay_blur > 0 ? `blur(${settings.overlay_blur}px)` : undefined,
+  }
+}
+
+bgSettingsCache = readBgSettings()
+writeBgSettings(bgSettingsCache)
 
 interface BgContextValue {
   currentBgUrl: string | null
@@ -92,7 +190,7 @@ export const useBgContext = () => useContext(BgContext)
 
 export function BgProvider({ children }: { children: ReactNode }) {
   const [files, setFiles] = useState<string[]>([])
-  const [settings, setSettings] = useState<BgSettings>(DEFAULT_SETTINGS)
+  const [settings, setSettings] = useState<BgSettings>(() => getCachedBgSettings())
   const [currentBgUrl, setCurrentBgUrl] = useState<string | null>(() => getBaseBgUrl())
   const [nextBgUrl, setNextBgUrl] = useState<string | null>(() => getBaseBgUrl())
   const [isTransitioning, setIsTransitioning] = useState(false)
@@ -121,7 +219,13 @@ export function BgProvider({ children }: { children: ReactNode }) {
     setSettingsLoaded(false)
     fetch('/api/preferences/bg_settings', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.value) setSettings({ ...DEFAULT_SETTINGS, ...d.value }) })
+      .then(d => {
+        if (d?.value) {
+          const next = mergeBgSettings(d.value)
+          setSettings(next)
+          setCachedBgSettings(next)
+        }
+      })
       .catch(() => {})
       .finally(() => setSettingsLoaded(true))
   }, [])
@@ -143,26 +247,38 @@ export function BgProvider({ children }: { children: ReactNode }) {
 
   const selectionKey = `${settings.use_custom_background ? '1' : '0'}|${settings.pinned_file}|${files.join('|')}`
 
+  const resolvePreferredUrl = useCallback(() => {
+    const cached = getBaseBgUrl()
+    if (isValidBackgroundUrl(cached, settings, filesRef.current)) {
+      return cached
+    }
+    const current = prevUrlRef.current
+    if (isValidBackgroundUrl(current, settings, filesRef.current)) {
+      return current
+    }
+    return pickUrl()
+  }, [pickUrl, settings])
+
   // Initialize background once startup fetches are done
   const [initialized, setInitialized] = useState(false)
   useEffect(() => {
     if (!initialized && filesLoaded && settingsLoaded) {
-      const url = pickUrl()
+      const url = resolvePreferredUrl()
       setCurrentBgUrl(url)
       setNextBgUrl(url)
       prevUrlRef.current = url
       selectionKeyRef.current = selectionKey
       setInitialized(true)
     }
-  }, [filesLoaded, settingsLoaded, initialized, pickUrl, selectionKey])
+  }, [filesLoaded, settingsLoaded, initialized, resolvePreferredUrl, selectionKey])
 
   // Apply background immediately when custom mode/pinned file/library changes
   useEffect(() => {
     if (!initialized) return
     if (selectionKeyRef.current === selectionKey) return
     selectionKeyRef.current = selectionKey
-    setCurrentBgUrl(pickUrl())
-  }, [initialized, selectionKey, pickUrl])
+    setCurrentBgUrl(resolvePreferredUrl())
+  }, [initialized, selectionKey, resolvePreferredUrl])
 
   // Handle background transition
   useEffect(() => {
@@ -200,6 +316,7 @@ function isVideo(url: string) { return VIDEO_EXTS.some(e => url.toLowerCase().en
 
 export default function DynamicBackground() {
   const { currentBgUrl, settings } = useBgContext()
+  const { resolvedTheme } = useTheme()
   const [bgA, setBgA] = useState<string | null>(currentBgUrl)
   const [bgB, setBgB] = useState<string | null>(null)
   const [showA, setShowA] = useState(true)
@@ -236,10 +353,7 @@ export default function DynamicBackground() {
     <>
       {renderLayer(bgA, showA, 'bg-a')}
       {renderLayer(bgB, !showA, 'bg-b')}
-      <div className="absolute inset-0" style={{
-        background: `rgba(${settings.overlay_color},${settings.overlay_opacity})`,
-        backdropFilter: settings.overlay_blur > 0 ? `blur(${settings.overlay_blur}px)` : undefined,
-      }} />
+      <div className="absolute inset-0" style={resolveOverlayStyle(settings, resolvedTheme)} />
     </>
   )
 }
